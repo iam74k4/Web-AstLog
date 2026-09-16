@@ -6,8 +6,9 @@ compatibility_date = "2026-09-01"
 routes = [{ pattern = "noctifex.dev", custom_domain = true }]
 
 # index.html・SVG を文字列として、PNG をバイト列として Worker に同梱する。
-# ファイルの置き場所は今のまま（リポジトリ直下 / assets）なので、
-# 移行が終わるまで GitHub Pages も並行して動き続ける。
+# ファイルの置き場所は今のまま（リポジトリ直下 / assets）にしてある。
+# Phase 1 で index.html は src/render/ のテンプレートへ分解して消えるので、
+# ここで動かしても二度手間になる。
 rules = [
   { type = "Text", globs = ["**/*.html", "**/*.svg"], fallthrough = true },
   { type = "Data", globs = ["**/*.png"], fallthrough = true },
