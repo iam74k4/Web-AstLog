@@ -267,7 +267,7 @@
        */
       .avatar {
         --avatar-zoom: 124%;
-        --avatar-x: -13%;
+        --avatar-x: -9%;
         --avatar-y: -4%;
 
         position: relative;
@@ -276,10 +276,11 @@
         border-radius: 50%;
         overflow: hidden;
         /*
-         * 元画像の背景が白いので、地の色は明暗どちらでも明るいままにする。
-         * var(--surface) にするとダークで白い円だけが浮いて見える。
+         * avatar.png は透過済み（角のピクセルで alpha=0 を確認済み）。
+         * ここで地の色を塗ると、透過部分にその色の円が
+         * バッジのように浮いて見えてしまうので、塗らずにページの
+         * 背景をそのまま透かす。縁取りの1pxだけ残す。
          */
-        background: #f1f1f5;
         box-shadow: inset 0 0 0 1px var(--line);
       }
 
@@ -290,8 +291,6 @@
         left: var(--avatar-x);
         top: var(--avatar-y);
         object-fit: cover;
-        /* 画像が届く前に下のモノグラムが透けないようにする */
-        background: inherit;
       }
 
       /* 画像が無い / 読み込めないときに出る。何も無いより名前の頭文字が出るほうがよい */
@@ -305,6 +304,14 @@
         font-size: var(--fs-lg);
         font-weight: 600;
         letter-spacing: 0.02em;
+      }
+
+      /*
+       * display: grid が [hidden] の既定（display: none）より詳細度で勝ってしまうため、
+       * 明示しないと画像が読み込めても紫のフォールバックが下から透けて見え続ける。
+       */
+      .avatar .fallback[hidden] {
+        display: none;
       }
 
       .identity h1 {
@@ -891,6 +898,9 @@
           <!--
             似顔絵。assets/avatar.png が無い/読み込めない間はモノグラムだけが見える
             （.fallback が下に敷いてあり、img が乗る形）。
+            avatar.png は透過 PNG なので、読み込めたら .fallback を隠す。
+            隠さないと、キャラクターの輪郭の外側から紫のフォールバックが
+            透けて見えてしまう。
             位置がずれたら <style> 内 .avatar の --avatar-zoom / -x / -y を調整する。
           -->
           <span class="avatar">
@@ -902,6 +912,7 @@
               height="72"
               loading="eager"
               decoding="async"
+              onload="this.previousElementSibling.hidden = true"
               onerror="this.remove()"
             />
           </span>
