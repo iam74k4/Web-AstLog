@@ -1,0 +1,30 @@
+name = "noctifex"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+# 本番は独自ドメイン。DNS が Cloudflare 管理下にあるので custom domain として割り当てる。
+routes = [{ pattern = "noctifex.dev", custom_domain = true }]
+
+# index.html・SVG を文字列として、PNG をバイト列として Worker に同梱する。
+# ファイルの置き場所は今のまま（リポジトリ直下 / assets）なので、
+# 移行が終わるまで GitHub Pages も並行して動き続ける。
+rules = [
+  { type = "Text", globs = ["**/*.html", "**/*.svg"], fallthrough = true },
+  { type = "Data", globs = ["**/*.png"], fallthrough = true },
+]
+
+# --- Phase 1 で有効にする --------------------------------------------------
+# リソースをまだ作っていないので、コメントのままにしている。
+# 作成コマンドの出力に出る id をそのまま貼ること。
+#
+#   wrangler d1 create noctifex
+#   wrangler kv namespace create MEDIA
+#
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "noctifex"
+# database_id = ""
+#
+# [[kv_namespaces]]
+# binding = "MEDIA"   # アバター画像、ログイン試行回数
+# id = ""
