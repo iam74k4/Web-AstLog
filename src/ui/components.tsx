@@ -166,3 +166,79 @@ export const StatusPill = ({ published }: { published: number }) =>
   ) : (
     <span class="status status--draft">下書き</span>
   )
+
+/* ------------------------------------------------ トップに置くブロックの中身 */
+
+/*
+  ブロック（src/blocks.ts）の「打ち込むもの」を描く部品。
+  どれも1行1件の body を parseLines で開いた列を受け取る。列が足りない行は
+  足りないまま出す（空欄で落とさない）。書いた人が一覧で気づけるように。
+*/
+
+export const Statement = ({ text, note }: { text: string; note?: string }) => (
+  <div class="statement">
+    <p class="statement__text">{text}</p>
+    {note ? <p class="statement__note">{note}</p> : null}
+  </div>
+)
+
+export const NowList = ({ rows }: { rows: string[][] }) => (
+  <ul class="now">
+    {rows.map(([what, note]) => (
+      <li key={what}>
+        <span>{what}</span>
+        {note ? <span class="exp">{note}</span> : null}
+      </li>
+    ))}
+  </ul>
+)
+
+export const Numbers = ({ rows }: { rows: string[][] }) => (
+  <ul class="numbers">
+    {rows.map(([value, unit, note]) => (
+      <li class="numbers__item" key={`${value}${unit}`}>
+        <span class="metric">
+          <span class="metric__value">{value}</span>
+          {unit ? <span class="metric__unit">{unit}</span> : null}
+        </span>
+        {note ? <span class="numbers__note">{note}</span> : null}
+      </li>
+    ))}
+  </ul>
+)
+
+// URL の形は呼ぶ側（renderBlock）で isSafeUrl を通してある
+export const LinkList = ({ rows }: { rows: string[][] }) => (
+  <ul class="linklist">
+    {rows.map(([label, url, note]) => (
+      <li key={url}>
+        <a href={url} rel="noreferrer" target={url?.startsWith('/') ? undefined : '_blank'}>
+          <span class="linklist__label">{label}</span>
+          {note ? <span class="linklist__note">{note}</span> : null}
+          <span class="linklist__go">↗</span>
+        </a>
+      </li>
+    ))}
+  </ul>
+)
+
+// 個人ページの経歴と同じ形。年月・何を・補足
+export const Timeline = ({ rows }: { rows: string[][] }) => (
+  <ul class="career">
+    {rows.map(([period, title, org]) => (
+      <li key={`${period}${title}`}>
+        <span class="period">{period}</span>
+        <span class="title">{title}</span>
+        {org ? <span class="org">{org}</span> : null}
+      </li>
+    ))}
+  </ul>
+)
+
+export const Note = ({ paragraphs }: { paragraphs: string[] }) => (
+  <div class="bio">
+    {paragraphs.map((text) => (
+      <p key={text}>{text}</p>
+    ))}
+  </div>
+)

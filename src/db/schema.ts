@@ -1,5 +1,6 @@
 import { relations, sql } from 'drizzle-orm'
 import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { BLOCK_KEYS } from '../blocks'
 
 /*
   公開サイトは published = 1 の行だけを読む。
@@ -103,6 +104,31 @@ export const itemLinks = sqliteTable('item_links', {
 })
 
 /*
+  トップページの並び。1行が1ブロック。
+
+  type の種類と、それぞれが何を出すかは src/blocks.ts が正。決まった中身を
+  持つもの（apps・team …）は title と body を使わず、置く場所だけを持つ。
+  打ち込むもの（ひとこと・数字 …）は title と body に中身が入る。body の
+  読み方は種類ごとに違い、メンバーの skills_text と同じく1行1件で持つ。
+
+  空のときは DEFAULT_BLOCKS の並びで描く（真っ白なトップを出さない）。
+*/
+export const blocks = sqliteTable(
+  'blocks',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    type: text('type', { enum: BLOCK_KEYS }).notNull(),
+    title: text('title').notNull().default(''),
+    body: text('body').notNull().default(''),
+    published: integer('published').notNull().default(0),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: text('created_at').notNull().default(now),
+    updatedAt: text('updated_at').notNull().default(now),
+  },
+  (t) => [index('idx_blocks_order').on(t.sortOrder)],
+)
+
+/*
   管理画面から変えられる、サイト全体の設定。今のところ見た目のプリセットだけ。
 
   列を増やさず key-value にしているのは、設定が1つ増えるたびに移行を
@@ -172,3 +198,4 @@ export type Item = typeof items.$inferSelect
 export type Platform = typeof platforms.$inferSelect
 export type User = typeof users.$inferSelect
 export type Setting = typeof settings.$inferSelect
+export type Block = typeof blocks.$inferSelect

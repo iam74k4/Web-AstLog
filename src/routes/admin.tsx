@@ -1,11 +1,19 @@
-import { and, asc, count, eq, ne } from 'drizzle-orm'
+import { and, asc, count, eq, max, ne } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { createMiddleware } from 'hono/factory'
 import type { Child } from 'hono/jsx'
-import { loadTheme, saveTheme } from '../db/queries'
+import {
+  BLOCK_TYPES,
+  type BlockKey,
+  type BlockType,
+  blockType,
+  DEFAULT_BLOCKS,
+  isBlockKey,
+} from '../blocks'
+import { listBlocks, loadTheme, reorderBlocks, saveTheme } from '../db/queries'
 import * as schema from '../db/schema'
 import type { AppEnv } from '../env'
 import {
@@ -97,12 +105,18 @@ const Area = (props: {
   value?: string | null
   hint?: string
   rows?: number
+  error?: string
 }) => (
   <label class="field field--wide">
     <span class="field__label">{props.label}</span>
-    <textarea class="input input--area" name={props.name} rows={props.rows ?? 4}>
+    <textarea
+      class={props.error ? 'input input--area input--error' : 'input input--area'}
+      name={props.name}
+      rows={props.rows ?? 4}
+    >
       {props.value ?? ''}
     </textarea>
+    {props.error ? <span class="field__error">{props.error}</span> : null}
     {props.hint ? <span class="field__hint">{props.hint}</span> : null}
   </label>
 )
@@ -143,11 +157,19 @@ const PublishToggle = ({ published }: { published: number }) => (
   </label>
 )
 
-const FormActions = ({ cancelHref, deleteHref }: { cancelHref: string; deleteHref?: string }) => (
+const FormActions = ({
+  cancelHref,
+  deleteHref,
+  deleteLabel = 'この項目を削除…',
+}: {
+  cancelHref: string
+  deleteHref?: string
+  deleteLabel?: string
+}) => (
   <div class="form-actions">
     {deleteHref ? (
       <a class="btn btn--link btn--danger" href={deleteHref}>
-        この項目を削除…
+        {deleteLabel}
       </a>
     ) : (
       <span />
@@ -168,6 +190,8 @@ const Confirm = (props: {
   detail: string
   action: string
   cancelHref: string
+  // ボタンの文言。既定は「削除する」。構成から外すときは「外す」
+  verb?: string
   children?: Child
 }) => (
   <div class="confirm">
@@ -179,7 +203,7 @@ const Confirm = (props: {
         キャンセル
       </a>
       <button class="btn btn--danger" type="submit">
-        削除する
+        {props.verb ?? '削除する'}
       </button>
     </form>
   </div>
@@ -1133,6 +1157,414 @@ app.post('/items/:id/delete', async (c) => {
 
   await db(c).delete(schema.items).where(eq(schema.items.id, id))
   return c.redirect(`/admin/items?type=${item.type}&deleted=1`, 303)
+})
+
+/* --------------------------------------------------------------- 構成 */
+
+/*
+  トップページの並び。置く・外す・上下に動かす、の3つだけ。
+  部品の見た目はここからは変えられない（見た目は「見た目」で、全体に対して選ぶ）。
+*/
+
+const blockLabel = (block: schema.Block) =>
+  block.title || blockType(block.type)?.label || block.type
+
+const BlocksPage = (props: {
+  email: string
+  rows: schema.Block[]
+  flash?: string | null
+  error?: string
+}) => {
+  const placed = new Set(props.rows.map((row) => row.type))
+  // 決まった中身のものは1つだけ。打ち込むものはいくつでも置ける
+  const available = BLOCK_TYPES.filter((type) => type.kind === 'free' || !placed.has(type.key))
+
+  return (
+    <AdminLayout title="構成" active="blocks" email={props.email} flash={props.flash}>
+      <div class="admin-head">
+        <div class="admin-head__title">
+          <span class="crumbs">トップページ</span>
+          <h1>構成</h1>
+        </div>
+        <a class="btn btn--ghost" href="/" target="_blank" rel="noreferrer">
+          サイトを見る ↗
+        </a>
+      </div>
+
+      {props.error ? <p class="banner banner--error">{props.error}</p> : null}
+
+      {props.rows.length === 0 ? (
+        <div class="empty-state">
+          <p>
+            まだ何も置いていないので、既定の並び（Hero → Apps → Works → Team → Contact）で
+            出しています
+          </p>
+          <form method="post" action="/admin/blocks/init">
+            <button class="btn btn--primary" type="submit">
+              この並びから始める
+            </button>
+          </form>
+        </div>
+      ) : (
+        <ul class="rows">
+          {props.rows.map((block, index) => {
+            const type = blockType(block.type)
+            return (
+              <li class="row" key={block.id}>
+                <span class="row__move">
+                  <form method="post" action={`/admin/blocks/${block.id}/move`}>
+                    <input type="hidden" name="dir" value="up" />
+                    <button
+                      class="move-btn"
+                      type="submit"
+                      disabled={index === 0}
+                      aria-label={`${blockLabel(block)} を上へ`}
+                    >
+                      ↑
+                    </button>
+                  </form>
+                  <form method="post" action={`/admin/blocks/${block.id}/move`}>
+                    <input type="hidden" name="dir" value="down" />
+                    <button
+                      class="move-btn"
+                      type="submit"
+                      disabled={index === props.rows.length - 1}
+                      aria-label={`${blockLabel(block)} を下へ`}
+                    >
+                      ↓
+                    </button>
+                  </form>
+                </span>
+                <span class="row__main">
+                  <strong>{blockLabel(block)}</strong>
+                  <span class="row__sub">
+                    {type?.label ?? block.type}
+                    {type?.kind === 'fixed' ? ' · 中身は自動' : ''}
+                  </span>
+                </span>
+                <StatusPill published={block.published} />
+                <span class="row__actions">
+                  <a
+                    class="icon-btn"
+                    href={`/admin/blocks/${block.id}/edit`}
+                    aria-label={`${blockLabel(block)} を編集`}
+                  >
+                    <PencilIcon />
+                    <span class="icon-btn__text">編集</span>
+                  </a>
+                  <a
+                    class="icon-btn icon-btn--danger"
+                    href={`/admin/blocks/${block.id}/delete`}
+                    aria-label={`${blockLabel(block)} を外す`}
+                  >
+                    <TrashIcon />
+                    <span class="icon-btn__text">外す</span>
+                  </a>
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      <section class="catalog">
+        <h2 class="catalog__title">
+          足す<span class="presets__note">下に足される。置いてから上下に動かす</span>
+        </h2>
+        <ul class="catalog__grid">
+          {available.map((type) => (
+            <li class="catalog__item" key={type.key}>
+              <span class="catalog__label">{type.label}</span>
+              <span class="catalog__note">{type.note}</span>
+              {type.kind === 'fixed' ? (
+                <form method="post" action="/admin/blocks">
+                  <input type="hidden" name="type" value={type.key} />
+                  <button class="btn btn--ghost" type="submit">
+                    置く
+                  </button>
+                </form>
+              ) : (
+                <a class="btn btn--ghost" href={`/admin/blocks/new?type=${type.key}`}>
+                  書く
+                </a>
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
+    </AdminLayout>
+  )
+}
+
+app.get('/blocks', async (c) => {
+  return c.html(
+    <BlocksPage
+      email={c.get('user').email}
+      rows={await listBlocks(db(c))}
+      flash={c.req.query('saved') ? '保存しました' : c.req.query('deleted') ? '外しました' : null}
+    />,
+  )
+})
+
+const BlockForm = (props: {
+  email: string
+  type: BlockType
+  block?: schema.Block
+  values?: Record<string, string>
+  errors?: Record<string, string>
+}) => {
+  const { type, block } = props
+  const value = (key: 'title' | 'body') =>
+    props.values?.[key] ?? block?.[key] ?? (key === 'title' && 'title' in type ? type.title : '')
+
+  return (
+    <AdminLayout title={type.label} active="blocks" email={props.email}>
+      <div class="admin-head">
+        <div class="admin-head__title">
+          <span class="crumbs">構成 / {block ? '編集' : '追加'}</span>
+          <h1>{type.label}</h1>
+        </div>
+      </div>
+
+      <form
+        method="post"
+        action={block ? `/admin/blocks/${block.id}` : '/admin/blocks'}
+        class="form"
+      >
+        <input type="hidden" name="type" value={type.key} />
+        <div class="form-grid">
+          {type.kind === 'free' ? (
+            <>
+              <Field
+                label={type.key === 'statement' ? '一文' : '見出し'}
+                name="title"
+                value={value('title')}
+                error={props.errors?.title}
+                hint={
+                  type.key === 'statement' ? '大きく出る' : `空なら「${type.title || type.label}」`
+                }
+              />
+              <Area
+                label={type.key === 'statement' ? '添え書き' : '中身'}
+                name="body"
+                value={value('body')}
+                rows={6}
+                hint={type.hint}
+                error={props.errors?.body}
+              />
+            </>
+          ) : (
+            <p class="form-note field--wide">
+              中身は自動で入ります（{type.note}）。ここでは出す・出さないだけを決めます。
+            </p>
+          )}
+        </div>
+
+        <div class="form-foot">
+          <PublishToggle published={block?.published ?? 1} />
+          <FormActions
+            cancelHref="/admin/blocks"
+            deleteHref={block ? `/admin/blocks/${block.id}/delete` : undefined}
+            deleteLabel="トップから外す…"
+          />
+        </div>
+      </form>
+    </AdminLayout>
+  )
+}
+
+app.get('/blocks/new', (c) => {
+  const key = c.req.query('type') ?? ''
+  const type = isBlockKey(key) ? blockType(key) : undefined
+  // 決まった中身のものは書くことが無いので、一覧の「置く」から直接入る
+  if (!type || type.kind !== 'free') return c.notFound()
+  return c.html(<BlockForm email={c.get('user').email} type={type} />)
+})
+
+app.get('/blocks/:id/edit', async (c) => {
+  const id = parseId(c.req.param('id'))
+  if (!id) return c.notFound()
+  const block = await db(c).query.blocks.findFirst({ where: eq(schema.blocks.id, id) })
+  const type = block ? blockType(block.type) : undefined
+  if (!block || !type) return c.notFound()
+  return c.html(<BlockForm email={c.get('user').email} type={type} block={block} />)
+})
+
+function readBlockForm(form: FormData) {
+  return {
+    title: str(form.get('title')),
+    body: str(form.get('body')),
+    published: bool(form.get('published')),
+  }
+}
+
+// ひとことは一文が無いと出せない。それ以外は中身が無いと出せない
+function blockErrors(
+  key: BlockKey,
+  values: { title: string; body: string },
+): Record<string, string> | null {
+  if (key === 'statement' && !values.title) return { title: '一文を入れてください' }
+  if (key !== 'statement' && !values.body) return { body: '中身を入れてください' }
+  return null
+}
+
+async function nextBlockOrder(c: Context<AppEnv>) {
+  const [row] = await db(c)
+    .select({ last: max(schema.blocks.sortOrder) })
+    .from(schema.blocks)
+  return (row?.last ?? 0) + 10
+}
+
+app.post('/blocks', async (c) => {
+  const form = await c.req.formData()
+  const key = str(form.get('type'))
+  const type = isBlockKey(key) ? blockType(key) : undefined
+  const email = c.get('user').email
+  const rows = await listBlocks(db(c))
+
+  if (!type) {
+    return c.html(<BlocksPage email={email} rows={rows} error="置けないブロックです" />, 400)
+  }
+
+  if (type.kind === 'fixed') {
+    if (rows.some((row) => row.type === type.key)) {
+      return c.html(
+        <BlocksPage email={email} rows={rows} error={`${type.label} は既に置いてあります`} />,
+        400,
+      )
+    }
+    await db(c)
+      .insert(schema.blocks)
+      .values({ type: type.key, published: 1, sortOrder: await nextBlockOrder(c) })
+    return c.redirect('/admin/blocks?saved=1', 303)
+  }
+
+  const values = readBlockForm(form)
+  const errors = blockErrors(type.key, values)
+  if (errors) {
+    return c.html(
+      <BlockForm email={email} type={type} values={asValues(values)} errors={errors} />,
+      400,
+    )
+  }
+
+  await db(c)
+    .insert(schema.blocks)
+    .values({ type: type.key, ...values, sortOrder: await nextBlockOrder(c) })
+  return c.redirect('/admin/blocks?saved=1', 303)
+})
+
+// 何も置いていないときだけ、既定の並びを行にする。2回目以降は何もしない
+app.post('/blocks/init', async (c) => {
+  const rows = await listBlocks(db(c))
+  if (rows.length === 0) {
+    await db(c)
+      .insert(schema.blocks)
+      .values(
+        DEFAULT_BLOCKS.map((type, index) => ({ type, published: 1, sortOrder: (index + 1) * 10 })),
+      )
+  }
+  return c.redirect('/admin/blocks?saved=1', 303)
+})
+
+app.post('/blocks/:id', async (c) => {
+  const id = parseId(c.req.param('id'))
+  if (!id) return c.notFound()
+  const block = await db(c).query.blocks.findFirst({ where: eq(schema.blocks.id, id) })
+  const type = block ? blockType(block.type) : undefined
+  if (!block || !type) return c.notFound()
+
+  const values = readBlockForm(await c.req.formData())
+  const updatedAt = new Date().toISOString()
+
+  // 決まった中身のものは、出す・出さないしか変えられない
+  if (type.kind === 'fixed') {
+    await db(c)
+      .update(schema.blocks)
+      .set({ published: values.published, updatedAt })
+      .where(eq(schema.blocks.id, id))
+    return c.redirect('/admin/blocks?saved=1', 303)
+  }
+
+  const errors = blockErrors(type.key, values)
+  if (errors) {
+    return c.html(
+      <BlockForm
+        email={c.get('user').email}
+        type={type}
+        block={block}
+        values={asValues(values)}
+        errors={errors}
+      />,
+      400,
+    )
+  }
+
+  await db(c)
+    .update(schema.blocks)
+    .set({ ...values, updatedAt })
+    .where(eq(schema.blocks.id, id))
+  return c.redirect('/admin/blocks?saved=1', 303)
+})
+
+/*
+  上下に1つ動かす。並び順は毎回 10 刻みで振り直すので、同じ値が並んで
+  「動かしたのに順番が変わらない」ことが起きない
+*/
+app.post('/blocks/:id/move', async (c) => {
+  const id = parseId(c.req.param('id'))
+  if (!id) return c.notFound()
+  const rows = await listBlocks(db(c))
+  const index = rows.findIndex((row) => row.id === id)
+  if (index < 0) return c.notFound()
+
+  const form = await c.req.formData()
+  const target = str(form.get('dir')) === 'up' ? index - 1 : index + 1
+  const ids = rows.map((row) => row.id)
+  if (target >= 0 && target < ids.length) {
+    const [moved] = ids.splice(index, 1)
+    if (moved !== undefined) ids.splice(target, 0, moved)
+    await reorderBlocks(db(c), ids)
+  }
+  return c.redirect('/admin/blocks', 303)
+})
+
+app.get('/blocks/:id/delete', async (c) => {
+  const id = parseId(c.req.param('id'))
+  if (!id) return c.notFound()
+  const block = await db(c).query.blocks.findFirst({ where: eq(schema.blocks.id, id) })
+  const type = block ? blockType(block.type) : undefined
+  if (!block || !type) return c.notFound()
+
+  return c.html(
+    <AdminLayout title="外す" active="blocks" email={c.get('user').email}>
+      <Confirm
+        title={`「${blockLabel(block)}」をトップから外しますか？`}
+        detail={
+          type.kind === 'fixed'
+            ? '中身（登録した項目やメンバー）は消えません。あとから「足す」で置き直せます。'
+            : '打ち込んだ中身も消えます。'
+        }
+        action={`/admin/blocks/${id}/delete`}
+        cancelHref="/admin/blocks"
+        verb="外す"
+      >
+        <p class="confirm__detail">
+          いったん隠したいだけなら、編集で「公開する」を外すほうが安全です。
+        </p>
+      </Confirm>
+    </AdminLayout>,
+  )
+})
+
+app.post('/blocks/:id/delete', async (c) => {
+  const id = parseId(c.req.param('id'))
+  if (!id) return c.notFound()
+  const block = await db(c).query.blocks.findFirst({ where: eq(schema.blocks.id, id) })
+  if (!block) return c.notFound()
+
+  await db(c).delete(schema.blocks).where(eq(schema.blocks.id, id))
+  return c.redirect('/admin/blocks?deleted=1', 303)
 })
 
 /* --------------------------------------------------------------- 見た目 */

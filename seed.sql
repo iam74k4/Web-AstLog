@@ -7,6 +7,15 @@ DELETE FROM item_tags;
 DELETE FROM items;
 DELETE FROM members;
 DELETE FROM platforms;
+DELETE FROM blocks;
+
+-- トップの並び。移行前の index.html と同じ順（src/blocks.ts の DEFAULT_BLOCKS と揃える）
+INSERT INTO blocks (type, published, sort_order) VALUES
+  ('hero',    1, 10),
+  ('apps',    1, 20),
+  ('works',   1, 30),
+  ('team',    1, 40),
+  ('contact', 1, 50);
 
 INSERT INTO platforms (key, label, sort_order) VALUES
   ('macos',  'macOS',  10),

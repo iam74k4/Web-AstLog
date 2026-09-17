@@ -39,6 +39,24 @@ export function parseCareer(text: string): CareerEntry[] {
     })
 }
 
+/*
+  1行1件・「|」区切りのテキストを、列の配列に開く。
+  ブロック（数字・リンク集・できごと …）の body はどれもこの形で持つ。
+  parseCareer と同じ読み方だが、列の意味は種類ごとに違うので名前を付けない
+*/
+export function parseLines(text: string): string[][] {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.split('|').map((part) => part.trim()))
+}
+
+// 管理画面から入る URL でも、javascript: のような形は通さない
+export function isSafeUrl(url: string | undefined): url is string {
+  return !!url && /^(https?:\/\/|mailto:|\/)/.test(url)
+}
+
 // 空行で段落を分ける
 export function paragraphs(text: string): string[] {
   return text

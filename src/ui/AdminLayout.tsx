@@ -3,14 +3,14 @@ import { MarkIcon } from './icons'
 
 /*
   管理画面の外枠。900px 以上で左ナビ、それ未満では上のバーになる（CSS 側）。
-  項目が3つしかないので、折りたたむメニューは持たない。
+  項目が4つしかないので、折りたたむメニューは持たない。
 
   公開ページと違い、ここは見た目のプリセットを当てない。編集する場所の
   見え方まで一緒に変わると、直したのが中身なのか設定なのか分からなくなる。
 */
 export const AdminLayout = (props: {
   title: string
-  active: 'members' | 'items' | 'appearance'
+  active: 'members' | 'items' | 'blocks' | 'appearance'
   email: string
   flash?: string | null
   children?: Child
@@ -37,6 +37,9 @@ export const AdminLayout = (props: {
             </a>
             <a href="/admin/items" aria-current={props.active === 'items' ? 'page' : undefined}>
               Apps &amp; Works
+            </a>
+            <a href="/admin/blocks" aria-current={props.active === 'blocks' ? 'page' : undefined}>
+              構成
             </a>
             <a
               href="/admin/appearance"

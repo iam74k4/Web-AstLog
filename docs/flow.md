@@ -9,7 +9,7 @@ GitHub 上でそのまま図として表示される（Mermaid）。画面の一
 
 ```mermaid
 flowchart LR
-    Top["トップ /"]
+    Top["トップ /<br>（構成で置いたブロックの順）"]
     Profile["メンバー個別<br>/members/:slug"]
     Filtered["トップ・その人で絞り込み<br>/?member=slug"]
     Mail["メールソフト"]
@@ -41,11 +41,23 @@ flowchart TD
     IForm["Item フォーム<br>/items/new ・ /:id/edit"]
     MDel["削除の確認<br>GET /members/:id/delete"]
     IDel["削除の確認<br>GET /items/:id/delete"]
+    Blocks["構成<br>GET /admin/blocks"]
+    BForm["ブロックフォーム<br>/blocks/new?type= ・ /:id/edit"]
+    BDel["外す確認<br>GET /blocks/:id/delete"]
     Look["見た目<br>GET /admin/appearance"]
 
     Login -->|"POST /admin/login<br>成功 → 303"| Members
     Members <-->|"左ナビ"| Items
-    Items <-->|"左ナビ"| Look
+    Items <-->|"左ナビ"| Blocks
+    Blocks <-->|"左ナビ"| Look
+
+    Blocks -->|"↑↓ POST /:id/move → 303"| Blocks
+    Blocks -->|"足す（決まった中身）<br>POST /admin/blocks → 303"| Blocks
+    Blocks -->|"足す（打ち込む）/ 編集"| BForm
+    BForm -->|"POST → 303 ?saved=1"| Blocks
+    BForm -->|"入力エラー → 400"| BForm
+    Blocks -->|"外す"| BDel
+    BDel -->|"POST → 303 ?deleted=1"| Blocks
     Look -->|"POST → 303 ?saved=1<br>選べない値なら 400"| Look
 
     Members -->|"＋ Add / 編集"| MForm
@@ -68,6 +80,9 @@ flowchart TD
 ```
 
 保存が必ず 303 リダイレクトで終わるので、リロードしても二重に登録されない。
+
+構成の ↑↓ は、行ごとの小さなフォーム。1回押すごとに1つ動いて一覧に戻る。
+ドラッグ&ドロップにしないのは、JavaScript を増やさないため。
 
 見た目だけは一覧を持たず、同じ画面に戻る。選ぶものが3つしかないので、
 「どれを編集中か」を示す一覧が要らない。

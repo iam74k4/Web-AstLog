@@ -1,5 +1,6 @@
 import { and, asc, count, eq, sql } from 'drizzle-orm'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
+import { DEFAULT_BLOCKS } from '../blocks'
 import { normalizeTheme, THEME_KEYS, type Theme, type ThemeKey } from '../theme'
 import type { ItemView } from '../ui/components'
 import * as schema from './schema'
@@ -100,4 +101,47 @@ export async function saveTheme(db: Db, theme: Theme) {
       target: schema.settings.key,
       set: { value: sql`excluded.value`, updatedAt },
     })
+}
+
+/* ------------------------------------------------------------- 構成 */
+
+export function listBlocks(db: Db) {
+  return db.query.blocks.findMany({
+    orderBy: [asc(schema.blocks.sortOrder), asc(schema.blocks.id)],
+  })
+}
+
+// 何も置いていないときの並び。id は 0 で、DB には無い
+export function defaultBlocks(): schema.Block[] {
+  return DEFAULT_BLOCKS.map((type, index) => ({
+    id: 0,
+    type,
+    title: '',
+    body: '',
+    published: 1,
+    sortOrder: (index + 1) * 10,
+    createdAt: '',
+    updatedAt: '',
+  }))
+}
+
+/*
+  公開ページが描く並び。
+  1行も無ければ既定の並び。1行でもあれば、公開中のものだけ。
+  「全部下書き」と「まだ何も置いていない」を分けるため、published で絞る前に数える
+*/
+export async function publishedBlocks(db: Db): Promise<schema.Block[]> {
+  const rows = await listBlocks(db)
+  if (rows.length === 0) return defaultBlocks()
+  return rows.filter((row) => row.published === 1)
+}
+
+// 並び順を 10 刻みで振り直す。上下入れ替えのたびに呼ぶので、同じ値が並ぶことがない
+export async function reorderBlocks(db: Db, ids: number[]) {
+  for (const [index, id] of ids.entries()) {
+    await db
+      .update(schema.blocks)
+      .set({ sortOrder: (index + 1) * 10 })
+      .where(eq(schema.blocks.id, id))
+  }
 }

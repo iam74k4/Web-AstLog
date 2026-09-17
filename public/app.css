@@ -749,6 +749,102 @@ main {
   font-size: var(--fs-label);
 }
 
+/* --- 打ち込むブロック（ひとこと・いま・数字・リンク集） --- */
+
+/* できごとは .career、メモは .bio をそのまま使う。同じものを別の名前で増やさない */
+
+.statement {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  border-left: 2px solid var(--accent);
+  padding-left: var(--sp-5);
+}
+
+.statement__text {
+  font-family: var(--font-display);
+  font-size: var(--fs-contact);
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  max-width: 28em;
+}
+
+.statement__note {
+  color: var(--ink-weak);
+  font-size: var(--fs-sm);
+}
+
+.now li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2) var(--sp-4);
+  padding-block: var(--sp-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.now li:first-child {
+  border-top: 1px solid var(--line);
+}
+
+.now .exp {
+  color: var(--ink-weak);
+  font-size: var(--fs-meta);
+  font-family: var(--font-mono);
+}
+
+.numbers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--sp-4);
+}
+
+.numbers__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.numbers__note {
+  color: var(--ink-weak);
+  font-size: var(--fs-meta);
+}
+
+.linklist li a {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2) var(--sp-4);
+  min-height: var(--tap);
+  padding-block: var(--sp-3);
+  border-bottom: 1px solid var(--line);
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.linklist li:first-child a {
+  border-top: 1px solid var(--line);
+}
+
+.linklist__label {
+  font-weight: 600;
+}
+
+.linklist__note {
+  color: var(--ink-weak);
+  font-size: var(--fs-sm);
+}
+
+.linklist__go {
+  margin-left: auto;
+  color: var(--accent);
+  font-size: var(--fs-sm);
+}
+
 /* --- 個人ページから一覧への帯 --- */
 
 .band {
@@ -1402,6 +1498,91 @@ main {
   margin-top: var(--sp-2);
 }
 
+/* --- 構成: 並べ替えと、置けるもののカタログ --- */
+
+.row__move {
+  display: flex;
+  gap: var(--sp-1);
+}
+
+.row__move form {
+  display: contents;
+}
+
+.move-btn {
+  width: var(--tap);
+  min-height: var(--tap);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-mid);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.move-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.form-note {
+  color: var(--ink-mid);
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+}
+
+.catalog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+}
+
+.catalog__title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.catalog__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--sp-3);
+}
+
+.catalog__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.catalog__item .btn {
+  align-self: flex-start;
+  margin-top: auto;
+}
+
+.catalog__label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.catalog__note {
+  color: var(--ink-weak);
+  font-size: var(--fs-label);
+  line-height: 1.5;
+  flex: 1;
+}
+
 /* --- 見た目のプリセット選び --- */
 
 .presets {
@@ -1805,6 +1986,13 @@ body[data-layout='center'] .head {
   justify-content: center;
 }
 
+body[data-layout='center'] .statement {
+  align-items: center;
+  text-align: center;
+  border-left: 0;
+  padding-left: 0;
+}
+
 /* --- 骨格: 雑誌風 --- */
 
 body[data-layout='magazine'] {
@@ -1819,6 +2007,7 @@ body[data-layout='magazine'] .shell {
 body[data-layout='magazine'] .card,
 body[data-layout='magazine'] .member,
 body[data-layout='magazine'] .band,
+body[data-layout='magazine'] .numbers__item,
 body[data-layout='magazine'] .contact {
   border: 0;
   border-top: 1px solid var(--line-strong);

@@ -88,15 +88,16 @@ src/
   index.tsx          入口。ルートを束ねて 404 / 500 を出す
   site.ts            サイト全体の文言と宛先（管理画面からは変えない）
   theme.ts           見た目のプリセット。選べる値はここが正
+  blocks.ts          トップに置けるブロックの種類。ここが正
   env.ts             バインディングの型
   db/
     schema.ts        テーブル定義。ここが正
-    queries.ts       公開ページが読む問い合わせと、見た目の読み書き
+    queries.ts       公開ページが読む問い合わせと、構成・見た目の読み書き
   lib/
     auth.ts          パスワード・セッション・試行回数
     format.ts        テキストの解釈とフォーム値の受け取り
   routes/
-    public.tsx       / と /members/:slug と /images/*
+    public.tsx       / と /members/:slug と /images/*。トップはブロックを順に描く
     admin.tsx        /admin/*
   ui/
     Layout.tsx       公開ページの外枠
