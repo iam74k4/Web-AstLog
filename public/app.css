@@ -13,6 +13,10 @@
 :root {
   --font-sans: 'Helvetica Neue', 'Hiragino Sans', 'Noto Sans JP', system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, monospace;
+  --font-serif: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', Georgia, serif;
+
+  /* 見出しの書体。本文は読みやすさを優先して常に --font-sans */
+  --font-display: var(--font-sans);
 
   /* 文字の段。6つだけ。中間値を足さない */
   --fs-label: 11px;
@@ -27,6 +31,9 @@
   --fs-lead: clamp(14px, 1.05vw, 15px);
   --fs-section: clamp(17px, 1.3vw, 19px);
   --fs-display: clamp(28px, 4vw, 52px);
+  /* 雑誌風のときだけ使う、もう一段大きい見出し */
+  --fs-display-xl: clamp(32px, 6.4vw, 76px);
+  --fs-contact: clamp(20px, 2.4vw, 30px);
 
   /* 余白の段。7つから選ぶ */
   --sp-1: 2px;
@@ -38,6 +45,10 @@
   --sp-7: 32px;
 
   --nav-w: 264px;
+  /* ページの最大幅。骨格のプリセットで使い分ける */
+  --w-page: 1280px;
+  --w-center: 880px;
+  --w-wide: 1440px;
   --gutter: clamp(16px, 3.4vw, 60px);
   --radius: 10px;
   --radius-sm: 6px;
@@ -55,9 +66,21 @@
   --ink: #f2f2f4;
   --ink-mid: #b4b4c2;
   --ink-weak: #8a8a96;
-  --accent: #8f8ff5;
+  /* アクセントの候補。どれを使うかは管理画面の「見た目」で選ぶ */
+  --iris: #8f8ff5;
+  --iris-soft: rgba(143, 143, 245, 0.13);
+  --ember: #e8a15c;
+  --ember-soft: rgba(232, 161, 92, 0.14);
+  --mint: #5fd0ab;
+  --mint-soft: rgba(95, 208, 171, 0.13);
+  --sky: #6fb6f2;
+  --sky-soft: rgba(111, 182, 242, 0.13);
+  --rose: #f0899f;
+  --rose-soft: rgba(240, 137, 159, 0.13);
+
+  --accent: var(--iris);
+  --accent-soft: var(--iris-soft);
   --accent-ink: #12121a;
-  --accent-soft: rgba(143, 143, 245, 0.13);
   --danger: #e5848a;
   --danger-soft: rgba(229, 132, 138, 0.14);
 
@@ -161,7 +184,7 @@ img {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-7);
-  max-width: 1280px;
+  max-width: var(--w-page);
   margin-inline: auto;
   padding: var(--gutter);
 }
@@ -336,6 +359,7 @@ main {
 
 .hero h1,
 .hero__headline {
+  font-family: var(--font-display);
   font-size: var(--fs-display);
   font-weight: 600;
   line-height: 1.24;
@@ -364,6 +388,7 @@ main {
 }
 
 .head h2 {
+  font-family: var(--font-display);
   font-size: var(--fs-section);
   font-weight: 600;
   letter-spacing: 0.01em;
@@ -770,7 +795,8 @@ main {
 }
 
 .contact h2 {
-  font-size: clamp(20px, 2.4vw, 30px);
+  font-family: var(--font-display);
+  font-size: var(--fs-contact);
   font-weight: 600;
   line-height: 1.3;
   letter-spacing: -0.01em;
@@ -1376,6 +1402,150 @@ main {
   margin-top: var(--sp-2);
 }
 
+/* --- 見た目のプリセット選び --- */
+
+.presets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.presets__legend {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.presets__note {
+  color: var(--ink-weak);
+  font-size: var(--fs-label);
+  font-weight: 400;
+}
+
+.presets__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--sp-3);
+}
+
+.preset {
+  position: relative;
+  display: block;
+  cursor: pointer;
+}
+
+/* ラジオは消さずに視覚の外へ。読み上げと矢印キーでの移動を残すため */
+.preset input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.preset__box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  height: 100%;
+  padding: var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+
+.preset input:checked + .preset__box {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.preset input:focus-visible + .preset__box {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.preset__label {
+  font-size: var(--fs-sm);
+}
+
+.preset__note {
+  color: var(--ink-weak);
+  font-size: var(--fs-label);
+  line-height: 1.5;
+}
+
+/* 骨格の見取り図。縮小版ではなく、帯の並び方だけを見せる */
+.skel {
+  display: grid;
+  gap: var(--sp-2);
+  aspect-ratio: 16 / 9;
+  padding: var(--sp-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.skel i {
+  display: block;
+  border-radius: var(--sp-1);
+  background: var(--line-strong);
+}
+
+.skel i.skel__mark {
+  background: var(--accent);
+}
+
+.skel--rail {
+  grid-template-columns: 1fr 2.4fr;
+  grid-template-rows: 1fr 2fr;
+}
+
+.skel--rail .skel__mark {
+  grid-row: 1 / 3;
+}
+
+.skel--center {
+  grid-template-rows: 1fr 1.6fr 1.6fr;
+}
+
+.skel--center .skel__mark {
+  justify-self: center;
+  width: 45%;
+}
+
+.skel--magazine {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 2.6fr;
+}
+
+.skel--magazine .skel__mark {
+  grid-column: 1 / 3;
+}
+
+.swatch {
+  display: block;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+}
+
+.sample {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+}
+
 /* ============================================================ 600px 以上 */
 
 @media (min-width: 600px) {
@@ -1550,6 +1720,177 @@ main {
   }
 }
 
+/* ====================================================== 見た目のプリセット */
+
+/*
+  管理画面の「見た目」で選んだものが body の data-* に載る。
+  選べる値は src/theme.ts が正。ここに無い値を保存しても何も変わらない。
+
+  どのプリセットでも HTML は同じ。ここでやるのは :root の段を差し替えることと、
+  同じ部品を別の並べ方にすることだけ。生の色や文字サイズはここに書かない。
+*/
+
+/* --- アクセント色 --- */
+
+/*
+  body だけでなく要素単位でも効かせる。管理画面の見本が、同じ指定で
+  そのまま色を出せるようにするため（見本用の色を別に持たない）。
+*/
+[data-accent='iris'] {
+  --accent: var(--iris);
+  --accent-soft: var(--iris-soft);
+}
+
+[data-accent='ember'] {
+  --accent: var(--ember);
+  --accent-soft: var(--ember-soft);
+}
+
+[data-accent='mint'] {
+  --accent: var(--mint);
+  --accent-soft: var(--mint-soft);
+}
+
+[data-accent='sky'] {
+  --accent: var(--sky);
+  --accent-soft: var(--sky-soft);
+}
+
+[data-accent='rose'] {
+  --accent: var(--rose);
+  --accent-soft: var(--rose-soft);
+}
+
+/* --- 書体。変えるのは見出しだけで、本文は読みやすさを優先して据え置く --- */
+
+[data-typeface='sans'] {
+  --font-display: var(--font-sans);
+}
+
+[data-typeface='serif'] {
+  --font-display: var(--font-serif);
+}
+
+[data-typeface='mono'] {
+  --font-display: var(--font-mono);
+}
+
+/* --- 骨格: 中央寄せ --- */
+
+body[data-layout='center'] .shell {
+  max-width: var(--w-center);
+}
+
+body[data-layout='center'] .rail,
+body[data-layout='center'] .identity,
+body[data-layout='center'] .hero,
+body[data-layout='center'] .contact {
+  align-items: center;
+  text-align: center;
+}
+
+body[data-layout='center'] .toc {
+  justify-content: center;
+  flex-wrap: wrap;
+  border-top: 0;
+  padding-top: 0;
+}
+
+body[data-layout='center'] .hero p,
+body[data-layout='center'] .contact p {
+  margin-inline: auto;
+}
+
+body[data-layout='center'] .head {
+  justify-content: center;
+}
+
+/* --- 骨格: 雑誌風 --- */
+
+body[data-layout='magazine'] {
+  --fs-display: var(--fs-display-xl);
+}
+
+body[data-layout='magazine'] .shell {
+  max-width: var(--w-wide);
+}
+
+/* 箱を並べず、罫線で段を区切る */
+body[data-layout='magazine'] .card,
+body[data-layout='magazine'] .member,
+body[data-layout='magazine'] .band,
+body[data-layout='magazine'] .contact {
+  border: 0;
+  border-top: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: transparent;
+  padding: var(--sp-5) 0 0;
+}
+
+body[data-layout='magazine'] .grid {
+  gap: var(--sp-6);
+}
+
+body[data-layout='magazine'] .head {
+  border-bottom-color: var(--line-strong);
+}
+
+@media (min-width: 600px) {
+  body[data-layout='magazine'] .grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    column-gap: var(--sp-7);
+  }
+}
+
+@media (min-width: 900px) {
+  /* 中央寄せと雑誌風は、広い画面でも左に柱を立てない */
+  body[data-layout='center'] .shell,
+  body[data-layout='magazine'] .shell {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-7);
+  }
+
+  body[data-layout='center'] .rail,
+  body[data-layout='magazine'] .rail {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+
+  body[data-layout='center'] .toc,
+  body[data-layout='magazine'] .toc {
+    flex-direction: row;
+    padding-top: 0;
+  }
+
+  body[data-layout='center'] .toc a,
+  body[data-layout='magazine'] .toc a {
+    margin-left: 0;
+  }
+
+  /* 雑誌風の名札は、ページの上に渡す題字になる */
+  body[data-layout='magazine'] .rail {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--sp-5);
+    border-bottom: 1px solid var(--line-strong);
+    padding-bottom: var(--sp-5);
+  }
+
+  body[data-layout='magazine'] .identity {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--sp-4);
+  }
+
+  body[data-layout='magazine'] .toc {
+    border-top: 0;
+  }
+}
+
 /* ============================================ 入力手段で分ける（幅ではなく） */
 
 @media (hover: hover) {
@@ -1581,6 +1922,13 @@ main {
 
   .links a:hover {
     color: var(--accent);
+  }
+
+  /* 罫線だけの面は浮かせない。浮くと隣の段と行がずれて見える */
+  body[data-layout='magazine'] .card:hover,
+  body[data-layout='magazine'] .member:hover {
+    transform: none;
+    border-top-color: var(--accent);
   }
 
   .pill-cta:hover,

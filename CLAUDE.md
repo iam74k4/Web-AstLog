@@ -46,6 +46,11 @@ HTML フォームと 303 リダイレクトで動かす。JSON API も SPA も�
 `npm run db:generate` → `src/routes/admin.tsx` のフォームと
 `src/routes/public.tsx` の表示に足す。`drizzle/` の SQL は手で書かない。
 
+**見た目のプリセットを増やす** → `src/theme.ts` の一覧に1つ足す →
+`public/app.css` に同じ key の `[data-layout]` / `[data-accent]` /
+`[data-typeface]` を足す。片方だけ足すと「選べるのに何も変わらない」ものができる
+（テストが落ちる）。CSS 側でも生の色や寸法は書かず、`:root` の段を差し替える。
+
 **公開ページの節を増やす** → `src/routes/public.tsx` に `<section>` を足し、
 `nav` にも足す。中身が0件なら節ごと出さないこと。
 

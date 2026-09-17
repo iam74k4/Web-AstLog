@@ -6,6 +6,7 @@ import {
   listPlatforms,
   listPublishedItems,
   listPublishedMembers,
+  loadTheme,
   usedPlatforms,
 } from '../db/queries'
 import * as schema from '../db/schema'
@@ -56,11 +57,12 @@ const Contact = ({ title, lead, email }: { title: string; lead: string; email: s
 
 publicRoutes.get('/', async (c) => {
   const db = drizzle(c.env.DB, { schema })
-  const [members, apps, works, platforms] = await Promise.all([
+  const [members, apps, works, platforms, theme] = await Promise.all([
     listPublishedMembers(db),
     listPublishedItems(db, 'app'),
     listPublishedItems(db, 'work'),
     listPlatforms(db),
+    loadTheme(db),
   ])
 
   const hasTeam = members.length > 0
@@ -93,6 +95,7 @@ publicRoutes.get('/', async (c) => {
       canonical={`${SITE.origin}/`}
       jsonLd={jsonLd}
       nav={nav}
+      theme={theme}
       withFilterScript={apps.length > 0 || members.length > 1}
       sidebar={
         <div class="identity">
@@ -166,7 +169,10 @@ publicRoutes.get('/', async (c) => {
 
 publicRoutes.get('/members/:slug', async (c) => {
   const db = drizzle(c.env.DB, { schema })
-  const member = await findPublishedMember(db, c.req.param('slug'))
+  const [member, theme] = await Promise.all([
+    findPublishedMember(db, c.req.param('slug')),
+    loadTheme(db),
+  ])
   if (!member) return c.notFound()
 
   const counts = await countMemberItems(db, member.id)
@@ -198,6 +204,7 @@ publicRoutes.get('/members/:slug', async (c) => {
       canonical={`${SITE.origin}/members/${member.slug}`}
       jsonLd={jsonLd}
       nav={nav}
+      theme={theme}
       sidebar={
         <div class="identity">
           <Brand size="sm" />

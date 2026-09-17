@@ -16,6 +16,7 @@ export async function resetDb() {
   await database.delete(schema.users)
   await database.delete(schema.members)
   await database.delete(schema.platforms)
+  await database.delete(schema.settings)
   await database.insert(schema.platforms).values([
     { key: 'web', label: 'Web', sortOrder: 10 },
     { key: 'cli', label: 'CLI', sortOrder: 20 },

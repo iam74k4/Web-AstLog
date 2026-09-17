@@ -103,6 +103,19 @@ export const itemLinks = sqliteTable('item_links', {
 })
 
 /*
+  管理画面から変えられる、サイト全体の設定。今のところ見た目のプリセットだけ。
+
+  列を増やさず key-value にしているのは、設定が1つ増えるたびに移行を
+  書かずに済ませるため。選べる値は src/theme.ts が正で、ここは選んだ結果を
+  置くだけ。知らない値が入っていても既定に戻して描く。
+*/
+export const settings = sqliteTable('settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: text('updated_at').notNull().default(now),
+})
+
+/*
   管理画面のログイン。
   role と memberId を最初から持たせておく。後から「本人が自分のページだけ
   編集できる」を足すときに、列を増やす移行をしなくて済ませるため。
@@ -158,3 +171,4 @@ export type Member = typeof members.$inferSelect
 export type Item = typeof items.$inferSelect
 export type Platform = typeof platforms.$inferSelect
 export type User = typeof users.$inferSelect
+export type Setting = typeof settings.$inferSelect

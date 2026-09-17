@@ -1,11 +1,16 @@
 import { raw } from 'hono/html'
 import type { Child } from 'hono/jsx'
 import { SITE } from '../site'
+import type { Theme } from '../theme'
 
 export type NavItem = { href: string; label: string; active?: boolean }
 
 /*
-  公開ページの外枠。head と骨格（左の名札 + 右の本文）はここだけで決める。
+  公開ページの外枠。head と骨格（名札 + 本文）はここだけで決める。
+
+  骨格の並べ替えは body の data-* だけで済ませる。マークアップは
+  どのプリセットでも同じで、変わるのは app.css の [data-layout] 側。
+  出し分けを JSX に持たせると、プリセットの数だけ画面が分かれてしまう。
 
   JavaScript は絞り込みだけに使う。切っても全件が読める状態を保つこと。
 */
@@ -15,6 +20,7 @@ export const Layout = (props: {
   canonical: string
   jsonLd?: unknown
   nav: NavItem[]
+  theme: Theme
   sidebar: Child
   withFilterScript?: boolean
   children?: Child
@@ -51,7 +57,11 @@ export const Layout = (props: {
         />
       ) : null}
     </head>
-    <body>
+    <body
+      data-layout={props.theme.layout}
+      data-accent={props.theme.accent}
+      data-typeface={props.theme.typeface}
+    >
       <a class="skip" href="#main">
         本文へスキップ
       </a>

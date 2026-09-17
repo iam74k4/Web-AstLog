@@ -1,5 +1,6 @@
-import { and, asc, count, eq } from 'drizzle-orm'
+import { and, asc, count, eq, sql } from 'drizzle-orm'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
+import { normalizeTheme, THEME_KEYS, type Theme, type ThemeKey } from '../theme'
 import type { ItemView } from '../ui/components'
 import * as schema from './schema'
 
@@ -69,4 +70,34 @@ export async function countMemberItems(db: Db, memberId: number) {
     app: rows.find((row) => row.type === 'app')?.n ?? 0,
     work: rows.find((row) => row.type === 'work')?.n ?? 0,
   }
+}
+
+/* ------------------------------------------------------------- 見た目 */
+
+/*
+  settings は key-value なので、見た目の3つは接頭辞を付けて置く。
+  他の設定が増えても、この3行だけを拾えるようにするため。
+*/
+const THEME_PREFIX = 'theme.'
+
+const settingKey = (key: ThemeKey) => `${THEME_PREFIX}${key}`
+
+export async function loadTheme(db: Db): Promise<Theme> {
+  const rows = await db.query.settings.findMany()
+  const raw: Partial<Record<ThemeKey, string>> = {}
+  for (const key of THEME_KEYS) {
+    raw[key] = rows.find((row) => row.key === settingKey(key))?.value
+  }
+  return normalizeTheme(raw)
+}
+
+export async function saveTheme(db: Db, theme: Theme) {
+  const updatedAt = new Date().toISOString()
+  await db
+    .insert(schema.settings)
+    .values(THEME_KEYS.map((key) => ({ key: settingKey(key), value: theme[key], updatedAt })))
+    .onConflictDoUpdate({
+      target: schema.settings.key,
+      set: { value: sql`excluded.value`, updatedAt },
+    })
 }

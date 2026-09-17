@@ -41,9 +41,12 @@ flowchart TD
     IForm["Item フォーム<br>/items/new ・ /:id/edit"]
     MDel["削除の確認<br>GET /members/:id/delete"]
     IDel["削除の確認<br>GET /items/:id/delete"]
+    Look["見た目<br>GET /admin/appearance"]
 
     Login -->|"POST /admin/login<br>成功 → 303"| Members
     Members <-->|"左ナビ"| Items
+    Items <-->|"左ナビ"| Look
+    Look -->|"POST → 303 ?saved=1<br>選べない値なら 400"| Look
 
     Members -->|"＋ Add / 編集"| MForm
     MForm -->|"POST → 303 ?saved=1"| Members
@@ -65,6 +68,9 @@ flowchart TD
 ```
 
 保存が必ず 303 リダイレクトで終わるので、リロードしても二重に登録されない。
+
+見た目だけは一覧を持たず、同じ画面に戻る。選ぶものが3つしかないので、
+「どれを編集中か」を示す一覧が要らない。
 
 ## 認証
 
