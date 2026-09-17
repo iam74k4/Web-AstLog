@@ -25,8 +25,13 @@ export const Avatar = ({
   size?: number
 }) => (
   <span class="avatar" style={`--avatar-size:${size}px`}>
+    {/*
+      遅延読み込みにしない。1ページに数枚しか無く、どれも小さい。
+      待たせる利得より、Team の欄が空の丸のまま見える時間のほうが痛い
+      （印刷とスクリーンショットでは、そのまま空で焼き付く）
+    */}
     {src ? (
-      <img src={src} alt="" width={size} height={size} loading="lazy" decoding="async" />
+      <img src={src} alt="" width={size} height={size} />
     ) : (
       <span class="avatar__fallback" aria-hidden="true">
         {initials(name)}

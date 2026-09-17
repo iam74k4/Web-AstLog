@@ -33,6 +33,13 @@ describe('トップページ', () => {
     expect(await (await get('/')).text()).toContain('member--compact')
   })
 
+  it('アバターは遅延読み込みにしない（空の丸のまま見えてしまう）', async () => {
+    await seedMember({ avatarUrl: '/assets/avatar.png' })
+    const html = await (await get('/')).text()
+    expect(html).toContain('src="/assets/avatar.png"')
+    expect(html).not.toContain('loading="lazy"')
+  })
+
   it('下書きのメンバーは名前もリンクも出さない', async () => {
     const draft = await seedMember({ slug: 'draft', name: '下書きの人', published: 0 })
     await seedMember({ slug: 'shown', name: '公開の人' })
