@@ -74,6 +74,13 @@ npm run deploy
 Actions の deploy ワークフロー（手動実行）でも同じことができる。使うなら
 `CLOUDFLARE_API_TOKEN` をリポジトリの secret に入れる。
 
+## 画面
+
+どんな画面があり、どう行き来するかは `docs/` にまとめてある。
+
+- [docs/screens.md](./docs/screens.md) — 画面一覧（URL・認証・出す条件・状態）
+- [docs/flow.md](./docs/flow.md) — 画面遷移図
+
 ## どこに何があるか
 
 ```
@@ -101,6 +108,7 @@ public/
   assets/            ロゴとアバター
 drizzle/             生成されたマイグレーション（手で書かない）
 test/                workerd 上で動くテスト
+docs/                画面一覧と画面遷移図
 seed.sql             移行前の index.html の内容
 ```
 
