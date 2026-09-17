@@ -1,0 +1,67 @@
+import { and, asc, count, eq } from 'drizzle-orm'
+import type { DrizzleD1Database } from 'drizzle-orm/d1'
+import type { ItemView } from '../ui/components'
+import * as schema from './schema'
+
+export type Db = DrizzleD1Database<typeof schema>
+
+const publicOrder = [asc(schema.items.sortOrder), asc(schema.items.id)]
+
+export function listPublishedMembers(db: Db) {
+  return db.query.members.findMany({
+    where: eq(schema.members.published, 1),
+    orderBy: [asc(schema.members.sortOrder), asc(schema.members.id)],
+  })
+}
+
+export function findPublishedMember(db: Db, slug: string) {
+  return db.query.members.findFirst({
+    where: and(eq(schema.members.slug, slug), eq(schema.members.published, 1)),
+  })
+}
+
+export async function listPublishedItems(db: Db, type: 'app' | 'work'): Promise<ItemView[]> {
+  const rows = await db.query.items.findMany({
+    where: and(eq(schema.items.type, type), eq(schema.items.published, 1)),
+    orderBy: publicOrder,
+    with: {
+      tags: { orderBy: [asc(schema.itemTags.sortOrder)] },
+      links: { orderBy: [asc(schema.itemLinks.sortOrder)] },
+      member: true,
+      platform: true,
+    },
+  })
+
+  return rows.map((row) => ({
+    ...row,
+    tags: row.tags.map((tag) => tag.tag),
+    links: row.links.map((link) => ({ label: link.label, url: link.url })),
+    platformLabel: row.platform?.label ?? null,
+    memberName: row.member?.name ?? null,
+    memberSlug: row.member?.slug ?? null,
+  }))
+}
+
+// 絞り込みボタンは、公開中の Apps に実際に出てくるものだけ並べる。
+// 空振りするボタンを置かないため
+export function usedPlatforms(items: ItemView[], all: schema.Platform[]) {
+  const used = new Set(items.map((item) => item.platformKey).filter(Boolean))
+  return all.filter((platform) => used.has(platform.key))
+}
+
+export function listPlatforms(db: Db) {
+  return db.query.platforms.findMany({ orderBy: [asc(schema.platforms.sortOrder)] })
+}
+
+export async function countMemberItems(db: Db, memberId: number) {
+  const rows = await db
+    .select({ type: schema.items.type, n: count() })
+    .from(schema.items)
+    .where(and(eq(schema.items.memberId, memberId), eq(schema.items.published, 1)))
+    .groupBy(schema.items.type)
+
+  return {
+    app: rows.find((row) => row.type === 'app')?.n ?? 0,
+    work: rows.find((row) => row.type === 'work')?.n ?? 0,
+  }
+}

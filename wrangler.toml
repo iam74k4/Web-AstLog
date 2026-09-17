@@ -1,31 +1,29 @@
 name = "noctifex"
-main = "src/index.js"
+main = "src/index.tsx"
 compatibility_date = "2026-09-01"
 
 # 本番は独自ドメイン。DNS が Cloudflare 管理下にあるので custom domain として割り当てる。
 routes = [{ pattern = "noctifex.dev", custom_domain = true }]
 
-# index.html・SVG を文字列として、PNG をバイト列として Worker に同梱する。
-# ファイルの置き場所は今のまま（リポジトリ直下 / assets）にしてある。
-# Phase 1 で index.html は src/render/ のテンプレートへ分解して消えるので、
-# ここで動かしても二度手間になる。
-rules = [
-  { type = "Text", globs = ["**/*.html", "**/*.svg"], fallthrough = true },
-  { type = "Data", globs = ["**/*.png"], fallthrough = true },
-]
+# public/ の中身は Worker より先に配られる（/app.css, /assets/...）。
+# それ以外のパスが Worker に落ちてくる。
+[assets]
+directory = "./public"
 
-# --- Phase 1 で有効にする --------------------------------------------------
-# リソースをまだ作っていないので、コメントのままにしている。
-# 作成コマンドの出力に出る id をそのまま貼ること。
-#
+# --- 作成してから id を入れること --------------------------------------
 #   wrangler d1 create noctifex
 #   wrangler kv namespace create MEDIA
-#
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "noctifex"
-# database_id = ""
-#
-# [[kv_namespaces]]
-# binding = "MEDIA"   # アバター画像、ログイン試行回数
-# id = ""
+# ローカル（wrangler dev）は id を見ないので、この値のままでも動く。
+[[d1_databases]]
+binding = "DB"
+database_name = "noctifex"
+database_id = "TO_BE_CREATED"
+migrations_dir = "drizzle"
+
+[[kv_namespaces]]
+# アバター画像と、ログイン試行回数
+binding = "MEDIA"
+id = "TO_BE_CREATED"
+
+# SETUP_TOKEN は secret で渡す（最初の owner を作るときだけ使う）
+#   wrangler secret put SETUP_TOKEN

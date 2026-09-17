@@ -5,11 +5,26 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "check": "wrangler deploy --dry-run",
+    "check": "tsc --noEmit && wrangler deploy --dry-run",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply noctifex --local",
-    "db:migrate": "wrangler d1 migrations apply noctifex --remote"
+    "db:migrate": "wrangler d1 migrations apply noctifex --remote",
+    "db:seed:local": "wrangler d1 execute noctifex --local --file=./seed.sql",
+    "db:seed": "wrangler d1 execute noctifex --remote --file=./seed.sql"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
+    "@cloudflare/workers-types": "^5.20260917.1",
+    "drizzle-kit": "^0.31.10",
+    "playwright": "^1.63.0",
+    "typescript": "^7.0.2",
     "wrangler": "^4.0.0"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.13.8"
   }
 }
