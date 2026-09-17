@@ -1,6 +1,9 @@
 name = "noctifex"
 main = "src/index.tsx"
-compatibility_date = "2026-09-01"
+# テスト（vitest-pool-workers 同梱の workerd）が対応する最新日付に合わせている。
+# ここだけ新しくすると、本番の挙動をテストで確かめられなくなる。
+# 上げるときは、テスト側の workerd が追いついてから一緒に上げること。
+compatibility_date = "2026-08-22"
 
 # 本番は独自ドメイン。DNS が Cloudflare 管理下にあるので custom domain として割り当てる。
 routes = [{ pattern = "noctifex.dev", custom_domain = true }]

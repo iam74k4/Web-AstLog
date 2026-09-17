@@ -13,14 +13,18 @@
     "db:migrate:local": "wrangler d1 migrations apply noctifex --local",
     "db:migrate": "wrangler d1 migrations apply noctifex --remote",
     "db:seed:local": "wrangler d1 execute noctifex --local --file=./seed.sql",
-    "db:seed": "wrangler d1 execute noctifex --remote --file=./seed.sql"
+    "db:seed": "wrangler d1 execute noctifex --remote --file=./seed.sql",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^5.20260917.1",
     "drizzle-kit": "^0.31.10",
     "playwright": "^1.63.0",
     "typescript": "^7.0.2",
+    "vitest": "^4.1.11",
     "wrangler": "^4.0.0"
   },
   "dependencies": {

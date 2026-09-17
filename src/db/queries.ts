@@ -32,14 +32,19 @@ export async function listPublishedItems(db: Db, type: 'app' | 'work'): Promise<
     },
   })
 
-  return rows.map((row) => ({
-    ...row,
-    tags: row.tags.map((tag) => tag.tag),
-    links: row.links.map((link) => ({ label: link.label, url: link.url })),
-    platformLabel: row.platform?.label ?? null,
-    memberName: row.member?.name ?? null,
-    memberSlug: row.member?.slug ?? null,
-  }))
+  return rows.map((row) => {
+    // 下書きのメンバーは名前も出さない。出すと、まだ公開していない人の名前が
+    // カードに載り、404 になるプロフィールへ導いてしまう
+    const member = row.member?.published === 1 ? row.member : null
+    return {
+      ...row,
+      tags: row.tags.map((tag) => tag.tag),
+      links: row.links.map((link) => ({ label: link.label, url: link.url })),
+      platformLabel: row.platform?.label ?? null,
+      memberName: member?.name ?? null,
+      memberSlug: member?.slug ?? null,
+    }
+  })
 }
 
 // 絞り込みボタンは、公開中の Apps に実際に出てくるものだけ並べる。

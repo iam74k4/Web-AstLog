@@ -93,7 +93,7 @@ publicRoutes.get('/', async (c) => {
       canonical={`${SITE.origin}/`}
       jsonLd={jsonLd}
       nav={nav}
-      withFilterScript={apps.length > 0}
+      withFilterScript={apps.length > 0 || members.length > 1}
       sidebar={
         <div class="identity">
           <Brand />
@@ -128,7 +128,7 @@ publicRoutes.get('/', async (c) => {
       {works.length ? (
         <section id="works">
           <SectionHead title="Works" note="業務" />
-          <div class="grid">
+          <div class="grid" id="work-grid">
             {works.map((item) => (
               <ItemCard key={item.id} item={item} showMember={members.length > 1} />
             ))}
@@ -279,10 +279,18 @@ publicRoutes.get('/members/:slug', async (c) => {
   )
 })
 
-// アバターなど、管理画面からアップロードした画像。KV から出す
+/*
+  管理画面からアップロードした画像。KV から出す。
+
+  同じ KV にはログイン試行回数（login:<メールアドレス>）も入っている。
+  ここでキーの形を縛らないと、そのまま読み出せてしまう。
+  avatars/ 配下の、こちらが付けた名前だけを通す。
+*/
+const AVATAR_KEY = /^avatars\/[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/
+
 publicRoutes.get('/images/*', async (c) => {
   const key = c.req.path.replace(/^\/images\//, '')
-  if (!key) return c.notFound()
+  if (!AVATAR_KEY.test(key)) return c.notFound()
 
   const object = await c.env.MEDIA.getWithMetadata<{ contentType?: string }>(key, 'arrayBuffer')
   if (!object.value) return c.notFound()

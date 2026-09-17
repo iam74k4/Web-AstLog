@@ -10,6 +10,7 @@ import type { AppEnv } from '../env'
 import {
   clearLoginFailures,
   createSession,
+  DUMMY_HASH,
   destroySession,
   getSessionUser,
   hashPassword,
@@ -28,6 +29,29 @@ import { MarkIcon, PencilIcon, TrashIcon } from '../ui/icons'
 export const adminRoutes = new Hono<AppEnv>()
 
 const db = (c: { env: { DB: D1Database } }) => drizzle(c.env.DB, { schema })
+
+/*
+  SameSite=Lax だけに頼らず、書き込みは Origin も見る。
+  ログイン・ログアウト・初期設定も「書き込み」なので、認証の壁より
+  外側で掛ける。内側だけに置くと、壁の手前にあるこの3つを素通りする。
+*/
+const sameOrigin = createMiddleware<AppEnv>(async (c, next) => {
+  if (c.req.method === 'POST') {
+    const origin = c.req.header('origin')
+    if (origin && new URL(origin).host !== new URL(c.req.url).host) {
+      return c.text('別のサイトからの送信は受け付けません', 403)
+    }
+  }
+  await next()
+})
+
+adminRoutes.use('*', sameOrigin)
+
+// URL の :id は数字とは限らない。数字でなければ 404 にする
+function parseId(value: string | undefined): number | null {
+  const id = Number(value)
+  return Number.isInteger(id) && id > 0 ? id : null
+}
 
 /* ------------------------------------------------------------------ 部品 */
 
@@ -196,7 +220,9 @@ adminRoutes.post('/login', async (c) => {
   }
 
   const user = await db(c).query.users.findFirst({ where: eq(schema.users.email, email) })
-  const ok = user ? await verifyPassword(password, user.passwordHash) : false
+  // ユーザーが居なくても必ず1回ハッシュを計算する。
+  // 居ないときだけ即座に返すと、応答の速さでアカウントの有無が分かってしまう
+  const ok = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH)
 
   if (!user || !ok) {
     await recordLoginFailure(c.env.MEDIA, email)
@@ -276,19 +302,8 @@ const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   await next()
 })
 
-// SameSite=Lax だけに頼らず、書き込みは Origin も見る
-const sameOrigin = createMiddleware<AppEnv>(async (c, next) => {
-  if (c.req.method === 'POST') {
-    const origin = c.req.header('origin')
-    if (origin && new URL(origin).host !== new URL(c.req.url).host) {
-      return c.text('別のサイトからの送信は受け付けません', 403)
-    }
-  }
-  await next()
-})
-
 const app = new Hono<AppEnv>()
-app.use('*', sameOrigin, requireAuth)
+app.use('*', requireAuth)
 
 app.get('/', (c) => c.redirect('/admin/members', 303))
 
@@ -436,6 +451,7 @@ const MemberForm = (props: {
           <label class="field">
             <span class="field__label">アバター画像</span>
             <input class="input input--file" type="file" name="avatar" accept="image/*" />
+            {props.errors?.avatar ? <span class="field__error">{props.errors.avatar}</span> : null}
             <span class="field__hint">
               {member?.avatarUrl
                 ? '選ぶと差し替わる。空なら今のまま'
@@ -491,80 +507,102 @@ async function readMemberForm(c: Context<AppEnv>) {
   }
 }
 
-// 画像は KV に置く。R2 が未有効なのと、アバターは読むばかりで書き換えが稀なため
-async function saveAvatar(kv: KVNamespace, form: FormData, slug: string): Promise<string | null> {
-  const file = form.get('avatar')
-  if (!(file instanceof File) || file.size === 0) return null
-  if (!file.type.startsWith('image/')) return null
-  if (file.size > 1_000_000) return null
+const AVATAR_MAX_BYTES = 1_000_000
 
-  const extension = file.type.split('/')[1]?.replace('+xml', '') ?? 'bin'
-  const key = `avatars/${slug}-${newToken(4)}.${extension}`
+/*
+  画像は KV に置く。R2 が未有効なのと、アバターは読むばかりで書き換えが稀なため。
+
+  戻り値で「選ばれていない」と「弾いた」を区別する。同じ null にすると、
+  大きすぎる画像を選んだ人に「保存しました」と出てしまう。
+*/
+type AvatarResult = { url: string | null; error?: string }
+
+async function saveAvatar(kv: KVNamespace, form: FormData, slug: string): Promise<AvatarResult> {
+  const file = form.get('avatar')
+  if (!(file instanceof File) || file.size === 0) return { url: null }
+  if (!file.type.startsWith('image/')) return { url: null, error: '画像ファイルを選んでください' }
+  if (file.size > AVATAR_MAX_BYTES) {
+    return { url: null, error: '画像は 1MB までです。小さくしてから選び直してください' }
+  }
+
+  // キーは /images/ 側の検査（avatars/ 配下・英数字のみ）を必ず通る形にする
+  const extension = file.type.split('/')[1]?.replace(/[^a-z0-9]/g, '') || 'bin'
+  const key = `avatars/${toSlug(slug) || 'member'}-${newToken(4)}.${extension}`
   await kv.put(key, await file.arrayBuffer(), { metadata: { contentType: file.type } })
-  return `/images/${key}`
+  return { url: `/images/${key}` }
+}
+
+// 差し替え・削除で使われなくなった画像は KV に残さない。
+// 残すと、URL を知っている人がいつまでも取得できる
+async function removeAvatar(kv: KVNamespace, avatarUrl: string | null | undefined) {
+  if (!avatarUrl?.startsWith('/images/avatars/')) return
+  await kv.delete(avatarUrl.replace('/images/', ''))
+}
+
+// 入力エラーで描き直すとき、打った内容をそのまま返すための変換
+function asValues(values: Record<string, unknown>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(values).map(([key, value]) => [key, String(value ?? '')]),
+  )
 }
 
 app.post('/members', async (c) => {
   const { form, values } = await readMemberForm(c)
-  if (!values.name)
-    return c.html(
-      <MemberForm email={c.get('user').email} errors={{ name: '氏名は必須です' }} />,
-      400,
-    )
+  const email = c.get('user').email
+  const back = (errors: Record<string, string>) =>
+    c.html(<MemberForm email={email} errors={errors} values={asValues(values)} />, 400)
+
+  if (!values.name) return back({ name: '氏名は必須です' })
 
   const duplicate = await db(c).query.members.findFirst({
     where: eq(schema.members.slug, values.slug),
   })
-  if (duplicate) {
-    return c.html(
-      <MemberForm
-        email={c.get('user').email}
-        errors={{ slug: 'この slug は既に使われています' }}
-        values={Object.fromEntries(
-          Object.entries(values).map(([key, value]) => [key, String(value ?? '')]),
-        )}
-      />,
-      400,
-    )
-  }
+  if (duplicate) return back({ slug: 'この slug は既に使われています' })
 
-  const avatarUrl = await saveAvatar(c.env.MEDIA, form, values.slug)
+  const avatar = await saveAvatar(c.env.MEDIA, form, values.slug)
+  if (avatar.error) return back({ avatar: avatar.error })
+
   await db(c)
     .insert(schema.members)
-    .values({ ...values, avatarUrl })
+    .values({ ...values, avatarUrl: avatar.url })
   return c.redirect('/admin/members?saved=1', 303)
 })
 
 app.post('/members/:id', async (c) => {
-  const id = Number(c.req.param('id'))
+  const id = parseId(c.req.param('id'))
+  if (!id) return c.notFound()
   const member = await db(c).query.members.findFirst({ where: eq(schema.members.id, id) })
   if (!member) return c.notFound()
 
   const { form, values } = await readMemberForm(c)
+  const email = c.get('user').email
+  const back = (errors: Record<string, string>) =>
+    c.html(
+      <MemberForm email={email} member={member} errors={errors} values={asValues(values)} />,
+      400,
+    )
+
+  if (!values.name) return back({ name: '氏名は必須です' })
+
   const duplicate = await db(c).query.members.findFirst({
     where: and(eq(schema.members.slug, values.slug), ne(schema.members.id, id)),
   })
-  if (duplicate) {
-    return c.html(
-      <MemberForm
-        email={c.get('user').email}
-        member={member}
-        errors={{ slug: 'この slug は既に使われています' }}
-      />,
-      400,
-    )
-  }
+  if (duplicate) return back({ slug: 'この slug は既に使われています' })
 
-  const avatarUrl = await saveAvatar(c.env.MEDIA, form, values.slug)
+  const avatar = await saveAvatar(c.env.MEDIA, form, values.slug)
+  if (avatar.error) return back({ avatar: avatar.error })
+
   await db(c)
     .update(schema.members)
-    .set({ ...values, ...(avatarUrl ? { avatarUrl } : {}) })
+    .set({ ...values, ...(avatar.url ? { avatarUrl: avatar.url } : {}) })
     .where(eq(schema.members.id, id))
+  if (avatar.url) await removeAvatar(c.env.MEDIA, member.avatarUrl)
   return c.redirect('/admin/members?saved=1', 303)
 })
 
 app.get('/members/:id/delete', async (c) => {
-  const id = Number(c.req.param('id'))
+  const id = parseId(c.req.param('id'))
+  if (!id) return c.notFound()
   const member = await db(c).query.members.findFirst({ where: eq(schema.members.id, id) })
   if (!member) return c.notFound()
 
@@ -593,9 +631,13 @@ app.get('/members/:id/delete', async (c) => {
 })
 
 app.post('/members/:id/delete', async (c) => {
-  await db(c)
-    .delete(schema.members)
-    .where(eq(schema.members.id, Number(c.req.param('id'))))
+  const id = parseId(c.req.param('id'))
+  if (!id) return c.notFound()
+  const member = await db(c).query.members.findFirst({ where: eq(schema.members.id, id) })
+  if (!member) return c.notFound()
+
+  await db(c).delete(schema.members).where(eq(schema.members.id, id))
+  await removeAvatar(c.env.MEDIA, member.avatarUrl)
   return c.redirect('/admin/members?deleted=1', 303)
 })
 
@@ -686,11 +728,71 @@ type ItemFormData = {
   members: schema.Member[]
   platforms: schema.Platform[]
   item?: schema.Item & { tags: { tag: string }[]; links: { label: string; url: string }[] }
+  // 入力エラーで描き直すとき、送られてきた内容をそのまま返すために使う
+  submitted?: Record<string, string>
+  errors?: Record<string, string>
+}
+
+/*
+  フォームが描く値は、DB の行から来ることも、送信されて弾かれた内容から
+  来ることもある。どちらも同じ形にしてから渡す。入力エラーのたびに
+  打った内容が消えるのは、ここを分けていないと起きる。
+*/
+function itemDraft(item?: ItemFormData['item'], submitted?: Record<string, string>): ItemDraft {
+  if (submitted) {
+    return {
+      title: submitted.title ?? '',
+      memberId: submitted.memberId ?? '',
+      platformKey: submitted.platformKey ?? '',
+      category: submitted.category ?? '',
+      year: submitted.year ?? '',
+      summary: submitted.summary ?? '',
+      tags: submitted.tags ?? '',
+      sortOrder: submitted.sortOrder ?? '10',
+      published: submitted.published === '1' ? 1 : 0,
+      metricValue: submitted.metricValue ?? '',
+      metricUnit: submitted.metricUnit ?? '',
+      metricNote: submitted.metricNote ?? '',
+      links: submitted.links ? JSON.parse(submitted.links) : [],
+    }
+  }
+  return {
+    title: item?.title ?? '',
+    memberId: item?.memberId ? String(item.memberId) : '',
+    platformKey: item?.platformKey ?? '',
+    category: item?.category ?? '',
+    year: item?.year ?? '',
+    summary: item?.summary ?? '',
+    tags: (item?.tags ?? []).map((tag) => tag.tag).join(', '),
+    sortOrder: String(item?.sortOrder ?? 10),
+    published: item?.published ?? 0,
+    metricValue: item?.metricValue ?? '',
+    metricUnit: item?.metricUnit ?? '',
+    metricNote: item?.metricNote ?? '',
+    links: item?.links ?? [],
+  }
+}
+
+type ItemDraft = {
+  title: string
+  memberId: string
+  platformKey: string
+  category: string
+  year: string
+  summary: string
+  tags: string
+  sortOrder: string
+  published: number
+  metricValue: string
+  metricUnit: string
+  metricNote: string
+  links: { label: string; url: string }[]
 }
 
 const ItemForm = (props: ItemFormData) => {
   const item = props.item
-  const links = [...(item?.links ?? []), { label: '', url: '' }, { label: '', url: '' }].slice(0, 3)
+  const d = itemDraft(item, props.submitted)
+  const links = [...d.links, { label: '', url: '' }, { label: '', url: '' }].slice(0, 3)
 
   return (
     <AdminLayout title={item ? item.title : '新しい項目'} active="items" email={props.email}>
@@ -706,11 +808,17 @@ const ItemForm = (props: ItemFormData) => {
       <form method="post" action={item ? `/admin/items/${item.id}` : '/admin/items'} class="form">
         <input type="hidden" name="type" value={props.type} />
         <div class="form-grid">
-          <Field label="タイトル" name="title" value={item?.title} required />
+          <Field
+            label="タイトル"
+            name="title"
+            value={d.title}
+            required
+            error={props.errors?.title}
+          />
           <Select
             label="担当メンバー"
             name="memberId"
-            value={item?.memberId ?? ''}
+            value={d.memberId}
             options={[
               { value: '', label: '（なし）' },
               ...props.members.map((member) => ({ value: String(member.id), label: member.name })),
@@ -720,7 +828,7 @@ const ItemForm = (props: ItemFormData) => {
             <Select
               label="プラットフォーム"
               name="platformKey"
-              value={item?.platformKey ?? ''}
+              value={d.platformKey}
               options={[
                 { value: '', label: '（なし）' },
                 ...props.platforms.map((platform) => ({
@@ -734,30 +842,20 @@ const ItemForm = (props: ItemFormData) => {
             <Field
               label="区分"
               name="category"
-              value={item?.category}
+              value={d.category}
               placeholder="金融系基幹システム"
             />
           )}
-          <Field label="年" name="year" value={item?.year} placeholder="2026 / 2024 —" />
+          <Field label="年" name="year" value={d.year} placeholder="2026 / 2024 —" />
           <Area
             label="説明文"
             name="summary"
-            value={item?.summary}
+            value={d.summary}
             rows={3}
             hint="「何であるか。何をしたか。」の2文"
           />
-          <Field
-            label="タグ"
-            name="tags"
-            value={(item?.tags ?? []).map((tag) => tag.tag).join(', ')}
-            hint="カンマ区切り"
-          />
-          <Field
-            label="並び順"
-            name="sortOrder"
-            value={item?.sortOrder ?? 10}
-            hint="小さいほど先。10刻み"
-          />
+          <Field label="タグ" name="tags" value={d.tags} hint="カンマ区切り" />
+          <Field label="並び順" name="sortOrder" value={d.sortOrder} hint="小さいほど先。10刻み" />
 
           <fieldset class="field field--wide fieldset">
             <legend class="field__label">リンク</legend>
@@ -789,21 +887,21 @@ const ItemForm = (props: ItemFormData) => {
                   class="input"
                   type="text"
                   name="metricValue"
-                  value={item?.metricValue ?? ''}
+                  value={d.metricValue}
                   placeholder="20"
                 />
                 <input
                   class="input"
                   type="text"
                   name="metricUnit"
-                  value={item?.metricUnit ?? ''}
+                  value={d.metricUnit}
                   placeholder="人日"
                 />
                 <input
                   class="input"
                   type="text"
                   name="metricNote"
-                  value={item?.metricNote ?? ''}
+                  value={d.metricNote}
                   placeholder="見込み 40人日 → 実績"
                 />
               </div>
@@ -812,7 +910,7 @@ const ItemForm = (props: ItemFormData) => {
         </div>
 
         <div class="form-foot">
-          <PublishToggle published={item?.published ?? 0} />
+          <PublishToggle published={d.published} />
           <FormActions
             cancelHref={`/admin/items?type=${props.type}`}
             deleteHref={item ? `/admin/items/${item.id}/delete` : undefined}
@@ -841,8 +939,10 @@ app.get('/items/new', async (c) => {
 })
 
 app.get('/items/:id/edit', async (c) => {
+  const editId = parseId(c.req.param('id'))
+  if (!editId) return c.notFound()
   const item = await db(c).query.items.findFirst({
-    where: eq(schema.items.id, Number(c.req.param('id'))),
+    where: eq(schema.items.id, editId),
     with: {
       tags: { orderBy: [asc(schema.itemTags.sortOrder)] },
       links: { orderBy: [asc(schema.itemLinks.sortOrder)] },
@@ -883,6 +983,27 @@ async function readItemForm(form: FormData) {
   }
 }
 
+// 弾いたときに、打った内容をそのままフォームへ返すための形
+function submittedItem(form: FormData): Record<string, string> {
+  const labels = form.getAll('linkLabel').map((value) => str(value))
+  const urls = form.getAll('linkUrl').map((value) => str(value))
+  return {
+    title: str(form.get('title')),
+    memberId: str(form.get('memberId')),
+    platformKey: str(form.get('platformKey')),
+    category: str(form.get('category')),
+    year: str(form.get('year')),
+    summary: str(form.get('summary')),
+    tags: str(form.get('tags')),
+    sortOrder: str(form.get('sortOrder')),
+    published: bool(form.get('published')) ? '1' : '',
+    metricValue: str(form.get('metricValue')),
+    metricUnit: str(form.get('metricUnit')),
+    metricNote: str(form.get('metricNote')),
+    links: JSON.stringify(labels.map((label, index) => ({ label, url: urls[index] ?? '' }))),
+  }
+}
+
 // タグとリンクは総入れ替えにする。差分を取るより、消して入れ直すほうが読める
 async function replaceChildren(database: ReturnType<typeof db>, itemId: number, form: FormData) {
   const tags = parseTags(str(form.get('tags')))
@@ -919,6 +1040,8 @@ app.post('/items', async (c) => {
         type={values.type}
         members={members}
         platforms={platforms}
+        submitted={submittedItem(form)}
+        errors={{ title: 'タイトルは必須です' }}
       />,
       400,
     )
@@ -934,9 +1057,30 @@ app.post('/items', async (c) => {
 })
 
 app.post('/items/:id', async (c) => {
-  const id = Number(c.req.param('id'))
+  const id = parseId(c.req.param('id'))
+  if (!id) return c.notFound()
+  // 先に存在を確かめる。無い id のまま進むと、タグの差し替えが外部キーで
+  // 落ちて 500 になるか、何も変わっていないのに「保存しました」と出る
+  const existing = await db(c).query.items.findFirst({ where: eq(schema.items.id, id) })
+  if (!existing) return c.notFound()
+
   const form = await c.req.formData()
   const values = await readItemForm(form)
+  if (!values.title) {
+    const { members, platforms } = await formContext(c)
+    return c.html(
+      <ItemForm
+        email={c.get('user').email}
+        type={values.type}
+        members={members}
+        platforms={platforms}
+        item={{ ...existing, tags: [], links: [] }}
+        submitted={submittedItem(form)}
+        errors={{ title: 'タイトルは必須です' }}
+      />,
+      400,
+    )
+  }
 
   await db(c).update(schema.items).set(values).where(eq(schema.items.id, id))
   await replaceChildren(db(c), id, form)
@@ -944,7 +1088,8 @@ app.post('/items/:id', async (c) => {
 })
 
 app.get('/items/:id/delete', async (c) => {
-  const id = Number(c.req.param('id'))
+  const id = parseId(c.req.param('id'))
+  if (!id) return c.notFound()
   const item = await db(c).query.items.findFirst({
     where: eq(schema.items.id, id),
     with: { tags: true, links: true },
@@ -970,10 +1115,13 @@ app.get('/items/:id/delete', async (c) => {
 })
 
 app.post('/items/:id/delete', async (c) => {
-  const id = Number(c.req.param('id'))
+  const id = parseId(c.req.param('id'))
+  if (!id) return c.notFound()
   const item = await db(c).query.items.findFirst({ where: eq(schema.items.id, id) })
+  if (!item) return c.notFound()
+
   await db(c).delete(schema.items).where(eq(schema.items.id, id))
-  return c.redirect(`/admin/items?type=${item?.type ?? 'app'}&deleted=1`, 303)
+  return c.redirect(`/admin/items?type=${item.type}&deleted=1`, 303)
 })
 
 adminRoutes.route('/', app)

@@ -1,0 +1,38 @@
+name: check
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# 同じブランチに続けて push したら、前の実行は捨てる
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: 型
+        run: npm run typecheck
+
+      - name: 書式とlint
+        run: npm run lint
+
+      # 本物の workerd で動かす。D1 と KV も実体が立つ
+      - name: テスト
+        run: npm test
+
+      # デプロイせずに、束ねられるところまで確かめる
+      - name: ビルド
+        run: npx wrangler deploy --dry-run

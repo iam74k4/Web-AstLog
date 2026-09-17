@@ -62,6 +62,14 @@ export async function verifyPassword(password: string, stored: string): Promise<
   return timingSafeEqual(derived, fromBase64(hash))
 }
 
+/*
+  存在しないメールアドレスで来たときに、代わりに検証するハッシュ。
+  乱数から作った捨て値で、これに一致するパスワードは無い。
+  「ユーザーが居ないので即座に失敗」を避け、常に同じだけ時間を使うためにある。
+*/
+export const DUMMY_HASH =
+  'pbkdf2$100000$62JM2mGBbJhiAhTaHjcMEA==$usCnWkqRH5nZxJtwZCec3HvfMTuNX/0rw8NgwSmAMIc='
+
 export function newToken(bytes = 32): string {
   return [...crypto.getRandomValues(new Uint8Array(bytes))]
     .map((b) => b.toString(16).padStart(2, '0'))
@@ -110,10 +118,17 @@ export async function loginAttempts(kv: KVNamespace, email: string): Promise<num
   return value ? Number(value) : 0
 }
 
+/*
+  KV は読んで書くまでの間に他のリクエストが割り込める（かつ結果整合）ので、
+  同時に叩かれると上限を数回超えうる。総当たりを鈍らせるのが目的で、
+  厳密な回数制限ではない。正確に止めたくなったら Durable Object に移すこと。
+*/
 export async function recordLoginFailure(kv: KVNamespace, email: string): Promise<void> {
   const key = `login:${email.toLowerCase()}`
-  const next = ((await kv.get(key)) ? Number(await kv.get(key)) : 0) + 1
-  await kv.put(key, String(next), { expirationTtl: WINDOW_SECONDS })
+  const current = await kv.get(key)
+  await kv.put(key, String((current ? Number(current) : 0) + 1), {
+    expirationTtl: WINDOW_SECONDS,
+  })
 }
 
 export async function clearLoginFailures(kv: KVNamespace, email: string): Promise<void> {

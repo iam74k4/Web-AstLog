@@ -59,7 +59,9 @@ export function str(value: FormValue): string {
 }
 
 export function num(value: FormValue, fallback = 0): number {
-  const parsed = Number(str(value))
+  const text = str(value)
+  if (!text) return fallback
+  const parsed = Number(text)
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
