@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { num, paragraphs, parseCareer, parseSkills, parseTags, toSlug } from '../src/lib/format'
+import {
+  isSafeUrl,
+  num,
+  paragraphs,
+  parseLines,
+  parseSkills,
+  parseTags,
+  toSlug,
+} from '../src/lib/format'
 
 describe('parseSkills', () => {
   it('末尾が : の行でグループを分ける', () => {
@@ -25,15 +33,43 @@ describe('parseSkills', () => {
   })
 })
 
-describe('parseCareer', () => {
-  it('1行を3つに割る', () => {
-    expect(parseCareer('2024.03 — 現在 | システムエンジニア | リンクレア')).toEqual([
-      { period: '2024.03 — 現在', title: 'システムエンジニア', org: 'リンクレア' },
+describe('parseLines', () => {
+  it('1行を「|」で割る', () => {
+    expect(parseLines('2024.03 — 現在 | システムエンジニア | リンクレア')).toEqual([
+      ['2024.03 — 現在', 'システムエンジニア', 'リンクレア'],
     ])
   })
 
-  it('足りない項目は空文字にする', () => {
-    expect(parseCareer('2021.03 卒業')).toEqual([{ period: '2021.03 卒業', title: '', org: '' }])
+  it('足りない列はそのまま短い行として返す', () => {
+    expect(parseLines('2021.03 卒業')).toEqual([['2021.03 卒業']])
+  })
+
+  it('空行は落とす', () => {
+    expect(parseLines('A | 1\n\n  \nB | 2')).toEqual([
+      ['A', '1'],
+      ['B', '2'],
+    ])
+  })
+})
+
+describe('isSafeUrl', () => {
+  it('http(s)・mailto・同じサイトの経路は通す', () => {
+    expect(isSafeUrl('https://example.com')).toBe(true)
+    expect(isSafeUrl('mailto:a@example.com')).toBe(true)
+    expect(isSafeUrl('/members/okazaki')).toBe(true)
+  })
+
+  it('それ以外は通さない', () => {
+    expect(isSafeUrl('javascript:alert(1)')).toBe(false)
+    expect(isSafeUrl('example.com')).toBe(false)
+    expect(isSafeUrl(undefined)).toBe(false)
+  })
+
+  it('プロトコル相対は「同じサイト」ではない', () => {
+    // //evil.example はブラウザでは外部 URL。/ で始まるからと通すと、
+    // 同じタブのまま外へ連れて行かれる
+    expect(isSafeUrl('//evil.example')).toBe(false)
+    expect(isSafeUrl('/\\evil.example')).toBe(false)
   })
 })
 

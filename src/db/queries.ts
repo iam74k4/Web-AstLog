@@ -136,12 +136,40 @@ export async function publishedBlocks(db: Db): Promise<schema.Block[]> {
   return rows.filter((row) => row.published === 1)
 }
 
-// 並び順を 10 刻みで振り直す。上下入れ替えのたびに呼ぶので、同じ値が並ぶことがない
+/*
+  並び順を 10 刻みで振り直す。上下入れ替えのたびに呼ぶので、同じ値が並ばない。
+
+  1行ずつ await せず batch で送る。途中で止まると、振り直しの済んだ行と
+  済んでいない行が混じり、同じ sortOrder が並ぶ——この関数が防ぎたかった状態——
+  で終わってしまうため
+*/
 export async function reorderBlocks(db: Db, ids: number[]) {
-  for (const [index, id] of ids.entries()) {
-    await db
+  const updates = ids.map((id, index) =>
+    db
       .update(schema.blocks)
       .set({ sortOrder: (index + 1) * 10 })
-      .where(eq(schema.blocks.id, id))
-  }
+      .where(eq(schema.blocks.id, id)),
+  )
+  const [first, ...rest] = updates
+  if (!first) return
+  await db.batch([first, ...rest])
+}
+
+/*
+  何も置いていない DB に最初の1つを足すときは、先に既定の並びを行にする。
+
+  0件のトップは既定の並びで描いているので、見えているものは Hero〜Contact。
+  そこへ1つ足したときに、その1つだけの DB になって5節が消えるのは、
+  足した人から見れば「足したのに減った」になる
+*/
+export async function ensureBlocks(db: Db): Promise<schema.Block[]> {
+  const rows = await listBlocks(db)
+  if (rows.length > 0) return rows
+
+  await db
+    .insert(schema.blocks)
+    .values(
+      DEFAULT_BLOCKS.map((type, index) => ({ type, published: 1, sortOrder: (index + 1) * 10 })),
+    )
+  return listBlocks(db)
 }

@@ -72,7 +72,6 @@ export const BLOCK_TYPES = [
 export type BlockType = (typeof BLOCK_TYPES)[number]
 export type BlockKey = BlockType['key']
 export type FixedBlockKey = Extract<BlockType, { kind: 'fixed' }>['key']
-export type FreeBlockKey = Extract<BlockType, { kind: 'free' }>['key']
 
 export const BLOCK_KEYS = BLOCK_TYPES.map((type) => type.key) as [BlockKey, ...BlockKey[]]
 
@@ -82,10 +81,6 @@ export function blockType(key: string): BlockType | undefined {
 
 export function isBlockKey(key: string): key is BlockKey {
   return blockType(key) !== undefined
-}
-
-export function isFreeBlock(key: BlockKey): key is FreeBlockKey {
-  return blockType(key)?.kind === 'free'
 }
 
 /*

@@ -14,7 +14,7 @@ import {
 } from '../db/queries'
 import * as schema from '../db/schema'
 import type { AppEnv } from '../env'
-import { isSafeUrl, paragraphs, parseCareer, parseLines, parseSkills } from '../lib/format'
+import { isSafeUrl, paragraphs, parseLines, parseSkills } from '../lib/format'
 import { SITE } from '../site'
 import {
   Avatar,
@@ -184,13 +184,12 @@ function renderBlock(block: schema.Block, data: TopData): Rendered | null {
 
     case 'statement': {
       if (!block.title) return null
-      const [note] = paragraphs(block.body)
       return {
         id,
         nav: null,
         node: (
           <section id={id}>
-            <Statement text={block.title} note={note} />
+            <Statement text={block.title} notes={paragraphs(block.body)} />
           </section>
         ),
       }
@@ -339,7 +338,7 @@ publicRoutes.get('/members/:slug', async (c) => {
 
   const counts = await countMemberItems(db, member.id)
   const skills = parseSkills(member.skillsText)
-  const career = parseCareer(member.careerText)
+  const career = parseLines(member.careerText)
   const bio = paragraphs(member.bio)
   const total = counts.app + counts.work
 
@@ -385,8 +384,8 @@ publicRoutes.get('/members/:slug', async (c) => {
       <section id="about">
         <SectionHead title="About" note="経歴 / 技術" />
         <div class="about">
-          <div class="bio">
-            {bio.length ? bio.map((text) => <p key={text}>{text}</p>) : <Empty>準備中です</Empty>}
+          <Note paragraphs={bio}>
+            {bio.length ? null : <Empty>準備中です</Empty>}
 
             {skills.length ? (
               <div class="skills">
@@ -405,20 +404,13 @@ publicRoutes.get('/members/:slug', async (c) => {
                 ))}
               </div>
             ) : null}
-          </div>
+          </Note>
 
           {career.length ? (
             <div>
               <p class="side-head">CAREER</p>
-              <ul class="career">
-                {career.map((entry) => (
-                  <li key={entry.period + entry.title}>
-                    <span class="period">{entry.period}</span>
-                    <span class="title">{entry.title}</span>
-                    <span class="org">{entry.org}</span>
-                  </li>
-                ))}
-              </ul>
+              {/* トップの「できごと」と同じ部品。同じ形のものを2度書かない */}
+              <Timeline rows={career} />
             </div>
           ) : null}
         </div>

@@ -197,5 +197,4 @@ export type Member = typeof members.$inferSelect
 export type Item = typeof items.$inferSelect
 export type Platform = typeof platforms.$inferSelect
 export type User = typeof users.$inferSelect
-export type Setting = typeof settings.$inferSelect
 export type Block = typeof blocks.$inferSelect

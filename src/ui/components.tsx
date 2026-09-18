@@ -175,10 +175,14 @@ export const StatusPill = ({ published }: { published: number }) =>
   足りないまま出す（空欄で落とさない）。書いた人が一覧で気づけるように。
 */
 
-export const Statement = ({ text, note }: { text: string; note?: string }) => (
+export const Statement = ({ text, notes }: { text: string; notes: string[] }) => (
   <div class="statement">
     <p class="statement__text">{text}</p>
-    {note ? <p class="statement__note">{note}</p> : null}
+    {notes.map((note) => (
+      <p class="statement__note" key={note}>
+        {note}
+      </p>
+    ))}
   </div>
 )
 
@@ -222,7 +226,7 @@ export const LinkList = ({ rows }: { rows: string[][] }) => (
   </ul>
 )
 
-// 個人ページの経歴と同じ形。年月・何を・補足
+// 年月・何を・補足。個人ページの経歴もこれで描く
 export const Timeline = ({ rows }: { rows: string[][] }) => (
   <ul class="career">
     {rows.map(([period, title, org]) => (
@@ -235,10 +239,15 @@ export const Timeline = ({ rows }: { rows: string[][] }) => (
   </ul>
 )
 
-export const Note = ({ paragraphs }: { paragraphs: string[] }) => (
+/*
+  文章の列。段落のあとに、同じ列へ続けたいもの（個人ページのスキル）を
+  children で受ける。受けないと、呼ぶ側が同じ列をもう1枚作ることになる
+*/
+export const Note = ({ paragraphs, children }: { paragraphs: string[]; children?: Child }) => (
   <div class="bio">
     {paragraphs.map((text) => (
       <p key={text}>{text}</p>
     ))}
+    {children}
   </div>
 )

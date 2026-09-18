@@ -25,24 +25,12 @@ export function parseSkills(text: string): SkillGroup[] {
   return groups
 }
 
-export type CareerEntry = { period: string; title: string; org: string }
-
-// 1行 = 「期間 | 肩書き | 所属」
-export function parseCareer(text: string): CareerEntry[] {
-  return text
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [period, title, org] = line.split('|').map((part) => part.trim())
-      return { period: period ?? '', title: title ?? '', org: org ?? '' }
-    })
-}
-
 /*
   1行1件・「|」区切りのテキストを、列の配列に開く。
-  ブロック（数字・リンク集・できごと …）の body はどれもこの形で持つ。
-  parseCareer と同じ読み方だが、列の意味は種類ごとに違うので名前を付けない
+
+  経歴も、ブロック（数字・リンク集・できごと …）の body も、どれもこの形。
+  列の意味は使う側で決めるので、ここでは名前を付けない。読み方を1か所に
+  まとめておかないと、書式を変えるたびに両方を直すことになる
 */
 export function parseLines(text: string): string[][] {
   return text
@@ -52,9 +40,15 @@ export function parseLines(text: string): string[][] {
     .map((line) => line.split('|').map((part) => part.trim()))
 }
 
-// 管理画面から入る URL でも、javascript: のような形は通さない
+/*
+  管理画面から入る URL でも、javascript: のような形は通さない。
+
+  / で始まるものは同じサイトの経路として通すが、// と /\ は除く。
+  //example.com はブラウザではプロトコル相対の外部 URL で、
+  「同じサイトだから同じタブで開く」の判断が外れる
+*/
 export function isSafeUrl(url: string | undefined): url is string {
-  return !!url && /^(https?:\/\/|mailto:|\/)/.test(url)
+  return !!url && /^(https?:\/\/|mailto:|\/(?![/\\]))/.test(url)
 }
 
 // 空行で段落を分ける

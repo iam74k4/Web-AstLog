@@ -1,3 +1,4 @@
+import { env } from 'cloudflare:test'
 import { beforeEach, describe, expect, it } from 'vitest'
 import * as schema from '../src/db/schema'
 import { db, form, get, resetDb, seedItem, seedMember, signIn } from './helpers'
@@ -112,14 +113,70 @@ describe('管理の構成', () => {
     expect(rows.map((row) => row.type)).toEqual(['hero', 'apps', 'works', 'team', 'contact'])
   })
 
+  it('何も置いていないまま足しても、既定の5節は消えない', async () => {
+    // 0件のトップは既定の並びで出ている。そこへ1つ足して、見えていた節が
+    // 消えるなら「足したのに減った」になる
+    await seedMember()
+    await seedItem({ type: 'app' })
+    await seedItem({ type: 'work', title: '業務の実績' })
+    const signed = await signIn()
+
+    const response = await signed('/admin/blocks', {
+      method: 'POST',
+      body: form({ type: 'note', title: 'あとがき', body: '本文です', published: '1' }),
+    })
+    expect(response.status).toBe(303)
+
+    const rows = await db().query.blocks.findMany({ orderBy: (t, { asc }) => [asc(t.sortOrder)] })
+    expect(rows.map((row) => row.type)).toEqual([
+      'hero',
+      'apps',
+      'works',
+      'team',
+      'contact',
+      'note',
+    ])
+    expect(sectionIds(await (await get('/')).text())).toEqual([
+      'apps',
+      'works',
+      'team',
+      'contact',
+      `block-${rows[5]?.id}`,
+    ])
+  })
+
   it('決まった中身のものは1つしか置けない', async () => {
     const signed = await signIn()
-    const first = await signed('/admin/blocks', { method: 'POST', body: form({ type: 'team' }) })
-    expect(first.status).toBe(303)
+    await signed('/admin/blocks/init', { method: 'POST' })
 
-    const second = await signed('/admin/blocks', { method: 'POST', body: form({ type: 'team' }) })
-    expect(second.status).toBe(400)
-    expect(await db().select().from(schema.blocks)).toHaveLength(1)
+    const response = await signed('/admin/blocks', { method: 'POST', body: form({ type: 'team' }) })
+    expect(response.status).toBe(400)
+    expect(await db().select().from(schema.blocks)).toHaveLength(5)
+  })
+
+  it('リンク集は URL の形まで見る', async () => {
+    const signed = await signIn()
+    // スキームの打ち忘れ。保存できてしまうと、公開なのにサイトに出ない行になる
+    const response = await signed('/admin/blocks', {
+      method: 'POST',
+      body: form({ type: 'links', title: 'Links', body: 'Blog | example.com' }),
+    })
+    expect(response.status).toBe(400)
+    expect(await response.text()).toContain('URL は https://')
+    expect(await db().select().from(schema.blocks)).toHaveLength(0)
+  })
+
+  it('入力エラーで描き直しても、外した「公開する」は外れたまま', async () => {
+    const signed = await signIn()
+    const response = await signed('/admin/blocks', {
+      method: 'POST',
+      body: form({ type: 'numbers', title: '数字で見る', body: '' }),
+    })
+    expect(response.status).toBe(400)
+
+    const html = await response.text()
+    expect(html).toContain('value="数字で見る"')
+    expect(html).not.toContain('name="published" value="1" checked=""')
   })
 
   it('知らない種類は置けない', async () => {
@@ -139,6 +196,80 @@ describe('管理の構成', () => {
     })
     expect(response.status).toBe(400)
     expect(await response.text()).toContain('value="数字で見る"')
+    expect(await db().select().from(schema.blocks)).toHaveLength(0)
+  })
+
+  it('打ち込むブロックを編集できる', async () => {
+    const signed = await signIn()
+    await signed('/admin/blocks', {
+      method: 'POST',
+      body: form({ type: 'note', title: 'あとがき', body: '本文です', published: '1' }),
+    })
+    const note = await db().query.blocks.findFirst({ where: (t, { eq }) => eq(t.type, 'note') })
+    if (!note) throw new Error('note が無い')
+
+    const response = await signed(`/admin/blocks/${note.id}`, {
+      method: 'POST',
+      body: form({ title: '追記', body: '書き直しました', published: '1' }),
+    })
+    expect(response.status).toBe(303)
+
+    const html = await (await get('/')).text()
+    expect(html).toContain('追記')
+    expect(html).toContain('書き直しました')
+    expect(html).not.toContain('本文です')
+  })
+
+  it('決まった中身のものは、編集しても公開/下書きしか変わらない', async () => {
+    await seedMember()
+    const signed = await signIn()
+    await signed('/admin/blocks/init', { method: 'POST' })
+    const team = await db().query.blocks.findFirst({ where: (t, { eq }) => eq(t.type, 'team') })
+    if (!team) throw new Error('team が無い')
+
+    // 見出しと中身を送りつけても、決まった中身のものは受け取らない
+    const response = await signed(`/admin/blocks/${team.id}`, {
+      method: 'POST',
+      body: form({ title: '乗っ取り', body: '差し込み' }),
+    })
+    expect(response.status).toBe(303)
+
+    const saved = await db().query.blocks.findFirst({ where: (t, { eq }) => eq(t.id, team.id) })
+    expect(saved?.title).toBe('')
+    expect(saved?.published).toBe(0)
+    expect(sectionIds(await (await get('/')).text())).not.toContain('team')
+  })
+
+  it('動かす向きが分からなければ何もしない', async () => {
+    const signed = await signIn()
+    await signed('/admin/blocks/init', { method: 'POST' })
+    const apps = await db().query.blocks.findFirst({ where: (t, { eq }) => eq(t.type, 'apps') })
+    if (!apps) throw new Error('apps が無い')
+
+    const response = await signed(`/admin/blocks/${apps.id}/move`, {
+      method: 'POST',
+      body: form({ dir: 'DOWN' }),
+    })
+    expect(response.status).toBe(400)
+
+    const rows = await db().query.blocks.findMany({ orderBy: (t, { asc }) => [asc(t.sortOrder)] })
+    expect(rows.map((row) => row.type)).toEqual(['hero', 'apps', 'works', 'team', 'contact'])
+  })
+
+  it('種類が消えた行も外せる', async () => {
+    // blocks.ts から種類を1つ減らしたあとの行。読む側は無視するが、
+    // 外せないと一覧に残り続ける
+    await env.DB.prepare(
+      "INSERT INTO blocks (type, published, sort_order) VALUES ('gone', 1, 10)",
+    ).run()
+    const [orphan] = await db().select().from(schema.blocks)
+    if (!orphan) throw new Error('行が無い')
+
+    const signed = await signIn()
+    expect((await signed(`/admin/blocks/${orphan.id}/delete`)).status).toBe(200)
+
+    const response = await signed(`/admin/blocks/${orphan.id}/delete`, { method: 'POST' })
+    expect(response.status).toBe(303)
     expect(await db().select().from(schema.blocks)).toHaveLength(0)
   })
 

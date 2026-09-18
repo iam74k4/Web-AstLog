@@ -1,4 +1,4 @@
-import { env } from 'cloudflare:test'
+import css from 'virtual:app-css'
 import { beforeEach, describe, expect, it } from 'vitest'
 import * as schema from '../src/db/schema'
 import { ACCENTS, LAYOUTS, TYPEFACES } from '../src/theme'
@@ -83,7 +83,9 @@ describe('見た目のプリセット', () => {
 
     expect(html).toContain('value="magazine" checked=""')
     expect(html).toContain('value="ember" checked=""')
-    expect(html).toContain('data-typeface="mono"')
+    // 見本は全種類ぶん出るので、data-typeface を見ても選択中は分からない
+    expect(html).toContain('value="serif" checked=""')
+    expect(html).not.toContain('value="sans" checked=""')
   })
 })
 
@@ -92,7 +94,9 @@ describe('見た目のプリセット', () => {
   片方だけ足すと、選べるのに何も変わらない選択肢ができる。
 */
 describe('プリセットと CSS', () => {
-  const css = env.TEST_APP_CSS
+  it('CSS を読めている（読めていないと、以下の検査が素通りする）', () => {
+    expect(css.length).toBeGreaterThan(1000)
+  })
 
   it('骨格には body[data-layout] の指定がある', () => {
     for (const layout of LAYOUTS) {

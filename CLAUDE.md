@@ -60,7 +60,8 @@ HTML フォームと 303 リダイレクトで動かす。JSON API も SPA も�
 **ブロックの種類を増やす** → `src/blocks.ts` に1つ足す → 中身を描く部品を
 `src/ui/components.tsx` に置く → `src/routes/public.tsx` の `renderBlock` に1分岐。
 中身が無ければ `null` を返して節ごと出さないこと。body は他と同じく「1行1件・`|`
-区切り」で持ち、`parseLines` で開く。
+区切り」で持ち、`parseLines` で開く。**公開ページで落とす中身は、管理画面でも
+保存させない**（`blockErrors`）。「公開」なのにサイトに出ない行がいちばん分かりにくい。
 
 **画面や URL を足す・変える** → `docs/screens.md` と `docs/flow.md` も直す。
 実装とずれた図は、無いよりたちが悪い。
