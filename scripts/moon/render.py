@@ -1,43 +1,107 @@
 """
-Noctifex の入口に敷く三日月を、粒子の雲としてレンダリングする。
+入口に敷く三日月を、**折った面の上に並べた点**としてレンダリングする。
+ここが本番。詰めるのは scripts/moon/pack.py、設計の経緯は docs/moon.md。
 
-形はロゴの三日月そのもの（src/ui/icons.tsx の多角形）を立体にしたもの。
+  blender -b -P scripts/moon/render.py -- <out.png> <res> <samples> [preset] [fstop]
+  例（下見）: ... -- /tmp/m.png 700 16 final
+  例（本番）: ... -- /tmp/m.png 1600 64 final
 
-最初は「球を左から照らして三日月を作る」を試したが、あれでは絶対に似ない。
-ロゴは天文学的な三日月ではなく、尖りが右へ長く伸び、内側が鋭い V 字に
-切れ込んだ記号だからで、球の照らされ方からはその形は出てこない
-（球から球を引く月牙も駄目。正面から見ると内側の縁が必ず直線になる——
-  切断面が視線と平行な平面の円で、投影すると線分に潰れる）。
+**プリセットは final を使うこと。** 他は比較のために残してある途中稿で、
+設計書が採ったのは final（1層・点を配信実画素で 9.4 間隔 / 2.8 径まで粗く）。
 
-だから多角形を厚みのある板にして、その体積に粒子を散らす。奥行きがあるので
-被写界深度で手前と奥がボケ、平面の図形では出ない立体感になる。
+## 作り
 
-  blender -b -P scripts/moon/render.py -- <out.png> <samples> <count> <res>
+  1. 面は**厚みゼロ**。うねらせるのは Y（＝カメラの視線方向）だけで、
+     X/Z には1ミリも動かさない。だからカメラから見た輪郭はロゴの多角形のまま。
+     さらに縁から TAPER で折りを 0 に落とすので、境界の点は必ず y=0 に乗る。
+  2. 点は**面上の弧長**で刻む。ここが要点。画面の (x,z) で等間隔に置くと、
+     いくら折っても投影は等間隔のままで、**折りは絵に1画素も現れない**。
+     弧長で刻むと、面が寝ている所では投影された間隔が詰まって明るい等高線に
+     なり、カメラに正対している所は疎で地が透ける。密度の濃淡が統計ではなく
+     幾何になる。
+  3. 詰まりには下限 DU_MIN を置く。置かないと傾きの急な所で投影間隔が
+     点の直径を割り、点の列が**白い筋に溶ける**（実際そうなった）。
+  4. 間隔と点の大きさは**配信される実画素**で持つ（px / dot）。ワールド単位で
+     持つと、解像度や pack.py の丈を変えた瞬間に意味が変わる。
 
-## 採らなかった別案
+## 測って捨てたもの
 
-「折れた面に並ぶ規則的な点」で作る案が scripts/moon/dots/render.py にある
-（設計と測定値は docs/moon-dots.md）。実際に出る寸法で格子が疎すぎたので
-採っていないが、**測って分かった否定的な結果**が要る場合はそちらを見ること
-——被写界深度はこの寸法では効かない、投影座標に格子を置くと折りは絵に
-1画素も現れない、層を重ねると点間隔が読める下限を割る。
+  - **被写界深度。** 振幅 0.40BU・距離 5.25BU・50mm では f/1.2 でも許容錯乱円が
+    約1画素で、f/8 との差は変調の深さ 0.951 対 0.940。効かないものは置かない。
+  - **層の重なりと干渉縞。** 縞を出すには層を近づける必要があるが、近づけると
+    配信サイズで点の間隔が読める下限を割る。1層に減らしたほうが等倍で強い。
+
+## 配る絵は色を持たない
+
+RGB は使わず、明暗はぜんぶアルファに入れる（pack.py）。色は public/app.css が
+--accent から作って敷き、この絵を mask として抜く。だから見た目プリセットで
+三日月そのものの色も変わる。合成（Glare 等）も焼かない。
+
+## 前の作り
+
+粒子を体積にランダムに散らす版が scripts/moon/particles.py に残っている。
+**pack.py の坂は両者で真逆**なので、あちらを焼くときは particles.py の
+冒頭にある値に戻すこと。
 """
 
+"""
+三日月を「奥へ折った薄い面」として作る（4稿・これが最終）。
+
+  blender -b -P fold4.py -- <out.png> <res> <samples> <preset> <fstop>
+  例: blender -b -P fold4.py -- /tmp/g.png 1400 64 g 2.0
+
+## 作り
+
+  1. 面は**厚みゼロ**。うねらせるのは Y（＝カメラの視線方向）だけで、
+     X/Z には1ミリも動かさない。だからカメラから見た輪郭は多角形のまま。
+     さらに縁から TAPER=0.045BU で折りを 0 に落とすので、境界の点は
+     必ず y=0 の面に乗る（透視投影で輪郭が揺れるのを止めるため）。
+  2. 点は**面上の弧長**で刻む。ここが要点。画面の (x,z) で等間隔に置くと、
+     いくら折っても投影は等間隔のままで何も起きない。弧長で刻むと、
+     面が寝ている所では投影された間隔が詰まって明るい等高線になり、
+     カメラに正対している所は疎で地が透ける。
+  3. 詰まりには下限 DU_MIN=0.38 を置く。置かないと傾きの急な所で
+     点の間隔が1画素を割り、破線ではなく白い筋に溶けた（実際そうなった）。
+  4. 層を複数枚、別の折り方・別の格子の向きで重ねる。干渉縞が出る。
+  5. 1点＝カメラ向きの四角。色属性 "Col" に明るさを b/4 で入れ、
+     マテリアルで 4 倍して発光強度にする。頂点インスタンスだと1層まるごと
+     同じ明るさになり、縁で消える・傾きで光る が付けられなかった。
+
+## 測った結果（preset g / 1400px / EEVEE / 24〜64 サンプル）
+
+  IoU 0.9295（膨張半径 5〜10px で 0.9257〜0.9300、安定）
+  対照：折りを抜いた flat は 0.9298 ——**折りは輪郭を1ミリも壊していない**。
+  1.0 に届かない 0.07 は、点の絵を膨張・収縮で閉じて多角形と比べる
+  測り方そのものと、縁の減光のぶん。
+  外接枠の縦横比 0.667（ロゴは 0.665）。
+  クリップ(>=250/255) 0.00%、最大 0.869。
+  392x574 に縮めて、列方向の自己相関が 9px で 0.787、18px で 0.603。
+  196x287（DPR1）でも 4px/9px/14px に 1.00/0.895/0.700 の峰が残る。
+
+## 分かった限界
+
+  被写界深度は**この寸法では効かない**。振幅 0.40BU・距離 5.25BU・50mm では
+  f/1.2 でも許容錯乱円が約1画素で、f/8 との差は変調の深さ 0.951 対 0.940。
+  参照の「手前の葉はやわらかく、芯は鋭い」は、輪郭を守る限り再現できない。
+"""
+
+import json
 import math
+import os
+import random
 import sys
 
 import bpy
 
 argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
-OUT = argv[0] if len(argv) > 0 else "/tmp/moon.png"
-SAMPLES = int(argv[1]) if len(argv) > 1 else 96
-COUNT = int(argv[2]) if len(argv) > 2 else 559000  # particle_size と対で決まる。下の説明を見ること
-RES = int(argv[3]) if len(argv) > 3 else 1600
-ENGINE = argv[4] if len(argv) > 4 else "eevee"  # eevee | cycles
+OUT = argv[0] if len(argv) > 0 else "/tmp/fold2.png"
+RES = int(argv[1]) if len(argv) > 1 else 1400
+SAMPLES = int(argv[2]) if len(argv) > 2 else 24
+PRESET = argv[3] if len(argv) > 3 else "a"
+FSTOP = float(argv[4]) if len(argv) > 4 else 2.0
 
-ACCENT = (0.561, 0.561, 0.961)  # --accent (iris #8f8ff5) をリニアに寄せた値
+ACCENT = (0.561, 0.561, 0.961)
 
-# ロゴの多角形（24×24 の枠、y は下向き）。src/ui/icons.tsx が正
 MARK = [
     (14.96, 2.50),
     (7.71, 6.10),
@@ -47,296 +111,251 @@ MARK = [
     (12.09, 16.78),
     (10.73, 9.07),
 ]
-DEPTH = 0.40  # 板の厚み。厚いほど粒が奥行き方向に散り、被写界深度が効く
 
+L = 12.0
+PX_PER_BU = 362.0  # 配信 392x574 での実画素 / Blender 単位
+
+
+def to_bu(p):
+    return ((p[0] - 12.0) / L, -(p[1] - 12.0) / L)
+
+
+POLY = [to_bu(p) for p in MARK]
+
+
+def inside(x, z):
+    hit = False
+    n = len(POLY)
+    for i in range(n):
+        x1, z1 = POLY[i]
+        x2, z2 = POLY[(i + 1) % n]
+        if (z1 > z) != (z2 > z):
+            if x < x1 + (z - z1) * (x2 - x1) / (z2 - z1):
+                hit = not hit
+    return hit
+
+
+def edge_dist(x, z):
+    best = 1e9
+    n = len(POLY)
+    for i in range(n):
+        x1, z1 = POLY[i]
+        x2, z2 = POLY[(i + 1) % n]
+        dx, dz = x2 - x1, z2 - z1
+        ll = dx * dx + dz * dz
+        t = 0.0 if ll == 0 else max(0.0, min(1.0, ((x - x1) * dx + (z - z1) * dz) / ll))
+        best = min(best, math.hypot(x - (x1 + t * dx), z - (z1 + t * dz)))
+    return best
+
+
+def smoothstep(e0, e1, v):
+    t = max(0.0, min(1.0, (v - e0) / (e1 - e0)))
+    return t * t * (3.0 - 2.0 * t)
+
+
+# ---------------------------------------------------------------- 設計
+#
+# px は「配信される実画素での点の間隔」。ここがこの試みの要。
+# 参照（ElevenLabs）は 520x470 を占めるので細かい格子が成立するが、
+# こちらは 392x574 しか無い。同じ密度を真似ると点が1画素を割って砂に戻る。
+TAPER = 0.045  # 縁からこの幅（BU）で折りを 0 に落とす。輪郭を守るため
+FADE = 0.075  # 縁からこの幅で明るさを 0 に落とす。外周が消えていくように
+
+"""
+弧長で刻むと、面が寝ている所では du がいくらでも小さくなる。
+そのまま許すと、投影された点の間隔が1画素を割って**線に溶ける**——
+実際、傾きの急な所（preset b/c/d の上辺と右下）が破線ではなく
+白い筋になっていた。等高線として明るくなるのは狙いどおりだが、
+点の列が読めなくなったらこの試み全体の意味が無い。
+
+だから詰まりに下限を置く。0.38 は「設計間隔の 38%」＝ 配信画素で
+8.0px * 0.38 = 3.0px。1点 2.3px なので、隙間が 0.7px 残る。
+"""
+DU_MIN = 0.50  # 設計書の最終構成に合わせた（0.38 では詰まった所が線に溶ける）
+
+PRESETS = {
+    "a": [
+        dict(px=8.5, amp=0.26, k1=8.5, k2=3.4, rot=0.30, ph=0.0, gain=1.00, dot=2.2, seed=1),
+        dict(px=9.5, amp=0.20, k1=6.0, k2=4.6, rot=1.42, ph=1.9, gain=0.62, dot=2.0, seed=2),
+    ],
+    "b": [
+        dict(px=8.0, amp=0.30, k1=9.5, k2=3.0, rot=0.22, ph=0.0, gain=1.00, dot=2.3, seed=1),
+        dict(px=9.0, amp=0.23, k1=7.0, k2=5.0, rot=1.25, ph=2.1, gain=0.66, dot=2.1, seed=2),
+        dict(px=11.0, amp=0.15, k1=4.5, k2=6.5, rot=2.50, ph=0.7, gain=0.42, dot=1.9, seed=3),
+    ],
+    # 折りを大きく・少なく。畳まれた帯として読ませる
+    "c": [
+        dict(px=8.0, amp=0.42, k1=5.2, k2=2.2, rot=0.26, ph=0.4, gain=1.00, dot=2.3, seed=1),
+        dict(px=9.5, amp=0.30, k1=3.8, k2=4.0, rot=1.35, ph=2.3, gain=0.60, dot=2.0, seed=2),
+    ],
+    # 1層だけ。折りと弧長の効きを単独で見る
+    "d": [
+        dict(px=7.5, amp=0.38, k1=6.0, k2=2.6, rot=0.28, ph=0.0, gain=1.05, dot=2.4, seed=1),
+    ],
+    # 本命。大きな折り1枚＋奥にもう1枚。詰まりに下限があるので線に溶けない
+    "e": [
+        dict(px=8.0, amp=0.40, k1=5.6, k2=2.4, rot=0.26, ph=0.3, gain=1.05, dot=2.4, seed=1),
+        dict(px=10.5, amp=0.26, k1=3.6, k2=4.2, rot=1.38, ph=2.3, gain=0.48, dot=2.0, seed=2, back=0.16),
+    ],
+    # 本命の仕上げ。e に「傾きで明暗」と「左が濃い」を足した
+    "g": [
+        dict(px=8.0, amp=0.40, k1=5.6, k2=2.4, rot=0.26, ph=0.3, gain=1.05, dot=2.4, seed=1,
+             tilt_ref=1.5, tilt_lo=0.45, tilt_hi=1.95, lx_lo=1.15, lx_hi=0.70),
+        dict(px=10.5, amp=0.26, k1=3.6, k2=4.2, rot=1.38, ph=2.3, gain=0.50, dot=2.0, seed=2, back=0.16,
+             tilt_ref=1.2, tilt_lo=0.40, tilt_hi=1.70, lx_lo=1.15, lx_hi=0.70),
+    ],
+    # 対照。g から折りだけを抜いた（amp=0）。IoU の目減りが折りのせいか、
+    # 縁の減光と膨張処理のせいかを切り分けるため
+    "flat": [
+        dict(px=8.0, amp=0.0005, k1=5.6, k2=2.4, rot=0.26, ph=0.3, gain=1.05, dot=2.4, seed=1,
+             tilt_ref=1.5, tilt_lo=0.45, tilt_hi=1.95, lx_lo=1.15, lx_hi=0.70),
+        dict(px=10.5, amp=0.0005, k1=3.6, k2=4.2, rot=1.38, ph=2.3, gain=0.50, dot=2.0, seed=2, back=0.16,
+             tilt_ref=1.2, tilt_lo=0.40, tilt_hi=1.70, lx_lo=1.15, lx_hi=0.70),
+    ],
+    # 設計書が最終的に採った構成。1層・点を粗く（配信で読めるように）。
+    # d の折り（amp/k1/k2/rot）に g の「傾きで明暗」と「左が濃い」を足し、
+    # 間隔と点を配信実画素で 9.4 / 2.8 まで開いたもの
+    "final": [
+        dict(px=9.4, amp=0.38, k1=6.0, k2=2.6, rot=0.28, ph=0.0, gain=1.05, dot=2.8, seed=1,
+             tilt_ref=1.5, tilt_lo=0.45, tilt_hi=1.95, lx_lo=1.15, lx_hi=0.70),
+    ],
+    # e より粗い。点がもっと大きく、間隔も開く
+    "f": [
+        dict(px=9.5, amp=0.44, k1=5.0, k2=2.2, rot=0.26, ph=0.3, gain=1.05, dot=2.7, seed=1),
+        dict(px=12.0, amp=0.28, k1=3.4, k2=4.0, rot=1.38, ph=2.3, gain=0.46, dot=2.2, seed=2, back=0.18),
+    ],
+}
+LAYERS = PRESETS[PRESET]
+
+
+def make_height(cfg):
+    amp, k1, k2, ph = cfg["amp"], cfg["k1"], cfg["k2"], cfg["ph"]
+    c, s = math.cos(cfg["rot"]), math.sin(cfg["rot"])
+
+    def h(u, v):
+        x = u * c - v * s
+        z = u * s + v * c
+        raw = amp * (math.sin(k1 * u + ph) + 0.35 * math.sin(k2 * v + ph * 0.7))
+        return raw * smoothstep(0.0, TAPER, edge_dist(x, z)), x, z
+
+    return h
+
+
+def lattice(cfg):
+    """面上を弧長で刻んだ格子。戻すのは (x, y, z, 明るさ, 半径)。"""
+    h = make_height(cfg)
+    step = cfg["px"] / PX_PER_BU
+    rnd = random.Random(cfg["seed"])
+    half = (cfg["dot"] / 2.0) / PX_PER_BU
+
+    us, vs = [], []
+    c, s = math.cos(cfg["rot"]), math.sin(cfg["rot"])
+    for x, z in POLY:
+        us.append(x * c + z * s)
+        vs.append(-x * s + z * c)
+    u0, u1 = min(us) - step, max(us) + step
+    v0, v1 = min(vs) - step, max(vs) + step
+
+    pts = []
+    v, row = v0, 0
+    while v <= v1:
+        u = u0 + (step * 0.5 if row % 2 else 0.0)
+        guard = 0
+        while u <= u1 and guard < 20000:
+            guard += 1
+            y, x, z = h(u, v)
+            du = step * 1e-2
+            y2, _, _ = h(u + du, v)
+            slope = (y2 - y) / du
+            if inside(x, z):
+                d = edge_dist(x, z)
+                # 手前ほど明るい。折りの山と谷で明暗が分かれ、起伏が読める
+                depth = 1.55 - 1.17 * smoothstep(-cfg["amp"], cfg["amp"], y)
+                # 面の傾き。寝ている所（|slope| 大）は点が詰まる上に明るく、
+                # カメラに正対している所（|slope| 小）は疎で暗い。
+                # 参照の「明るい等高線 / 地が透ける所」はこの2つの積で出る。
+                # 密度だけでは足りなかった——詰まりに下限を置いたぶん、
+                # 明暗で差をつけ直す必要がある。
+                t = min(1.0, abs(slope) / cfg.get("tilt_ref", 1.6))
+                tilt = cfg.get("tilt_lo", 0.62) + (cfg.get("tilt_hi", 1.85) - cfg.get("tilt_lo", 0.62)) * t
+                fade = smoothstep(0.0, FADE, d)
+                jit = 0.78 + 0.44 * rnd.random()
+                # 三日月の質量は左（膨らんだ側）にある。左を濃く、右の尖りへ向けて
+                # 落とすと、記号ではなく照らされた立体に見える
+                lit_x = cfg.get("lx_lo", 1.0) + (cfg.get("lx_hi", 1.0) - cfg.get("lx_lo", 1.0)) * smoothstep(
+                    -0.55, 0.55, x
+                )
+                b = cfg["gain"] * depth * tilt * fade * jit * lit_x
+                if b > 0.012:
+                    pts.append((x, y + cfg.get('back', 0.0), z, b, half * (0.75 + 0.45 * fade)))
+            u += max(step * DU_MIN, step / math.sqrt(1.0 + slope * slope))
+        v += step
+        row += 1
+    return pts
+
+
+# ---------------------------------------------------------------- 組み立て
 bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
 
-# ---------------------------------------------------------------- 形
-#
-# 同じ三日月を、内側へ少しずつ縮めた3枚の殻として作る。
-#
-# 1枚だけに粒を撒くと密度が端まで一定で、輪郭が定規で引いた線になる。
-# 3枚に分けて内側ほど多く撒くと、重なりのぶん密度が中心へ向かって上がり、
-# 縁では粒が散って消える——参考にしている絵の、形が縁で溶ける感じはこれ。
-
-
-def inset(points, d):
-    """多角形を d だけ内側へ寄せる。各頂点を角の二等分線に沿って動かす。
-    凹んだ頂点では自然に外へ動くので、この形（内側が V 字）でも破綻しない。"""
-    n = len(points)
-    out = []
-    for i in range(n):
-        px, py = points[(i - 1) % n]
-        cx, cy = points[i]
-        nx, ny = points[(i + 1) % n]
-
-        def unit(ax, ay, bx, by):
-            vx, vy = bx - ax, by - ay
-            length = math.hypot(vx, vy) or 1.0
-            return vx / length, vy / length
-
-        # 前後の辺の法線。
-        #
-        # 右手側（+ey, -ex）が内側。MARK は符号付き面積 -84.8 の「時計回り」で、
-        # しかも y が下向きの枠で書いてある。左手側（-ey, +ex）を内側と決めて
-        # いたときは、この関数が多角形を内側ではなく外側へ広げていた——
-        # 面積が 84.8 → 145.0 → 232.3 と増え、いちばん大きい殻に粒の53%を
-        # 配っていたので、密度が中心ではなく外へ向かって上がり、出来上がった
-        # 絵はロゴの2.74倍に膨らんだ別の形だった。
-        e1x, e1y = unit(px, py, cx, cy)
-        e2x, e2y = unit(cx, cy, nx, ny)
-        n1x, n1y = e1y, -e1x
-        n2x, n2y = e2y, -e2x
-        bx_, by_ = n1x + n2x, n1y + n2y
-        blen = math.hypot(bx_, by_) or 1.0
-        bx_, by_ = bx_ / blen, by_ / blen
-        # 角が鋭いほど深く入れる必要がある
-        cosang = max(0.25, (bx_ * n1x + by_ * n1y))
-        out.append((cx + bx_ * d / cosang, cy + by_ * d / cosang))
-    return out
-
-
-SHELLS = [
-    # (内側へ寄せる量, 粒の割り当て)
-    #
-    # 面積は 84.8 / 56.5 / 36.9（元の 100% / 67% / 43%）。
-    #
-    # 外に多く配る。殻が重なっているので、それでも密度は中心へ向かって上がる
-    # ——外の縁には0枚目の粒しか来ないが、中心には3枚ぶんが重なるため、
-    # 単位面積あたりで約 3.2 倍になる。内側に多く配ると質量が中心に寄りすぎ、
-    # 輪郭が痩せてロゴの太い面が細い弧になる（実際そうなった）。
-    (0.00, 0.45),
-    (0.55, 0.32),
-    (1.00, 0.23),
-]
-
-
-def make_shell(points, name):
-    verts = [((x - 12.0) / 12.0, 0.0, -(y - 12.0) / 12.0) for x, y in points]
-    mesh = bpy.data.meshes.new(name)
-    mesh.from_pydata(verts, [], [list(range(len(verts)))])
-    mesh.update()
-    ob = bpy.data.objects.new(name, mesh)
-    scene.collection.objects.link(ob)
-    bpy.context.view_layer.objects.active = ob
-
-    sol = ob.modifiers.new("thick", type="SOLIDIFY")
-    sol.thickness = DEPTH
-    sol.offset = 0.0
-    bpy.ops.object.modifier_apply(modifier="thick")
-
-    # ボクセルで組み直す。これが無いと、多角形を三角に割った継ぎ目に沿って
-    # 粒の密度が偏り、絵の中に明るい直線が何本か走る
-    rem = ob.modifiers.new("even", type="REMESH")
-    rem.mode = "VOXEL"
-    rem.voxel_size = 0.022
-    bpy.ops.object.modifier_apply(modifier="even")
-    return ob
-
-
-shells = [(make_shell(inset(MARK, d), f"shell{i}"), share) for i, (d, share) in enumerate(SHELLS)]
-
-# ---------------------------------------------------------------- 粒
-bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=1.0, location=(0, 0, -50))
-dot = bpy.context.active_object
-dot.name = "dot"
-
-mat = bpy.data.materials.new("glow")
+mat = bpy.data.materials.new("dots")
 mat.use_nodes = True
 nt = mat.node_tree
 nt.nodes.clear()
-
-geo = nt.nodes.new("ShaderNodeNewGeometry")
-info = nt.nodes.new("ShaderNodeObjectInfo")
-
-# (1) 左ほど明るい。ロゴの膨らみが左にあるので、そちらを光らせると立体に見える
-sep = nt.nodes.new("ShaderNodeSeparateXYZ")
-lit = nt.nodes.new("ShaderNodeMapRange")
-lit.inputs["From Min"].default_value = 0.62
-lit.inputs["From Max"].default_value = -0.62
-lit.inputs["To Min"].default_value = 0.05
-lit.inputs["To Max"].default_value = 0.62
-lit.clamp = True
-
-# (2) ノイズで濃淡をうねらせる。
-#     一様に光らせると、粒は多くても「塗り」に見える。参考にしている絵の
-#     内部構造は、密度がゆっくり波打っていることで出ている
-noise = nt.nodes.new("ShaderNodeTexNoise")
-noise.inputs["Scale"].default_value = 3.6
-noise.inputs["Detail"].default_value = 6.0
-noise.inputs["Roughness"].default_value = 0.55
-swirl = nt.nodes.new("ShaderNodeMapRange")
-swirl.inputs["From Min"].default_value = 0.36
-swirl.inputs["From Max"].default_value = 0.64
-swirl.inputs["To Min"].default_value = 0.10
-swirl.inputs["To Max"].default_value = 1.75
-swirl.clamp = True
-
-# (3) 粒ごとのばらつき。全部が同じ明るさだと、光っている粒ではなく網点に見える
-spark = nt.nodes.new("ShaderNodeMapRange")
-spark.inputs["From Min"].default_value = 0.0
-spark.inputs["From Max"].default_value = 1.0
-"""
-粒1つごとの明るさの幅。0.35〜2.3（6.6:1）だった。
-
-配る絵では粒が**サブピクセル**（直径 0.82px、いちばん大きいもので 1.43px）
-なので、1画素は「そこに見えている2〜3枚の粒の面の平均」でしかない。
-枚数が少ないと、粒ごとのばらつきが平均されずにそのまま画素の乱れとして残る
-——実測で高周波の σ が 17.1/255、本体の中央値の 13.9%。粒ではなく紙やすりに
-見えるのはこれ。0.75〜1.65（2.2:1）まで詰めると σ が 28% 落ちる。
-平均は 1.325 → 1.20 とほぼ変わらないので、露出も pack.py の坂もずれない。
-"""
-spark.inputs["To Min"].default_value = 0.75
-spark.inputs["To Max"].default_value = 1.65
-spark.clamp = True
-
-m1 = nt.nodes.new("ShaderNodeMath")
-m1.operation = "MULTIPLY"
-m2 = nt.nodes.new("ShaderNodeMath")
-m2.operation = "MULTIPLY"
-
-"""
-粒1つの明るさの倍率。
-
-7.0 だった。粒は体積の中に散らしてあるので、視線方向に何十個も重なる。
-1粒が明るいと、重なった所は 1.0 を軽く突き抜ける——そして下の view_transform
-が "Standard"、つまり 1.0 で**切り落とす**設定だったので、三日月の内側は
-全部まとめて白に張り付いていた。実測で本体の 64.2% が 250/255 以上、
-中央値は 255。内部に情報が1つも残っていない状態だった。
-
-それを CSS 側が opacity 0.42 で敷くので、画面には**一様な灰色の板**が出る。
-粒が見えるのは飽和を免れた外周の細い帯だけで、そこも粒が疎すぎて
-ディザに見え、隙間が黒い点として残っていた。
-
-1.2 にすると、重なっても AgX の肩の中に収まる。実測でクリップ 0.0%、
-素材の最大値 178/255。最大値が下がったぶんは CSS の --moon-ink を上げて
-取り返せる（飽和していないので、上げても板にならない）。
-"""
-BOOST = 1.2 if ENGINE == "cycles" else 1.0
-gain = nt.nodes.new("ShaderNodeMath")
-gain.operation = "MULTIPLY"
-gain.inputs[1].default_value = BOOST
-
+attr = nt.nodes.new("ShaderNodeAttribute")
+attr.attribute_name = "Col"
+mul = nt.nodes.new("ShaderNodeMath")
+mul.operation = "MULTIPLY"
+mul.inputs[1].default_value = 4.0  # 色属性に b/4 で入れてある（1.0 超えを避けるため）
 emit = nt.nodes.new("ShaderNodeEmission")
 emit.inputs["Color"].default_value = (*ACCENT, 1.0)
 out = nt.nodes.new("ShaderNodeOutputMaterial")
-
-nt.links.new(geo.outputs["Position"], sep.inputs["Vector"])
-nt.links.new(sep.outputs["X"], lit.inputs["Value"])
-nt.links.new(geo.outputs["Position"], noise.inputs["Vector"])
-nt.links.new(noise.outputs["Fac"], swirl.inputs["Value"])
-nt.links.new(info.outputs["Random"], spark.inputs["Value"])
-nt.links.new(lit.outputs["Result"], m1.inputs[0])
-nt.links.new(swirl.outputs["Result"], m1.inputs[1])
-nt.links.new(m1.outputs["Value"], m2.inputs[0])
-nt.links.new(spark.outputs["Result"], m2.inputs[1])
-nt.links.new(m2.outputs["Value"], gain.inputs[0])
-nt.links.new(gain.outputs["Value"], emit.inputs["Strength"])
+nt.links.new(attr.outputs["Fac"], mul.inputs[0])
+nt.links.new(mul.outputs["Value"], emit.inputs["Strength"])
 nt.links.new(emit.outputs["Emission"], out.inputs["Surface"])
-dot.data.materials.append(mat)
 
-# ---------------------------------------------------------------- 散らす
-for idx, (shell, share) in enumerate(shells):
-    bpy.context.view_layer.objects.active = shell
-    shell.modifiers.new("scatter", type="PARTICLE_SYSTEM")
-    ps = shell.particle_systems[0]
-    s = ps.settings
-    s.type = "EMITTER"
-    s.count = max(1, int(COUNT * share))
-    s.emit_from = "VOLUME"
-    s.distribution = "RAND"
-    s.use_emit_random = True
-    s.physics_type = "NO"
-    s.frame_start = 1.0
-    s.frame_end = 1.0
-    s.lifetime = 500
-    s.render_type = "OBJECT"
-    s.instance_object = dot
-    """
-    粒の大きさ。0.0024 だった。
+stats = {"preset": PRESET, "layers": []}
+for i, cfg in enumerate(LAYERS):
+    pts = lattice(cfg)
+    stats["layers"].append({"i": i, "count": len(pts), "px": cfg["px"], "amp": cfg["amp"]})
 
-    小さくするのは、1画素に見えている面の枚数を増やして、粒ごとのばらつきを
-    画素の中で平均させるため（上の spark の説明と同じ話）。0.0014 にすると
-    枚数が 2.5 → 7 になり、σ が 32% 落ちる。spark を詰めるのと合わせると 47%。
+    verts, faces, cols = [], [], []
+    for x, y, z, b, s in pts:
+        j = len(verts)
+        verts += [(x - s, y, z - s), (x + s, y, z - s), (x + s, y, z + s), (x - s, y, z + s)]
+        faces.append((j, j + 1, j + 2, j + 3))
+        cols += [(b / 4.0, b / 4.0, b / 4.0, 1.0)] * 4
 
-    **COUNT と一緒に動かすこと。** 見た目の被覆は COUNT x particle_size^2 で
-    決まる。大きさだけ変えると、明るさも外接枠も動いて pack.py の坂と
-    ロゴとの IoU がずれる。(0.0024/0.0014)^2 = 2.94 なので、COUNT は 2.94倍。
-
-    なお **COUNT だけ増やしても、ざらつきは減らない**（実測で 4倍にして -5%）。
-    粒は不透明な発光面なので、増やしたぶんは後ろに隠れるだけで、1画素に
-    見えている枚数が増えない。そのうえ淡い周縁が pack.py の坂を越えて
-    本体が +44% に膨らみ、ロゴとの IoU が落ちる。数で殴らないこと。
-    """
-    s.particle_size = 0.0014
-    s.size_random = 0.85  # 大小の差が大きいほど、粒が「光の点」に見える
-    s.use_rotation_instance = False
-    s.use_scale_instance = True
-    ps.seed = 7 + idx * 13
-    # 母体そのものは映さない。映すのは粒だけ
-    shell.show_instancer_for_render = False
-
-scene.frame_set(2)
+    mesh = bpy.data.meshes.new(f"L{i}")
+    mesh.from_pydata(verts, [], faces)
+    mesh.update()
+    ca = mesh.color_attributes.new(name="Col", type="FLOAT_COLOR", domain="POINT")
+    flat = []
+    for c4 in cols:
+        flat += list(c4)
+    ca.data.foreach_set("color", flat)
+    ob = bpy.data.objects.new(f"L{i}", mesh)
+    scene.collection.objects.link(ob)
+    ob.data.materials.append(mat)
 
 # ---------------------------------------------------------------- カメラ
-bpy.ops.object.camera_add(location=(0.02, -5.25, 0.06), rotation=(math.pi / 2, 0, 0))
+bpy.ops.object.camera_add(location=(0.0, -5.25, 0.0), rotation=(math.pi / 2, 0, 0))
 cam = bpy.context.active_object
 scene.camera = cam
 cam.data.lens = 50
 cam.data.dof.use_dof = True
-cam.data.dof.focus_distance = 5.12
-cam.data.dof.aperture_fstop = 1.7  # 浅いほど手前と奥が溶ける
+cam.data.dof.focus_distance = 5.25
+# 浅くしすぎると点が滲んで格子が消える。振幅 0.3BU・f/2.0 で錯乱円は約1px
+cam.data.dof.aperture_fstop = FSTOP
 
-# ---------------------------------------------------------------- 霧（Cycles のみ）
-#
-# 粒そのものが光源なので、まわりに薄い霧を置くと、その光が霧の中で散る。
-# 粒と粒のあいだが物理的に繋がり、貼り付けた点の集まりではなく「発光する雲」
-# になる——EEVEE には無い表現で、代わりに描画は桁で遅くなる。
-if ENGINE == "cycles":
-    # 箱は小さく。大きいと霧が画面いっぱいに広がる。霧は pack.py の
-    # 明るさの坂（LO/HI）で切り落とされるので絵には残らないが、広いほど
-    # 粒のまわりの淡い所まで霧に埋もれ、三日月の外接枠が取れなくなる
-    # （実測で、閾値 0.10 では縦横比が 0.650 ではなく 0.846 になった）
-    bpy.ops.mesh.primitive_cube_add(size=2.9, location=(0, 0, 0))
-    fog = bpy.context.active_object
-    fog.name = "fog"
-    fmat = bpy.data.materials.new("fog")
-    fmat.use_nodes = True
-    fnt = fmat.node_tree
-    fnt.nodes.clear()
-    vol = fnt.nodes.new("ShaderNodeVolumePrincipled")
-    vol.inputs["Density"].default_value = 0.20
-    vol.inputs["Anisotropy"].default_value = 0.35  # 前方散乱ぎみ。光の筋が伸びる
-    vol.inputs["Color"].default_value = (*ACCENT, 1.0)
-    vol.inputs["Emission Strength"].default_value = 0.0
-    fout = fnt.nodes.new("ShaderNodeOutputMaterial")
-    fnt.links.new(vol.outputs["Volume"], fout.inputs["Volume"])
-    fog.data.materials.append(fmat)
-    # visible_camera は落とさないこと。
-    #
-    # 箱の面を消すつもりで False にしたら、カメラ光線が霧に入らなくなり、
-    # 散乱が一切描かれなかった（濃さを 0.05 から 0.45 まで振っても絵が同じ）。
-    # このマテリアルは Volume 出力しか持たないので、面はもともと映らない。
-    fog.visible_shadow = False
-
-# ---------------------------------------------------------------- レンダー設定
+# ---------------------------------------------------------------- 出力
 engines = bpy.types.RenderSettings.bl_rna.properties["engine"].enum_items.keys()
-if ENGINE == "cycles":
-    scene.render.engine = "CYCLES"
-    scene.cycles.samples = SAMPLES
-    scene.cycles.use_denoising = True
-    scene.cycles.max_bounces = 4
-    scene.cycles.volume_bounces = 2
-    scene.cycles.volume_step_rate = 1.0
-else:
-    for want in ("BLENDER_EEVEE_NEXT", "BLENDER_EEVEE", "CYCLES"):
-        if want in engines:
-            scene.render.engine = want
-            break
-    if hasattr(scene.eevee, "taa_render_samples"):
-        scene.eevee.taa_render_samples = SAMPLES
-print("engine:", scene.render.engine)
+for want in ("BLENDER_EEVEE_NEXT", "BLENDER_EEVEE", "CYCLES"):
+    if want in engines:
+        scene.render.engine = want
+        break
+if hasattr(scene.eevee, "taa_render_samples"):
+    scene.eevee.taa_render_samples = SAMPLES
 
 scene.render.resolution_x = RES
 scene.render.resolution_y = RES
@@ -344,27 +363,10 @@ scene.render.film_transparent = True
 scene.render.image_settings.file_format = "PNG"
 scene.render.image_settings.color_mode = "RGBA"
 scene.render.filepath = OUT
-"""
-"Standard" にしてはいけない。1.0 で**ハードクリップ**する設定で、粒が
-重なった所を全部 1.0 に潰してしまう（上の BOOST の説明のとおり）。
-
-AgX はハイライトを切らずに圧縮する。粒が何十個重なっても順位が保たれるので、
-内側ほど明るい・外へ向かって散る、という濃淡がそのまま絵に残る。
-配る絵は pack.py が無彩色に倒すので、AgX が色を寝かせることは問題にならない。
-"""
 scene.view_settings.view_transform = "AgX"
 scene.view_settings.look = "None"
 
-# 滲み（グロー）はここでは作らない。ここだけでなく、どこでも作らない。
-#
-# 配るのは**無彩色の三日月だけ**で、光暈は public/app.css の --moon-glow が
-# --accent から描く。絵に焼くと色がそこで固定され、アクセント色5つのうち3つと
-# 喧嘩する。scripts/moon/pack.py の先頭にその理由が書いてある。
-#
-# （なお Blender 5 の合成はシーン直下の node_tree ではなくノードグループになり、
-# Glare の設定も RNA プロパティからソケット入力へ移っている。つないでみたが、
-# グループ入力にレンダー結果が渡らず、出てくる絵は真っ黒になった。
-# いまは焼かないと決めたので、この道は追わなくてよい。）
-
+print("ENGINE", scene.render.engine)
+print("STATS", json.dumps(stats))
 bpy.ops.render.render(write_still=True)
-print("wrote:", OUT)
+print("WROTE", OUT, os.path.exists(OUT))

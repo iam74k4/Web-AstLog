@@ -115,7 +115,7 @@
 
     --moon-ratio は素材の寸法。src/ui/components.tsx の width/height と同じ数。
   */
-  --moon-ratio: 312 / 480;
+  --moon-ratio: 373 / 574;
   --moon-top: 3%;
   --moon-h: 45%;
   --moon-cut: 12%;
