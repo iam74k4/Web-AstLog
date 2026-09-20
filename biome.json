@@ -11,13 +11,34 @@
       "semicolons": "asNeeded"
     }
   },
+  "css": {
+    "formatter": {
+      "quoteStyle": "single"
+    }
+  },
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true
+      "recommended": true,
+      "style": {
+        "noDescendingSpecificity": "off"
+      }
     }
   },
   "files": {
-    "includes": ["src/**", "test/**", "drizzle.config.ts", "vitest.config.ts"]
-  }
+    "includes": [
+      "src/**",
+      "test/**",
+      "public/**",
+      "scripts/**",
+      "drizzle.config.ts",
+      "vitest.config.ts"
+    ]
+  },
+  "overrides": [
+    {
+      "includes": ["public/assets/**"],
+      "linter": { "rules": { "a11y": { "noSvgWithoutTitle": "off" } } }
+    }
+  ]
 }

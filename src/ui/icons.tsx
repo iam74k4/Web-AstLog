@@ -4,6 +4,10 @@
   置いた場所の文字色になる。
 */
 
+/*
+  三日月。明るい側が左（外周は x=5.68 まで張り出し、内周は x≈10.7〜12.1）。
+  入口の背景の月（scripts/moon/render.py）も同じ向きに光を当ててある。
+*/
 export const MarkIcon = ({ size = 24 }: { size?: number }) => (
   <svg
     viewBox="0 0 24 24"

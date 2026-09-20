@@ -62,6 +62,21 @@ export const items = sqliteTable(
     // work のときの区分（「金融系基幹システム」など）
     category: text('category').notNull().default(''),
     title: text('title').notNull(),
+    /*
+      作品1件の恒久リンク（/apps/item/<slug> と /works/item/<slug>）。
+
+      一覧の URL（/apps/3）は「いまの並びの3枚目」でしかない。並べ替え・公開の
+      切り替え・追加のたびに、200 のまま別の作品を指す——404 なら気づけるが、
+      これは誰にも気づかれないまま貼ったリンクの中身が入れ替わる。作品を1件だけ
+      名指しできる URL を、並び順から切り離してここに持つ。
+
+      null は「恒久リンクがまだ無い」。この列より前からある行だけが該当し、
+      管理画面から一度保存すれば埋まる（保存時は必ず作品名から作る）。
+      NOT NULL にしないのは、既にある行を1つの既定値で埋めると、その値が
+      重なって unique を張れないため。SQLite は unique の中の NULL を
+      互いに別物として扱うので、埋まっていない行が何行あっても通る。
+    */
+    slug: text('slug').unique(),
     // "2026" や "2024 —" を入れるので文字列
     year: text('year').notNull().default(''),
     // 「何であるか。何をしたか。」の2文

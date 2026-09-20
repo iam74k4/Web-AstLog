@@ -22,38 +22,131 @@ export function findPublishedMember(db: Db, slug: string) {
   })
 }
 
-export async function listPublishedItems(db: Db, type: 'app' | 'work'): Promise<ItemView[]> {
-  const rows = await db.query.items.findMany({
-    where: and(eq(schema.items.type, type), eq(schema.items.published, 1)),
-    orderBy: publicOrder,
-    with: {
-      tags: { orderBy: [asc(schema.itemTags.sortOrder)] },
-      links: { orderBy: [asc(schema.itemLinks.sortOrder)] },
-      member: true,
-      platform: true,
-    },
-  })
+/*
+  一覧を絞り込む条件。プラットフォームとメンバーの2軸で、どちらも無ければ全件。
 
-  return rows.map((row) => {
-    // 下書きのメンバーは名前も出さない。出すと、まだ公開していない人の名前が
-    // カードに載り、404 になるプロフィールへ導いてしまう
-    const member = row.member?.published === 1 ? row.member : null
-    return {
-      ...row,
-      tags: row.tags.map((tag) => tag.tag),
-      links: row.links.map((link) => ({ label: link.label, url: link.url })),
-      platformLabel: row.platform?.label ?? null,
-      memberName: member?.name ?? null,
-      memberSlug: member?.slug ?? null,
-    }
-  })
+  メンバーは slug ではなく id で受ける。呼ぶ側は公開中のメンバーの一覧から
+  引き当てるので、下書きのメンバーの slug では絞り込めない（絞り込まずに
+  全件が出る）。ここで slug を受けると、その一手間を飛ばせてしまう。
+*/
+export type ItemScope = { platformKey?: string | null; memberId?: number | null }
+
+/*
+  1画面ぶんだけを引くための範囲。limit と offset は必ず対で渡すこと。
+  offset だけでは SQL に載らず、静かに1画面目が出る。
+*/
+export type ItemSlice = ItemScope & { limit?: number; offset?: number }
+
+const itemsWhere = (type: 'app' | 'work', scope: ItemScope) =>
+  and(
+    eq(schema.items.type, type),
+    eq(schema.items.published, 1),
+    scope.platformKey ? eq(schema.items.platformKey, scope.platformKey) : undefined,
+    scope.memberId ? eq(schema.items.memberId, scope.memberId) : undefined,
+  )
+
+/*
+  画面に出すぶんだけを引く。範囲を渡さなければ全件（全体ページ /all はこちら）。
+
+  条件は idx_items_public（type, published, sort_order）と
+  idx_items_member（member_id）にそのまま乗る。
+*/
+// カード1枚ぶんに要る子（タグ・リンク・担当・プラットフォーム）を一緒に引く形
+const itemWith = {
+  tags: { orderBy: [asc(schema.itemTags.sortOrder)] },
+  links: { orderBy: [asc(schema.itemLinks.sortOrder)] },
+  // true をそのまま書くと boolean に広がって、drizzle の with が受け取らない
+  member: true as const,
+  platform: true as const,
 }
 
-// 絞り込みボタンは、公開中の Apps に実際に出てくるものだけ並べる。
-// 空振りするボタンを置かないため
-export function usedPlatforms(items: ItemView[], all: schema.Platform[]) {
-  const used = new Set(items.map((item) => item.platformKey).filter(Boolean))
-  return all.filter((platform) => used.has(platform.key))
+/*
+  DB の行を画面に出す形に開く。一覧（listPublishedItems）と作品1件
+  （findPublishedItem）で同じ式を読む——片方だけ直すと、一覧のカードと
+  その作品の恒久リンクで中身が食い違う。
+*/
+type ItemRow = schema.Item & {
+  tags: { tag: string }[]
+  links: { label: string; url: string }[]
+  member: schema.Member | null
+  platform: schema.Platform | null
+}
+
+function toItemView(row: ItemRow): ItemView {
+  // 下書きのメンバーは名前も出さない。出すと、まだ公開していない人の名前が
+  // カードに載り、404 になるプロフィールへ導いてしまう
+  const member = row.member?.published === 1 ? row.member : null
+  return {
+    ...row,
+    tags: row.tags.map((tag) => tag.tag),
+    links: row.links.map((link) => ({ label: link.label, url: link.url })),
+    platformLabel: row.platform?.label ?? null,
+    memberName: member?.name ?? null,
+    memberSlug: member?.slug ?? null,
+  }
+}
+
+export async function listPublishedItems(
+  db: Db,
+  type: 'app' | 'work',
+  slice: ItemSlice = {},
+): Promise<ItemView[]> {
+  const rows = await db.query.items.findMany({
+    where: itemsWhere(type, slice),
+    orderBy: publicOrder,
+    limit: slice.limit,
+    offset: slice.offset,
+    with: itemWith,
+  })
+
+  return rows.map(toItemView)
+}
+
+/*
+  作品1件を恒久リンク（/apps/item/<slug>）から引く。
+
+  並び順も絞り込みも見ない。一覧の URL（/apps/3）は「いまの並びの3枚目」で、
+  並べ替えれば同じ URL が別の作品を指すが、こちらは slug で名指しするので
+  何を足しても外しても指す先が動かない。それがこの列の全部の理由。
+
+  公開中のものだけ。下書きの作品は、一覧に出ないのと同じ理由でここにも無い
+  （URL を知っている人にだけ見える下書き、という抜け道を作らない）。
+*/
+export async function findPublishedItem(db: Db, slug: string): Promise<ItemView | null> {
+  const row = await db.query.items.findFirst({
+    where: and(eq(schema.items.slug, slug), eq(schema.items.published, 1)),
+    with: itemWith,
+  })
+  return row ? toItemView(row) : null
+}
+
+/*
+  画面が何枚になるかを決める数。カードを引かずに数えるので、出さない画面の
+  中身は取ってこない。
+*/
+export async function countPublishedItems(db: Db, type: 'app' | 'work', scope: ItemScope = {}) {
+  const [row] = await db.select({ n: count() }).from(schema.items).where(itemsWhere(type, scope))
+  return row?.n ?? 0
+}
+
+/*
+  絞り込みのピルは、公開中の一覧に実際に出てくるものだけ並べる。
+  空振りするピルを置かないため。
+
+  作るのは絞り込む前の全件から。絞り込んだ結果から作ると、押すたびにピルの
+  並びが変わり、いま外したばかりのピルが消えて戻れなくなる。
+*/
+export async function usedPlatforms(db: Db, type: 'app' | 'work'): Promise<schema.Platform[]> {
+  return await db
+    .selectDistinct({
+      key: schema.platforms.key,
+      label: schema.platforms.label,
+      sortOrder: schema.platforms.sortOrder,
+    })
+    .from(schema.platforms)
+    .innerJoin(schema.items, eq(schema.items.platformKey, schema.platforms.key))
+    .where(and(eq(schema.items.type, type), eq(schema.items.published, 1)))
+    .orderBy(asc(schema.platforms.sortOrder))
 }
 
 export function listPlatforms(db: Db) {

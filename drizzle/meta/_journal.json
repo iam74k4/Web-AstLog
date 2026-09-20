@@ -22,6 +22,13 @@
       "when": 1789665752501,
       "tag": "0002_blocks",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789767726276,
+      "tag": "0003_item_slug",
+      "breakpoints": true
     }
   ]
 }

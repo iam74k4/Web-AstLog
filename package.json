@@ -7,7 +7,7 @@
     "deploy": "wrangler deploy",
     "check": "tsc --noEmit && wrangler deploy --dry-run",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check .",
+    "lint": "biome check --error-on-warnings .",
     "format": "biome check --write .",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply noctifex --local",
@@ -15,7 +15,9 @@
     "db:seed:local": "wrangler d1 execute noctifex --local --file=./seed.sql",
     "db:seed": "wrangler d1 execute noctifex --remote --file=./seed.sql",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check:fit": "node scripts/check-fit.mjs",
+    "check:contrast": "node scripts/check-contrast.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",

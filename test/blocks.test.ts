@@ -5,9 +5,26 @@ import { db, form, get, resetDb, seedItem, seedMember, signIn } from './helpers'
 
 beforeEach(resetDb)
 
-// 節が出た順に id を拾う。並びのテストはこれで見る
-const sectionIds = (html: string) => [...html.matchAll(/<section id="([^"]+)"/g)].map((m) => m[1])
+/*
+  節が出た順に id を拾う。並びのテストはこれで見る。
 
+  id が第1属性でなくなると、この正規表現は [] を返す。[] のままだと
+  `not.toContain('team')` が素通りして、節が全部消えていても緑になる。
+  拾えなかったこと自体をここで落とす。
+*/
+const sectionIds = (html: string) => {
+  const ids = [...html.matchAll(/<section id="([^"]+)"/g)].map((m) => m[1])
+  expect(
+    ids.length,
+    '節の id を1つも拾えていない（<section id="…"> の形が変わった？）',
+  ).toBeGreaterThan(0)
+  return ids
+}
+
+/*
+  並びを確かめる宛先は `/all`。置いたブロックが全部1ページに出る唯一の URL で、
+  「置いた順にこの並びで出る」を1回の取得で見られるのはここだけ。
+*/
 const place = (rows: Partial<typeof schema.blocks.$inferInsert>[]) =>
   db()
     .insert(schema.blocks)
@@ -26,7 +43,7 @@ describe('トップの構成', () => {
     await seedItem({ type: 'app' })
     await seedItem({ type: 'work', title: '業務の実績' })
 
-    const html = await (await get('/')).text()
+    const html = await (await get('/all')).text()
     expect(html).toContain('class="hero"')
     expect(sectionIds(html)).toEqual(['apps', 'works', 'team', 'contact'])
   })
@@ -36,14 +53,14 @@ describe('トップの構成', () => {
     await seedItem({ type: 'app' })
     await place([{ type: 'team' }, { type: 'contact' }, { type: 'apps' }])
 
-    expect(sectionIds(await (await get('/')).text())).toEqual(['team', 'contact', 'apps'])
+    expect(sectionIds(await (await get('/all')).text())).toEqual(['team', 'contact', 'apps'])
   })
 
   it('目次も置いた順に従う', async () => {
     await seedMember()
     await place([{ type: 'contact' }, { type: 'team' }])
 
-    const html = await (await get('/')).text()
+    const html = await (await get('/all')).text()
     expect(html.indexOf('href="#contact"')).toBeLessThan(html.indexOf('href="#team"'))
     expect(html).not.toContain('href="#apps"')
   })
@@ -52,14 +69,14 @@ describe('トップの構成', () => {
     await seedMember()
     await place([{ type: 'team', published: 0 }, { type: 'contact' }])
 
-    expect(sectionIds(await (await get('/')).text())).toEqual(['contact'])
+    expect(sectionIds(await (await get('/all')).text())).toEqual(['contact'])
   })
 
   it('中身の無い節は見出しごと出さない', async () => {
     // apps は登録が0件、note は本文が空
     await place([{ type: 'apps' }, { type: 'note', title: '空のメモ' }, { type: 'contact' }])
 
-    const html = await (await get('/')).text()
+    const html = await (await get('/all')).text()
     expect(sectionIds(html)).toEqual(['contact'])
     expect(html).not.toContain('空のメモ')
   })
@@ -73,7 +90,7 @@ describe('トップの構成', () => {
       { type: 'now', body: 'Workers への移行 | 進行中' },
     ])
 
-    const html = await (await get('/')).text()
+    const html = await (await get('/all')).text()
     expect(html).toContain('速くつくる。')
     expect(html).toContain('添え書きです')
     expect(html).toContain('metric__value">20<')
@@ -91,9 +108,51 @@ describe('トップの構成', () => {
       { type: 'links', body: '危ない | javascript:alert(1)\n安全 | https://example.com' },
     ])
 
-    const html = await (await get('/')).text()
+    const html = await (await get('/all')).text()
     expect(html).not.toContain('javascript:')
     expect(html).toContain('https://example.com')
+  })
+})
+
+/*
+  公開ページは画面ごとに別の URL。並びを確かめるのは上の `/all` のままだが、
+  「どのブロックに URL があるか」はここでしか見られない。
+*/
+describe('画面ごとの URL', () => {
+  it('置いた順の先頭が / に出る', async () => {
+    await seedMember()
+    await place([{ type: 'team' }, { type: 'contact' }])
+
+    const html = await (await get('/')).text()
+    // 先頭の1画面だけ。2番目から先は / には出ない
+    expect(sectionIds(html)).toEqual(['team'])
+    expect(html).not.toContain('<section id="contact"')
+  })
+
+  it('中身の無いブロックには URL が無い', async () => {
+    // renderBlock が節ごと出さないものは、URL も無い。「公開なのに開けない
+    // ページ」と「開けるのに空のページ」を、どちらも作らないため
+    await seedMember()
+    await place([{ type: 'apps' }, { type: 'team', published: 0 }, { type: 'contact' }])
+
+    expect((await get('/apps')).status).toBe(404) // 公開中の登録が0件
+    expect((await get('/team')).status).toBe(404) // 下書き
+    expect((await get('/works')).status).toBe(404) // 置いていない
+    expect((await get('/contact')).status).toBe(200)
+  })
+
+  it('全部下書きでも / は開ける', async () => {
+    await place([
+      { type: 'contact', published: 0 },
+      { type: 'team', published: 0 },
+    ])
+
+    const response = await get('/')
+    // 入口まで 404 にすると、管理画面に入って直す前に手詰まりになる
+    expect(response.status).toBe(200)
+    expect(await response.text()).toContain('class="empty"')
+    // 入口以外は素直に無い
+    expect((await get('/contact')).status).toBe(404)
   })
 })
 
@@ -136,7 +195,7 @@ describe('管理の構成', () => {
       'contact',
       'note',
     ])
-    expect(sectionIds(await (await get('/')).text())).toEqual([
+    expect(sectionIds(await (await get('/all')).text())).toEqual([
       'apps',
       'works',
       'team',
@@ -214,7 +273,7 @@ describe('管理の構成', () => {
     })
     expect(response.status).toBe(303)
 
-    const html = await (await get('/')).text()
+    const html = await (await get('/all')).text()
     expect(html).toContain('追記')
     expect(html).toContain('書き直しました')
     expect(html).not.toContain('本文です')
@@ -237,7 +296,7 @@ describe('管理の構成', () => {
     const saved = await db().query.blocks.findFirst({ where: (t, { eq }) => eq(t.id, team.id) })
     expect(saved?.title).toBe('')
     expect(saved?.published).toBe(0)
-    expect(sectionIds(await (await get('/')).text())).not.toContain('team')
+    expect(sectionIds(await (await get('/all')).text())).not.toContain('team')
   })
 
   it('動かす向きが分からなければ何もしない', async () => {
@@ -310,6 +369,6 @@ describe('管理の構成', () => {
 
     const response = await signed(`/admin/blocks/${team.id}/delete`, { method: 'POST' })
     expect(response.headers.get('location')).toBe('/admin/blocks?deleted=1')
-    expect(sectionIds(await (await get('/')).text())).not.toContain('team')
+    expect(sectionIds(await (await get('/all')).text())).not.toContain('team')
   })
 })

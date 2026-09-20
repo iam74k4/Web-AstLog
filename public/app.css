@@ -11,14 +11,15 @@
 */
 
 :root {
-  --font-sans: 'Helvetica Neue', 'Hiragino Sans', 'Noto Sans JP', system-ui, -apple-system, sans-serif;
+  --font-sans:
+    'Helvetica Neue', 'Hiragino Sans', 'Noto Sans JP', system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, monospace;
   --font-serif: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', Georgia, serif;
 
   /* 見出しの書体。本文は読みやすさを優先して常に --font-sans */
   --font-display: var(--font-sans);
 
-  /* 文字の段。6つだけ。中間値を足さない */
+  /* 文字の段（静的）。6つだけ。中間値を足さない */
   --fs-label: 11px;
   --fs-meta: 12px;
   --fs-sm: 13px;
@@ -26,14 +27,22 @@
   --fs-md: 15px;
   --fs-lg: 18px;
 
-  /* 画面幅に連動する段 */
-  --fs-card-title: clamp(15px, 1.1vw, 16px);
-  --fs-lead: clamp(14px, 1.05vw, 15px);
-  --fs-section: clamp(17px, 1.3vw, 19px);
-  --fs-display: clamp(28px, 4vw, 52px);
-  /* 雑誌風のときだけ使う、もう一段大きい見出し */
+  /*
+    文字の段（画面に連動）。見出しの4段だけで、本文には使わない。
+    xl > 素 > sm > xs の1本のはしごで、部品の名前は持たせない。
+
+    連動する段をこの4つに絞ったのは、残りが設計域（390 / 768 / 1440）で
+    ほとんど動かなかったため。--fs-card-title は 390 と 768 で 15.00px、
+    1440 で 15.84px——名前は「連動」でも実体は静的な 15px（= --fs-md）
+    だった。--fs-lead（14.00 / 14.00 / 15.12px）と --fs-section
+    （17.00 / 17.00 / 18.72px）も同じで、3つとも静的な段に畳んである。
+
+    可変部は幅と高さの小さいほう（下の @supports で svh を足す）。
+  */
   --fs-display-xl: clamp(32px, 6.4vw, 76px);
-  --fs-contact: clamp(20px, 2.4vw, 30px);
+  --fs-display: clamp(28px, 4vw, 52px);
+  --fs-display-sm: clamp(24px, 3vw, 38px);
+  --fs-display-xs: clamp(20px, 2.4vw, 30px);
 
   /* 余白の段。7つから選ぶ */
   --sp-1: 2px;
@@ -52,6 +61,141 @@
   --gutter: clamp(16px, 3.4vw, 60px);
   --radius: 10px;
   --radius-sm: 6px;
+
+  /*
+    画面1つぶんの高さ。公開ページはこの高さに収め、ページ自体は動かさない。
+    svh は道具の帯を出したときの高さなので、帯の出入りで中身が切れたり跳ねたり
+    しない。
+
+    100vh の控えは置かない。これを読むのは「画面に収める外枠」1か所だけで、
+    そこは丸ごと @supports (height: 100svh) の内側にある。svh を知らない環境では
+    節ごと効かず --screen-h は一度も読まれないので、控えを書いても届かない。
+  */
+  --screen-h: calc(100svh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+
+  /* カードの説明を止める行数。幅が変わっても高さが変わらないようにする */
+  --card-lines: 2;
+
+  /*
+    横帯（狭い画面の目次と絞り込み）の右端のぼかし。切れていることを見せる。
+    覆いなので色ではなく不透明度の坂で、地の色とは関わらない。
+  */
+  --fade-right: linear-gradient(to right, #000 calc(100% - var(--sp-6)), transparent);
+
+  /*
+    入口の月（.moon）。素材は三日月だけで、光暈はここの --moon-glow が描く。
+
+    丈はパネルの高さに対する割合で持つ。以前は clamp(280px, min(46vw, 46svh),
+    620px) と窓の寸法から測っていたが、月が乗るのはパネルであって窓ではない。
+    46svh は 1440x900 の rail（パネル 869x639）で 414px ＝ パネルの 65% になり、
+    1024x768 の center（パネル 810x366）では 353px ＝ パネルの 96% になる——
+    同じ数式なのに、器に対する大きさが1.5倍ちがう。.moon はパネルに
+    inset: 0 で貼ってあるので、% で書けば器そのものを測れる。
+
+    3% と 45% の出どころ。**三日月は見出しの後ろには入ってよいが、リード文の
+    後ろには入れない。** 文字の色が2段あるので、許される明るさも2段ある。
+
+      見出し #f2f2f4 は大きい文字なので 3:1。地は 140/255 まで許される
+      リード文 #b4b4c2 は通常の文字なので 4.5:1。地は 71/255 まで
+
+    粒子はいちばん明るい所が 255。--moon-ink で 0.50 まで落とすと 133/255 に
+    なり、見出しは 3.27:1 で通る。リード文を通すには 0.25 あたりまで
+    落とすことになり、そこまで行くと月が見えない。だから**見出しは横切らせ、
+    リード文は避ける**——オーナーが選んだ「見出しがその手前を横切る」構図は
+    そのまま、下だけを切る。
+
+    設計サイズ3つ × 骨格3つ ＋ 1024x768 の計12通りで測ると、リード文の
+    **上端**はパネルの高さの 50.8%（768x1024 の rail / center）より上に
+    来ることが無い。3% + 45% ＝ 48% に収めれば、いちばん狭い組でも 19px 空く。
+    値 = 全プリセット共通 + 1024x768, 既定書体, Chromium
+
+    --moon-cut は右へのずらし。パネル幅ではなく**絵そのものの幅**に対する
+    割合で効かせたいので、translate で渡す（right: -12% だと器の幅に対する
+    割合になり、1342px のパネルでは月が丸ごと画面の外へ出る）。
+
+    --moon-ratio は素材の寸法。src/ui/components.tsx の width/height と同じ数。
+  */
+  --moon-ratio: 312 / 480;
+  --moon-top: 3%;
+  --moon-h: 45%;
+  --moon-cut: 12%;
+
+  /*
+    三日月をどれだけアクセント色に寄せるか。残りは白。
+
+    0% なら銀の月（色は光暈だけが持つ）、100% ならアクセントそのもの。
+    月あかりを浴びた月、という理屈で 62% に置いている。
+
+    **色を混ぜる式そのものは :root に置けない。** ここに書けるのは割合だけで、
+    color-mix は使う側（.moon__mark::after）に書く——:root で var(--accent) を
+    畳むと iris で焼き付いて [data-accent] が効かなくなるため。同じ罠に
+    --moon-glow で一度はまっている。
+  */
+  --moon-tint: 62%;
+  /*
+    三日月の濃さ。見出しの 3:1 が上限を決めている。
+
+    この数は**素材の持ち方と対になっている**。いまの素材は「どこがどれだけ
+    光っているか」をアルファ1面で運び、色は CSS が敷く（.moon__mark::after）。
+    合成の結果は「アクセント色 x アルファ x この数」なので、アルファに濃淡を
+    移した時点で、前の 0.70 は意味が変わった。
+
+    0.58 でも通る（実測 3.19:1）が、そこまで寄せない。書体が差し替わると
+    行の位置が動き、いまより明るい所に文字が乗りうる。0.52 で 3.72:1。
+    **素材を焼き直したら必ず npm run check:contrast を回し直すこと。**
+  */
+  --moon-ink: 0.52;
+
+  /*
+    月あかりの形。--fade-right と同じで、**色ではなく不透明度の坂**として
+    持つ。使う側は var(--accent) を敷いて、これで抜く。
+
+    色を混ぜた形（color-mix(in oklab, var(--accent) …)）でここに書いては
+    いけない。カスタムプロパティの var() は**宣言した要素**で解決されるので、
+    :root で組み立てると --accent は :root の既定（iris）で焼き付き、
+    body の [data-accent] は二度と効かない。実際そうなっていて、5色すべてで
+    光暈が rgb(45,45,72) の紫のまま——アクセントを変えてもリンクだけが
+    変わり、月は動かなかった。坂だけなら色を含まないので、この罠が無い。
+
+    段を4つ刻んであるのは、2点だけの radial-gradient が暗い地の上で縞に
+    なるため。closest-side なので、置いた箱に内接するところで 0 に着く。
+    circle ではなく ellipse——三日月は縦長で、円にすると幅が余る。
+  */
+  --moon-glow: radial-gradient(
+    closest-side ellipse,
+    rgb(0 0 0 / 100%) 0%,
+    rgb(0 0 0 / 58%) 30%,
+    rgb(0 0 0 / 23%) 58%,
+    rgb(0 0 0 / 6%) 80%,
+    transparent 100%
+  );
+  /* 光のいちばん濃い所。上限はコントラストで決まる（--moon-glow-inset を見ること） */
+  --moon-glow-ink: 0.26;
+
+  /*
+    光暈を置く箱。三日月の箱からどれだけ外へ広げるかで持つ。
+    右へは広げず、左と下へ大きく。**この偏りが要**で、見た目の好みではなく
+    継ぎ目を出さないための解。
+
+    月は右端で切れる＝三日月の中心はパネルの右端から 0.38幅しか内側に無い。
+    そこに光暈を同心の円で置くと、半径の 23% という濃い所でパネルの端に
+    断ち切られる。実測で **右 40.6/255・上 17.9/255** の段差——地との差が
+    3/255 もあれば縦線として見えるので、これは「切り取った」ではなく
+    「描画に失敗した」に見える。切ってよいのは粒子の実体のほうだけ。
+
+    だから光は、余白のあるほうへ逃がす。右端は三日月の右端に合わせ（右 0）、
+    左へ 1.15幅・下へ 1.25丈・上へ 0.20丈。12通り（設計サイズ3つ × 骨格3つ
+    ＋ 1024x768）× アクセント5色のすべてで、パネルの四辺の段差は最大
+    1.9/255 に収まる。
+
+    濃さの上限 26% はコントラストで決まっている。この光は見出しもリード文も
+    横切るので、いちばん明るいアクセント（mint）で測って、リード文 #b4b4c2 が
+    5.59:1（要 4.5:1）・見出し #f2f2f4 が 11.7:1（要 3:1）。
+    値 = 全プリセット共通 + 1024x768, 既定書体, Chromium
+
+    数を動かしたら npm run check:contrast で測り直すこと。
+  */
+  --moon-glow-inset: -20% 0 -125% -115%;
 
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --dur-fast: 180ms;
@@ -87,13 +231,49 @@
   --tap: 40px;
 }
 
+/*
+  見出しの段に高さを足す。
+
+  1画面ぶんの高さの中に収める作りにしたのに、連動する値の可変部が全部 vw だった。
+  幅が広くて背の低い画面（横向きの電話、分割表示、短い窓）では、見出しだけが
+  画面の高さに対して大きくなりすぎ、弁（節の overflow: auto）を押し開ける。
+  可変部を「幅と高さの小さいほう」にすれば、背が低いぶんだけ見出しが下がる。
+
+  svh の係数は、設計サイズの3つで今日と同じ数になるように選んである
+  （いちばん厳しいのは 1440x900 で、svh = 9px。上限 ÷ 9 を上回る係数にする）。
+    390x844   svh 8.44px / vw 3.90px → どの段も下限に当たる（幅が先に効く）
+    768x1024  svh 10.24px / vw 7.68px → 幅が先に効く
+    1440x900  svh 9.00px / vw 14.40px → 高さが先に効くが、値は上限のまま
+  つまり設計サイズでは1pxも変わらず、背の低い画面でだけ効く。
+
+  括りは @supports。svh を知らない環境ではこの節ごと落ちて、上の幅だけの段が
+  そのまま残る（括らないと var() の差し替えに失敗して、見出しが本文の 14px を
+  受け継いでしまう）。「画面に収める外枠」と同じ条件だが、マーカー文字列を
+  分けてある——test/theme.test.ts の blockAt は最初に見つけた括りを切り出すので、
+  同じ文字列を2つ置くと外枠の検査がこちらを読んでしまう。
+*/
+@supports (font-size: 1svh) {
+  :root {
+    --fs-display-xl: clamp(32px, min(6.4vw, 9svh), 76px);
+    --fs-display: clamp(28px, min(4vw, 6svh), 52px);
+    --fs-display-sm: clamp(24px, min(3vw, 4.4svh), 38px);
+    --fs-display-xs: clamp(20px, min(2.4vw, 3.4svh), 30px);
+  }
+}
+
 *,
 *::before,
 *::after {
   box-sizing: border-box;
 }
 
-html {
+/*
+  節へのリンクでなめらかに動かすのは、縦に積んだ全体ページ（/all）だけ。
+  画面ごとの URL ではページ自体が動かないので、素の html には持たせない。
+  詳細度を 0 にしてあるのは、下の prefers-reduced-motion で素の html の
+  指定に譲るため。
+*/
+:where(html:has(> body[data-whole])) {
   scroll-behavior: smooth;
   scroll-padding-top: var(--sp-7);
 }
@@ -151,11 +331,21 @@ img {
   border-radius: var(--radius-sm);
 }
 
-/* 目に見せないが読み上げには残す */
+/*
+  目に見せないが読み上げには残す。
+
+  padding と border を0に落としてあるのは必須。clip-path: inset(50%) は
+  ボーダーボックスの中央を切り抜くので、padding のある要素にこの組を付けると
+  切り抜きが中身の外側に落ち、文字が見えたまま残る。次に使う人が「この部品は
+  padding 無しでだけ安全」という条件を覚えなくて済むよう、部品の側で閉じておく。
+*/
 .sr-only {
   position: absolute;
   width: 1px;
   height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
@@ -299,25 +489,30 @@ main {
   padding-top: var(--sp-4);
 }
 
+/*
+  目次に番号は振らない。
+
+  ページャの 01 · 07（いま何画面目か）と同じ 11px の mono・同じ色で並ぶと、
+  同じ数え上げに見える。しかも目次の番号はブロックの並び順なので、/apps でも
+  /apps/2 でも /apps/3 でも「01」のまま動かない——動くほうの番号の隣で、
+  動かない番号が同じ姿をしているのがいちばん読み違えやすい。数えるのは
+  ページャ1つに寄せる。
+*/
 .toc a {
   display: inline-flex;
   align-items: baseline;
-  gap: var(--sp-3);
   flex-shrink: 0;
   padding: var(--sp-2) var(--sp-3);
   border-radius: var(--radius-sm);
   color: var(--ink-weak);
   font-size: var(--fs-sm);
-  transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease);
 }
 
-.toc__num {
-  font-family: var(--font-mono);
-  font-size: var(--fs-label);
-  opacity: 0.7;
-}
-
-.toc a[aria-current='true'] {
+/* 目次の行き先は節（#apps）ではなく画面の URL（/apps）。だから 'true' ではなく 'page' */
+.toc a[aria-current='page'] {
   color: var(--accent);
   background: var(--accent-soft);
 }
@@ -338,7 +533,9 @@ main {
   border-radius: 999px;
   color: var(--ink-mid);
   font-size: var(--fs-sm);
-  transition: border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
 }
 
 .rail__footer {
@@ -348,13 +545,147 @@ main {
   letter-spacing: 0.04em;
 }
 
+/*
+  足元の「全体を1ページで見る ↗」。素の a は color: inherit /
+  text-decoration: none なので、置くだけでは著作権表示と同じ姿になり、
+  押せるものだと分からない（WCAG 1.4.1 は色に頼るなと言うが、ここは色の
+  違いすら無い状態だった）。下線を引き、色も1段上げる
+  （--ink-weak 5.73:1 → --ink-mid 9.54:1 on --bg）。
+
+  高さは足さない。当たり判定（min-height: var(--tap)）を付けると柱が 40px
+  伸び、中央寄せと雑誌風の 900 以上では柱の高さがそのまま本文の予算を削る
+  ——設計サイズで弁を開かせないために、ここは文の中のリンクのままにしてある
+  （WCAG 2.5.8 の inline の例外。上の目次とは --sp-6 = 24px 空いている）。
+  実測でも、この1行を足したあとの柱の高さは足す前と同じ——
+  「© 2026 Noctifex · 全体を1ページで見る ↗」が 264px（--nav-w）の柱に1行で
+  収まる（足元の高さ 19px = rail @1440x900, Hiragino Sans, macOS Chromium。
+  柱ぜんぶで 377px も足す前と同値）。3骨格 × 5ビューポート × 12URL の 180通りで、
+  ページの動きも弁の開きも足す前と1pxも変わっていない。
+*/
+.rail__footer a {
+  color: var(--ink-mid);
+  text-decoration: underline;
+  text-underline-offset: var(--sp-1);
+}
+
 /* ============================================================ 本文 */
 
 .hero {
+  /* 月（.moon）の絶対配置の受け皿。これが無いと画面の外まで伸びる */
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--sp-5);
   padding-block: var(--sp-3);
+}
+
+/*
+  入口の背景の月。粒子で焼いた三日月（部品は components.tsx の MoonField、
+  作り直しは scripts/moon/render.py → scripts/moon/pack.py）と、その周りの
+  光暈。光暈は絵ではなく radial-gradient なので、アクセント色に追従する。
+
+  overflow: clip がこの節の要。.hero は弁（overflow: auto）を持つ箱なので、
+  はみ出す子を置くとそれがスクロール可能領域になり、「公開ページはスクロール
+  しない」が弁ごと破れる。clip はスクロールコンテナを作らないので、溢れは
+  祖先に伝わらず、ここで終わる。hidden に書き換えないこと——hidden は
+  「見えないだけのスクロール箱」で、この箱は誰も戻せない。
+  わざとはみ出させて 3骨格 × 3寸法を測り、弁が 0 のままなのを確認した。
+*/
+.moon {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/*
+  三日月の箱。ここが位置と大きさの正で、光暈はこの箱を基準に広がる。
+
+  上に寄せて、リード文より上で終わらせる（--moon-h の説明を見ること）。
+  右端から --moon-cut だけはみ出させ、.moon の overflow: clip で断つ。
+  切れるのは粒子の**実体**なので、断面が直線でも「切り取った」に見える。
+  光暈のほうを切ると、ただの描画の失敗に見える——だから光暈は箱ごと内側に
+  収まる大きさにしてある（--moon-glow-size）。
+
+  translate は % が自分の幅に対して効く。パネル幅に対して効く right や
+  margin-right では、パネルが 358px のときと 1342px のときで切れる量が
+  4倍ちがってしまう。
+*/
+/*
+  三日月。**絵は色を持たない。** 運んでくるのはアルファ1面だけで、
+  「どこがどれだけ光っているか」がそこに入っている（scripts/moon/pack.py）。
+  色はここで --accent から作って敷き、その絵で抜く。
+
+  こうしてあるので、見た目プリセットを変えると**光暈だけでなく三日月そのものの
+  色も変わる**。焼き込むと色がそこで固定され、アクセント5色のうち3色と喧嘩する
+  （実際にそうなっていた）。
+
+  色を混ぜる式をここに書いているのは、:root に置けないため。カスタム
+  プロパティの var() は**宣言した要素**で解決されるので、:root で
+  color-mix(..., var(--accent) ...) と組み立てると --accent が :root の既定
+  （iris）で焼き付き、body の [data-accent] が二度と効かない。
+  :root が持てるのは「どれだけアクセントに寄せるか」の数だけ。
+
+  mask は image-set で形式を選ばせる。<picture> を置かなくても AVIF と WebP の
+  出し分けができ、しかも .moon が display: none のときは**取りに行かない**
+  （空の1枚を先頭に置く細工が要らなくなった）。image-set を知らない環境では
+  上の素の url() が残る。
+*/
+.moon__mark {
+  position: absolute;
+  top: var(--moon-top);
+  right: 0;
+  display: block;
+  height: var(--moon-h);
+  aspect-ratio: var(--moon-ratio);
+  translate: var(--moon-cut) 0;
+  /* 光暈（::before）を三日月（::after）の裏に回すための重なりの文脈 */
+  isolation: isolate;
+}
+
+/*
+  三日月そのもの。
+
+  ここを親（.moon__mark）ではなく ::after に置いているのは、mask が
+  **子孫まで切る**ため。親に掛けると、中に居る光暈まで三日月の形に
+  切り抜かれて、光が月の外に出られなくなる。
+*/
+.moon__mark::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklab, var(--accent) var(--moon-tint), #fff);
+  mask: url('/assets/moon.webp') no-repeat center / 100% 100%;
+  opacity: var(--moon-ink);
+}
+
+@supports (mask-image: image-set(url('/assets/moon.avif') type('image/avif'))) {
+  .moon__mark::after {
+    mask-image: image-set(
+      url('/assets/moon.avif') type('image/avif'),
+      url('/assets/moon.webp') type('image/webp')
+    );
+  }
+}
+
+.moon__mark::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: var(--moon-glow-inset);
+  /* 色はここで敷く。この規則の中なら var(--accent) は body の
+     [data-accent] を見るので、見た目プリセットで月あかりの色も変わる */
+  background: var(--accent);
+  mask-image: var(--moon-glow);
+  opacity: var(--moon-glow-ink);
+}
+
+.hero > h1,
+.hero > p {
+  /* 月より前に出す。月は z-index: 0 の背景 */
+  position: relative;
+  z-index: 1;
 }
 
 .hero h1,
@@ -366,20 +697,35 @@ main {
   letter-spacing: -0.015em;
 }
 
-.hero__headline {
-  font-size: clamp(24px, 3vw, 38px);
+/*
+  個人ページの名乗りは、トップの大見出しより1段小さい。
+
+  要素とクラスの両方で書いてあるのは必須。この見出しは <h1 class="hero__headline">
+  になったので、素の .hero__headline（0,1,0）では上の .hero h1（0,1,1）に負け、
+  1段大きい --fs-display を継いでしまう。CSS は何も言わず、変わるのは
+  「名乗りだけが画面の高さを食う」という結果だけ。
+*/
+.hero h1.hero__headline {
+  font-size: var(--fs-display-sm);
 }
 
 .hero p {
   max-width: 54ch;
   color: var(--ink-mid);
-  font-size: var(--fs-lead);
+  font-size: var(--fs-md);
 }
 
+/*
+  見出しと添え（件数・年など）は1組。空いた幅ぶん引き離さない。
+
+  space-between だと 1440 で2つが 782px 離れ、同じ組に見えなくなる。
+  中央寄せのプリセットは同じ2つを隣り合わせに置いている（justify-content:
+  center）ので、1組であることは骨格の側でも決まっている。素の並びを
+  flex-start にしておけば、中央寄せはその1行の上書きだけで済む。
+*/
 .head {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
   gap: var(--sp-5);
   flex-wrap: wrap;
   border-bottom: 1px solid var(--line);
@@ -387,9 +733,14 @@ main {
   margin-bottom: var(--sp-5);
 }
 
-.head h2 {
+/*
+  節の見出し。割られた画面（1画面 = 1ドキュメント）では h1、縦に積んだ
+  全体ページ（/all）では h2。要素が変わっても字面は同じでなければならない
+  ——見出しの階層は読み上げと検索のためのもので、大きさの段ではない
+*/
+.head :is(h1, h2) {
   font-family: var(--font-display);
-  font-size: var(--fs-section);
+  font-size: var(--fs-lg);
   font-weight: 600;
   letter-spacing: 0.01em;
 }
@@ -401,6 +752,79 @@ main {
   letter-spacing: 0.04em;
 }
 
+/* --- 画面の中身の2つの箱 --- */
+
+/*
+  節の中は「見出しの箱」と「本文の箱」の2つだけ（src/ui/components.tsx の
+  ScreenSection）。見出し側には、めくっても動かないもの——見出しと Apps の
+  絞り込みのピル——が入る。
+
+  ここに寸法は書かない。中身は自分の高さのまま、節の上下中央寄せに任せる。
+  画面に入りきらなくなったときに手を入れる先を、本文の箱ひとつに決めておく
+  ためだけの2つ。min-width だけは 0 にする（節は grid なので、既定の auto の
+  ままだと長い1語が箱を押し広げる）。
+*/
+.screen-head,
+.screen-body {
+  min-width: 0;
+}
+
+/* --- 画面の移動 --- */
+
+/*
+  main の2行目。本文（1行目）が残りの高さを全部取るので、この帯はいつも
+  画面の底に座る。通し番号はサーバーが数えて入れてあるので、counter は使わない
+  （counter の数は印刷にも読み上げにも出ない）。
+
+  端では <a> を出さず、ますだけを残す。3列を固定しておけば、めくっても
+  真ん中の数字が左右に動かない。
+*/
+.pager {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--sp-4);
+  border-top: 1px solid var(--line);
+  padding-top: var(--sp-4);
+}
+
+/*
+  justify-self は必須。ますは 1fr なので、grid の子になった inline-flex は
+  blockify され、初期値 normal が stretch として効いて「← 前」が列いっぱいに
+  伸びる（1440 で 396px 対 64px、390 でも 141px 対 64px）。最終画面では右が
+  .pager__end なので、伸びたカプセルが帯に1つだけ残って特に目立つ。
+*/
+.pager__go {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  min-height: var(--tap);
+  padding: var(--sp-2) var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-mid);
+  font-size: var(--fs-sm);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+
+.pager__go--next {
+  justify-self: end;
+}
+
+/* 端。押せるものは置かないが、当たり判定ぶんの高さは帯から抜かない */
+.pager__end {
+  min-height: var(--tap);
+}
+
+.pager__count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  letter-spacing: 0.08em;
+  color: var(--ink-weak);
+}
+
 /* --- 絞り込み --- */
 
 .filters {
@@ -410,21 +834,29 @@ main {
   margin-bottom: var(--sp-5);
 }
 
-.filters button {
+/*
+  ピルはボタンではなくリンク。絞り込みはサーバーが持っていて、押した先は
+  絞り込んだ一覧の1画面目の URL になる（公開ページは JavaScript を持たない）。
+  リンクは inline なので、当たり判定の高さ（--tap）を効かせるために
+  inline-flex にする。
+*/
+.filters a {
+  display: inline-flex;
+  align-items: center;
   min-height: var(--tap);
   padding: var(--sp-2) var(--sp-5);
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: transparent;
   color: var(--ink-mid);
-  font-family: inherit;
   font-size: var(--fs-sm);
-  cursor: pointer;
-  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease),
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease),
     color var(--dur-fast) var(--ease);
 }
 
-.filters button[aria-pressed='true'] {
+/* いま効いている絞り込み。もう一度押すと、その軸だけ外れる */
+.filters a[aria-current] {
   border-color: transparent;
   background: var(--accent);
   color: var(--accent-ink);
@@ -453,7 +885,9 @@ main {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
-  transition: border-color var(--dur-fast) var(--ease), transform var(--dur) var(--ease);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    transform var(--dur) var(--ease);
 }
 
 .card[hidden] {
@@ -468,7 +902,7 @@ main {
 }
 
 .card__head h3 {
-  font-size: var(--fs-card-title);
+  font-size: var(--fs-md);
   font-weight: 600;
   letter-spacing: 0.01em;
 }
@@ -537,12 +971,23 @@ main {
   padding-top: var(--sp-4);
 }
 
+/*
+  カードの外に出るリンクは --accent。このサイトの仕事は、初めて来た人を
+  GitHub なり公開ページなりの実物へ送り出すことで、その操作子が本文と同じ色
+  （--ink-mid）だと、カードの中でいちばん目立たないものになる。区別が
+  @media (hover: hover) の :hover にしか無いと、タッチ端末では最後まで
+  気づかれない。
+
+  同じ「外に出る」動作は .linklist__go / .band__go / .member__go も --accent
+  なので、これで流儀が1つに揃う。↗ に opacity は掛けない。掛けると実効 3.97:1
+  で AA を割るうえ、:root の段に無い生の値を1か所に書くことになる。
+*/
 .links a {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
   min-height: var(--tap);
-  color: var(--ink-mid);
+  color: var(--accent);
   font-size: var(--fs-sm);
   transition: color var(--dur-fast) var(--ease);
 }
@@ -550,7 +995,6 @@ main {
 .links a::after {
   content: '↗';
   font-size: var(--fs-label);
-  opacity: 0.6;
 }
 
 .metric {
@@ -562,7 +1006,7 @@ main {
 
 .metric__value {
   color: var(--accent);
-  font-size: 26px;
+  font-size: var(--fs-display-xs);
   font-weight: 600;
   font-family: var(--font-mono);
   line-height: 1.2;
@@ -596,7 +1040,9 @@ main {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
-  transition: border-color var(--dur-fast) var(--ease), transform var(--dur) var(--ease);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    transform var(--dur) var(--ease);
 }
 
 /* 狭い画面では Profile ↗ を下の行に落とし、名前と一言に幅を渡す */
@@ -666,13 +1112,9 @@ main {
   font-size: var(--fs-label);
 }
 
-/* --- About --- */
+/* --- About / Skills / Career --- */
 
-.about {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--sp-7);
-}
+/* 紹介文・技術・経歴は画面が分かれた。1つの箱に2段組みで詰める枠は要らない */
 
 .bio {
   display: flex;
@@ -686,10 +1128,18 @@ main {
   line-height: 1.9;
 }
 
+/*
+  技術の3つの塊の小見出し。<h2 class="side-head">。
+
+  font-weight を素に戻してあるのは、見出し要素に上げたぶんを見た目に
+  出さないため（ブラウザの既定は h2 = 太字）。ここで欲しかったのは
+  読み上げでの移動と、塊と一覧の結び付きであって、太さではない。
+*/
 .side-head {
   color: var(--ink-weak);
   font-size: var(--fs-label);
   font-family: var(--font-mono);
+  font-weight: 400;
   letter-spacing: 0.1em;
   margin-bottom: var(--sp-4);
 }
@@ -763,7 +1213,7 @@ main {
 
 .statement__text {
   font-family: var(--font-display);
-  font-size: var(--fs-contact);
+  font-size: var(--fs-display-xs);
   font-weight: 600;
   line-height: 1.4;
   letter-spacing: -0.01em;
@@ -845,7 +1295,7 @@ main {
   font-size: var(--fs-sm);
 }
 
-/* --- 個人ページから一覧への帯 --- */
+/* --- 一覧への帯（トップの入口と、個人ページの1枚目） --- */
 
 .band {
   display: flex;
@@ -890,9 +1340,10 @@ main {
   padding: var(--sp-6);
 }
 
-.contact h2 {
+/* 割られた画面では h1。.head と同じ理由で、要素が変わっても字面は変えない */
+.contact :is(h1, h2) {
   font-family: var(--font-display);
-  font-size: var(--fs-contact);
+  font-size: var(--fs-display-xs);
   font-weight: 600;
   line-height: 1.3;
   letter-spacing: -0.01em;
@@ -1163,12 +1614,24 @@ main {
   border-radius: var(--radius-sm);
   color: var(--ink-mid);
   font-size: var(--fs-sm);
-  transition: border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
 }
 
 .icon-btn--danger {
   border-color: rgba(229, 132, 138, 0.35);
   color: var(--danger);
+}
+
+/*
+  行の中の1つぶんのフォーム（構成の公開・下書き）。他の操作と同じ幅で並ぶ。
+  操作子そのものは .icon-btn だが、絵ではなく文字で出す——「下書きにする」は
+  絵にすると「隠す」「消す」と見分けが付かない
+*/
+.row__publish {
+  display: flex;
+  flex: 1;
 }
 
 .status {
@@ -1378,7 +1841,9 @@ main {
   font-size: var(--fs-sm);
   font-weight: 600;
   cursor: pointer;
-  transition: opacity var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  transition:
+    opacity var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
 }
 
 .btn--primary {
@@ -1639,7 +2104,9 @@ main {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--bg);
-  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease);
 }
 
 .preset input:checked + .preset__box {
@@ -1730,8 +2197,20 @@ main {
 /* ============================================================ 600px 以上 */
 
 @media (min-width: 600px) {
+  /*
+    列の数は画面幅ではなく件数で決まる。--cols はサーバーが 1画面ぶんの件数
+    （src/blocks.ts の perScreen）からそのまま渡すので、1画面ぶんが必ず1行に
+    並ぶ。ここに数を書かない理由がそれで、件数を変えても CSS は触らない。
+
+    auto-fill をやめたのは2つの壊れ方のため。(a) 幅が広いほど列が増えて本文が
+    細る——2件しか無いのに3列ぶんの幅で割られ、説明が2行に入らなくなる
+    （229px = rail @1440x900, Hiragino Sans, macOS Chromium。電話 390 の
+    308px より狭い。雑誌風は5列で 243px）。(b) 件数を増やしたとき、入る列数
+    しだいで2行目ができて画面から溢れる。どちらも「広い画面ほど読めない」に
+    なるので、列は件数に結び付けて1行に固定する。
+  */
   .grid {
-    grid-template-columns: repeat(auto-fill, minmax(276px, 1fr));
+    grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
   }
 
   .team-grid {
@@ -1808,6 +2287,16 @@ main {
     min-height: 36px;
   }
 
+  /* 文字で出す操作子は詰めない。36px の四角にすると中の文字ごと消える */
+  .row__publish {
+    flex: 0 0 auto;
+  }
+
+  .icon-btn--wide {
+    width: auto;
+    padding: 0 var(--sp-4);
+  }
+
   .icon-btn__text {
     position: absolute;
     width: 1px;
@@ -1848,11 +2337,6 @@ main {
 
   main {
     gap: calc(var(--sp-7) * 2);
-  }
-
-  .about {
-    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
-    gap: var(--gutter);
   }
 
   .contact {
@@ -1970,8 +2454,19 @@ body[data-layout='center'] .contact {
   text-align: center;
 }
 
+/*
+  中央寄せには必ず safe を付ける。目次は 899 以下で1行の横帯（overflow-x: auto）
+  になるので、素の center は溢れた瞬間に中身を左右へ等しくはみ出させ、左端が
+  スクロールで戻せなくなる。safe なら溢れた時点で start に戻るので、切れるとしても
+  必ず右端からになり、そちらは端のぼかしで見える。align-content と同じ理屈。
+
+  flex-wrap: wrap は縦に伸びる全体ページ（/all）のためのもの。あちらは高さの
+  予算が無いので、折り返すほうが1行の横スクロール帯より読みやすい。1画面に
+  収めるページでは「画面に収める外枠」の 899 以下が nowrap で上書きする
+  （そのために、あの1本だけ :where() を外してある）。
+*/
 body[data-layout='center'] .toc {
-  justify-content: center;
+  justify-content: safe center;
   flex-wrap: wrap;
   border-top: 0;
   padding-top: 0;
@@ -2025,8 +2520,14 @@ body[data-layout='magazine'] .head {
 }
 
 @media (min-width: 600px) {
+  /*
+    雑誌風も列の数は --cols に従う（列を数える規則は素の .grid の1本だけ）。
+    ここで変えるのは段の間隔だけ。前は 240px の auto-fill で、1440 では5列に
+    割れて本文が 243px しか無かった（= magazine @1440x900, Hiragino Sans,
+    macOS Chromium）。罫線で段を区切る設計では箱の枠が無いぶん、細い段は
+    段組みではなく「切れた文」に見える
+  */
   body[data-layout='magazine'] .grid {
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
     column-gap: var(--sp-7);
   }
 }
@@ -2068,6 +2569,18 @@ body[data-layout='magazine'] .head {
     padding-bottom: var(--sp-5);
   }
 
+  /*
+    中央寄せと雑誌風は、900 以上でも柱を左に立てず上の帯にする（すぐ上で
+    列を1つに戻している）。帯になった名札の中身は横に寝かせること。
+
+    縦積みのままだと名札だけで約237px——トップの帯 30.1px の約8倍——を取り、
+    そのぶんが本文の予算から消える。中央寄せで弁が開いていた3画面（about 23px /
+    skills 58px / career 55px 不足）は、これで3つとも収まる。
+
+    4行まとめて効かせる。flex-wrap を落とすと、名札の6つの子が狭い帯で1行に
+    収まらず、はみ出したぶんが切れる。
+  */
+  body[data-layout='center'] .identity,
   body[data-layout='magazine'] .identity {
     flex-direction: row;
     align-items: center;
@@ -2104,13 +2617,19 @@ body[data-layout='magazine'] .head {
     color: var(--ink);
   }
 
-  .filters button:hover {
+  .filters a:hover,
+  .pager__go:hover {
     border-color: var(--line-strong);
     color: var(--ink);
   }
 
+  /*
+    素の色がもう --accent なので、ホバーで色は動かせない。下線に替える。
+    色だけに頼らない合図なので、タッチ端末で落ちても失うものが無い。
+  */
   .links a:hover {
-    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: var(--sp-1);
   }
 
   /* 罫線だけの面は浮かせない。浮くと隣の段と行がずれて見える */
@@ -2147,19 +2666,345 @@ body[data-layout='magazine'] .head {
     scroll-behavior: auto;
   }
 
+  /*
+    ここの !important は外せない。動きを止める指定は、部品ごとに書いた
+    transition / animation（.card や .pill など十数か所）より必ず強く
+    なければならず、詳細度で勝とうとすると同じ一覧をここに書き写すことになる。
+    「動きを減らす」と設定した人に動きが残るのは、めまいや発作の引き金になる
+    （WCAG 2.3.3）。lint の自動修正に外させないよう、理由つきで黙らせる。
+  */
   *,
   *::before,
   *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: 上のコメントのとおり、部品側の transition に必ず勝つ必要がある */
     transition: none !important;
+    /* biome-ignore lint/complexity/noImportantStyles: 同上 */
     animation: none !important;
   }
 }
 
+/*
+  はっきり見たいと言われたら、月は消す。
+
+  三日月は文字の下に敷く明るい面なので、コントラストを上げたい人にとっては
+  邪魔でしかない。forced-colors（Windows のハイコントラスト）では文字だけが
+  システム色に置き換わり、画像は置き換わらない——つまり何もしないと、
+  いちばん読みやすくしたい設定で、いちばん読みにくい組み合わせが残る。
+  prefers-contrast: more も同じ意図の申告なので、まとめて受ける。
+
+  装飾なので、消しても失われる情報は無い（aria-hidden と alt="" のとおり）。
+*/
+@media (forced-colors: active), (prefers-contrast: more) {
+  .moon {
+    display: none;
+  }
+}
+
+/*
+  背の低い窓でも消す。
+
+  400px は「画面に収める外枠」が弁を開ける条件 (b) と同じ数。そこまで低いと
+  パネル自体が潰れ（320x256 の実測でパネルは 16px）、月は絵として成り立たない
+  まま、読むために動かす箱の中に明るい面だけを残す。拡大 200% の人が最初に
+  当たる寸法なので、装飾より本文を通す。
+*/
+@media (max-height: 400px) {
+  .moon {
+    display: none;
+  }
+}
+
+/* ================================================ 画面に収める外枠（公開ページ） */
+
+/*
+  公開ページは1画面に1つぶんだけを収め、ページそのものはスクロールさせない。
+  画面から画面への移動は、普通のフルページ遷移でやる（JavaScript は持たせない）。
+
+  骨格ひとそろいを @supports (height: 100svh) で丸ごと括ってあるのは必須。
+  括らずに書くと、svh を知らない環境では高さだけが auto に落ちて overflow の
+  指定だけが残り、「中身は全部あるのに下が読めない」ページになる。偽の環境では
+  この節ごと効かないので、今日どおり縦に伸びるページに戻る。
+
+  overflow は hidden ではなく clip。hidden は「見えないだけのスクロール箱」で、
+  フラグメント移動やフォーカス移動で中身が滑ったとき、戻す手段が無い。
+
+  当てる相手は公開ページだけ。data-layout は公開ページの body にしか付かない
+  （管理画面には当てない）ので、これを目印にする。[data-whole] が付くのは
+  縦に積んだ全体ページ（/all）で、そこだけは今日どおりスクロールしてよい。
+
+  目印の側は :where() で包んで詳細度を 0 にしてある。こうしておくと、下の
+  @media print が素の html, body / .shell のままで外枠を解ける。
+
+  この節はファイルの末尾近くに置く。骨格（.shell / main / .rail）の素の指定と
+  900 以上の指定を上書きするので、それらより後でなければ効かない。
+*/
+@supports (height: 100svh) {
+  :where(html:has(> body[data-layout]:not([data-whole]))),
+  :where(body[data-layout]:not([data-whole])) {
+    height: 100%;
+    overflow: clip;
+    overscroll-behavior: none;
+  }
+
+  :where(body[data-layout]:not([data-whole])) .shell {
+    height: var(--screen-h);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  :where(body[data-layout]:not([data-whole])) main {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    min-height: 0;
+    gap: var(--sp-5);
+  }
+
+  /*
+    画面の中身は、上から順に置いたひとかたまりを、画面の高さの中で上下中央に
+    寄せる。段の数は決めない——節の子は Apps の4つ（見出し・絞り込み・一覧・
+    空の知らせ）から Contact の1つまであり、決め打ちにすると 1fr が見出しや
+    絞り込みに載って、そこだけが間延びする。中身は自分の高さのままなので、
+    カードが画面の高さに合わせて伸び縮みすることもない。
+
+    中央寄せには必ず safe を付ける。素の center は、中身が容器を超えた瞬間に
+    上端を容器の外へ押し出し、どこからも戻せなくする。safe なら溢れた時点で
+    start に戻るので、切れるとしても必ず下からになる。
+
+    ここは必ず :is(.hero, section) のクラス強度（0,1,2）で書く。main > *
+    （0,0,2）では .hero{display:flex}（0,1,0）に負けて、Hero だけ縦積みが残る。
+  */
+  :where(body[data-layout]:not([data-whole])) main > :is(.hero, section) {
+    display: grid;
+    align-content: safe center;
+    min-height: 0;
+  }
+
+  /*
+    溢れの弁。
+
+    規則はひとつ。溢れたら隠さない・縮めない・ページを動かさない。まず画面を
+    増やす（1画面あたり何件かは src/blocks.ts の perScreen が決める）。それでも
+    溢れたときだけ、最後の手段として本文が動く。
+
+    付け先は節そのもの——パネルまるごと。本文の箱（.screen-body）だけを動かす
+    形にはできない。下段を 1fr で決め打つと、上の align-content が効かなくなって
+    上下中央寄せが消えるからで、そのうえ本文の箱を持つ節は今のところ Apps だけ
+    しかない。クラスを列挙すれば、これから足すブロックが必ず漏れる。漏れた節は
+    「弁の無い節」になり、中身が静かに切り取られる。だからパネルごと動かす。
+    頭（見出しと絞り込みのピル）も一緒に流れるが、読めなくなる中身は無い。
+
+    これは死にコードではない。名前の付いた3つの条件でだけ動く弁である。
+      (a) ブラウザの拡大が 200% 以上
+      (b) 画面の高さが 400px 未満（横向きの電話、分割表示）
+      (c) 書体が差し替わって、見積もりより行が伸びたとき
+    WCAG 1.4.10 が要求する 320x256 は (a) と (b) の両方に当たる。この寸法には
+    カードが1枚も入らないので、収めるのはあきらめて弁を開ける——中身は必ず読める
+    （だから弁のある画面には tabindex を付けてキーボードでも操作できるようにしてある）。
+    設計サイズ（3つの骨格 × 3つのビューポート＝9通り）で開いたら、それは弁の
+    出番ではなく perScreen の不具合。開いているのを見つけたら、まず件数を疑う。
+    9通りは npm run check:fit が実際にブラウザで測る（scripts/check-fit.mjs）。
+
+    hidden や clip では隠さない。見えない中身はキーボードでもたどれなくなり、
+    文字を拡大しただけで読めない部分ができる（WCAG 1.4.4 / 1.4.10）。必ず auto。
+    overscroll-behavior は contain。端まで来た勢いが外へ抜けないようにする——
+    外側の html と body は overflow: clip なので、抜けた先から戻る手段が無い。
+    scrollbar-gutter は stable。弁が開いた瞬間に幅が縮んで、行が組み直されるのを
+    止める（幅が変われば折り返しが変わり、また溢れる、を繰り返しかねない）。
+  */
+  :where(body[data-layout]:not([data-whole])) main > :is(.hero, section) {
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  /*
+    弁より先に潰れさせない。
+
+    高さの足りない箱に入った flex の子は、既定では自分の中身より小さく潰れる。
+    潰れたぶんは scrollHeight に出ないので、弁は開かないまま段落だけが重なる。
+    スクロールもできず、切り取られてもいない——ただ読めないだけの画面になる。
+    切り取りより悪い（ある設計では12段落が 487px に押し込まれた
+    = magazine @1440x900, Hiragino Sans, macOS Chromium）。
+
+    このファイルの実測値は、必ず「値 = プリセット @幅x高さ, 書体, ブラウザ」の
+    形で条件を添えること。条件の無い数は、別のプリセットで測り直した人の数と
+    食い違ったときに、どちらが間違いなのか誰にも決められなくなる。
+
+    今の節は grid なので、この指定は当たっても何も変えない。節がもう一度 flex に
+    なったとき（骨格のプリセットを足すときに起きやすい）のための受けで、
+    「潰れる」より「溢れて弁が開く」を必ず選ばせるために先に置いておく。
+  */
+  :where(body[data-layout]:not([data-whole])) main > * > * {
+    flex: 0 0 auto;
+  }
+
+  /*
+    説明文は行数で止める。幅が変わってもカードの高さが変わらなくなるので、
+    1画面に何件置けるかをサーバー側で先に決められる。
+    幅ではなく部品の都合なので、ブレークポイントでは分けない。
+  */
+  :where(body[data-layout]:not([data-whole])) .card p {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: var(--card-lines);
+    line-clamp: var(--card-lines);
+    overflow: hidden;
+  }
+
+  @media (max-width: 899px) {
+    /* 名札を横帯にする。縦に積むと、それだけで画面の1/4を使ってしまう */
+    :where(body[data-layout]:not([data-whole])) .rail {
+      flex-direction: row;
+      align-items: center;
+      gap: var(--sp-4);
+    }
+
+    /*
+      名札の中身も横に寝かせる。個人ページの名札はトップより中身が多く
+      （顔・名前・肩書き・所在地）、縦積みのままだと帯だけで 188.7px——
+      トップの帯 30.1px の6倍、画面の 1/4 を使ってしまう。
+      （188.7px = rail の個人ページ、30.1px = rail のトップ。どちらも
+      @390x844, Hiragino Sans, macOS Chromium。プリセットを書き落とさないこと——
+      同じトップの帯でも center では 64.2px で、条件抜きの数だけ並べると
+      食い違って見える）
+    */
+    :where(body[data-layout]:not([data-whole])) .identity {
+      flex-direction: row;
+      align-items: center;
+      gap: var(--sp-4);
+      min-width: 0;
+    }
+
+    /*
+      帯に入らないものは畳む。畳むのは6つ——顔（飾りなので alt は空）、所在地、
+      ひとこと、肩書き、柱の中の GitHub / Mail、著作権表示。名前と目次に
+      場所を譲る。900 以上の柱と、縦に伸びる全体ページ（/all）では今までどおり出る。
+
+      **畳んだぶんが「どこにも無くなる」ものを、この中に入れてはいけない。**
+      GitHub のプロフィールはかつてここにしか無く、この1行がスマホからの
+      一次動線を丸ごと消していた（WCAG 1.4.10 の「機能の損失」）。いまは
+      Contact の画面に常設してあり、そちらは幅で消えない——だから .socials は
+      柱の中（.identity の子）だけを名指しする。素の .socials を隠すと、
+      Contact に置いたほうまで一緒に消える。
+      肩書きも同じ理由で畳んでよい: Team の画面のカード（.member__role）と、
+      入口の <title> / meta description / JSON-LD の jobTitle に残っている。
+
+      名前（.identity__name）はここに入れない。入口で名乗ることそのものが
+      目的なので、いちばん人の多い幅で消したら意味が無い。
+
+      肩書きを畳むのは幅の勘定でもある。390 の帯は 358px しかなく、
+      名前と肩書きを両方出すと名札が 310px を取って目次が 36px になる
+      （必要 220px）。肩書きを畳むと名札 200px・目次 146px。個人ページの
+      目次も 70px → 180px に戻る。高さは1pxも動かない——設計サイズ3つ ×
+      3骨格 × 12URL で、ページの動きも弁の開きも畳む前と同じ0のまま
+      （146px = rail @390x844, Hiragino Sans, macOS Chromium）。
+    */
+    :where(body[data-layout]:not([data-whole])) .identity .avatar,
+    :where(body[data-layout]:not([data-whole])) .identity__place,
+    :where(body[data-layout]:not([data-whole])) .identity__role,
+    :where(body[data-layout]:not([data-whole])) .identity__tagline,
+    :where(body[data-layout]:not([data-whole])) .identity .socials,
+    :where(body[data-layout]:not([data-whole])) .rail__footer {
+      display: none;
+    }
+
+    /*
+      目次も1行の横帯にする。折り返すと2段になり、そのぶん本文の予算が減る
+      （中央寄せの 390px では、この1段ぶんで 6px 足りなくなっていた）。
+
+      ここだけ :where() を外してある。中央寄せの
+      body[data-layout='center'] .toc（0,2,1）が flex-wrap: wrap を持っていて、
+      :where() 付きの (0,1,0) では負けるため。外すのはこの1本だけにすること——
+      16か所すべてから外すと、下の @media print が素の html, body, .shell で
+      外枠を解けなくなる。
+
+      右端をぼかすのは、切れていることを見せるため。ページ自体が動かないので、
+      帯が切れていることに気づく手がかりが他に1つも無い（タッチ端末では
+      スクロールバーも出ない）。390px の個人ページの目次は、番号を落とした
+      あとでも 272px の帯に収まらない。
+    */
+    body[data-layout]:not([data-whole]) .toc {
+      flex: 1;
+      min-width: 0;
+      flex-wrap: nowrap;
+      border-top: 0;
+      padding-top: 0;
+      mask-image: var(--fade-right);
+    }
+
+    /* 絞り込みも目次と同じ、1行の横スクロール帯にする。折り返すと2段で場所を取る */
+    :where(body[data-layout]:not([data-whole])) .filters {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scrollbar-width: thin;
+      mask-image: var(--fade-right);
+    }
+
+    :where(body[data-layout]:not([data-whole])) .filters a {
+      flex-shrink: 0;
+    }
+  }
+
+  @media (min-width: 900px) {
+    /* ドキュメントが動かないので、貼り付けておく意味がない */
+    :where(body[data-layout]:not([data-whole])) .rail {
+      position: static;
+    }
+
+    /*
+      900 以上では .shell が2列（柱 | 本文）になる。素の
+      'auto minmax(0, 1fr)' のままだと柱も本文も1行目（auto）に入り、
+      2行目の 1fr が画面の残りを丸ごと持っていく。本文は柱と同じ高さで
+      止まり、下に何も無い帯が残る。2列のときは1段だけにして、本文を
+      画面の高さまで伸ばす。
+    */
+    :where(body[data-layout]:not([data-whole])) .shell {
+      grid-template-rows: minmax(0, 1fr);
+    }
+
+    /*
+      中央寄せと雑誌風は 900 以上でも1列のまま（上の [data-layout] の節で
+      列を1つに戻している）。柱の下に本文が続くので、こちらは2段のままに
+      する。列を戻す指定とこの指定は対。片方だけ直すと、また下が空く。
+    */
+    :where(body[data-layout='center']:not([data-whole])) .shell,
+    :where(body[data-layout='magazine']:not([data-whole])) .shell {
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+  }
+
+  /*
+    [hidden] の打ち消し。上で display を与えているので、このままだと hidden を
+    付けた節が見えてしまう（.card[hidden]{display:none} と同じ罠）。
+    上の指定（0,1,2）に勝たせるため属性を足して（0,2,2）にし、必ず最後に置く。
+  */
+  :where(body[data-layout]:not([data-whole])) main > :is(.hero, section)[hidden] {
+    display: none;
+  }
+}
+
 @media print {
+  /* 紙は1画面ではない。画面に収める外枠をここで解く */
+  html,
+  body {
+    height: auto;
+    overflow: visible;
+  }
+
+  .shell {
+    height: auto;
+  }
+
+  /*
+    紙の上では「次の画面へ」は押せない。全体ページ（/all）を刷ること。
+    .moon はインクを食うだけの装飾なので、ここで落とす（/all には元から
+    出ないが、入口の画面を直接刷られたときのため）。
+  */
   .rail,
   .filters,
+  .pager,
   .skip,
-  .band {
+  .band,
+  .moon {
     display: none;
   }
 

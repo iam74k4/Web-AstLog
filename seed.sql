@@ -71,24 +71,30 @@ Playwright',
 
 -- Apps ------------------------------------------------------------------
 
-INSERT INTO items (id, type, member_id, platform_key, title, year, summary, published, sort_order) VALUES
-  (1, 'app', 1, 'macos', 'AppMixer', '2026', 'macOS 14.4 の Core Audio Process Tap でアプリ単位の音量と出力先を制御する常駐アプリ。署名と公証を通して配布している。', 1, 10),
-  (2, 'app', 1, 'ios', 'AllTasks', '2026', 'Apple リマインダー・Microsoft To Do・Google ToDo を1つの受信箱にまとめるタスクアプリ。3つのサービスを横断して1画面で扱えるようにしている。', 1, 20),
-  (3, 'app', 1, 'cli', 'AI Agent Config', '2026', 'Cursor / Claude Code / Copilot でばらつくルールを1か所に集約し、1コマンドで各環境へ配る設定ツール。本業の AI 活用を自分の環境にも通すためにつくった。', 1, 30),
-  (4, 'app', 1, 'server', 'Discord Bot', '2026', '機能追加がコマンド単位で完結する153ファイルのモジュール構成。VC 録音と SQLite 永続化を備え、Railway へ継続デプロイしている。', 1, 40),
-  (5, 'app', 1, 'web', 'Portfolio', '2026', 'スクロールしない SPA 型のポートフォリオ。「ページ全体をスクロールさせない」制約を先に置いて設計している。', 1, 50);
+-- slug は作品1件の恒久リンク（/apps/item/<slug> と /works/item/<slug>）の3語目。
+-- 作り方は管理画面と同じ toSlug（小文字にして、英数字とハイフン以外をハイフンに畳む）。
+-- 重なったら末尾に -2, -3 と付けて一意にする（いまは重なっていない）。
+-- 題が日本語だけのもの（Works の2件）は toSlug が空を返すので、意味の分かる英語を手で置く。
+-- ここを変えると、貼られたリンクが切れる。足すのはよいが、書き換えないこと。
+
+INSERT INTO items (id, type, member_id, platform_key, title, slug, year, summary, published, sort_order) VALUES
+  (1, 'app', 1, 'macos', 'AppMixer', 'appmixer', '2026', 'macOS 14.4 の Core Audio Process Tap でアプリ単位の音量と出力先を制御する常駐アプリ。署名と公証を通して配布している。', 1, 10),
+  (2, 'app', 1, 'ios', 'AllTasks', 'alltasks', '2026', 'Apple リマインダー・Microsoft To Do・Google ToDo を1つの受信箱にまとめるタスクアプリ。3つのサービスを横断して1画面で扱えるようにしている。', 1, 20),
+  (3, 'app', 1, 'cli', 'AI Agent Config', 'ai-agent-config', '2026', 'Cursor / Claude Code / Copilot でばらつくルールを1か所に集約し、1コマンドで各環境へ配る設定ツール。本業の AI 活用を自分の環境にも通すためにつくった。', 1, 30),
+  (4, 'app', 1, 'server', 'Discord Bot', 'discord-bot', '2026', '機能追加がコマンド単位で完結する153ファイルのモジュール構成。VC 録音と SQLite 永続化を備え、Railway へ継続デプロイしている。', 1, 40),
+  (5, 'app', 1, 'web', 'Portfolio', 'portfolio', '2026', 'スクロールしない SPA 型のポートフォリオ。「ページ全体をスクロールさせない」制約を先に置いて設計している。', 1, 50);
 
 -- 説明文がまだ書けていないもの。消さずに下書きのまま置いておく
-INSERT INTO items (id, type, member_id, platform_key, title, year, summary, published, sort_order) VALUES
-  (6, 'app', 1, 'web', 'Booking-Platform', '2026', '', 0, 60),
-  (7, 'app', 1, 'cli', 'EventPlayback', '2026', '', 0, 70),
-  (8, 'app', 1, 'cli', 'AgentDeck for Stream Deck+', '2026', '', 0, 80);
+INSERT INTO items (id, type, member_id, platform_key, title, slug, year, summary, published, sort_order) VALUES
+  (6, 'app', 1, 'web', 'Booking-Platform', 'booking-platform', '2026', '', 0, 60),
+  (7, 'app', 1, 'cli', 'EventPlayback', 'eventplayback', '2026', '', 0, 70),
+  (8, 'app', 1, 'cli', 'AgentDeck for Stream Deck+', 'agentdeck-for-stream-deck', '2026', '', 0, 80);
 
 -- Works -----------------------------------------------------------------
 
-INSERT INTO items (id, type, member_id, category, title, year, summary, metric_value, metric_unit, metric_note, published, sort_order) VALUES
-  (9, 'work', 1, '金融系基幹システム', '開発工程の効率化', '2024 —', '生成AIと自動化を設計・製造・テストに組み込む取り組み。横断で使える集計ツールも展開している。', '20', '人日', '見込み 40人日 → 実績', 1, 10),
-  (10, 'work', 1, '製造業', '問い合わせ対応エージェント', '2026', 'Copilot Studio で構築した、ドキュメントを参照して問い合わせに答えるエージェント。参照する資料を整理し、回答を検証して一次対応に充てた。', NULL, NULL, NULL, 1, 20);
+INSERT INTO items (id, type, member_id, category, title, slug, year, summary, metric_value, metric_unit, metric_note, published, sort_order) VALUES
+  (9, 'work', 1, '金融系基幹システム', '開発工程の効率化', 'dev-efficiency', '2024 —', '生成AIと自動化を設計・製造・テストに組み込む取り組み。横断で使える集計ツールも展開している。', '20', '人日', '見込み 40人日 → 実績', 1, 10),
+  (10, 'work', 1, '製造業', '問い合わせ対応エージェント', 'support-agent', '2026', 'Copilot Studio で構築した、ドキュメントを参照して問い合わせに答えるエージェント。参照する資料を整理し、回答を検証して一次対応に充てた。', NULL, NULL, NULL, 1, 20);
 
 -- タグ --------------------------------------------------------------------
 
