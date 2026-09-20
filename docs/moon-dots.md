@@ -1,0 +1,312 @@
+# 入口の月を「折れた面の点」で作る案（採用せず）
+
+> **いま入口に出ている月はこの案ではありません。** 出ているのは粒子版
+> （`scripts/moon/render.py`）です。この文書は、参照（ElevenLabs のトップの
+> 造形）にある「折れた面に並ぶ規則的な点」を出せるか調べたときの記録で、
+> スクリプトは `scripts/moon/dots/render.py` に残してあります。
+>
+> **採らなかった理由**は、実際に出る寸法（1440x900 の rail で 196x287 CSS px）
+> の DPR1 で格子が疎すぎ、三日月の塊が消えて「網」に見えるため。DPR2 では
+> 参照に近くなります。大きく出すことが前提の表現で、そこを変えると文字との
+> 重なりの上限（CLAUDE.md）が動きます。
+>
+> 以下は、5つの作り方を実際に Blender で焼いて比べ、反証にかけた結果の
+> そのままの記録です。**測って分かった否定的な結果**——被写界深度はこの寸法では
+> 効かない、投影座標に格子を置くと折りは絵に現れない、層を重ねると点間隔が
+> 読める下限を割る——が本体で、同じ壁に二度ぶつからないために残しています。
+
+---
+
+# 三日月を焼き直す — 採る作り方・render.py の差し替え・測った数
+
+測定はすべて自分で焼き直して取った。Blender 5.2.1 LTS、EEVEE、1400px、64 サンプル。
+焼いた実物・測定スクリプトは
+`/private/tmp/claude-501/-Users-iam74k4-Git-Noctifex--claude-worktrees-local-behavior-check-b1183e/27aec1ff-885d-4438-a244-2beebdfb2bae/scratchpad/final2/` に置いてある。
+差し替える2ファイルは
+`.../scratchpad/render.py.new` と `.../scratchpad/pack.py.new`（そのまま動く）。
+
+---
+
+## 1. どれを採るか
+
+**骨格は「面を奥へ折る」（fold4.py）1本。そこへ他の3つから1つずつ部品を持ち込む。
+層の重なり・干渉縞・被写界深度は採らない。**
+
+### 採るもの
+
+| 出どころ | 採る部品 | 採る理由（自分で測った数） |
+|---|---|---|
+| 面を奥へ折る | 厚みゼロの面を **Y（視線方向）だけ**に折る／縁から `TAPER` で折りを 0 に落として輪郭を守る／点を**面上の弧長**で刻む／`DU_MIN` で詰まりに下限／1点ごとの明るさを頂点カラーに焼く | 5案を同じ配信経路（pack → 392x574 / 196x287 → `#0c0c0e` に ink 0.70 で合成）に通すと、**DPR1 で格子の山がいちばん高い**のがこれ（周期 4.0〜4.6px、山/地 x26〜38）。他は x10〜22 か、検出不能 |
+| 格子で撒く | 間隔と点の大きさを**配信実画素**で持ち、そこからワールドへ換算する | ワールド直打ちだと解像度や pack の丈を変えた瞬間に意味が変わる。実際 fold4 の `PX_PER_BU=362` は pack の丈が 574 のときだけ正しく、いまの 480 では 1.20 倍甘かった |
+| 傾きで明暗を作る | 「投影面の格子に置くと折りは絵に1画素も現れない／弧長で刻んで初めて等高線が出る」という発見そのもの | fold4 と同じ結論に独立に到達している。実装は fold4 側が単純なのでそちらを使う |
+| 重なりと被写界深度 | 「面紗と DOF は逆に効いている」という反証結果 | それを受けて**層を1枚に減らした**。2枚重ねと1枚を焼き比べると、DPR1 の格子の山が x25 → **x35**、ぼかし IoU が 0.859 → **0.887** に上がる |
+
+### 採らないものと、崩れた理由
+
+- **格子で撒く（grid2.py）** — 反証2件失敗。`perspective_fix()` が投影 `(x−cx)/(d+y)` をちょうど打ち消すので `py` が式から完全に消え、**3次元の折りが1画素も効いていない**（全点 `py=0` の対照と IoU・周期・WebP サイズまで一致）。さらに `EDGERING` が多角形の辺を等間隔に描くので、配信サイズでは「7角形の型抜き」に読める。視覚言語 2 と 5 が原理的に出ない作りなので採らない。
+- **傾きで明暗を作る（tilt.py）** — 反証3件**すべて**失敗。報告の IoU 0.971 は σ=16px のぼかし後の数で、`pack.py` はそのぼかしを掛けない。配信経路で測ると 0.760〜0.838 で**制約1（0.85）を割る**。DPR1 では横方向の周期が3か所中0か所。採らない。
+- **ジオメトリノードで作り直す（gn_moon.py）** — 反証2件失敗。層の重なりが点格子を**線スクリーン（コーデュロイ）**に変え、列方向の成分が本物の点格子の 1/3.4 しか残らない。合成後のコントラストも 2.26〜2.99:1 で 3:1 を割る。採らない。
+- **重なりと被写界深度（layers.py）** — 名前になっている2つが逆に効いている（面紗を切ると変調 0.454→0.705、DOF を切ると IoU 0.889→0.928）。**名前の2つを捨てた残り**だけが有効で、それは fold4 と同じもの。自分でも六方格子版（`final2/p12.0.png` `p15.0.png`）を焼いたが、fold4 より疎で平板だった。
+- **面を奥へ折る（fold4.py）の欠陥2つ** — 反証2件が指摘した内容はどちらも**露出の話で、骨格の話ではない**。(a) 配信素材の実効最大が 247〜255/255 で `--moon-ink` の契約を割る、(b) `ACCENT` が紫のまま（実測 彩度 31/255）。(c) `pack.py` の `grey = lum` が点のアンチエイリアスの縁まで不透明に持ち上げる。3つとも下の変更で直してある。
+
+### 採らないと決めた「参照の視覚言語」
+
+- **2（何重にも畳まれた面／手前ごしに奥が透ける／干渉縞）** — 出さない。干渉縞は層を近づけないと出ないが、近づけると合成の点間隔が読める下限を割る。fold4 側でも layers 側でも同じ壁に当たっている。
+- **4（被写界深度）** — 使わない。`f/2` と DOF 無しを焼き比べると、配信素材の IoU・縦横比・格子の山が**小数第3位まで同じ**だった。効かないものは置かない（レンダー時間だけ増える）。
+
+---
+
+## 2. `scripts/moon/render.py` への具体的な変更
+
+現行は 362 行。**30〜313 行（`ACCENT` から「霧」まで）を丸ごと捨てる。**
+消えるのは `inset()` / `SHELLS` / `make_shell()`（ボクセル remesh）/ パーティクルシステム一式（`emit_from="VOLUME"` `distribution="RAND"` `particle_size` `size_random` `spark` `swirl` `lit`）/ Cycles の霧の箱 / DOF。
+残すのは引数の受け取り・`MARK`・レンダー設定（`AgX`・`film_transparent`・PNG RGBA）だけ。
+
+差し替え後の全文は `.../scratchpad/render.py.new`（325 行、そのまま `scripts/moon/render.py` に置ける）。中身の要点だけ引く。
+
+### (a) 設計の数 — すべて「配信実画素」で持つ
+
+```python
+PACK_H = 574.0
+PX_PER_BU = PACK_H / (19.0 / 12.0)  # = 362.5
+
+STEP_PX = 9.4   # 配信実画素での点の間隔
+DOT_PX = 2.8    # 同 点の直径
+DU_MIN = 0.50   # 弧長の刻みの下限（設計間隔の 50% = 配信 4.7px）
+TAPER = 0.045   # 縁からこの幅（BU）で折りを 0 に落とす。輪郭を守るため
+FADE = 0.050    # 縁からこの幅で明るさを 0 に落とす。外周が地へ溶けて終わるように
+FOLD = dict(amp=0.38, k1=6.0, k2=2.6, rot=0.28, ph=0.0)
+GAIN = 0.17
+```
+
+`PX_PER_BU` を**丈**から出しているのが肝。三日月の丈は `19.0/12.0 = 1.58333 BU` で多角形そのものが決める（幅は縁の出かたで少し動く）。`pack.py` が丈を 574 に揃えるので、1 配信px = 1.58333/574 BU。**`pack.py` の丈を変えたらここも変える。**
+
+### (b) 折りと、面上の弧長で刻む格子
+
+```python
+def height(u, v):
+    """折りの座標系 (u, v) → 奥行き y と、画面の (x, z)。"""
+    c, s = math.cos(FOLD["rot"]), math.sin(FOLD["rot"])
+    x = u * c - v * s
+    z = u * s + v * c
+    raw = FOLD["amp"] * (
+        math.sin(FOLD["k1"] * u + FOLD["ph"]) + 0.35 * math.sin(FOLD["k2"] * v + FOLD["ph"] * 0.7)
+    )
+    return raw * smoothstep(0.0, TAPER, edge_dist(x, z)), x, z
+
+
+def lattice():
+    step = STEP_PX / PX_PER_BU
+    half = (DOT_PX / 2.0) / PX_PER_BU
+    rnd = random.Random(1)
+
+    c, s = math.cos(FOLD["rot"]), math.sin(FOLD["rot"])
+    us = [x * c + z * s for x, z in POLY]
+    vs = [-x * s + z * c for x, z in POLY]
+    u0, u1 = min(us) - step, max(us) + step
+    v0, v1 = min(vs) - step, max(vs) + step
+
+    pts = []
+    v, row = v0, 0
+    while v <= v1:
+        u = u0 + (step * 0.5 if row % 2 else 0.0)  # 1行おきに半歩ずらす（六方）
+        guard = 0
+        while u <= u1 and guard < 20000:
+            guard += 1
+            y, x, z = height(u, v)
+            du = step * 1e-2
+            y2, _, _ = height(u + du, v)
+            slope = (y2 - y) / du
+            if inside(x, z):
+                d = edge_dist(x, z)
+                depth = 1.55 - 1.17 * smoothstep(-FOLD["amp"], FOLD["amp"], y)
+                t = min(1.0, abs(slope) / 1.5)
+                tilt = 0.45 + (1.95 - 0.45) * t
+                fade = smoothstep(0.0, FADE, d)
+                jit = 0.78 + 0.44 * rnd.random()
+                lit_x = 1.15 + (0.70 - 1.15) * smoothstep(-0.55, 0.55, x)
+                b = 1.05 * depth * tilt * fade * jit * lit_x
+                if b > 0.012:
+                    pts.append((x, y, z, b, half * (0.75 + 0.45 * fade)))
+            # ここが弧長の刻み。傾いているぶんだけ歩幅を縮める
+            u += max(step * DU_MIN, step / math.sqrt(1.0 + slope * slope))
+        v += step
+        row += 1
+    return pts
+```
+
+`inside()` `edge_dist()` `smoothstep()` は fold4.py のものをそのまま（`render.py.new` に入っている）。
+
+### (c) 点は実体の四角＋頂点カラー（粒子システムは使わない）
+
+```python
+mat = bpy.data.materials.new("dots")
+mat.use_nodes = True
+nt = mat.node_tree
+nt.nodes.clear()
+attr = nt.nodes.new("ShaderNodeAttribute")
+attr.attribute_name = "Col"
+mul = nt.nodes.new("ShaderNodeMath")
+mul.operation = "MULTIPLY"
+mul.inputs[1].default_value = 4.0 * GAIN
+emit = nt.nodes.new("ShaderNodeEmission")
+emit.inputs["Color"].default_value = (1.0, 1.0, 1.0, 1.0)   # 無彩色
+out = nt.nodes.new("ShaderNodeOutputMaterial")
+nt.links.new(attr.outputs["Fac"], mul.inputs[0])
+nt.links.new(mul.outputs["Value"], emit.inputs["Strength"])
+nt.links.new(emit.outputs["Emission"], out.inputs["Surface"])
+
+pts = lattice()
+verts, faces, cols = [], [], []
+for x, y, z, b, s in pts:
+    j = len(verts)
+    verts += [(x - s, y, z - s), (x + s, y, z - s), (x + s, y, z + s), (x - s, y, z + s)]
+    faces.append((j, j + 1, j + 2, j + 3))
+    cols += [(b / 4.0, b / 4.0, b / 4.0, 1.0)] * 4
+
+mesh = bpy.data.meshes.new("dots")
+mesh.from_pydata(verts, [], faces)
+mesh.update()
+ca = mesh.color_attributes.new(name="Col", type="FLOAT_COLOR", domain="POINT")
+flat = []
+for c4 in cols:
+    flat += list(c4)
+ca.data.foreach_set("color", flat)
+ob = bpy.data.objects.new("dots", mesh)
+scene.collection.objects.link(ob)
+ob.data.materials.append(mat)
+```
+
+頂点インスタンス（`instance_type='VERTS'`）では1メッシュが1マテリアル＝1つの明るさしか持てず、「縁で消える」「傾きで光る」が付けられない。段ごとにメッシュを割る手もあるが段の境目が絵に出る。**色属性は 0〜1 に収めたいので `b/4` で入れ、マテリアルで 4 倍して戻す。**
+
+### (d) カメラとレンダー設定
+
+```python
+bpy.ops.object.camera_add(location=(0.0, -5.25, 0.0), rotation=(math.pi / 2, 0, 0))
+cam = bpy.context.active_object
+scene.camera = cam
+cam.data.lens = 50
+cam.data.dof.use_dof = False     # 効かないので置かない（測定は下）
+
+scene.render.filter_size = 1.5
+scene.render.film_transparent = True
+scene.view_settings.view_transform = "AgX"
+scene.view_settings.look = "None"
+```
+
+`view_transform`・`film_transparent`・PNG RGBA・「合成を焼かない」は現行のまま。
+
+### (e) `scripts/moon/pack.py` — 4か所（これを直さないと骨格が良くても配信で壊れる）
+
+```python
+LO, HI = 0.0, 0.10                                   # was 0.045, 0.09
+grey = np.repeat(lit[..., None], 3, axis=2)          # was lum
+height = int(sys.argv[3]) if len(sys.argv) > 3 else 574   # was 480
+img = img.resize((width, height), Image.BOX)         # was Image.LANCZOS
+```
+
+- `grey = lum` は**霧を切るための式**で、霧の無い点の絵に当てると、点のアンチエイリアスの縁（lum はほぼ最大のまま alpha だけ落ちる）を坂が不透明に持ち上げる。`lit`（= lum × alpha）に替えると実効最大が 226.8 → 190 に戻る。
+- `LO/HI` はその霧を切るために選ばれた数。霧が無いので 0.0/0.10 にする（暗い点ほど透ける、というだけの坂になる）。
+- 丈 480 → **574**。DPR2 の実画素が 574 なので、設計サイズでは拡縮が入らない。同時に `PX_PER_BU=362` が正しい数になる。
+- `LANCZOS` → `BOX`。点の絵では行き過ぎ（リンギング）が実効最大を **+10〜19/255** 持ち上げる（同じ絵で BOX 190 / LANCZOS 200）。
+
+### (f) CSS と部品（`test/theme.test.ts` が見張っている3か所）
+
+```
+public/app.css         --moon-ratio: 325 / 480;  →  --moon-ratio: 373 / 574;
+src/ui/components.tsx  width="325" height="480"  →  width="373" height="574"
+```
+
+`--moon-ink: 0.70` は**動かさない**。コメントの導出（「地は 140/255 まで」「実効最大 180 → 0.78 まで上げられる → 書体差を引いて 0.70」）が、新しい素材でもそのまま成り立つように `GAIN` を選んである（実効最大 **184**）。
+
+### 焼いた結果（全部自分で測った数）
+
+| | いまの素材 | 新しい素材 |
+|---|---|---|
+| 点の周期（2次元スペクトル・DPR2 392x574） | **無し**（形の包絡 30〜39px だけ） | 9.6〜10.1px、山/地 x12〜22 |
+| 同 DPR1 196x287 | **無し** | 4.9〜5.2px、山/地 x17〜35 |
+| IoU（膨張収縮 r15/r21） | — | **0.912 / 0.915** |
+| IoU（形態素を使わない等面積しきい値、σ=2/3.5/5 配信px） | — | **0.880 / 0.884 / 0.856** |
+| 外接枠の縦横比（ロゴ 0.6653） | 0.6771 | 0.6498 |
+| 多角形の外へ出たインク | — | 4.86% |
+| 焼いた絵のクリップ（≥250/255） | 0.00% | **0.00%**（最大 184） |
+| 彩度（点の上のチャンネル差） | — | **最大 1/255**（＝丸め誤差。無彩色） |
+| 素材の実効最大 → `× --moon-ink 0.70` | 180 → 126 | **184 → 128.8**、140 超えは **0.00%** |
+| 素材の寸法 / 大きさ | 325x480 / avif 12KB | 373x574 / **avif 23KB・webp 42KB** |
+| 点の数 / 焼き時間 | 140000 粒 | **1404 点 / 1.1 秒**（EEVEE 1400px 64 サンプル） |
+
+---
+
+## 3.「小さく出る」への答え
+
+**196x287 CSS px で成立するもの／しないものは、はっきり分かれる。**
+
+### 成立する（測って確かめた）
+
+- **視覚言語 1（規則的に並んだ点。行と列が読める）** — 成立。DPR2 で周期 9.6〜10.1px（山/地 x12〜22）、DPR1 でも 4.9〜5.2px（x17〜35）。実寸で並べて見ても、点の列として読める（添付の左右比較）。成立の条件は1つだけ——**間隔と点の直径を、ワールドでもレンダー画素でもなく「配信実画素」で決めること**。
+- **視覚言語 3（面の傾きで密度が変わる＝明るい等高線）** — 成立。弧長で刻んでいるので、面が寝た帯では投影間隔が 9.4px → 4.7px（`DU_MIN` の下限）まで詰まり、そこが明るい帯になる。正対している所は 9.4px のまま地が透ける（多角形の内側のインク被覆 32%）。
+- **視覚言語 5（強い明暗／外周は消えていく）** — 成立。`FADE` で縁 18 配信px を地へ落としてある。輪郭に点を打つ（`EDGERING`）のはやっていないので、型抜きには見えない。
+
+### 成立しない（正直に書く）
+
+- **視覚言語 2（閉じかけた曲面が何重にも畳まれ、手前の層ごしに奥が透け、干渉縞が出る）** — **この寸法では物理的に無理。** 唸りが見えるには層の格子をごく近い周期にしなければならないが、近づけた瞬間に合成の点間隔が読める下限を割る。fold4 の2枚重ねを焼くと DPR1 の格子の山が x35 → x25 に落ち、layers.py の h1/h2 では合成間隔が 6.65px まで詰まった。出ているのは「1枚の面が折れている」までで、**畳まれてはいない**。
+- **視覚言語 4（被写界深度）** — **無理。** 振幅 0.38BU・距離 5.25BU・50mm では f/2 でも許容錯乱円が配信1画素を下回る。`f/2` と DOF 無しを焼き比べて、配信素材の IoU・縦横比・格子の山が小数第3位まで同じだった。奥行きを増やせば効くが、増やしたぶん輪郭が揺れる。だから**外した**。
+- **DPR1 の、いちばん寝た帯** — 点が線に溶ける。`DU_MIN=0.50` は DPR2 で間隔 4.7px・点 2.8px（隙間 1.9px）だが、DPR1 ではそれが 2.35px / 1.4px（隙間 0.95px）になる。`DU_MIN` を 0.38 に下げた版を DPR1 で見ると、寝た帯が丸ごと横縞になった。0.50 でも、いちばん寝た所だけは横縞に読める。**ここは諦めている。**
+
+### 「もっと大きく出さないと成立しない」か
+
+**2 と 4 を本当に欲しいなら、大きくするしかない。** 参照は 520x470 px（ビューポート幅の 43%）で、こちらは 196x287（14%）。層を2枚以上重ねて干渉縞を出し、かつ行と列を読ませるには、いまの倍——**丈 574 CSS px 前後**が要る。
+
+ただしそれは持ち主が決める話で、CSS 側の制約がはっきりしている。`--moon-top: 3%` + `--moon-h: 45%` = 48% という上限は、**リード文（`--ink-mid` 15px ＝ 通常文字なので 4.5:1 が要る）の上端が、12通りの組でパネル高の 50.8% より上に来ない**ことから出ている。丈を倍にするとリード文の後ろに入り、`--moon-ink` を 0.25 あたりまで落とすことになって、今度は月が見えなくなる。
+
+**1・3・5 だけで良いなら、いまの寸法のままで成立する。** 上の表がその実測。
+
+---
+
+## 4. 焼く手順
+
+```sh
+cd /Users/iam74k4/Git/Noctifex/.claude/worktrees/local-behavior-check-b1183e
+B=/Applications/Blender.app/Contents/MacOS/Blender
+
+# 1) 下見（EEVEE・700px・16 サンプル）0.9 秒。構図と折り方だけを見る
+$B -b -P scripts/moon/render.py -- /tmp/scr.png 700 16
+#    下見では点が 5px の四角にしかならず、本番より柔らかく出る。
+#    **下見で密度と明るさを判断しないこと。**
+
+# 2) 本番（EEVEE・1400px・64 サンプル）1.1 秒
+$B -b -P scripts/moon/render.py -- /tmp/moon.png 1400 64
+
+# 3) 配信用に詰める（丈 574。ここで無彩色と透過が確定する）
+python3 scripts/moon/pack.py /tmp/moon.png public/assets
+#    → "size: 373x574  (--moon-ratio: 373 / 574)" が出る。
+#      この2つの数を public/app.css の --moon-ratio と
+#      src/ui/components.tsx の width/height に**必ず**写す
+
+# 4) 検査
+npm run test            # theme.test.ts が --moon-ratio と width/height の食い違いを見る
+npm run check:contrast  # 60通り。--moon-ink 0.70 の上で見出しが 3:1 を保つか
+npm run check:fit       # 月そのものは版面を動かさないが、素材を差し替えたら一応
+```
+
+**Cycles は使わない。** `-- /tmp/moon.png 1400 64 cycles` でも動く（`render.py.new` は分岐を残してある）が、焼き比べると配信素材の IoU 0.913 対 0.912、格子の山も同じで、**時間だけ 1.1 秒 → 7.9 秒**。しかもデノイズの残りで彩度が 1/255 → 9/255 に上がる。霧をやめたので Cycles を使う理由が無くなった。
+
+---
+
+## 5. 残っている risk
+
+### 輪郭（IoU 0.85）を割りうる変更 — 名指しする
+
+1. **`FADE` を広げる。** いちばん危ない。0.050 → 0.075 にするだけで、ぼかし IoU が 0.884 → **0.854** に落ちる（余裕 0.004）。「外周をもっと溶かしたい」は、そのまま制約1を割りに行く操作。触ったら必ず測り直すこと。
+2. **`STEP_PX` を上げる。** 9.4 → 13.6（1.45倍）で、ぼかし IoU 0.884 → **0.807**、縦横比 0.6498 → 0.6493。点を粗くするほど尖りが取りこぼされる。
+3. **`pack.py` の丈を 574 から変える。** `PX_PER_BU` が連動している。片方だけ動かすと、設計した 9.4px が素材の上で別の数になり、DPR1 で格子が潰れる（丈 480 では 7.9px になっていた）。
+4. **`LO` を 0 から上げる。** 縁の淡い点が坂の下端で断ち切られ、外接枠が縮む。tilt.py が `edge_thin` で踏んだのと同じ罠（IoU 0.97 → 0.80）。
+5. **格子の位相（`FOLD["rot"]` や `STEP_PX` のわずかな変更）。** 縦横比が ±1.6% 揺れる（`STEP_PX` 8.0/8.6/9.4 で 0.6446/0.6411/0.6516）。外接枠を合わせて測る IoU はこのぶんを吸うが、余裕が減る。**数を1つでも触ったら、5案を測ったのと同じ測り方で IoU を取り直すこと。**
+
+### そのほか
+
+- **`--moon-ratio` と `components.tsx` の width/height を直し忘れると `test/theme.test.ts` が落ちる。** 325/480 → 373/574。光暈（`--moon-glow`）はこの箱を基準に広がるので、直さないと光の形もずれる。
+- **コントラストの余裕が薄い。** 素材の実効最大 184 → `× 0.70` = 128.8 で、上限 140 まで 11 しか無い。そこへブラウザ側の拡縮が乗る。自分のモデルで測ると、bilinear 相当なら DPR2 132 / DPR1 119 で問題無いが、Lanczos 相当の行き過ぎを想定すると DPR1 で 151（画素の 0.12%）まで出る。**`npm run check:contrast` を通すまで「通った」と言わないこと。** 落ちたら `GAIN` を 0.17 → 0.14 に下げる（実効最大 176。構造は変わらない——AgX の肩が効くので、`GAIN` を 1.0 から 0.22 へ 5倍落としても実効最大は 231 → 188 にしか動かない。落ちるのは暗いほう）。
+- **素材が太る。** avif 12KB → 23KB、webp 32KB → 42KB。丈を 480 → 574 に上げたぶん。入口の1枚なので許容範囲だと思うが、決めるのは持ち主。
+- **1024x768 の center は、196x287 より**ずっと**小さい。** `--moon-h: 45%` はパネル高に対する割合で、そこはパネルが 810x366 なので月は **165 CSS px 丈 = 107x165**。196x287 の約 0.57 倍で、DPR1 なら格子の間隔が 2.8px まで落ちる。設計はしていない寸法なので、そこがどう見えるかは実際に見て決めること（`check:contrast` はこの窓を測っているが、「読めるか」は測っていない）。
+- **「畳まれた面」は出ていない。** 上の 3 に書いたとおり、出ているのは1枚の折れた面まで。参照と並べれば違いは分かる。いまの寸法で取れる最善だと考えているが、そこが不満なら話は「月をどれだけ大きく出すか」に戻る。

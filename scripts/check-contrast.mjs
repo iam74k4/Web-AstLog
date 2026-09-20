@@ -46,6 +46,16 @@ const VIEWPORTS = [
 // 月が出るのは入口の画面だけ（/all にも個人ページにも出さない）
 const PATH = '/'
 
+/*
+  三日月が「出ている」と言える下限。
+
+  実測（DPR1・iris）では 4寸法で 2.0万〜3.4万画素、明るさの中央値 80〜85。
+  下限はそこから大きく引いてある——見栄えを縛るのではなく、
+  「描かれていない」を止めるための数だから。
+*/
+const MOON_MIN_PIXELS = 8000
+const MOON_MIN_LUMA = 45
+
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 
 const keysOf = (name) => {
@@ -133,6 +143,43 @@ const collect = ([layout, accent]) => {
   return [read(hero.querySelector('h1'), '見出し'), read(hero.querySelector('p'), 'リード文')]
 }
 
+// 三日月を消した絵と比べ、三日月が描いた画素とその明るさを返す
+const drawnBy = ([shownUrl, hiddenUrl]) => {
+  const load = (src) =>
+    new Promise((ok, ng) => {
+      const image = new Image()
+      image.onload = () => ok(image)
+      image.onerror = () => ng(new Error('撮った絵をページへ戻せなかった'))
+      image.src = src
+    })
+
+  return Promise.all([load(shownUrl), load(hiddenUrl)]).then(([shown, hidden]) => {
+    const read = (image) => {
+      const canvas = document.createElement('canvas')
+      canvas.width = image.width
+      canvas.height = image.height
+      const paper = canvas.getContext('2d', { willReadFrequently: true })
+      paper.drawImage(image, 0, 0)
+      return paper.getImageData(0, 0, canvas.width, canvas.height).data
+    }
+    const a = read(shown)
+    const b = read(hidden)
+    const lit = []
+    for (let at = 0; at < a.length; at += 4) {
+      const moved = Math.max(
+        Math.abs(a[at] - b[at]),
+        Math.abs(a[at + 1] - b[at + 1]),
+        Math.abs(a[at + 2] - b[at + 2]),
+      )
+      // 2/255 未満は地との差として見えない
+      if (moved >= 2) lit.push(0.2126 * a[at] + 0.7152 * a[at + 1] + 0.0722 * a[at + 2])
+    }
+    if (lit.length === 0) return { pixels: 0, median: 0 }
+    lit.sort((x, y) => x - y)
+    return { pixels: lit.length, median: lit[Math.floor(lit.length / 2)] }
+  })
+}
+
 // 撮った「地だけ」の絵をページへ戻し、行ボックスの下の画素を読む
 const worstIn = ([dataUrl, targets]) => {
   const relative = (channel) => {
@@ -207,6 +254,7 @@ async function main() {
   const failures = []
   let checked = 0
   let tightest = { ratio: Number.POSITIVE_INFINITY, where: '' }
+  let dimmest = { median: Number.POSITIVE_INFINITY, pixels: 0, where: '' }
 
   console.log(
     `月の上で文字が読めるか — ${VIEWPORTS.length}ビューポート × ${layouts.length}骨格 × ${accents.length}アクセント = ${VIEWPORTS.length * layouts.length * accents.length}通り`,
@@ -267,6 +315,44 @@ async function main() {
         }
       }
 
+      /*
+        月が**出ていること**を見る。
+
+        この検査は「文字が読めるか」しか見ていない。だから月が暗くなるのは
+        改善として素通りする——実際それで1回抜けた。色を CSS に持たせた日に
+        濃淡をアルファへ移し、画面での中央値が 85 から 73.5 まで落ちたのに、
+        ゲートは全部緑のままだった（「月が消えた」と言われて初めて気づいた）。
+
+        上限（文字が読めること）だけでなく、下限も要る。測り方は差分——
+        三日月だけを消した絵と比べ、三日月が描いている画素とその明るさを見る。
+
+        **これが捕まえるのは「消えた・ほぼ消えた」までで、1割の目減りではない。**
+        素材が 404 になった・mask が壊れた・--moon-ink を下げすぎた、を止める
+        ための下限で、見栄えの調整をここで縛るつもりは無い。
+      */
+      const moon = await (async () => {
+        const shown = await page.screenshot({ type: 'png' })
+        const hide = await page.addStyleTag({
+          content: '.moon__mark::after{display:none !important}',
+        })
+        const hidden = await page.screenshot({ type: 'png' })
+        await page.evaluate((node) => node.remove(), hide)
+        return page.evaluate(drawnBy, [
+          `data:image/png;base64,${shown.toString('base64')}`,
+          `data:image/png;base64,${hidden.toString('base64')}`,
+        ])
+      })()
+      if (moon.pixels < MOON_MIN_PIXELS) {
+        failures.push(
+          `${where} — 三日月が ${moon.pixels} 画素しか描いていない（下限 ${MOON_MIN_PIXELS}）。素材が届いていないか、mask が効いていない`,
+        )
+      } else if (moon.median < MOON_MIN_LUMA) {
+        failures.push(
+          `${where} — 三日月の明るさの中央値が ${moon.median.toFixed(1)}/255（下限 ${MOON_MIN_LUMA}）。薄すぎて出ていないのと変わらない`,
+        )
+      }
+      if (moon.median < dimmest.median) dimmest = { ...moon, where }
+
       for (const layout of layouts) {
         for (const accent of accents) {
           const targets = await page.evaluate(collect, [layout, accent])
@@ -326,7 +412,7 @@ async function main() {
   }
 
   console.log(
-    `✓ ${checked} 通り。基準を割った行 0（いちばん惜しいのは ${tightest.where} で ${tightest.ratio.toFixed(2)}:1）`,
+    `✓ ${checked} 通り。基準を割った行 0（いちばん惜しいのは ${tightest.where} で ${tightest.ratio.toFixed(2)}:1）\n  月はいちばん薄い ${dimmest.where} でも ${dimmest.pixels} 画素・明るさ ${dimmest.median.toFixed(1)}/255`,
   )
 }
 
