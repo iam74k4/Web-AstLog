@@ -92,6 +92,31 @@ async function screenPaths(base) {
   const all = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((found) => new URL(found[1]).pathname)
   if (all.length === 0) throw new Error('sitemap.xml に URL が1つも無い')
 
+  /*
+    少なすぎたら止める。**ここが無いと、この検査は黙って空振りする。**
+
+    数え上げる相手を sitemap から引いているので、D1 が空（migrate / seed を
+    忘れた新しいワークツリー、など）だと画面がほとんど生えず、sitemap が
+    数本しか返さない。それでも1本ずつは 200 で返るので、検査は
+    「✓ 9 通り」と緑で終わる——**測っていないのに合格**になる。
+    実際に再現した（paths を1本に絞ると 3骨格 × 3寸法 × 1URL = 9通りで緑、
+    終了コード 0）。
+
+    このリポジトリは同じ型の事故を3回やっている（規則をそのまま引用した
+    コメントに当たって永久に緑になった件）。床は低めに置いてあり、
+    「中身が減った」ではなく「DB が立っていない」を捕まえるためのもの。
+    本当に画面を減らしたなら、この数も一緒に下げること——その変更が
+    diff に出ることに意味がある。
+  */
+  const FLOOR = 5
+  if (all.length < FLOOR) {
+    throw new Error(
+      `sitemap.xml の URL が ${all.length} 本しかない（最低 ${FLOOR} 本を期待）。` +
+        'D1 が空のまま測ると、ほとんど何も測らずに緑で終わる。' +
+        'npm run db:migrate:local と npm run db:seed:local を先に通すこと',
+    )
+  }
+
   // 縦に伸びてよいのは全体ページだけ（body[data-whole]）。ここだけは測らない
   const paths = all.filter((path) => path !== '/all')
   if (paths.length === all.length) {
@@ -194,12 +219,16 @@ async function main() {
   let checked = 0
   let worstPage = 0
   let worstValve = 0
+  let urlCount = 0
+  let layoutCount = 0
 
   try {
     const layouts = layoutKeys()
     const paths = await screenPaths(base)
+    urlCount = paths.length
+    layoutCount = layouts.length
     console.log(
-      `画面に収まっているか — ${layouts.length}骨格 × ${VIEWPORTS.length}ビューポート × ${paths.length}URL = ${layouts.length * VIEWPORTS.length * paths.length}通り`,
+      `画面に収まっているか — ${layoutCount}骨格 × ${VIEWPORTS.length}ビューポート × ${paths.length}URL = ${layouts.length * VIEWPORTS.length * paths.length}通り`,
     )
 
     for (const viewport of VIEWPORTS) {
@@ -253,7 +282,8 @@ async function main() {
   }
 
   console.log(
-    `✓ ${checked} 通り。ページが動いた画面 0、弁が開いた節 0（いちばん惜しいところでページ ${worstPage}px・弁 ${worstValve}px）`,
+    `✓ ${checked} 通り（${urlCount} URL × ${layoutCount}骨格 × ${VIEWPORTS.length}寸法）。` +
+      `ページが動いた画面 0、弁が開いた節 0（いちばん惜しいところでページ ${worstPage}px・弁 ${worstValve}px）`,
   )
 }
 
