@@ -1,4 +1,3 @@
-import { raw } from 'hono/html'
 import type { Child } from 'hono/jsx'
 import { SITE } from '../site'
 import type { Theme } from '../theme'
@@ -160,7 +159,6 @@ export const Layout = (props: {
           {props.children}
         </main>
       </div>
-      {raw('')}
     </body>
   </html>
 )

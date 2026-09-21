@@ -189,10 +189,6 @@ export const sessions = sqliteTable(
   (t) => [index('idx_sessions_exp').on(t.expiresAt)],
 )
 
-export const membersRelations = relations(members, ({ many }) => ({
-  items: many(items),
-}))
-
 export const itemsRelations = relations(items, ({ one, many }) => ({
   member: one(members, { fields: [items.memberId], references: [members.id] }),
   platform: one(platforms, { fields: [items.platformKey], references: [platforms.key] }),

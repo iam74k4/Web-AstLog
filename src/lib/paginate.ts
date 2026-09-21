@@ -22,8 +22,18 @@ export function chunk<T>(rows: T[], perScreen: number): T[][] {
   return screens
 }
 
-// 何画面になるか。0件なら0画面（chunk の長さと必ず一致する）
+/*
+  何画面になるか。0件なら0画面（chunk の長さと必ず一致する）。
+
+  total は COUNT か配列の length なので負にならない（呼び出し7か所で確認）。
+  ここで 0 に丸め直さないのは、将来それを破る呼び出しを足したときに、
+  数え損ねが「0画面」として静かに通るのを避けるため——負を渡しうるように
+  なったら、渡す側で止めること。
+
+  perScreen 側の Math.max(1, …) は別物で、こちらは消さない（→ 0 を渡すと
+  ゼロ除算で Infinity になり、画面数が壊れる）。
+*/
 export function screenCount(total: number, perScreen: number): number {
   const size = Math.max(1, Math.floor(perScreen))
-  return Math.max(0, Math.ceil(total / size))
+  return Math.ceil(total / size)
 }
