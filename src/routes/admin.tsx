@@ -715,7 +715,7 @@ app.get('/members/:id/delete', async (c) => {
         action={`/admin/members/${id}/delete`}
         cancelHref="/admin/members"
       >
-        <p class="confirm__detail">
+        <p>
           担当している項目 {n} 件は消えず、担当者が空になります。
           <br />
           サイトから隠したいだけなら、編集で「公開する」を外すほうが安全です。
@@ -1280,7 +1280,7 @@ app.get('/items/:id/delete', async (c) => {
         action={`/admin/items/${id}/delete`}
         cancelHref={`/admin/items?type=${item.type}`}
       >
-        <p class="confirm__detail">
+        <p>
           タグ {item.tags.length} 件とリンク {item.links.length} 件も一緒に消えます。
           <br />
           サイトから隠したいだけなら、編集で「公開する」を外すほうが安全です。
@@ -1991,9 +1991,7 @@ app.get('/blocks/:id/delete', async (c) => {
         cancelHref="/admin/blocks"
         verb="外す"
       >
-        <p class="confirm__detail">
-          いったん隠したいだけなら、編集で「公開する」を外すほうが安全です。
-        </p>
+        <p>いったん隠したいだけなら、編集で「公開する」を外すほうが安全です。</p>
       </Confirm>
     </AdminLayout>,
   )

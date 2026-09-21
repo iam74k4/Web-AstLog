@@ -24,7 +24,7 @@ export const AdminLayout = (props: {
       <title>{props.title} — Noctifex Admin</title>
       <link rel="stylesheet" href="/app.css" />
     </head>
-    <body class="admin">
+    <body>
       <div class="admin-shell">
         <aside class="admin-nav">
           <span class="admin-nav__brand">
@@ -76,6 +76,6 @@ export const AdminBare = (props: { title: string; children?: Child }) => (
       <title>{props.title} — Noctifex Admin</title>
       <link rel="stylesheet" href="/app.css" />
     </head>
-    <body class="admin admin--bare">{props.children}</body>
+    <body class="admin--bare">{props.children}</body>
   </html>
 )

@@ -594,7 +594,15 @@ describe('部品の作法', () => {
       エラーは出ず、変わるのは「名乗りだけが画面の高さを食う」という結果だけ。
     */
     expect(bodyOf(sheet, '.hero h1.hero__headline {')).toContain('font-size: var(--fs-display-sm)')
-    expect(bodyOf(sheet, '.hero h1,')).toContain('font-size: var(--fs-display)')
+    expect(bodyOf(sheet, '.hero h1 {')).toContain('font-size: var(--fs-display)')
+
+    /*
+      素の .hero__headline は置かない。付く先は必ず .hero の直接の子の h1 で、
+      .hero h1（0,1,1）が勝つ——単独で勝つ機会が無い。要るのは、上の
+      「要素とクラスの両方」のほうだけ。
+    */
+    // 行頭で見る。部分一致だと .hero h1.hero__headline に当たってしまう
+    expect(sheet).not.toMatch(/^\.hero__headline\s*[,{]/m)
   })
 
   it('技術の小見出しは、見出しに上げても太さを変えない', () => {
