@@ -22,12 +22,10 @@
     npm run check:contrast
 */
 
-import { spawn } from 'node:child_process'
-import { readFileSync } from 'node:fs'
 import process from 'node:process'
-import { setTimeout as sleep } from 'node:timers/promises'
-import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
+import { devServer } from './lib/dev-server.mjs'
+import { keysOf } from './lib/theme.mjs'
 
 /*
   設計サイズ3つ（check-fit.mjs と同じ電話・板・机）に 1024x768 を足す。
@@ -55,51 +53,6 @@ const PATH = '/'
 */
 const MOON_MIN_PIXELS = 8000
 const MOON_MIN_LUMA = 45
-
-const ROOT = fileURLToPath(new URL('..', import.meta.url))
-
-const keysOf = (name) => {
-  const source = readFileSync(`${ROOT}src/theme.ts`, 'utf8')
-  const block = source.match(new RegExp(`export const ${name} = \\[([\\s\\S]*?)\\] as const`))?.[1]
-  if (!block) throw new Error(`src/theme.ts の ${name} を読めなかった（宣言の形が変わった？）`)
-  const keys = [...block.matchAll(/key: '([^']+)'/g)].map((found) => found[1])
-  if (keys.length === 0) throw new Error(`src/theme.ts の ${name} が空に見える`)
-  return keys
-}
-
-async function waitForServer(base, limitMs = 120_000) {
-  const until = Date.now() + limitMs
-  while (Date.now() < until) {
-    try {
-      const response = await fetch(base, { redirect: 'manual' })
-      if (response.status < 500) return
-    } catch {
-      // まだ立っていない
-    }
-    await sleep(500)
-  }
-  throw new Error(`${base} が ${limitMs / 1000} 秒たっても応えない`)
-}
-
-// check-fit.mjs と同じ理由で npx を挟まない（SIGTERM が本体に届かない）
-function startServer(port) {
-  const server = spawn(`${ROOT}node_modules/.bin/wrangler`, ['dev', '--port', String(port)], {
-    cwd: ROOT,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-  const log = []
-  const keep = (chunk) => log.push(String(chunk))
-  server.stdout.on('data', keep)
-  server.stderr.on('data', keep)
-  return {
-    stop: () => {
-      server.stdout.off('data', keep)
-      server.stderr.off('data', keep)
-      server.kill('SIGTERM')
-    },
-    spill: () => console.error(log.join('')),
-  }
-}
 
 /*
   骨格とアクセントを差し替えて、文字の行ボックスと色を集める。
@@ -233,20 +186,11 @@ const worstIn = ([dataUrl, targets]) => {
 }
 
 async function main() {
-  const port = Number(process.env.CONTRAST_PORT ?? 8789)
-  const given = process.env.CONTRAST_BASE
-  const base = given ?? `http://localhost:${port}`
-  const dev = given ? null : startServer(port)
-
-  if (dev) {
-    try {
-      await waitForServer(base)
-    } catch (error) {
-      dev.spill()
-      dev.stop()
-      throw error
-    }
-  }
+  // CONTRAST_BASE を渡したときだけ、そこに向けて測る（手元の dev を使いたいとき）
+  const { base, stop } = await devServer(
+    process.env.CONTRAST_BASE,
+    Number(process.env.CONTRAST_PORT ?? 8789),
+  )
 
   const layouts = keysOf('LAYOUTS')
   const accents = keysOf('ACCENTS')
@@ -398,7 +342,7 @@ async function main() {
     }
   } finally {
     await browser.close()
-    dev?.stop()
+    stop()
   }
 
   if (failures.length > 0) {

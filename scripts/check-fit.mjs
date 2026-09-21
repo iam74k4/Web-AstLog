@@ -30,12 +30,10 @@
   こちらは本物の版面が要る。混ぜると、片方のために片方の実行環境を曲げることになる。
 */
 
-import { spawn } from 'node:child_process'
-import { readFileSync } from 'node:fs'
 import process from 'node:process'
-import { setTimeout as sleep } from 'node:timers/promises'
-import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
+import { devServer } from './lib/dev-server.mjs'
+import { keysOf } from './lib/theme.mjs'
 
 /*
   設計サイズ。CLAUDE.md と public/app.css の「9通り」は、この3つ × 骨格3つのこと。
@@ -58,23 +56,6 @@ const PANELS = 'main > :is(.hero, section)'
 
 // 端数の許し。連動する段は clamp() で決まるので、幅しだいで 0.x px が出る
 const SLACK = 1
-
-const ROOT = fileURLToPath(new URL('..', import.meta.url))
-
-/*
-  骨格の一覧は src/theme.ts が正。ここに 'rail' と書き写すと、4つ目の
-  プリセットを足した日に、その骨格だけ誰も測らないまま出ていくことになる。
-  .ts をそのまま読み込めないので、宣言の文字列から key だけを拾う。
-*/
-function layoutKeys() {
-  const source = readFileSync(`${ROOT}src/theme.ts`, 'utf8')
-  const block = source.match(/export const LAYOUTS = \[([\s\S]*?)\] as const/)?.[1]
-  if (!block) throw new Error('src/theme.ts の LAYOUTS を読めなかった（宣言の形が変わった？）')
-
-  const keys = [...block.matchAll(/key: '([^']+)'/g)].map((found) => found[1])
-  if (keys.length === 0) throw new Error('src/theme.ts の LAYOUTS が空に見える')
-  return keys
-}
 
 /*
   測る URL は sitemap.xml から引く。
@@ -125,51 +106,6 @@ async function screenPaths(base) {
   return paths
 }
 
-// dev サーバが返事をするまで待つ。起動は初回だけ数秒かかる
-async function waitForServer(base, limitMs = 120_000) {
-  const until = Date.now() + limitMs
-  while (Date.now() < until) {
-    try {
-      const response = await fetch(base, { redirect: 'manual' })
-      if (response.status < 500) return
-    } catch {
-      // まだ立っていない
-    }
-    await sleep(500)
-  }
-  throw new Error(`${base} が ${limitMs / 1000} 秒たっても応えない`)
-}
-
-/*
-  サーバは自分で立てる。FIT_BASE を渡したときだけ、そこに向けて測る
-  （手元で `npm run dev` を動かしたまま測りたいとき）。
-
-  npx を挟まず node_modules/.bin/wrangler を直に起動する。npx を挟むと
-  SIGTERM が届くのは npx のほうで、本体の wrangler がポートを掴んだまま
-  残ることがある（次の実行がそのポートで立てられなくなる）。
-
-  サーバの出力はためておいて、うまくいったときは捨てる。成功した run の
-  最後に 160 行のアクセスログが出ると、肝心の1行が読めなくなる。
-*/
-function startServer(port) {
-  const server = spawn(`${ROOT}node_modules/.bin/wrangler`, ['dev', '--port', String(port)], {
-    cwd: ROOT,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-  const log = []
-  const keep = (chunk) => log.push(String(chunk))
-  server.stdout.on('data', keep)
-  server.stderr.on('data', keep)
-
-  const stop = () => {
-    server.stdout.off('data', keep)
-    server.stderr.off('data', keep)
-    server.kill('SIGTERM')
-  }
-  const spill = () => console.error(log.join(''))
-  return { server, stop, spill }
-}
-
 /*
   骨格は body の data-layout を差し替えて見る。
 
@@ -199,20 +135,8 @@ const measure = ([layout, panels, slack]) => {
 }
 
 async function main() {
-  const port = Number(process.env.FIT_PORT ?? 8788)
-  const given = process.env.FIT_BASE
-  const base = given ?? `http://localhost:${port}`
-  const dev = given ? null : startServer(port)
-
-  if (dev) {
-    try {
-      await waitForServer(base)
-    } catch (error) {
-      dev.spill()
-      dev.stop()
-      throw error
-    }
-  }
+  // FIT_BASE を渡したときだけ、そこに向けて測る（手元の dev を使いたいとき）
+  const { base, stop } = await devServer(process.env.FIT_BASE, Number(process.env.FIT_PORT ?? 8788))
 
   const browser = await chromium.launch()
   const failures = []
@@ -223,7 +147,7 @@ async function main() {
   let layoutCount = 0
 
   try {
-    const layouts = layoutKeys()
+    const layouts = keysOf('LAYOUTS')
     const paths = await screenPaths(base)
     urlCount = paths.length
     layoutCount = layouts.length
@@ -268,7 +192,7 @@ async function main() {
     }
   } finally {
     await browser.close()
-    dev?.stop()
+    stop()
   }
 
   if (failures.length > 0) {
