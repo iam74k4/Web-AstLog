@@ -983,11 +983,42 @@ async function siteScreens(
   ほうにそろえる（全体ページ /all と同じ扱い）。2つ目からは、その画面の URL
   が正。絞り込みは付けない——同じ中身の取り出し方なので、ピルの組み合わせの
   ぶんだけ URL が数えられると、どれが本体か分からなくなる。
+
+  href も先頭だけは / に寄せる。ここが /<slug>（＝/hero）だったころ、
+  ページャの「前」だけがそこを指していて、入口と**バイト単位で同一の URL** が
+  リンクを辿れる場所に1つ増えていた。/hero を直接開いた人のために
+  ルートは残してあるが（下の renderScreen で読み替える）、こちらから
+  案内はしない。
 */
-const siteSteps = (screens: BlockScreen[], query: string, solo?: schema.Member): Step[] =>
+/*
+  その画面に**効く絞り込みだけ**を残す。
+
+  絞り込みを全画面に配っていたころ、Hero にも Contact にも ?platform= が
+  付いて回っていた。中身は1文字も変わらないのに URL だけが増え、実測で
+  20画面のサイトに対して辿れる URL が 58本あった（/hero?platform=macos、
+  /contact?member=okazaki のたぐい）。
+
+  どれが効くかは scopeOf が正——platform は Apps にしか渡らず（Works には
+  必ず null）、member は Apps と Works の両方に渡る。ここはその写しなので、
+  scopeOf を変えるときは一緒に直すこと。
+
+  絞り込みが画面をまたいで残ること自体は意図どおり（test/public.test.ts の
+  「絞り込みは、めくっても目次から移っても外れない」）。落とすのは、
+  その画面では何の意味も持たない項目だけ。
+*/
+const stepQuery = (slug: string, filter: ItemFilter): string =>
+  filterQuery({
+    platform: slug === 'apps' ? filter.platform : null,
+    member: slug === 'apps' || slug === 'works' ? filter.member : null,
+  })
+
+const siteSteps = (screens: BlockScreen[], filter: ItemFilter, solo?: schema.Member): Step[] =>
   screens.map((screen, position) => ({
     navKey: screen.slug,
-    href: screenHref(screen, query),
+    href:
+      position === 0
+        ? `/${stepQuery(screen.slug, filter)}`
+        : screenHref(screen, stepQuery(screen.slug, filter)),
     canonical: position === 0 ? '/' : screenHref(screen),
     nav: screen.nav,
     title: screen.nav ? `${screen.nav} — ${SITE.name}` : siteTitle(solo),
@@ -1012,7 +1043,6 @@ async function renderScreen(c: Context<AppEnv>, want: { slug: string; page: numb
   ])
 
   const { filter, memberId } = readFilter(c, platforms, members)
-  const query = filterQuery(filter)
   const { screens, counted } = await siteScreens(db, blocks, members, filter, memberId)
 
   const solo = soloMember(members)
@@ -1039,8 +1069,22 @@ async function renderScreen(c: Context<AppEnv>, want: { slug: string; page: numb
     )
   }
 
-  const steps = siteSteps(screens, query, solo)
-  const seq = sequence(steps, stepAt(steps, want ? screenHref(want, query) : null))
+  const steps = siteSteps(screens, filter, solo)
+  /*
+    入口は / と /<slug>（いまなら /hero）の2つで開ける。列の中では / に
+    寄せてあるので、/<slug> で来たぶんはここで読み替える——同じ1枚なので、
+    404 にはしない。canonical は siteSteps が / を指している。
+  */
+  const first = screens[0]
+  /*
+    引くときも stepQuery を通す。その画面に効かない絞り込みを付けて来た URL
+    （手で打った /works?platform=web など）は、余分なぶんを落として同じ1枚に
+    当てる——列の href には付いていないので、素通しすると 404 になる。
+    中身は絞り込み無しと同じで、canonical も素の URL を指す。
+  */
+  const asked = want ? screenHref(want, stepQuery(want.slug, filter)) : null
+  const entry = first && want && want.slug === first.slug && want.page === 1
+  const seq = sequence(steps, stepAt(steps, entry ? `/${stepQuery(first.slug, filter)}` : asked))
   const current = seq && screens[seq.index]
   if (!seq || !current) return c.notFound()
 
@@ -1101,7 +1145,7 @@ async function renderItem(c: Context<AppEnv>, type: 'app' | 'work', slug: string
   const solo = soloMember(members)
   // 目次はサイトの画面のまま。この画面に絞り込みは無いので、素の並びを聞く
   const { screens } = await siteScreens(db, blocks, members, { platform: null, member: null }, null)
-  const steps = siteSteps(screens, '', solo)
+  const steps = siteSteps(screens, { platform: null, member: null }, solo)
 
   const step: Step = {
     // 印は、この作品が載っている一覧に付く（この画面は目次に並ばない）
@@ -1634,7 +1678,7 @@ publicRoutes.get('/sitemap.xml', async (c) => {
       2つの URL で開けるので、正の1つだけを出す（その1枚目の正は上の / と
       同じ文字列になる。重なりは下で落とす）。
     */
-    ...siteSteps(screens, '').map((step) => step.canonical),
+    ...siteSteps(screens, { platform: null, member: null }).map((step) => step.canonical),
     // 縦に積んだ全体版。正が自分自身になったので、ここに並ぶ資格がある
     '/all',
     ...members.flatMap((member) =>

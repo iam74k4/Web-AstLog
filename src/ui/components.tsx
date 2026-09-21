@@ -425,8 +425,15 @@ export const Empty = ({ children }: { children: Child }) => <p class="empty">{ch
 /*
   画面と画面を行き来する帯。main の2行目（本文の下）に置く。
 
-  通し番号はサーバーが数えて渡す。CSS の counter で数えると、印刷にも
-  読み上げにも数が出ず、「いま何枚目か」だけが落ちる。
+  数えるのは**節の中**（Apps 2 / 3）。全体の通し番号にしない理由は
+  src/lib/sequence.ts の Sequence.pager に書いてある。
+
+  節をまたぐ手は、行き先を名乗る（「次 → Works」）。兼ねていたころは
+  /apps/3 で「次」を押すと予告なく Works に出ていた。名乗らせるだけで
+  驚きが消え、押す前に決められる。
+
+  数はサーバーが数えて渡す。CSS の counter で数えると、印刷にも読み上げにも
+  数が出ず、「いま何枚目か」だけが落ちる。
 
   端（最初と最後）ではリンクそのものを出さない。押しても何も起きない
   リンクを置くと、キーボードで送る手が1回空振りする。ますだけは残すので、
@@ -434,34 +441,63 @@ export const Empty = ({ children }: { children: Child }) => <p class="empty">{ch
 */
 export const ScreenPager = ({
   prev,
+  prevSection,
   next,
+  nextSection,
+  section,
   index,
   total,
 }: {
   prev: string | null
+  prevSection: string | null
   next: string | null
+  nextSection: string | null
+  section: string | null
   index: number
   total: number
 }) => {
-  const pad = (n: number) => String(n).padStart(2, '0')
+  /*
+    読み上げに渡す言い方。節の名前があるときは「Apps の 3 画面のうち 2 画面目」、
+    無いとき（Hero・ひとこと）は画面が1枚しかないので位置を言わない。
+  */
+  const spoken = section
+    ? total > 1
+      ? `${section} の ${total} 画面のうち ${index} 画面目`
+      : section
+    : null
+
   return (
     <nav class="pager" aria-label="画面の移動">
       {prev ? (
         <a class="pager__go" href={prev} rel="prev">
-          ← 前
+          {prevSection ? `← ${prevSection}` : '← 前'}
         </a>
       ) : (
         <span class="pager__end" />
       )}
-      <span class="pager__count">
-        <span class="sr-only">{`${total} 画面のうち ${index} 画面目`}</span>
-        <span aria-hidden="true">
-          {pad(index)} · {pad(total)}
+      {/*
+        名前を持たない節（Hero・ひとこと）では言うことが無い。それでも枠は
+        残す——3つの枡で組んであるので、落とすと左右の手が真ん中へ寄り、
+        めくるたびにボタンの位置が動く。
+      */}
+      {spoken ? (
+        <span class="pager__count">
+          <span class="sr-only">{spoken}</span>
+          <span aria-hidden="true">
+            <span class="pager__section">{section}</span>
+            {total > 1 ? (
+              <span class="pager__of">
+                {index} / {total}
+              </span>
+            ) : null}
+          </span>
         </span>
-      </span>
+      ) : (
+        <span class="pager__count" />
+      )}
       {next ? (
         <a class="pager__go pager__go--next" href={next} rel="next">
-          次 →
+          {nextSection ? `${nextSection} →` : '次 →'}
         </a>
       ) : (
         <span class="pager__end" />

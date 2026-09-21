@@ -491,6 +491,10 @@ describe('画面に収める外枠', () => {
 */
 describe('部品の作法', () => {
   it('目次に番号は振らず、数えるのはページャだけ', async () => {
+    // 節が1つも無いと目次もページャも出ない。位置を名乗るのは2画面以上の
+    // 節だけなので、Apps が割れる件数（perScreen 2 に対して3件）を置く
+    for (const title of ['壱', '弐', '参']) await seedItem({ type: 'app', title })
+
     /*
       目次の 01〜04（ブロックの並び順）とページャの 01 · 07（いま何画面目か）が
       同じ 11px mono・同じ色で並ぶと、同じ数え上げに見える。しかも目次の番号は
@@ -502,9 +506,16 @@ describe('部品の作法', () => {
 
     const html = await (await get('/')).text()
     expect(html).not.toContain('toc__num')
-    // 画面の数え上げはページャに残る（読み上げ用の一文と、見た目の 01 · 07 の対）
     expect(html).toContain('class="pager__count"')
-    expect(html).toContain('画面のうち')
+
+    /*
+      数え上げはページャに残る。ただし数えるのは**節の中**なので、
+      位置を名乗るのは節の名前を持つ画面だけ——入口（Hero）は目次に
+      出ない＝名前が無いので、何画面目かを言わない（言える位置が無い）。
+    */
+    const apps = await (await get('/apps')).text()
+    expect(apps).toContain('画面のうち')
+    expect(apps).toContain('class="pager__section"')
   })
 
   it('柱の足元のリンクは、著作権表示と見分けが付く', () => {

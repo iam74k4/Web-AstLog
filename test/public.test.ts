@@ -835,18 +835,20 @@ describe('個人ページを画面に分ける', () => {
     expect((await get('/members/okazaki/hero')).status).toBe(404)
   })
 
-  it('ページャの通し番号は、その人の画面数で閉じる', async () => {
+  it('連なりはその人の中で閉じる。節をまたぐ手は行き先を名乗る', async () => {
     await seedMember(FULL)
 
-    // 名乗り・紹介・技術・経歴・連絡先 の5枚
+    // 名乗り・紹介・技術・経歴・連絡先 の5枚。どれも1画面ずつの別の節
     const first = await (await get('/members/okazaki')).text()
-    expect(first).toContain('5 画面のうち 1 画面目')
     expect(first).toContain('href="/members/okazaki/about" rel="next"')
+    // 名乗りは目次に出ない＝節の名前を持たないので、自分は名乗らない
+    expect(first).toContain('About →')
 
     const contact = await (await get('/members/okazaki/contact')).text()
-    expect(contact).toContain('5 画面のうち 5 画面目')
     // 最後の画面の次は無い
     expect(contact).not.toContain('rel="next"')
+    // 手前は別の節なので、戻る手も行き先を名乗る
+    expect(contact).toContain('← Career')
   })
 
   it('画面ごとに canonical と題が変わる', async () => {
@@ -888,8 +890,14 @@ describe('個人ページを件数で割る', () => {
     expect(second.status).toBe(200)
     expect(await second.text()).toContain(`できごと${per + 1}`)
 
-    // 名乗り・紹介・経歴2枚・連絡先。割れたぶんだけ連なりが伸びる
-    expect(first).toContain('5 画面のうち 3 画面目')
+    /*
+      経歴が2画面に割れる。数えるのは**節の中**なので、Career の 1 / 2。
+      連なり全体では3枚目だが、そこは数えない——絞り込みで動く数を
+      画面に出さないため（src/lib/sequence.ts）。
+    */
+    expect(first).toContain('Career の 2 画面のうち 1 画面目')
+    // 同じ節の中の移動なので、次は行き先を名乗らない
+    expect(first).toContain('次 →')
     // 3画面目は無い
     expect((await get('/members/okazaki/career/3')).status).toBe(404)
   })

@@ -44,9 +44,34 @@ export type Sequence = {
   nav: NavLink[]
   /*
     ページャに渡す値。1枚しか無いときは null——めくる先が無いので帯ごと出さない。
-    通し番号（01 · 07）は列の添字を1始まりにしたもので、ブロック単位ではない。
+
+    数えるのは**節の中**（Apps 2 / 3）で、全体の通し番号ではない。
+
+    全体で数えていたころ（01 · 07）は3つ困っていた。
+      1. 柱の「Apps」を押しても、Apps が3画面あることがどこにも出ない。
+         手がかりは 02 · 07 だけで、これは Apps の2ページ目という意味ではない
+      2. 「次」が「節の中の次」と「次の節へ移る」を兼ねていて、/apps/3 で
+         押すと予告なく Works に出る
+      3. **絞り込みが全体の番号を動かす。** Apps を macOS で絞ると 3画面が
+         1画面になるので、無関係な Contact の番号が 07 から 05 に変わった
+         （実測：/contact と /contact?platform=macos の違いはその数字だけ）
+
+    節の中で数えれば3つとも消える。めくる先は今までどおり連なり全体なので、
+    「次」を押し続ければサイトを一周できる性質は変わらない——変わるのは
+    数え方と、節をまたぐときに行き先を名乗ること。
   */
-  pager: { prev: string | null; next: string | null; index: number; total: number } | null
+  pager: {
+    prev: string | null
+    // 節をまたぐときだけ、行き先の節の名前。同じ節の中なら null
+    prevSection: string | null
+    next: string | null
+    nextSection: string | null
+    // いまの節の名前。名前を持たない節（Hero・ひとこと）では null
+    section: string | null
+    // 節の中での位置と、その節の画面数
+    index: number
+    total: number
+  } | null
 }
 
 /*
@@ -82,6 +107,20 @@ export function sequence(steps: Step[], index: number, tail: NavLink[] = []): Se
     nav.push({ href: step.href, label: step.nav, active: step.navKey === current.navKey })
   }
 
+  /*
+    節の中での位置。navKey が同じものを1つの節として数える。
+
+    列は節ごとにまとまって並んでいる（ブロックをほどいた順）ので、
+    同じ navKey の連続した範囲がその節になる。
+  */
+  const sameSection = steps.filter((step) => step.navKey === current.navKey)
+  const within = sameSection.indexOf(current)
+
+  const prevStep = steps[index - 1] ?? null
+  const nextStep = steps[index + 1] ?? null
+  // 節をまたぐときだけ行き先を名乗る。同じ節の中なら「次 →」のまま
+  const crossing = (step: Step | null) => (step && step.navKey !== current.navKey ? step.nav : null)
+
   return {
     index,
     current,
@@ -90,10 +129,13 @@ export function sequence(steps: Step[], index: number, tail: NavLink[] = []): Se
       steps.length > 1
         ? {
             // 端ではリンクそのものを出さない。押しても何も起きない手を置かない
-            prev: steps[index - 1]?.href ?? null,
-            next: steps[index + 1]?.href ?? null,
-            index: index + 1,
-            total: steps.length,
+            prev: prevStep?.href ?? null,
+            prevSection: crossing(prevStep),
+            next: nextStep?.href ?? null,
+            nextSection: crossing(nextStep),
+            section: current.nav,
+            index: within + 1,
+            total: sameSection.length,
           }
         : null,
   }

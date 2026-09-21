@@ -36,7 +36,8 @@ describe('画面の連なり', () => {
   it('目次に出ないものがある（Hero・ひとこと）。列には並ぶのでめくれば着く', () => {
     const seq = sequence(STEPS, 0)
     expect(seq?.nav.some((item) => item.label === 'hero')).toBe(false)
-    expect(seq?.pager?.total).toBe(4)
+    // 列には居るので、次で着く
+    expect(seq?.pager?.next).toBe('/apps')
   })
 
   it('ブロックの2画面目でも、その見出しに印が残る', () => {
@@ -49,11 +50,38 @@ describe('画面の連なり', () => {
   it('端ではめくる先を出さない。押しても何も起きない手を置かない', () => {
     expect(sequence(STEPS, 0)?.pager).toEqual({
       prev: null,
+      prevSection: null,
       next: '/apps',
+      // 次は別の節なので行き先を名乗る
+      nextSection: 'apps',
+      // Hero は目次に出ない＝名前を持たないので、節としては名乗らない
+      section: null,
       index: 1,
-      total: 4,
+      total: 1,
     })
     expect(sequence(STEPS, 3)?.pager?.next).toBeNull()
+  })
+
+  /*
+    数えるのは節の中。全体の通し番号にしない理由は sequence.ts に書いてある
+    （絞り込みが無関係な画面の番号を動かしていた）。
+  */
+  it('数えるのは節の中。全体の通し番号ではない', () => {
+    // /apps は Apps の1枚目。Apps は2画面ある
+    expect(sequence(STEPS, 1)?.pager).toMatchObject({ section: 'apps', index: 1, total: 2 })
+    // /apps/2 は同じ節の2枚目。列の中では3番目だが、そこは数えない
+    expect(sequence(STEPS, 2)?.pager).toMatchObject({ section: 'apps', index: 2, total: 2 })
+    // Contact は1画面しか無いので 1 / 1
+    expect(sequence(STEPS, 3)?.pager).toMatchObject({ section: 'contact', index: 1, total: 1 })
+  })
+
+  it('節をまたぐ手だけが行き先を名乗る', () => {
+    // 節の中の移動は名乗らない（「次 →」のまま）
+    expect(sequence(STEPS, 1)?.pager?.nextSection).toBeNull()
+    // 節をまたぐときは名乗る。予告なく別の節へ出るのを止めるため
+    expect(sequence(STEPS, 2)?.pager?.nextSection).toBe('contact')
+    expect(sequence(STEPS, 3)?.pager?.prevSection).toBe('apps')
+    expect(sequence(STEPS, 2)?.pager?.prevSection).toBeNull()
   })
 
   it('1枚しか無ければページャそのものを出さない', () => {
@@ -69,7 +97,8 @@ describe('画面の連なり', () => {
     const seq = sequence(STEPS, 0, [{ href: '/apps?member=okazaki', label: 'Apps · Works' }])
     expect(seq?.nav.at(-1)?.label).toBe('Apps · Works')
     // めくって着く先ではないので、ページャの数には入らない
-    expect(seq?.pager?.total).toBe(4)
+    expect(seq?.pager?.total).toBe(1)
+    expect(seq?.pager?.next).toBe('/apps')
   })
 })
 

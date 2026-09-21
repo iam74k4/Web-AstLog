@@ -357,8 +357,14 @@ describe('構成 — 何画面になるかを見せる', () => {
     // hero・apps・works・team・contact の順
     expect(screenBadges(before)).toEqual([1, chunk(titles, per).length, 0, 0, 1])
     expect(before).toContain('合計 4 画面')
-    // 公開ページが実際に何画面あるか（ページャの読み上げ）と突き合わせる
-    expect(await (await get('/')).text()).toContain('4 画面のうち 1 画面目')
+    /*
+      公開ページ側と突き合わせる。ページャは**節の中**を数えるので、
+      見るのは Apps の画面に出る数（管理画面の Apps の「N 画面」と同じ数）。
+      全体の通し番号は持っていない——絞り込みで動いてしまうのでやめた。
+    */
+    expect(await (await get('/apps')).text()).toContain(
+      `Apps の ${chunk(titles, per).length} 画面のうち 1 画面目`,
+    )
 
     // 1件足すと画面が1枚増える。それが管理画面から見えることがこのテストの主題
     const grown = [...titles, 'アプリ 5']
@@ -367,7 +373,9 @@ describe('構成 — 何画面になるかを見せる', () => {
     const after = await (await signed('/admin/blocks')).text()
     expect(screenBadges(after)).toEqual([1, chunk(grown, per).length, 0, 0, 1])
     expect(after).toContain('合計 5 画面')
-    expect(await (await get('/')).text()).toContain('5 画面のうち 1 画面目')
+    expect(await (await get('/apps')).text()).toContain(
+      `Apps の ${chunk(grown, per).length} 画面のうち 1 画面目`,
+    )
   })
 
   /*
@@ -459,10 +467,14 @@ describe('構成 — 何画面になるかを見せる', () => {
       expect(screenBadges(admin), one.key).toEqual([want])
       expect(admin, one.key).toContain(`合計 ${want} 画面`)
 
-      // 公開ページ側の数。置いてあるのはこの1つだけなので、サイトの画面数と同じ
-      const home = await (await get('/')).text()
-      if (want > 1) expect(home, one.key).toContain(`${want} 画面のうち 1 画面目`)
-      else expect(home, one.key).not.toContain('画面のうち')
+      /*
+        公開ページ側の数。ページャは節の中を数えるので、その節の1画面目に
+        出る数と突き合わせる。置いてあるのはこのブロック1つだけなので、
+        節の画面数＝管理画面の「N 画面」。
+      */
+      const first = await (await get(`/block-${block.id}`)).text()
+      if (want > 1) expect(first, one.key).toContain(`${want} 画面のうち 1 画面目`)
+      else expect(first, one.key).not.toContain('画面のうち')
 
       /*
         数えた画面には URL があり、数えていない画面には無い。1画面目は
