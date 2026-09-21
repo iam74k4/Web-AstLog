@@ -8,7 +8,11 @@
   三日月。明るい側が左（外周は x=5.68 まで張り出し、内周は x≈10.7〜12.1）。
   入口の背景の月（scripts/moon/render.py）も同じ向きに光を当ててある。
 */
-export const MarkIcon = ({ size = 24 }: { size?: number }) => (
+/*
+  size は必須。app.css は svg に寸法を与える規則を1つも持たないので、
+  渡し忘れると素の 300x150 に落ちて版面が崩れる。
+*/
+export const MarkIcon = ({ size }: { size: number }) => (
   <svg
     viewBox="0 0 24 24"
     width={size}

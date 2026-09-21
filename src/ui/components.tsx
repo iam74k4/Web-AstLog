@@ -8,21 +8,30 @@ import { MarkIcon } from './icons'
   ここに無い形をその場で書くと、同じものが少しずつ違う姿で増える。
 */
 
-export const Brand = ({ size = 'md', href = '/' }: { size?: 'sm' | 'md'; href?: string }) => (
-  <a class={`brand brand--${size}`} href={href}>
+export const Brand = ({ size = 'md' }: { size?: 'sm' | 'md' }) => (
+  /*
+    md は素の姿なので修飾子を足さない（.brand--md に当たる規則は app.css に無い）。
+    sm を名指しする書き方にはしないこと——3つ目の段を足したとき、CSS の
+    書き忘れを拾えなくなる。
+  */
+  <a class={size === 'md' ? 'brand' : `brand brand--${size}`} href="/">
     <MarkIcon size={size === 'sm' ? 17 : 27} />
     <span class="brand__word">NOCTIFEX</span>
   </a>
 )
 
+/*
+  size は必須。既定値を置くと、渡し忘れが --avatar-size:undefinedpx として
+  静かに出ていく——CSS 側のフォールバックが拾うので、画面も型もテストも通る。
+*/
 export const Avatar = ({
   src,
   name,
-  size = 72,
+  size,
 }: {
   src?: string | null
   name: string
-  size?: number
+  size: number
 }) => (
   <span class="avatar" style={`--avatar-size:${size}px`}>
     {/*
@@ -54,18 +63,16 @@ export const Avatar = ({
   page !== null が「割られた画面」を意味する。ここで数えない。
 */
 export const SectionHead = ({
-  id,
   title,
   note,
   h1,
 }: {
-  id?: string
   title: string
   note?: string
   h1?: boolean
 }) => (
   <div class="head">
-    {h1 ? <h1 id={id}>{title}</h1> : <h2 id={id}>{title}</h2>}
+    {h1 ? <h1>{title}</h1> : <h2>{title}</h2>}
     {note ? <span class="note">{note}</span> : null}
   </div>
 )
@@ -163,6 +170,7 @@ export const MoonField = () => (
     <span class="moon__mark" />
   </div>
 )
+
 /*
   画面1つぶんの節。中身を「見出しの箱」と「本文の箱」の2つに畳む。
 
