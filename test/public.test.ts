@@ -530,6 +530,34 @@ describe('絞り込み', () => {
     expect(works).not.toContain('よその人の仕事')
   })
 
+  it('Works の件数は、絞り込みの有無で取り違えない', async () => {
+    /*
+      Works の件数は2つある——絞り込みを見ない total（入口の帯）と、
+      絞り込んだあとの matched（説明文と、0件なら節ごと消す判断）。
+
+      ?member= が付かないときは同じ数なので、**片方をもう片方に取り違えても
+      画面は正しく見える**。取り違いが出るのは絞り込んだときだけ。
+      ここを留めないと、二重クエリを1本にまとめる書き換えで静かに壊れる
+      （「その人の Works が0件なら節ごと消える」だけでは、画面が生えない
+      ぶん緑のまま通ってしまう）。
+    */
+    const member = await seedMember()
+    const other = await seedMember({ slug: 'hoshino', name: '星野' })
+    await seedItem({ type: 'work', title: 'この人の仕事', memberId: member.id })
+    await seedItem({ type: 'work', title: 'よその人の仕事', memberId: other.id })
+
+    // 絞り込み無し: 2件
+    expect(await (await get('/works')).text()).toContain('業務での開発 2 件')
+
+    // その人で絞ると 1 件。ここが 2 件のままなら total と matched の取り違え
+    const mine = await (await get(`/works?member=${member.slug}`)).text()
+    expect(mine).toContain('業務での開発 1 件')
+    expect(mine).not.toContain('業務での開発 2 件')
+
+    // 入口の帯は絞り込みを見ないので、絞ったあとも 2 のまま
+    expect(await (await get(`/?member=${member.slug}`)).text()).toContain('Works 2')
+  })
+
   it('絞り込みは、めくっても目次から移っても外れない', async () => {
     const member = await seedMember()
     await seedItem({ type: 'app', title: 'アプリ壱', memberId: member.id })

@@ -943,7 +943,19 @@ async function siteScreens(
       節を消す仕組みか、入口の数のどちらかが必ず狂う。
     */
     countPublishedItems(db, 'work'),
-    countPublishedItems(db, 'work', scopeOf('work', filter, memberId)),
+    /*
+      絞り込んだあとの Works の件数。**memberId が無いときは引かない。**
+
+      scopeOf は Works に platformKey を渡さない（type === 'app' のときだけ
+      渡す）ので、Works に効く絞り込みは memberId だけ。?member= の付かない
+      全リクエスト——トップ・各画面・/sitemap.xml・作品1件ページ——で、
+      すぐ上と同じ SQL を2回投げていた。
+
+      **このガードは「scopeOf が Works に platformKey を渡さない」ことに
+      依存している。** Works に2つ目の絞り込み軸を足すなら、ここも一緒に
+      直すこと。直さないと件数が全件に化ける。
+    */
+    memberId ? countPublishedItems(db, 'work', scopeOf('work', filter, memberId)) : null,
   ])
 
   const counted: TopData = {
@@ -951,7 +963,7 @@ async function siteScreens(
     platforms: pills,
     filter,
     apps: { total: appTotal, matched: appMatched ?? appTotal, rows: [] },
-    works: { total: workMatched, matched: workMatched, rows: [] },
+    works: { total: workMatched ?? workTotal, matched: workMatched ?? workTotal, rows: [] },
     band: (() => {
       const href = listHrefOf(blocks, appTotal, workTotal)
       return href ? { href, app: appTotal, work: workTotal } : null

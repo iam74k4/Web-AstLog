@@ -1594,13 +1594,13 @@ app.get('/blocks', async (c) => {
 const bodyHint = (type: Extract<BlockType, { kind: 'free' }>) => {
   const parts: string[] = [type.hint]
   if ('perScreen' in type) parts.push(`1画面 ${type.perScreen} 件`)
-  if ('maxChars' in type) {
-    parts.push(
-      type.key === 'statement'
-        ? `一文とあわせて ${type.maxChars} 字まで`
-        : `1画面 ${type.maxChars} 字まで`,
-    )
-  }
+  // free 6種はすべて maxChars を持つので、ここは条件で包まない
+  // （1行上の perScreen は statement が持たないので、あちらは本当に分岐する）
+  parts.push(
+    type.key === 'statement'
+      ? `一文とあわせて ${type.maxChars} 字まで`
+      : `1画面 ${type.maxChars} 字まで`,
+  )
   return parts.join(' · ')
 }
 
@@ -1746,10 +1746,17 @@ function screenChars(type: BlockType, body: string): number[] {
   分からないと直しようがないため。
 */
 function blockErrors(
-  type: BlockType,
+  /*
+    free に絞ってあるのは、**安全性のため**。BlockType のまま受けて
+    `'maxChars' in type ? type.maxChars : Infinity` としていたころは、
+    maxChars を持たない free ブロックを足したときに無制限で保存を通し、
+    公開ページで弁が開いて「スクロールしない」が静かに破れた。
+    いまは同じ足し忘れが TS2339 でその場で落ちる。
+  */
+  type: Extract<BlockType, { kind: 'free' }>,
   values: { title: string; body: string },
 ): Record<string, string> | null {
-  const max = 'maxChars' in type ? type.maxChars : Number.POSITIVE_INFINITY
+  const max = type.maxChars
   if (type.key === 'statement') {
     if (!values.title) return { title: '一文を入れてください' }
     if (chars(values.title) > MAX_STATEMENT_SENTENCE) {
@@ -1816,7 +1823,7 @@ app.post('/blocks', async (c) => {
   }
 
   const values = type.kind === 'free' ? readBlockForm(form) : null
-  if (values) {
+  if (type.kind === 'free' && values) {
     const errors = blockErrors(type, values)
     if (errors) {
       return c.html(
