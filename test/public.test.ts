@@ -1,10 +1,12 @@
 import { env } from 'cloudflare:test'
+import markSvg from 'virtual:asset:noctifex-mark.svg'
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { MEMBER_PER_SCREEN } from '../src/blocks'
 import * as schema from '../src/db/schema'
 import { publicRoutes } from '../src/routes/public'
 import { SITE } from '../src/site'
+import { MARK_POINTS } from '../src/ui/icons'
 import { db, get, resetDb, seedItem, seedMember } from './helpers'
 
 beforeEach(resetDb)
@@ -176,6 +178,61 @@ describe('名乗り', () => {
 
     await seedMember({ slug: 'hoshino', name: '星野' })
     expect(await (await get('/members/okazaki')).text()).toContain('worksFor')
+  })
+
+  it('ロゴの7点は1か所が正。配り先がずれたら落とす', async () => {
+    /*
+      三日月の点の列は3か所にある——src/ui/icons.tsx の MARK_POINTS（正）、
+      Layout.tsx の favicon（data URI）、public/assets/noctifex-mark.svg。
+      前の2つは MARK_POINTS から配るので自動でそろうが、**3つめは別ファイル**
+      なので、ここで突き合わせる以外に一致を保つ手が無い。
+
+      ずれても型は黙るし、画面も一見それらしく出る（形が少し違うだけ）。
+    */
+    const html = await (await get('/')).text()
+    // favicon は data URI なので、点の列がそのまま入っている
+    expect(html).toContain(MARK_POINTS)
+
+    /*
+      配っている素材の SVG も同じ列であること。
+
+      **fetch では確かめられない。** workerd では public/ が配られず 404 に
+      なるうえ、その 404 ページ自身がロゴを描いているので、
+      `(await get('/assets/…')).text()` を見る書き方は素通りで緑になる
+      （実際にそう書いて通ってしまった）。ファイルの中身は
+      vitest.config.ts の assetPlugin が渡す。
+    */
+    expect(markSvg).toContain(MARK_POINTS)
+  })
+
+  it('Person の url は、名乗る場所で変わる', async () => {
+    /*
+      同じ Person が3か所に出る——1人のときのサイト自身、器の中の member[]、
+      個人ページ。url だけがそれぞれ違い、**1人ならサイトの origin**（その人が
+      サイト本体）、そうでなければ /members/<slug>。
+
+      「1人なら器は要らない」という設計の要点がこの1行に乗っているのに、
+      取り違えても型は黙るし、@type も name も jobTitle も同じなので
+      見た目でも気づけない。3か所を1本の関数に寄せたので、その1本が
+      正しい url を受け取っているかをここで留める。
+    */
+    const solo = await seedMember()
+    const home = await (await get('/')).text()
+    // 1人：サイト自身がその人。url はサイトの origin
+    expect(home).toContain(`"@type":"Person","name":"${solo.name}"`)
+    expect(home).toContain('"url":"https://noctifex.dev"')
+    expect(home).not.toContain('"url":"https://noctifex.dev/members/okazaki"')
+
+    // 個人ページ：その人の URL
+    const mine = await (await get('/members/okazaki')).text()
+    expect(mine).toContain('"url":"https://noctifex.dev/members/okazaki"')
+
+    // 2人目が公開されると器に戻り、member[] の中では各自の URL を名乗る
+    await seedMember({ slug: 'hoshino', name: '星野' })
+    const org = await (await get('/')).text()
+    expect(org).toContain('"@type":"Organization"')
+    expect(org).toContain('"url":"https://noctifex.dev/members/okazaki"')
+    expect(org).toContain('"url":"https://noctifex.dev/members/hoshino"')
   })
 })
 

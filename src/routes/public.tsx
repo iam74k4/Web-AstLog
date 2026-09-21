@@ -8,6 +8,7 @@ import {
   blockPerScreen,
   blockTexts,
   blockType,
+  blockVisibleParts,
   MEMBER_PER_SCREEN,
 } from '../blocks'
 import {
@@ -134,17 +135,43 @@ const soloMember = (members: schema.Member[]) => (members.length === 1 ? members
   採る側は「誰を採るのか」を探しに来ているので、実体が1人のあいだは
   その人として名乗る。
 */
+/*
+  JSON-LD の Person。name / jobTitle / url の3つが本体。
+
+  同じ形が3か所に手で書いてあった——1人のときのサイト自身、器の中の
+  member[]、個人ページ。CLAUDE.md は肩書きが「Team のカード・<title>・
+  description・JSON-LD の jobTitle に残る」と4か所を守らせているのに、
+  その JSON-LD 側がさらに3つに割れていた。
+
+  **url は既定値を置かず、呼ぶ側が毎回書く。** 1人のときだけ SITE.origin
+  （その人がサイト本体）、それ以外は /members/<slug>。これは「1人なら器は
+  要らない」という設計の要点そのものなので、既定に隠すと取り違えても
+  気づけない。
+
+  extra は description / sameAs / worksFor。渡さなければキーごと出ない
+  （空の配列を名乗らない）。
+*/
+const personJsonLd = (
+  member: Pick<schema.Member, 'name' | 'role'>,
+  url: string,
+  extra?: Record<string, unknown>,
+) => ({
+  '@type': 'Person' as const,
+  name: member.name,
+  jobTitle: member.role,
+  url,
+  ...extra,
+})
+
 const siteJsonLd = (members: schema.Member[]) => {
   const solo = soloMember(members)
   if (solo) {
     return {
       '@context': 'https://schema.org',
-      '@type': 'Person',
-      name: solo.name,
-      jobTitle: solo.role,
-      url: SITE.origin,
-      description: SITE.heroLead,
-      sameAs: [solo.github ?? SITE.github],
+      ...personJsonLd(solo, SITE.origin, {
+        description: SITE.heroLead,
+        sameAs: [solo.github ?? SITE.github],
+      }),
     }
   }
   return {
@@ -154,12 +181,7 @@ const siteJsonLd = (members: schema.Member[]) => {
     url: SITE.origin,
     description: SITE.heroLead,
     sameAs: [SITE.github],
-    member: members.map((member) => ({
-      '@type': 'Person',
-      name: member.name,
-      jobTitle: member.role,
-      url: `${SITE.origin}/members/${member.slug}`,
-    })),
+    member: members.map((member) => personJsonLd(member, `${SITE.origin}/members/${member.slug}`)),
   }
 }
 
@@ -210,9 +232,7 @@ const describe = (text: string) => {
   同じ数え方にそろえる。
 */
 const lineDigest = (key: BlockKey, rows: string[][]) =>
-  rows
-    .map((parts) => (key === 'links' ? parts.filter((_, index) => index !== 1) : parts).join(' '))
-    .join('、')
+  rows.map((parts) => blockVisibleParts(key, parts).join(' ')).join('、')
 
 /*
   カードの実績値（.metric）を説明文に畳む。値・単位・添えの順は、カードに
@@ -346,6 +366,19 @@ function screenOf<T>(rows: T[], perScreen: number, page: number | null) {
   そのまま捨てられる。枚数と中身を同じ関数から出す形は変えないこと——別々に
   数えると、いつか「節は出ないのに URL だけある」画面ができる。
 */
+/*
+  「1行1件」を並べる4つの、列の描き方。ここだけが種類ごとに違う。
+
+  表で持つのは、renderBlock の分岐を1本にするため——行の開き方も画面への
+  割り方も同じものが4本に写っていて、割り方を直すたびに4回直す必要があった。
+*/
+const ROW_LISTS = {
+  now: NowList,
+  numbers: Numbers,
+  links: LinkList,
+  timeline: Timeline,
+} as const
+
 function renderBlock(block: schema.Block, data: TopData, page: number | null): Rendered | null {
   const type = blockType(block.type)
   if (!type) return null
@@ -598,71 +631,26 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
       できた日に、管理画面の数だけが静かに古いままになる。
     */
 
-    case 'now': {
-      const rows = blockLines(type.key, block.body)
-      if (!rows.length) return null
-      const screen = screenOf(rows, perScreen, page)
-      if (!screen) return null
-      return {
-        id,
-        slug: id,
-        pages: screen.pages,
-        nav: title,
-        description: describe(joinParts(title, lineDigest(type.key, screen.rows))),
-        node: (
-          <Screen id={id} label={title} whole={!split}>
-            <SectionHead title={title} h1={split} />
-            <NowList rows={screen.rows} />
-          </Screen>
-        ),
-      }
-    }
+    /*
+      行を並べるだけの4つ。違うのは**列の描き方1つ**（NowList / Numbers /
+      LinkList / Timeline）で、行の開き方・画面への割り方・見出し・説明文・
+      目次の名前はどれも同じだった。4本に写してあったころは、画面の割り方を
+      直すのに同じ直しを4回する必要があり、1つ忘れれば**その節だけ**が
+      古い割り方のまま残る（見た目では分からない）。
 
-    case 'numbers': {
-      const rows = blockLines(type.key, block.body)
-      if (!rows.length) return null
-      const screen = screenOf(rows, perScreen, page)
-      if (!screen) return null
-      return {
-        id,
-        slug: id,
-        pages: screen.pages,
-        nav: title,
-        description: describe(joinParts(title, lineDigest(type.key, screen.rows))),
-        node: (
-          <Screen id={id} label={title} whole={!split}>
-            <SectionHead title={title} h1={split} />
-            <Numbers rows={screen.rows} />
-          </Screen>
-        ),
-      }
-    }
-
-    case 'links': {
-      const rows = blockLines(type.key, block.body)
-      if (!rows.length) return null
-      const screen = screenOf(rows, perScreen, page)
-      if (!screen) return null
-      return {
-        id,
-        slug: id,
-        pages: screen.pages,
-        nav: title,
-        description: describe(joinParts(title, lineDigest(type.key, screen.rows))),
-        node: (
-          <Screen id={id} label={title} whole={!split}>
-            <SectionHead title={title} h1={split} />
-            <LinkList rows={screen.rows} />
-          </Screen>
-        ),
-      }
-    }
-
+      ここに `default` を置かないのは、ブロックの種類を足したときに TS2366 で
+      落ちてほしいから（CLAUDE.md「ブロックの種類を増やす」）。列挙を1か所に
+      まとめても、その性質は変わらない。
+    */
+    case 'now':
+    case 'numbers':
+    case 'links':
     case 'timeline': {
       const rows = blockLines(type.key, block.body)
       if (!rows.length) return null
       const screen = screenOf(rows, perScreen, page)
       if (!screen) return null
+      const List = ROW_LISTS[block.type]
       return {
         id,
         slug: id,
@@ -672,7 +660,7 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
         node: (
           <Screen id={id} label={title} whole={!split}>
             <SectionHead title={title} h1={split} />
-            <Timeline rows={screen.rows} />
+            <List rows={screen.rows} />
           </Screen>
         ),
       }
@@ -1532,15 +1520,13 @@ async function renderMemberScreen(
     description: current.description,
     jsonLd: {
       '@context': 'https://schema.org',
-      '@type': 'Person',
-      name: member.name,
-      jobTitle: member.role,
-      url: `${SITE.origin}/members/${member.slug}`,
-      ...(member.github ? { sameAs: [member.github] } : {}),
-      // 1人のサイトなら器は無い。2人目が公開された日に戻る
-      ...(soloMember(members)
-        ? {}
-        : { worksFor: { '@type': 'Organization', name: SITE.name, url: SITE.origin } }),
+      ...personJsonLd(member, `${SITE.origin}/members/${member.slug}`, {
+        ...(member.github ? { sameAs: [member.github] } : {}),
+        // 1人のサイトなら器は無い。2人目が公開された日に戻る
+        ...(soloMember(members)
+          ? {}
+          : { worksFor: { '@type': 'Organization', name: SITE.name, url: SITE.origin } }),
+      }),
     },
     theme,
     sidebar: (

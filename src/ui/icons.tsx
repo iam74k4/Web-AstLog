@@ -12,6 +12,16 @@
   size は必須。app.css は svg に寸法を与える規則を1つも持たないので、
   渡し忘れると素の 300x150 に落ちて版面が崩れる。
 */
+/*
+  三日月の7点。ここが正。
+
+  同じ列が3か所にある——この MarkIcon、Layout.tsx の favicon（data URI）、
+  public/assets/noctifex-mark.svg。1つめと2つめはここから配り、3つめは
+  別ファイルなので test/public.test.ts が一致を見張る。
+*/
+export const MARK_POINTS =
+  '14.96,2.50 7.71,6.10 5.68,13.93 10.27,20.60 18.32,21.50 12.09,16.78 10.73,9.07'
+
 export const MarkIcon = ({ size }: { size: number }) => (
   <svg
     viewBox="0 0 24 24"
@@ -21,7 +31,7 @@ export const MarkIcon = ({ size }: { size: number }) => (
     aria-hidden="true"
     focusable="false"
   >
-    <polygon points="14.96,2.50 7.71,6.10 5.68,13.93 10.27,20.60 18.32,21.50 12.09,16.78 10.73,9.07" />
+    <polygon points={MARK_POINTS} />
   </svg>
 )
 

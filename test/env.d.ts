@@ -34,3 +34,14 @@ declare module 'virtual:app-css' {
   const css: string
   export default css
 }
+
+/*
+  public/assets/ の素材を中身として読む（vitest.config.ts の assetPlugin）。
+  workerd では public/ が配られないので、fetch では中身を確かめられない
+  ——しかも 404 のページ自身がロゴを描いているため、fetch で見る検査は
+  素通りで緑になる。
+*/
+declare module 'virtual:asset:*' {
+  const content: string
+  export default content
+}

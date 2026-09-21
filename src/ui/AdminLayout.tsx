@@ -8,6 +8,25 @@ import { MarkIcon } from './icons'
   公開ページと違い、ここは見た目のプリセットを当てない。編集する場所の
   見え方まで一緒に変わると、直したのが中身なのか設定なのか分からなくなる。
 */
+/*
+  管理画面の <head>。壁の中（AdminLayout）と外（AdminBare・ログインと初期設定）で
+  1文字も違わなかったので1本にする。noindex も viewport も同じ。
+
+  **props の口はまだ開けない。** 壁の外だけ head を変えたくなったら、
+  ここに1つ足す——呼ぶ側で <head> を書き直さないこと。2枚に戻ると、
+  次に足すメタタグが片方だけに入る。
+*/
+const AdminHead = ({ title }: { title: string }) => (
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="robots" content="noindex" />
+    <title>{title} — Noctifex Admin</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+)
+
 export const AdminLayout = (props: {
   title: string
   active: 'members' | 'items' | 'blocks' | 'appearance'
@@ -16,14 +35,7 @@ export const AdminLayout = (props: {
   children?: Child
 }) => (
   <html lang="ja">
-    <head>
-      <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-      <meta name="color-scheme" content="dark" />
-      <meta name="robots" content="noindex" />
-      <title>{props.title} — Noctifex Admin</title>
-      <link rel="stylesheet" href="/app.css" />
-    </head>
+    <AdminHead title={props.title} />
     <body>
       <div class="admin-shell">
         <aside class="admin-nav">
@@ -68,14 +80,7 @@ export const AdminLayout = (props: {
 
 export const AdminBare = (props: { title: string; children?: Child }) => (
   <html lang="ja">
-    <head>
-      <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-      <meta name="color-scheme" content="dark" />
-      <meta name="robots" content="noindex" />
-      <title>{props.title} — Noctifex Admin</title>
-      <link rel="stylesheet" href="/app.css" />
-    </head>
+    <AdminHead title={props.title} />
     <body class="admin--bare">{props.children}</body>
   </html>
 )

@@ -206,6 +206,22 @@ export function blockTexts(body: string): string[] {
   return paragraphs(body)
 }
 
+/*
+  1行のうち、本文として出る列だけを残す。
+
+  リンク集の2列目は URL で、href にはなるが本文には出ない。だから
+  説明文に畳むとき（public.tsx の lineDigest）も字数を数えるとき
+  （admin.tsx の screenChars）も、そこは外す。その規則が2か所に別々に
+  書いてあった——このファイルは「開く式は blockLines / blockTexts /
+  blockUnitCount が1本の正」と宣言しているのに、ここだけ漏れていた。
+
+  **つなぐ文字は共有しない。** 説明文は ' ' で、字数は '' で畳む。
+  ここで持つのは「どの列が本文か」までで、そこから先は呼ぶ側の都合。
+*/
+export function blockVisibleParts(key: BlockKey, parts: string[]): string[] {
+  return key === 'links' ? parts.filter((_, index) => index !== 1) : parts
+}
+
 // その中身が何単位あるか。画面の数を数えるだけの側（管理画面）はこれで足りる
 export function blockUnitCount(key: BlockKey, body: string): number {
   return key === 'note' ? blockTexts(body).length : blockLines(key, body).length

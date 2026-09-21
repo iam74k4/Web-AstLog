@@ -29,9 +29,31 @@ const appCssPlugin = (): Plugin => ({
   },
 })
 
+/*
+  public/ に置いた素材を、テストから中身として読む。
+
+  workerd の中では public/ が配られない（実測で /assets/… は 404）。しかも
+  404 のページ自身がロゴを描いているので、「素材を fetch して中身を見る」
+  検査は**素通りで緑になる**——実際にそう書いて、通ってしまった。
+  ファイルを読むのはここ（Node 側）しかない。
+*/
+const ASSET = 'virtual:asset:'
+
+const assetPlugin = (): Plugin => ({
+  name: 'noctifex:asset',
+  resolveId: (id) => (id.startsWith(ASSET) ? `\0${id}` : null),
+  load(id) {
+    if (!id.startsWith(`\0${ASSET}`)) return null
+    const file = `./public/assets/${id.slice(`\0${ASSET}`.length)}`
+    this.addWatchFile(file)
+    return `export default ${JSON.stringify(readFileSync(file, 'utf8'))}`
+  },
+})
+
 export default defineConfig({
   plugins: [
     appCssPlugin(),
+    assetPlugin(),
     cloudflareTest({
       singleWorker: true,
       wrangler: { configPath: './wrangler.toml' },

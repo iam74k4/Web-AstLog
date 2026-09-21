@@ -1,6 +1,7 @@
 import type { Child } from 'hono/jsx'
 import { SITE } from '../site'
 import type { Theme } from '../theme'
+import { MARK_POINTS } from './icons'
 
 export type NavItem = { href: string; label: string; active?: boolean }
 
@@ -77,7 +78,7 @@ export const Layout = (props: {
 
       <link
         rel="icon"
-        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%230c0c0e'/%3E%3Cpolygon points='14.96,2.50 7.71,6.10 5.68,13.93 10.27,20.60 18.32,21.50 12.09,16.78 10.73,9.07' fill='%23f2f2f4'/%3E%3C/svg%3E"
+        href={`data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%230c0c0e'/%3E%3Cpolygon points='${MARK_POINTS}' fill='%23f2f2f4'/%3E%3C/svg%3E`}
       />
       <link rel="stylesheet" href="/app.css" />
       {props.jsonLd ? (

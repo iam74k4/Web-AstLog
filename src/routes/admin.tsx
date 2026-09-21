@@ -13,6 +13,7 @@ import {
   blockTexts,
   blockType,
   blockUnitCount,
+  blockVisibleParts,
   DEFAULT_BLOCKS,
   isBlockKey,
   MAX_CHARS,
@@ -1730,9 +1731,7 @@ function screenChars(type: BlockType, body: string): number[] {
   const units =
     type.key === 'note'
       ? blockTexts(body)
-      : blockLines(type.key, body).map((parts) =>
-          (type.key === 'links' ? parts.filter((_, index) => index !== 1) : parts).join(''),
-        )
+      : blockLines(type.key, body).map((parts) => blockVisibleParts(type.key, parts).join(''))
   return chunk(units, perScreen).map((screen) => screen.reduce((sum, text) => sum + chars(text), 0))
 }
 
