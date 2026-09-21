@@ -163,7 +163,7 @@ export const MAX_CHARS = {
 
 export type BlockType = (typeof BLOCK_TYPES)[number]
 export type BlockKey = BlockType['key']
-export type FixedBlockKey = Extract<BlockType, { kind: 'fixed' }>['key']
+type FixedBlockKey = Extract<BlockType, { kind: 'fixed' }>['key']
 
 export const BLOCK_KEYS = BLOCK_TYPES.map((type) => type.key) as [BlockKey, ...BlockKey[]]
 

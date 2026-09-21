@@ -31,9 +31,9 @@ export const TYPEFACES = [
   { key: 'mono', label: '等幅', note: '見出しだけ等幅にする' },
 ] as const
 
-export type LayoutKey = (typeof LAYOUTS)[number]['key']
-export type AccentKey = (typeof ACCENTS)[number]['key']
-export type TypefaceKey = (typeof TYPEFACES)[number]['key']
+type LayoutKey = (typeof LAYOUTS)[number]['key']
+type AccentKey = (typeof ACCENTS)[number]['key']
+type TypefaceKey = (typeof TYPEFACES)[number]['key']
 
 export type Theme = {
   layout: LayoutKey
@@ -44,8 +44,9 @@ export type Theme = {
 export const THEME_KEYS = ['layout', 'accent', 'typeface'] as const
 export type ThemeKey = (typeof THEME_KEYS)[number]
 
-// 何も選んでいないサイトの姿。テストとフォームの初期値もここを見る
-export const THEME_DEFAULT: Theme = { layout: 'rail', accent: 'iris', typeface: 'sans' }
+// 何も選んでいないサイトの姿。読むのは下の pick だけ
+// （テストは 'rail' 等を生で書いているので、ここを変えてもテストは追随しない）
+const THEME_DEFAULT: Theme = { layout: 'rail', accent: 'iris', typeface: 'sans' }
 
 export type PresetOption = { key: string; label: string; note: string }
 

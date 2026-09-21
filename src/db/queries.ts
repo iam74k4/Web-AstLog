@@ -35,7 +35,7 @@ export type ItemScope = { platformKey?: string | null; memberId?: number | null 
   1画面ぶんだけを引くための範囲。limit と offset は必ず対で渡すこと。
   offset だけでは SQL に載らず、静かに1画面目が出る。
 */
-export type ItemSlice = ItemScope & { limit?: number; offset?: number }
+type ItemSlice = ItemScope & { limit?: number; offset?: number }
 
 const itemsWhere = (type: 'app' | 'work', scope: ItemScope) =>
   and(

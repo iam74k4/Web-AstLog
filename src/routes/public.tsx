@@ -794,7 +794,6 @@ type BlockScreen = {
   slug: string
   nav: string | null
   page: number
-  pages: number
 }
 
 function screenList(blocks: schema.Block[], data: TopData): BlockScreen[] {
@@ -809,7 +808,7 @@ function screenList(blocks: schema.Block[], data: TopData): BlockScreen[] {
     const first = renderBlock(block, data, 1)
     if (!first) continue
     for (let page = 1; page <= first.pages; page += 1) {
-      screens.push({ block, slug: first.slug, nav: first.nav, page, pages: first.pages })
+      screens.push({ block, slug: first.slug, nav: first.nav, page })
     }
   }
   return screens
