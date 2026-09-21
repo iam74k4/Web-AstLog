@@ -150,7 +150,7 @@ public/
   app.css            全画面のスタイル。値は :root のトークンだけで決める
                      骨格・色・書体のプリセットもここ（[data-layout] など）
                      末尾の「画面に収める外枠」が no-scroll を作る
-  assets/            ロゴとアバター
+  assets/            ロゴ・アバター・入口の月（moon.avif / moon.webp）
                      ※ ここに robots.txt や sitemap.xml を置かないこと。
                        public/ は Worker より先に配られるので、置くと
                        Worker が組み立てているほうが静かに届かなくなる
@@ -159,6 +159,8 @@ scripts/
   check-contrast.mjs npm run check:contrast の中身。月の上の文字を画素で測る
   moon/              入口の月。render.py が Blender で焼き、pack.py が配信用に詰める
                      配るのは無彩色の三日月だけ。光暈は app.css が --accent から描く
+  lib/               上の2本の共通部分。dev サーバの立て方（dev-server.mjs）と
+                     src/theme.ts の読み方（theme.mjs）。写しを2本持たない
 drizzle/             生成されたマイグレーション（手で書かない）
 test/                workerd 上で動くテスト
 docs/                画面一覧と画面遷移図

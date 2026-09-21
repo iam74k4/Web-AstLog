@@ -22,10 +22,12 @@
 # 三日月を焼き直す — 採る作り方・render.py の差し替え・測った数
 
 測定はすべて自分で焼き直して取った。Blender 5.2.1 LTS、EEVEE、1400px、64 サンプル。
-焼いた実物・測定スクリプトは
-`/private/tmp/claude-501/-Users-iam74k4-Git-Noctifex--claude-worktrees-local-behavior-check-b1183e/27aec1ff-885d-4438-a244-2beebdfb2bae/scratchpad/final2/` に置いてある。
-差し替える2ファイルは
-`.../scratchpad/render.py.new` と `.../scratchpad/pack.py.new`（そのまま動く）。
+
+焼いた実物と測定スクリプトはセッションの作業場に置いてあっただけなので、**もう無い**
+（消えるところに置いた）。差し替える2ファイルとして書いてあったものは、そのまま
+`scripts/moon/render.py`（preset `final`）と `scripts/moon/pack.py` に入っている
+——読むならそちらが正。この文書に残っているのは、そこへ至った測定と、
+**採らなかった4案がどう崩れたか**のほう。
 
 ---
 
@@ -64,7 +66,7 @@
 消えるのは `inset()` / `SHELLS` / `make_shell()`（ボクセル remesh）/ パーティクルシステム一式（`emit_from="VOLUME"` `distribution="RAND"` `particle_size` `size_random` `spark` `swirl` `lit`）/ Cycles の霧の箱 / DOF。
 残すのは引数の受け取り・`MARK`・レンダー設定（`AgX`・`film_transparent`・PNG RGBA）だけ。
 
-差し替え後の全文は `.../scratchpad/render.py.new`（325 行、そのまま `scripts/moon/render.py` に置ける）。中身の要点だけ引く。
+差し替え後の全文は、いまの `scripts/moon/render.py` がそれ（当時の下書きは消えるところに置いたので残っていない）。中身の要点だけ引く。
 
 ### (a) 設計の数 — すべて「配信実画素」で持つ
 
@@ -137,7 +139,7 @@ def lattice():
     return pts
 ```
 
-`inside()` `edge_dist()` `smoothstep()` は fold4.py のものをそのまま（`render.py.new` に入っている）。
+`inside()` `edge_dist()` `smoothstep()` は fold4.py のものをそのまま（いまの `render.py` に入っている）。
 
 ### (c) 点は実体の四角＋頂点カラー（粒子システムは使わない）
 
@@ -216,10 +218,19 @@ img = img.resize((width, height), Image.BOX)         # was Image.LANCZOS
 
 ```
 public/app.css         --moon-ratio: 325 / 480;  →  --moon-ratio: 373 / 574;
-src/ui/components.tsx  width="325" height="480"  →  width="373" height="574"
 ```
 
-`--moon-ink: 0.70` は**動かさない**。コメントの導出（「地は 140/255 まで」「実効最大 180 → 0.78 まで上げられる → 書体差を引いて 0.70」）が、新しい素材でもそのまま成り立つように `GAIN` を選んである（実効最大 **184**）。
+> **この節はこのあと変わった。** 当時は絵を `<img>` で貼っていたので
+> `src/ui/components.tsx` にも `width` / `height` があり、2か所に同じ数を写す
+> 必要があった。いまは CSS の `mask-image` で抜くので、マークアップ側に寸法は
+> 無い（`<span class="moon__mark" />` だけ）。**写す先は `--moon-ratio` 1か所。**
+> 素材と `--moon-ratio` の食い違いは `npm run check:contrast` が見る。
+>
+> `--moon-ink` も **0.70 ではなく 0.52**。下の導出（「地は 140/255 まで」
+> 「実効最大 180 → 0.78 → 書体差を引いて 0.70」）は、色を載せる前の
+> 無彩色の月の話。いまは `--moon-tint` で `--accent` を混ぜたぶんだけ明るい側に
+> 寄るので、その手前で止めてある。数はどちらも `npm run check:contrast` が
+> 実測で押さえているので、**導出ではなく検査を信じること**。
 
 ### 焼いた結果（全部自分で測った数）
 
@@ -234,7 +245,7 @@ src/ui/components.tsx  width="325" height="480"  →  width="373" height="574"
 | 焼いた絵のクリップ（≥250/255） | 0.00% | **0.00%**（最大 184） |
 | 彩度（点の上のチャンネル差） | — | **最大 1/255**（＝丸め誤差。無彩色） |
 | 素材の実効最大 → `× --moon-ink 0.70` | 180 → 126 | **184 → 128.8**、140 超えは **0.00%** |
-| 素材の寸法 / 大きさ | 325x480 / avif 12KB | 373x574 / **avif 23KB・webp 42KB** |
+| 素材の寸法 / 大きさ | 325x480 / avif 12KB | 373x574 / **avif 19KB・webp 29KB** |
 | 点の数 / 焼き時間 | 140000 粒 | **1404 点 / 1.1 秒**（EEVEE 1400px 64 サンプル） |
 
 ---
@@ -282,16 +293,17 @@ $B -b -P scripts/moon/render.py -- /tmp/moon.png 1400 64
 # 3) 配信用に詰める（丈 574。ここで無彩色と透過が確定する）
 python3 scripts/moon/pack.py /tmp/moon.png public/assets
 #    → "size: 373x574  (--moon-ratio: 373 / 574)" が出る。
-#      この2つの数を public/app.css の --moon-ratio と
-#      src/ui/components.tsx の width/height に**必ず**写す
+#      この数を public/app.css の --moon-ratio に**必ず**写す
+#      （写す先はここ1か所。マークアップに寸法は無い）
 
 # 4) 検査
-npm run test            # theme.test.ts が --moon-ratio と width/height の食い違いを見る
-npm run check:contrast  # 60通り。--moon-ink 0.70 の上で見出しが 3:1 を保つか
+npm run check:contrast  # 60通り。見出しが 3:1・リード文が 4.5:1 を保つか。
+                        #   素材と --moon-ratio の食い違いもここで落ちる
+                        #   （絵の寸法を知るには復号が要り、workerd にその手が無い）
 npm run check:fit       # 月そのものは版面を動かさないが、素材を差し替えたら一応
 ```
 
-**Cycles は使わない。** `-- /tmp/moon.png 1400 64 cycles` でも動く（`render.py.new` は分岐を残してある）が、焼き比べると配信素材の IoU 0.913 対 0.912、格子の山も同じで、**時間だけ 1.1 秒 → 7.9 秒**。しかもデノイズの残りで彩度が 1/255 → 9/255 に上がる。霧をやめたので Cycles を使う理由が無くなった。
+**Cycles は使わない。** `-- /tmp/moon.png 1400 64 cycles` でも動く（`render.py` は分岐を残してある）が、焼き比べると配信素材の IoU 0.913 対 0.912、格子の山も同じで、**時間だけ 1.1 秒 → 7.9 秒**。しかもデノイズの残りで彩度が 1/255 → 9/255 に上がる。霧をやめたので Cycles を使う理由が無くなった。
 
 ---
 
@@ -307,8 +319,8 @@ npm run check:fit       # 月そのものは版面を動かさないが、素材
 
 ### そのほか
 
-- **`--moon-ratio` と `components.tsx` の width/height を直し忘れると `test/theme.test.ts` が落ちる。** 325/480 → 373/574。光暈（`--moon-glow`）はこの箱を基準に広がるので、直さないと光の形もずれる。
-- **コントラストの余裕が薄い。** 素材の実効最大 184 → `× 0.70` = 128.8 で、上限 140 まで 11 しか無い。そこへブラウザ側の拡縮が乗る。自分のモデルで測ると、bilinear 相当なら DPR2 132 / DPR1 119 で問題無いが、Lanczos 相当の行き過ぎを想定すると DPR1 で 151（画素の 0.12%）まで出る。**`npm run check:contrast` を通すまで「通った」と言わないこと。** 落ちたら `GAIN` を 0.17 → 0.14 に下げる（実効最大 176。構造は変わらない——AgX の肩が効くので、`GAIN` を 1.0 から 0.22 へ 5倍落としても実効最大は 231 → 188 にしか動かない。落ちるのは暗いほう）。
-- **素材が太る。** avif 12KB → 23KB、webp 32KB → 42KB。丈を 480 → 574 に上げたぶん。入口の1枚なので許容範囲だと思うが、決めるのは持ち主。
+- **`--moon-ratio` を直し忘れると絵だけが箱の中で潰れる。** 325/480 → 373/574。光暈（`--moon-glow`）はこの箱を基準に広がるので、直さないと光の形だけが元のまま残る。見張っているのは `npm run check:contrast`（当時は `<img>` の width/height と突き合わせる `test/theme.test.ts` だった——いまマークアップに寸法は無い）。
+- **コントラストの余裕が薄い。** 素材の実効最大 184 → `× 0.70` = 128.8 で、上限 140 まで 11 しか無い。そこへブラウザ側の拡縮が乗る。自分のモデルで測ると、bilinear 相当なら DPR2 132 / DPR1 119 で問題無いが、Lanczos 相当の行き過ぎを想定すると DPR1 で 151（画素の 0.12%）まで出る。**`npm run check:contrast` を通すまで「通った」と言わないこと。** 落ちたら preset `final` の `gain`（1.05）を下げる（当時の見積もりでは 0.17 → 0.14 で実効最大 176。構造は変わらない——AgX の肩が効くので、`GAIN` を 1.0 から 0.22 へ 5倍落としても実効最大は 231 → 188 にしか動かない。落ちるのは暗いほう）。
+- **素材が太る。** avif 12KB → 19KB、webp 32KB → 29KB（丈を 480 → 574 に上げたぶん。のちに `AVIF_Q, WEBP_Q = 45, 72` へ落として webp は元より軽くなった）。入口の1枚なので許容範囲だと思うが、決めるのは持ち主。
 - **1024x768 の center は、196x287 より**ずっと**小さい。** `--moon-h: 45%` はパネル高に対する割合で、そこはパネルが 810x366 なので月は **165 CSS px 丈 = 107x165**。196x287 の約 0.57 倍で、DPR1 なら格子の間隔が 2.8px まで落ちる。設計はしていない寸法なので、そこがどう見えるかは実際に見て決めること（`check:contrast` はこの窓を測っているが、「読めるか」は測っていない）。
 - **「畳まれた面」は出ていない。** 上の 3 に書いたとおり、出ているのは1枚の折れた面まで。参照と並べれば違いは分かる。いまの寸法で取れる最善だと考えているが、そこが不満なら話は「月をどれだけ大きく出すか」に戻る。

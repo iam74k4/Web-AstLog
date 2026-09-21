@@ -12,9 +12,11 @@ export type NavItem = { href: string; label: string; active?: boolean }
   og:image が無いと、貼った先は灰色の箱か文字だけの行になり、画面が7つに
   分かれたいまはどの画面を貼っても同じ無地のカードになっていた。
 
-  素材はリポジトリにある public/assets/avatar.png。raster はこれ1枚しか
-  無い——noctifex-mark.svg と noctifex-wordmark.svg は SVG で、貼り先の
-  どれも og:image の SVG を読まない（Slack / LinkedIn / X）。
+  素材はリポジトリにある public/assets/avatar.png。og:image に出せる raster は
+  これ1枚——ロゴ（noctifex-mark.svg / noctifex-wordmark.svg）は SVG で、貼り先の
+  どれも og:image の SVG を読まない（Slack / LinkedIn / X）。入口の月
+  （moon.avif / moon.webp）は raster だが、無彩色の三日月を CSS の
+  mask-image で抜くための素材なので、そのまま貼ると絵にならない。
   144x144 は og:image の推奨（1200x630）に届かないので、出るのは大きな
   カードではなく小さな正方形のサムネイル。だから twitter:card は summary
   のままにしてある（summary_large_image にすると、横長の枠に 144px の絵を
