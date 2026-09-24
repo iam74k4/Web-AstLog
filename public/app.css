@@ -220,10 +220,13 @@
   /*
     夜の地。OS の設定に関わらずこの配色を既定にする。
 
+    地は色味を持たない黒にする。紫や青に寄せると、面も文字も全部その色に
+    染まって見え、アクセントを変えても画面の印象が変わらなくなる。
+
     面は不透明な色で塗らず、白をうっすら重ねて作る（ゴースト）。線はほとんど
     見えないくらいに弱くし、代わりに上辺へ 1px の光（--highlight）を入れて面を立たせる
   */
-  --bg: #120f17;
+  --bg: #0c0c0e;
   --surface: rgba(255, 255, 255, 0.04);
   --surface-hover: rgba(255, 255, 255, 0.07);
   --line: rgba(255, 255, 255, 0.07);
@@ -233,10 +236,10 @@
   --ink-mid: #b4b4c2;
   --ink-weak: #8a8a96;
   /* アクセントの候補。どれを使うかは管理画面の「見た目」で選ぶ */
-  --violet: #b58cf8;
-  --violet-soft: rgba(181, 140, 248, 0.16);
   --iris: #8f8ff5;
   --iris-soft: rgba(143, 143, 245, 0.13);
+  --violet: #b58cf8;
+  --violet-soft: rgba(181, 140, 248, 0.16);
   --ember: #e8a15c;
   --ember-soft: rgba(232, 161, 92, 0.14);
   --mint: #5fd0ab;
@@ -246,8 +249,8 @@
   --rose: #f0899f;
   --rose-soft: rgba(240, 137, 159, 0.13);
 
-  --accent: var(--violet);
-  --accent-soft: var(--violet-soft);
+  --accent: var(--iris);
+  --accent-soft: var(--iris-soft);
   --accent-ink: #12121a;
   --danger: #e5848a;
   --danger-soft: rgba(229, 132, 138, 0.14);
@@ -2608,14 +2611,14 @@ main {
   body だけでなく要素単位でも効かせる。管理画面の見本が、同じ指定で
   そのまま色を出せるようにするため（見本用の色を別に持たない）。
 */
-[data-accent='violet'] {
-  --accent: var(--violet);
-  --accent-soft: var(--violet-soft);
-}
-
 [data-accent='iris'] {
   --accent: var(--iris);
   --accent-soft: var(--iris-soft);
+}
+
+[data-accent='violet'] {
+  --accent: var(--violet);
+  --accent-soft: var(--violet-soft);
 }
 
 [data-accent='ember'] {

@@ -18,8 +18,8 @@ export const LAYOUTS = [
 ] as const
 
 export const ACCENTS = [
-  { key: 'violet', label: 'ヴァイオレット', note: '宵の紫' },
   { key: 'iris', label: 'アイリス', note: '夜の青紫' },
+  { key: 'violet', label: 'ヴァイオレット', note: '宵の紫' },
   { key: 'ember', label: 'エンバー', note: '熾火の橙' },
   { key: 'mint', label: 'ミント', note: '夜明けの緑' },
   { key: 'sky', label: 'スカイ', note: '薄明の青' },
@@ -47,7 +47,7 @@ export type ThemeKey = (typeof THEME_KEYS)[number]
 
 // 何も選んでいないサイトの姿。読むのは下の pick だけ
 // （テストは 'rail' 等を生で書いているので、ここを変えてもテストは追随しない）
-const THEME_DEFAULT: Theme = { layout: 'rail', accent: 'violet', typeface: 'sans' }
+const THEME_DEFAULT: Theme = { layout: 'rail', accent: 'iris', typeface: 'sans' }
 
 export type PresetOption = { key: string; label: string; note: string }
 

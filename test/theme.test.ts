@@ -18,7 +18,7 @@ describe('見た目のプリセット', () => {
   it('何も選んでいなければ既定の姿で出す', async () => {
     const html = await (await get('/')).text()
     expect(html).toContain('data-layout="rail"')
-    expect(html).toContain('data-accent="violet"')
+    expect(html).toContain('data-accent="iris"')
     expect(html).toContain('data-typeface="sans"')
   })
 
@@ -57,7 +57,7 @@ describe('見た目のプリセット', () => {
     // 1つでも知らなければ、まとめて受け取らない
     const html = await (await get('/')).text()
     expect(html).toContain('data-layout="rail"')
-    expect(html).toContain('data-accent="violet"')
+    expect(html).toContain('data-accent="iris"')
   })
 
   it('DB に知らない値が入っていても既定に戻して描く', async () => {
