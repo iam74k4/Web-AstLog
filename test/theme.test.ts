@@ -627,8 +627,19 @@ describe('部品の作法', () => {
     expect(bodyOf(sheet, '.hero {')).toContain('padding-block: var(--sp-3) var(--enter-shift)')
   })
 
-  it('三日月はパネルからはみ出させない。はみ出すと先が縦一直線に途切れて見える', () => {
-    expect(sheet).toMatch(/--moon-cut:\s*0%?;/)
+  it('三日月も光暈もパネルからはみ出させない。はみ出すと縦一直線に途切れて見える', () => {
+    /*
+      左へ寄せる量（--moon-shift）が、光暈が右へ広がる量より小さいと、光暈が
+      パネルの右端で断ち切られる。0 以上（右へ出す）なら三日月そのものが切れる
+    */
+    const root = blockAt(sheet, ':root {')
+    const shift = Number(root.match(/--moon-shift:\s*(-?[\d.]+)%/)?.[1])
+    const [, glowRight] = (root.match(/--moon-glow-inset:([^;]*);/)?.[1] ?? '')
+      .trim()
+      .split(/\s+/)
+      .map((part) => Number.parseFloat(part))
+    expect(shift).toBeLessThan(0)
+    expect(-shift).toBeGreaterThanOrEqual(-(glowRight ?? 0))
   })
 
   it('技術の小見出しは、見出しに上げても太さを変えない', () => {
@@ -840,8 +851,8 @@ describe('入口の月', () => {
       広い画面では月が丸ごと外へ出る。translate の % だけが自分の幅を見る。
     */
     const mark = bodyOf(sheet, '.moon__mark {')
-    expect(mark).toContain('translate: var(--moon-cut)')
-    expect(mark).not.toMatch(/margin-right|right:\s*var\(--moon-cut\)/)
+    expect(mark).toContain('translate: var(--moon-shift)')
+    expect(mark).not.toMatch(/margin-right|right:\s*var\(--moon-shift\)/)
   })
 
   it('月あかりの色は使う場所で解く。:root で焼き付けない', () => {
