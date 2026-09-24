@@ -590,11 +590,11 @@ describe('部品の作法', () => {
   it('個人ページの名乗りは、要素とクラスの両方で段を下げる', () => {
     /*
       この見出しは <h1 class="hero__headline">。素の .hero__headline（0,1,0）
-      では .hero h1（0,1,1）に負け、大見出しの --fs-display-xl を継ぐ。落ちても
+      では .hero h1（0,1,1）に負け、大見出しの --fs-display を継ぐ。落ちても
       エラーは出ず、変わるのは「名乗りだけが画面の高さを食う」という結果だけ。
     */
     expect(bodyOf(sheet, '.hero h1.hero__headline {')).toContain('font-size: var(--fs-display-sm)')
-    expect(bodyOf(sheet, '.hero h1 {')).toContain('font-size: var(--fs-display-xl)')
+    expect(bodyOf(sheet, '.hero h1 {')).toContain('font-size: var(--fs-display)')
 
     /*
       素の .hero__headline は置かない。付く先は必ず .hero の直接の子の h1 で、
