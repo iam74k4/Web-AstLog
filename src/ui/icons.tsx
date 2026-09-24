@@ -49,6 +49,13 @@ export const PencilIcon = () => (
   </svg>
 )
 
+// 別のタブで開くもの（公開ページへ）
+export const ExternalIcon = () => (
+  <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false" {...stroke}>
+    <path d="M9 3h4v4M13 3L7.5 8.5M11 9.5V13H3V5h3.5" />
+  </svg>
+)
+
 export const TrashIcon = () => (
   <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false" {...stroke}>
     <path d="M3 4h10M6 4V2.5h4V4M4.5 4l.5 9h6l.5-9" />

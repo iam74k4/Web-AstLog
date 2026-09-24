@@ -1706,6 +1706,11 @@ main {
   box-shadow: var(--highlight);
 }
 
+/* 動かした・直した行。戻ってきたときに、どれを触ったかが分かるように */
+.row:target {
+  border-color: var(--accent);
+}
+
 .row__main {
   display: flex;
   flex-direction: column;

@@ -40,6 +40,7 @@ flowchart LR
     Item -->|"目次（戻る道はこれだけ）"| Screen
 
     Screen -->|"Team のカード / Profile ↗"| Profile
+    Screen -->|"カードの担当者名（2人以上、または Team が無いとき）"| Profile
     Profile -->|"左上のロゴ"| Top
     Profile -->|"ページャ 次 → / 目次"| MScreen
     MScreen -->|"ページャ ← 前（1枚目は目次に無い）"| Profile
@@ -78,6 +79,18 @@ flowchart LR
 戻る道は目次だけ。一覧のカードの題がここへのリンクで、出る条件は「その作品が
 公開中」の1つだけ——Apps の節を外しても、貼られたリンクは死なない。
 
+「構成」で節を外しても、行き止まりを作らない。
+
+- 帯（入口と個人ページの1枚目）は、**置いてある節のぶんだけ**数えて送る。Apps と
+  Works を両方外したサイトでは帯ごと出さない。Works だけ外したなら件数も
+  `Apps 2` だけ
+- カードの担当者名（個人ページへのリンク）は、2人以上いるとき**か、Team を
+  置いていないとき**に出す。Team が無いと、トップから個人ページへ行く道が
+  ほかに1本も無い。作品1件のページの「担当」も同じ条件
+- `?member=` は名前のピルが並ぶとき（2人以上）だけ効く。1人のサイトでは読まず、
+  個人ページの帯も付けない。効かせると「すべて」にも名前にも印が付かないまま
+  一覧だけが絞られる
+
 全体ページ（`/all`）へは、柱の足元の「全体を1ページで見る ↗」から行く。899 以下では
 足元ごと畳まれるので、スマホの幅では画面から消える（`sitemap.xml` には載る）。
 管理画面の「構成」からも同じ1本が開く。印刷・Ctrl-F・翻訳・全体の点検のための
@@ -105,45 +118,63 @@ flowchart TD
     Look["見た目<br>GET /admin/appearance"]
     Public["公開ページ<br>/ ・ /all"]
 
-    Login -->|"POST /admin/login<br>成功 → 303"| Members
+    Login -->|"POST /admin/login<br>成功 → 303（?next= があればそこへ）"| Members
     Members <-->|"左ナビ"| Items
     Items <-->|"左ナビ"| Blocks
     Blocks <-->|"左ナビ"| Look
 
-    Blocks -->|"↑↓ POST /:id/move → 303"| Blocks
-    Blocks -->|"公開/下書き POST /:id/publish → 303"| Blocks
-    Blocks -->|"足す（決まった中身）<br>POST /admin/blocks → 303"| Blocks
+    Blocks -->|"↑↓ POST /:id/move → 303 #block-id"| Blocks
+    Blocks -->|"公開/下書き POST /:id/publish → 303 #block-id"| Blocks
+    Blocks -->|"足す（決まった中身）<br>POST /admin/blocks → 303 #block-id"| Blocks
     Blocks -->|"サイトを見る ↗ / 全体を1ページで見る ↗"| Public
+    Members -->|"サイトで見る ↗（公開中の行）"| Public
     Blocks -->|"足す（打ち込む）/ 編集"| BForm
-    BForm -->|"POST → 303 ?saved=1"| Blocks
+    BForm -->|"POST → 303 ?saved=1 / ?saved=draft"| Blocks
     BForm -->|"入力エラー → 400"| BForm
     Blocks -->|"外す"| BDel
+    BForm -->|"外す"| BDel
     BDel -->|"POST → 303 ?deleted=1"| Blocks
+    BDel -->|"キャンセル（編集から来たら編集へ）"| BForm
     Look -->|"POST → 303 ?saved=1<br>選べない値なら 400"| Look
 
     Members -->|"＋ Add / 編集"| MForm
-    MForm -->|"POST → 303 ?saved=1"| Members
+    MForm -->|"POST → 303 ?saved=1 / ?saved=draft"| Members
     MForm -->|"キャンセル"| Members
     MForm -->|"入力エラー → 400<br>打った内容は残したまま描き直す"| MForm
 
     Items -->|"＋ Add / 編集"| IForm
-    IForm -->|"POST → 303 ?saved=1"| Items
+    IForm -->|"POST → 303 ?saved=1 / ?saved=draft"| Items
     IForm -->|"キャンセル"| Items
     IForm -->|"入力エラー → 400"| IForm
 
     Members -->|"ゴミ箱"| MDel
+    MForm -->|"削除"| MDel
     MDel -->|"POST → 303 ?deleted=1"| Members
-    MDel -->|"キャンセル"| Members
+    MDel -->|"キャンセル（来た画面へ）"| Members
 
     Items -->|"ゴミ箱"| IDel
+    IForm -->|"削除"| IDel
     IDel -->|"POST → 303 ?deleted=1"| Items
-    IDel -->|"キャンセル"| Items
+    IDel -->|"キャンセル（来た画面へ）"| Items
 ```
 
 保存が必ず 303 リダイレクトで終わるので、リロードしても二重に登録されない。
 
+左ナビの足元の「サイトを見る ↗」は、どの画面からも公開ページを別タブで開く。
+
+下書きで保存したときは `?saved=draft` を返し、「下書きで保存しました。サイトには
+まだ出ていません」と言い分ける。「保存しました」だけだと、サイトに出たと思われる。
+書くブロック（ひとこと・数字 …）もメンバー・項目と同じく下書きから始める。
+
+削除の確認は、来た画面へキャンセルで戻す。編集フォームの「削除」から来たときは
+`?from=edit` が付いていて、キャンセルで編集フォームへ戻る（一覧へ飛ばすと、
+直しかけていた行を探し直すことになる）。
+
 構成の ↑↓ と「公開／下書き」は、行ごとの小さなフォーム。1回押すごとに1つ動いて
 一覧に戻る。ドラッグ&ドロップにしないのは、JavaScript を増やさないため。
+戻り先には `#block-<id>` を付け、触った行へ着地させる（行の枠がアクセント色になる）。
+足したブロックは Contact の手前に入る——末尾に付けると締めの連絡先の後ろに
+来てしまい、↑ を何度も押して運ぶことになる。
 
 公開／下書きの切り替えと、「公開する」を外した保存は、中身の長さを検査しない。
 検査すると、上限より前に保存された長い中身を持つ行が「引っ込めることすらできない」
@@ -169,7 +200,7 @@ flowchart TD
 
     Any --> Check
     Check -->|"はい"| Admin
-    Check -->|"いいえ → 303"| Login
+    Check -->|"いいえ → 303 ?next=開いた画面"| Login
     Login -->|"POST"| Rate
     Rate -->|"はい → 429"| Login
     Rate -->|"いいえ"| Verify
@@ -183,6 +214,8 @@ flowchart TD
 - 失敗の回数は KV に 15 分の期限付きで置く。厳密な回数制限ではなく、総当たりを
   鈍らせるためのもの
 - `POST` は Origin も確認する。ログイン・ログアウト・初期設定も対象
+- ログインし直したら `?next=` の画面へ戻す。受け付けるのは `/admin/` の中だけで、
+  外の URL・`//`・`..`・ログインやログアウト自身は捨てて `/admin/members` へ送る
 
 ## 初回だけ通る道
 
@@ -193,12 +226,12 @@ flowchart LR
     Setup["初期設定<br>/admin/setup"]
     Gate{"users が空、かつ<br>SETUP_TOKEN が一致"}
     Create["owner を1件作る"]
-    Login["ログイン画面"]
+    Admin["管理画面<br>/admin/members"]
     Gone["404"]
 
     Setup --> Gate
     Gate -->|"はい"| Create
-    Create -->|"303"| Login
+    Create -->|"303（そのままログイン）"| Admin
     Gate -->|"いいえ（2回目以降）"| Gone
 ```
 

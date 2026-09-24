@@ -262,18 +262,33 @@ const SiteIdentity = ({ solo }: { solo?: schema.Member }) => (
 )
 
 /*
-  一覧への帯の行き先。
+  一覧への帯（行き先と件数）。
 
   項目のある側へ送ること。Apps が0件の人を /apps へ送ると、0件の知らせ
   だけの画面に着く。その節を置いていないサイトでは、そもそもその URL が
   無い（404）ので、置いてあるかどうかも見る。
+
+  件数も、置いてある節のぶんだけ数える。Works を外したサイトで「Works 3」と
+  出すと、どこを探しても見つからない3件になる。送る先が無ければ null
+  （帯ごと出さない）。
 */
-const listHrefOf = (blocks: schema.Block[], app: number, work: number, query = '') =>
-  app > 0 && blocks.some((block) => block.type === 'apps')
-    ? `/apps${query}`
-    : work > 0 && blocks.some((block) => block.type === 'works')
-      ? `/works${query}`
-      : null
+const bandOf = (blocks: schema.Block[], app: number, work: number, query = '') => {
+  const placed = (key: string) => blocks.some((block) => block.type === key)
+  const counts = { app: placed('apps') ? app : 0, work: placed('works') ? work : 0 }
+  const href = counts.app > 0 ? `/apps${query}` : counts.work > 0 ? `/works${query}` : null
+  return href ? { href, ...counts } : null
+}
+
+/*
+  カードに担当者の名前（個人ページへのリンク）を出すか。
+
+  2人以上いるときは出す。1人のサイトで全部のカードに同じ名前を並べても
+  何も見分けられないので、ふだんは出さない。ただし Team の節を置いていない
+  ときは人数に関わらず出す——トップから個人ページへ行く道が、カードの
+  名前のほかに1本も無くなる。作品1件のページの「担当」も同じ条件。
+*/
+const showMemberOf = (blocks: schema.Block[], members: schema.Member[]) =>
+  members.length > 1 || !blocks.some((block) => block.type === 'team')
 
 /*
   一覧1つぶん。全件をメモリに載せず、画面を組むのに要る数と、いま描く画面の
@@ -299,6 +314,8 @@ type TopData = {
   // ピルに並べるぶん（公開中の Apps に実在するものだけ）
   platforms: schema.Platform[]
   filter: ItemFilter
+  // カードに担当者を出すか（showMemberOf）
+  showMember: boolean
   /*
     入口（Hero の画面）に置く一覧への帯。行き先と件数は呼ぶ側が決める——
     どの節を置いてあるかは、ブロックの並びを持っている側にしか分からない。
@@ -382,7 +399,7 @@ const ROW_LISTS = {
 function renderBlock(block: schema.Block, data: TopData, page: number | null): Rendered | null {
   const type = blockType(block.type)
   if (!type) return null
-  const { members, apps, works, platforms, filter, band } = data
+  const { members, apps, works, platforms, filter, showMember, band } = data
   const id = type.kind === 'fixed' ? type.key : `block-${block.id}`
   // 見出しが空なら、フォームの初期値と同じ名前（それも無ければ種類の名前）
   const title = block.title || ('title' in type && type.title) || type.label
@@ -487,7 +504,7 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
               */
               <div class="grid" style={`--cols:${perScreen}`}>
                 {apps.rows.map((item) => (
-                  <ItemCard key={item.id} item={item} showMember={members.length > 1} />
+                  <ItemCard key={item.id} item={item} showMember={showMember} />
                 ))}
               </div>
             ) : (
@@ -527,7 +544,7 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
             <SectionHead title="Works" note="業務" h1={split} />
             <div class="grid" style={`--cols:${perScreen}`}>
               {works.rows.map((item) => (
-                <ItemCard key={item.id} item={item} showMember={members.length > 1} />
+                <ItemCard key={item.id} item={item} showMember={showMember} />
               ))}
             </div>
           </Screen>
@@ -717,6 +734,7 @@ async function renderWholePage(c: Context<AppEnv>) {
     members,
     platforms,
     filter: { platform: null, member: null },
+    showMember: showMemberOf(blocks, members),
     apps: { total: apps.length, matched: apps.length, rows: apps },
     works: { total: works.length, matched: works.length, rows: works },
     // このページには一覧そのものがすぐ下に並ぶ。送り出す先が無いので帯は置かない
@@ -818,10 +836,15 @@ const screenHref = (screen: { slug: string; page: number }, query = '') =>
   知らないプラットフォームの key も、公開中に居ないメンバーの slug も、
   絞り込みとして扱わない（絞り込まずに全件を出す）。ピルに並ばないもので
   絞り込むと、画面のどこにも印が出ず、外す手が無くなる。
+
+  1人のサイトでは ?member= を読まない。名前のピルは2人以上いるときにしか
+  並ばない（FilterLinks）ので、効かせると「すべて」にも名前にも印が付かない
+  まま一覧だけが絞られる。
 */
 function readFilter(c: Context<AppEnv>, platforms: schema.Platform[], members: schema.Member[]) {
   const platform = c.req.query('platform') ?? ''
-  const member = members.find((row) => row.slug === c.req.query('member')) ?? null
+  const member =
+    members.length > 1 ? (members.find((row) => row.slug === c.req.query('member')) ?? null) : null
   const filter: ItemFilter = {
     platform: platforms.some((row) => row.key === platform) ? platform : null,
     member: member?.slug ?? null,
@@ -950,12 +973,10 @@ async function siteScreens(
     members,
     platforms: pills,
     filter,
+    showMember: showMemberOf(blocks, members),
     apps: { total: appTotal, matched: appMatched ?? appTotal, rows: [] },
     works: { total: workMatched ?? workTotal, matched: workMatched ?? workTotal, rows: [] },
-    band: (() => {
-      const href = listHrefOf(blocks, appTotal, workTotal)
-      return href ? { href, app: appTotal, work: workTotal } : null
-    })(),
+    band: bandOf(blocks, appTotal, workTotal),
   }
 
   return { screens: screenList(blocks, counted), counted }
@@ -1172,8 +1193,8 @@ async function renderItem(c: Context<AppEnv>, type: 'app' | 'work', slug: string
   const note = [item.platformLabel ?? item.category, item.year].filter(Boolean).join(' · ')
   const links: string[][] = [
     ...item.links.map((link) => [link.label, link.url]),
-    // 担当を出すのは複数人が公開されているときだけ。カードの showMember と同じ条件
-    ...(members.length > 1 && item.memberName && item.memberSlug
+    // 担当を出す条件はカードと同じ（showMemberOf）
+    ...(showMemberOf(blocks, members) && item.memberName && item.memberSlug
       ? [[item.memberName, `/members/${item.memberSlug}`, '担当']]
       : []),
   ]
@@ -1460,28 +1481,28 @@ async function renderMemberScreen(
   const counts = await countMemberItems(db, member.id)
 
   /*
-    この人の一覧の行き先。カードをここに複製せず、絞り込んだ一覧の1画面目へ送る。
+    この人の一覧への帯。カードをここに複製せず、絞り込んだ一覧の1画面目へ送る。
+    行き先と件数の決め方は bandOf を見ること。
 
-    項目がある側へ送ること。Apps が0件の人を /apps へ送ると、0件の知らせだけの
-    画面に着く。その節を置いていないサイトでは、そもそもその URL が無い（404）。
+    1人のサイトでは ?member= を付けない。readFilter が読まない（名前のピルが
+    無い）ので、付けても効かない URL が1本増えるだけになる。
   */
-  const listHref = listHrefOf(
+  const band = bandOf(
     blocks,
     counts.app,
     counts.work,
-    filterQuery({ platform: null, member: member.slug }),
+    filterQuery({ platform: null, member: members.length > 1 ? member.slug : null }),
   )
 
   const screens = memberScreens(
     member,
-    listHref ? (
+    band ? (
       <Screen>
-        {/* 行き先の決め方は listHrefOf を見ること */}
         <Band
-          href={listHref}
+          href={band.href}
           label="このメンバーの Apps · Works"
-          app={counts.app}
-          work={counts.work}
+          app={band.app}
+          work={band.work}
         />
       </Screen>
     ) : null,
@@ -1503,7 +1524,7 @@ async function renderMemberScreen(
     一覧はこの人の連なりの外にある。目次の最後に置いて、めくって着く先
     （ページャ）とは別のものだと分かるようにする。
   */
-  const tail: NavLink[] = listHref ? [{ href: listHref, label: 'Apps · Works' }] : []
+  const tail: NavLink[] = band ? [{ href: band.href, label: 'Apps · Works' }] : []
 
   // 1枚目は /members/<slug> だけで開く。名指し（3語目）では当たらない
   const seq = sequence(

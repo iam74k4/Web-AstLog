@@ -57,7 +57,7 @@ import {
 } from '../theme'
 import { AdminBare, AdminLayout } from '../ui/AdminLayout'
 import { Avatar, itemHref, StatusPill } from '../ui/components'
-import { MarkIcon, PencilIcon, TrashIcon } from '../ui/icons'
+import { ExternalIcon, MarkIcon, PencilIcon, TrashIcon } from '../ui/icons'
 
 export const adminRoutes = new Hono<AppEnv>()
 
@@ -85,6 +85,30 @@ function parseId(value: string | undefined): number | null {
   const id = Number(value)
   return Number.isInteger(id) && id > 0 ? id : null
 }
+
+/*
+  ログイン後の戻り先。管理画面の中の経路だけを通す。
+  外の URL や //host を通すと、ログイン画面が他サイトへの踏み台になる
+*/
+function safeNext(value: string | undefined): string | null {
+  if (!value || !/^\/admin(\/[\w\-./?=&%]*)?$/.test(value)) return null
+  if (value.includes('..') || value.includes('//')) return null
+  if (/^\/admin\/(login|logout|setup)/.test(value)) return null
+  return value
+}
+
+// 保存の知らせ。下書きで保存したときは、サイトにまだ出ていないことまで言う
+const savedParam = (published: number) => (published ? '1' : 'draft')
+
+function flashFor(c: Context<AppEnv>, deleted = '削除しました'): string | null {
+  const saved = c.req.query('saved')
+  if (saved === 'draft') return '下書きで保存しました。サイトにはまだ出ていません'
+  if (saved) return '保存しました'
+  return c.req.query('deleted') ? deleted : null
+}
+
+// 削除の確認から「キャンセル」したときの戻り先。編集画面から来たなら編集画面へ
+const cameFromEdit = (c: Context<AppEnv>) => c.req.query('from') === 'edit'
 
 /* ------------------------------------------------------------------ 部品 */
 
@@ -234,9 +258,10 @@ const Confirm = (props: {
 
 /* ------------------------------------------------------- ログインと初期設定 */
 
-const LoginPage = ({ email, error }: { email?: string; error?: string }) => (
+const LoginPage = ({ email, error, next }: { email?: string; error?: string; next?: string }) => (
   <AdminBare title="ログイン">
     <form class="login" method="post" action="/admin/login">
+      {next ? <input type="hidden" name="next" value={next} /> : null}
       <span class="login__brand">
         <MarkIcon size={30} />
         <span class="login__word">NOCTIFEX</span>
@@ -260,17 +285,21 @@ const LoginPage = ({ email, error }: { email?: string; error?: string }) => (
   </AdminBare>
 )
 
-adminRoutes.get('/login', (c) => c.html(<LoginPage />))
+adminRoutes.get('/login', (c) =>
+  c.html(<LoginPage next={safeNext(c.req.query('next')) ?? undefined} />),
+)
 
 adminRoutes.post('/login', async (c) => {
   const form = await c.req.formData()
   const email = str(form.get('email')).toLowerCase()
   const password = str(form.get('password'))
+  const next = safeNext(str(form.get('next'))) ?? undefined
 
   if ((await loginAttempts(c.env.MEDIA, email)) >= LOGIN_LIMIT.max) {
     return c.html(
       <LoginPage
         email={email}
+        next={next}
         error={`試行回数が多すぎます。${LOGIN_LIMIT.windowMinutes}分後にもう一度お試しください。`}
       />,
       429,
@@ -285,11 +314,20 @@ adminRoutes.post('/login', async (c) => {
   if (!user || !ok) {
     await recordLoginFailure(c.env.MEDIA, email)
     // どちらが違うかは言わない。メールアドレスの存在を教えないため
-    return c.html(<LoginPage email={email} error="メールアドレスかパスワードが違います" />, 401)
+    return c.html(
+      <LoginPage email={email} next={next} error="メールアドレスかパスワードが違います" />,
+      401,
+    )
   }
 
   await clearLoginFailures(c.env.MEDIA, email)
-  const session = await createSession(db(c), user.id)
+  await startSession(c, user.id)
+  // 開こうとしていた画面へ戻す。セッションが切れて弾かれた人を、一覧の頭に放り出さない
+  return c.redirect(next ?? '/admin/members', 303)
+})
+
+async function startSession(c: Context<AppEnv>, userId: number) {
+  const session = await createSession(db(c), userId)
   setCookie(c, SESSION_COOKIE, session.id, {
     httpOnly: true,
     sameSite: 'Lax',
@@ -297,8 +335,7 @@ adminRoutes.post('/login', async (c) => {
     path: '/',
     expires: session.expiresAt,
   })
-  return c.redirect('/admin/members', 303)
-})
+}
 
 adminRoutes.post('/logout', async (c) => {
   const sessionId = getCookie(c, SESSION_COOKIE)
@@ -344,10 +381,15 @@ adminRoutes.all('/setup', async (c) => {
   if (!email || password.length < 12)
     return c.text('メールアドレスと12文字以上のパスワードが必要です', 400)
 
-  await db(c)
+  const [owner] = await db(c)
     .insert(schema.users)
     .values({ email, passwordHash: await hashPassword(password), role: 'owner' })
-  return c.redirect('/admin/login', 303)
+    .returning({ id: schema.users.id })
+  if (!owner) return c.text('owner を作れませんでした', 500)
+
+  // 打ったばかりのメールとパスワードを、もう一度打たせない
+  await startSession(c, owner.id)
+  return c.redirect('/admin/members', 303)
 })
 
 /* --------------------------------------------------------------- 認証の壁 */
@@ -355,7 +397,12 @@ adminRoutes.all('/setup', async (c) => {
 const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   const sessionId = getCookie(c, SESSION_COOKIE)
   const user = sessionId ? await getSessionUser(db(c), sessionId) : null
-  if (!user) return c.redirect('/admin/login', 303)
+  if (!user) {
+    // GET なら行き先を持ち回す（POST の宛先は開き直せないので持たない）
+    const url = new URL(c.req.url)
+    const next = c.req.method === 'GET' ? safeNext(url.pathname + url.search) : null
+    return c.redirect(next ? `/admin/login?next=${encodeURIComponent(next)}` : '/admin/login', 303)
+  }
   c.set('user', user)
   await next()
 })
@@ -373,12 +420,7 @@ app.get('/members', async (c) => {
   })
 
   return c.html(
-    <AdminLayout
-      title="Members"
-      active="members"
-      email={c.get('user').email}
-      flash={c.req.query('saved') ? '保存しました' : c.req.query('deleted') ? '削除しました' : null}
-    >
+    <AdminLayout title="Members" active="members" email={c.get('user').email} flash={flashFor(c)}>
       <div class="admin-head">
         <h1>Members</h1>
         <a class="btn btn--primary" href="/admin/members/new">
@@ -406,6 +448,19 @@ app.get('/members', async (c) => {
               <span class="row__col row__col--num">{member.sortOrder}</span>
               <StatusPill published={member.published} />
               <span class="row__actions">
+                {/* 下書きの人のページは 404 なので、公開中のときだけ出す */}
+                {member.published ? (
+                  <a
+                    class="icon-btn"
+                    href={`/members/${member.slug}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`${member.name} のページをサイトで見る`}
+                  >
+                    <ExternalIcon />
+                    <span class="icon-btn__text">サイトで見る</span>
+                  </a>
+                ) : null}
                 <a
                   class="icon-btn"
                   href={`/admin/members/${member.id}/edit`}
@@ -534,7 +589,7 @@ const MemberForm = (props: {
           <PublishToggle published={member?.published ?? 0} />
           <FormActions
             cancelHref="/admin/members"
-            deleteHref={member ? `/admin/members/${member.id}/delete` : undefined}
+            deleteHref={member ? `/admin/members/${member.id}/delete?from=edit` : undefined}
           />
         </div>
       </form>
@@ -660,7 +715,7 @@ app.post('/members', async (c) => {
   await db(c)
     .insert(schema.members)
     .values({ ...values, avatarUrl: avatar.url })
-  return c.redirect('/admin/members?saved=1', 303)
+  return c.redirect(`/admin/members?saved=${savedParam(values.published)}`, 303)
 })
 
 app.post('/members/:id', async (c) => {
@@ -693,7 +748,7 @@ app.post('/members/:id', async (c) => {
     .set({ ...values, ...(avatar.url ? { avatarUrl: avatar.url } : {}) })
     .where(eq(schema.members.id, id))
   if (avatar.url) await removeAvatar(c.env.MEDIA, member.avatarUrl)
-  return c.redirect('/admin/members?saved=1', 303)
+  return c.redirect(`/admin/members?saved=${savedParam(values.published)}`, 303)
 })
 
 app.get('/members/:id/delete', async (c) => {
@@ -714,7 +769,7 @@ app.get('/members/:id/delete', async (c) => {
         title={`「${member.name}」を削除しますか？`}
         detail="この操作は取り消せません。"
         action={`/admin/members/${id}/delete`}
-        cancelHref="/admin/members"
+        cancelHref={cameFromEdit(c) ? `/admin/members/${id}/edit` : '/admin/members'}
       >
         <p>
           担当している項目 {n} 件は消えず、担当者が空になります。
@@ -754,7 +809,7 @@ app.get('/items', async (c) => {
       title="Apps & Works"
       active="items"
       email={c.get('user').email}
-      flash={c.req.query('saved') ? '保存しました' : c.req.query('deleted') ? '削除しました' : null}
+      flash={flashFor(c)}
     >
       <div class="admin-head">
         <div class="admin-head__title">
@@ -1039,7 +1094,7 @@ const ItemForm = (props: ItemFormData) => {
           <PublishToggle published={d.published} />
           <FormActions
             cancelHref={`/admin/items?type=${props.type}`}
-            deleteHref={item ? `/admin/items/${item.id}/delete` : undefined}
+            deleteHref={item ? `/admin/items/${item.id}/delete?from=edit` : undefined}
           />
         </div>
       </form>
@@ -1229,7 +1284,7 @@ app.post('/items', async (c) => {
     .returning({ id: schema.items.id })
   const id = inserted[0]?.id
   if (id) await replaceChildren(db(c), id, form)
-  return c.redirect(`/admin/items?type=${values.type}&saved=1`, 303)
+  return c.redirect(`/admin/items?type=${values.type}&saved=${savedParam(values.published)}`, 303)
 })
 
 app.post('/items/:id', async (c) => {
@@ -1261,7 +1316,7 @@ app.post('/items/:id', async (c) => {
 
   await db(c).update(schema.items).set(values).where(eq(schema.items.id, id))
   await replaceChildren(db(c), id, form)
-  return c.redirect(`/admin/items?type=${values.type}&saved=1`, 303)
+  return c.redirect(`/admin/items?type=${values.type}&saved=${savedParam(values.published)}`, 303)
 })
 
 app.get('/items/:id/delete', async (c) => {
@@ -1279,7 +1334,7 @@ app.get('/items/:id/delete', async (c) => {
         title={`「${item.title}」を削除しますか？`}
         detail="この操作は取り消せません。"
         action={`/admin/items/${id}/delete`}
-        cancelHref={`/admin/items?type=${item.type}`}
+        cancelHref={cameFromEdit(c) ? `/admin/items/${id}/edit` : `/admin/items?type=${item.type}`}
       >
         <p>
           タグ {item.tags.length} 件とリンク {item.links.length} 件も一緒に消えます。
@@ -1456,7 +1511,8 @@ const BlocksPage = (props: {
             {props.rows.map((block, index) => {
               const type = blockType(block.type)
               return (
-                <li class="row" key={block.id}>
+                // id は「動かした・直した行」へ戻ってくるための着地点
+                <li class="row" id={`block-${block.id}`} key={block.id}>
                   <span class="row__move">
                     <form method="post" action={`/admin/blocks/${block.id}/move`}>
                       <input type="hidden" name="dir" value="up" />
@@ -1542,9 +1598,7 @@ const BlocksPage = (props: {
         <section class="catalog">
           <h2 class="catalog__title">
             足す
-            <span class="presets__note">
-              連なりのいちばん後ろに足される。置いてから前後に動かす
-            </span>
+            <span class="presets__note">Contact の手前に入る。置いてから前後に動かす</span>
           </h2>
           <ul class="catalog__grid">
             {available.map((type) => (
@@ -1580,7 +1634,7 @@ app.get('/blocks', async (c) => {
       email={c.get('user').email}
       rows={rows}
       counts={counts}
-      flash={c.req.query('saved') ? '保存しました' : c.req.query('deleted') ? '外しました' : null}
+      flash={flashFor(c, '外しました')}
     />,
   )
 })
@@ -1616,7 +1670,12 @@ const BlockForm = (props: {
   const value = (key: 'title' | 'body') =>
     props.values?.[key] ?? block?.[key] ?? (key === 'title' && 'title' in type ? type.title : '')
   // 入力エラーで描き直すとき、外した「公開する」も外したまま返す
-  const published = props.values ? Number(props.values.published === '1') : (block?.published ?? 1)
+  /*
+    入力エラーで描き直すとき、外した「公開する」も外したまま返す。
+    新しく書くときは下書きから始める（メンバー・項目と同じ。置くだけのもの——
+    Apps や Team——はフォームを通らず、置いた時点で出る）
+  */
+  const published = props.values ? Number(props.values.published === '1') : (block?.published ?? 0)
 
   return (
     <AdminLayout title={type.label} active="blocks" email={props.email}>
@@ -1667,7 +1726,7 @@ const BlockForm = (props: {
           <PublishToggle published={published} />
           <FormActions
             cancelHref="/admin/blocks"
-            deleteHref={block ? `/admin/blocks/${block.id}/delete` : undefined}
+            deleteHref={block ? `/admin/blocks/${block.id}/delete?from=edit` : undefined}
             deleteLabel="トップから外す…"
           />
         </div>
@@ -1837,14 +1896,29 @@ app.post('/blocks', async (c) => {
     そうしないと、足した1つだけの DB になって、見えていた5節が消える
   */
   const current = await ensureBlocks(db(c))
-  await db(c)
+  const [added] = await db(c)
     .insert(schema.blocks)
     .values({
       type: type.key,
       ...(values ?? { published: 1 }),
       sortOrder: nextBlockOrder(current),
     })
-  return c.redirect('/admin/blocks?saved=1', 303)
+    .returning({ id: schema.blocks.id })
+  if (!added) return c.text('足せませんでした', 500)
+
+  /*
+    足す先は Contact の手前。連なりのいちばん後ろに付けると締めの連絡先の後ろに
+    来てしまい、↑ を何度も押して運ぶことになる
+  */
+  const contact = current.findIndex((row) => row.type === 'contact')
+  if (contact >= 0) {
+    const ids = current.map((row) => row.id)
+    ids.splice(contact, 0, added.id)
+    await reorderBlocks(db(c), ids)
+  }
+
+  const published = values ? values.published : 1
+  return c.redirect(`/admin/blocks?saved=${savedParam(published)}#block-${added.id}`, 303)
 })
 
 // 何も置いていないときだけ、既定の並びを行にする。2回目以降は何もしない
@@ -1877,7 +1951,7 @@ app.post('/blocks/:id', async (c) => {
       .update(schema.blocks)
       .set({ published: values.published, updatedAt })
       .where(eq(schema.blocks.id, id))
-    return c.redirect('/admin/blocks?saved=1', 303)
+    return c.redirect(`/admin/blocks?saved=${savedParam(values.published)}#block-${id}`, 303)
   }
 
   /*
@@ -1907,7 +1981,7 @@ app.post('/blocks/:id', async (c) => {
     .update(schema.blocks)
     .set({ ...values, updatedAt })
     .where(eq(schema.blocks.id, id))
-  return c.redirect('/admin/blocks?saved=1', 303)
+  return c.redirect(`/admin/blocks?saved=${savedParam(values.published)}#block-${id}`, 303)
 })
 
 /*
@@ -1927,7 +2001,8 @@ app.post('/blocks/:id/publish', async (c) => {
     .update(schema.blocks)
     .set({ published: bool(form.get('published')), updatedAt: new Date().toISOString() })
     .where(eq(schema.blocks.id, id))
-  return c.redirect('/admin/blocks?saved=1', 303)
+  // 押した行へ戻す。一覧の頭に戻すと、どれを切り替えたかを探し直すことになる
+  return c.redirect(`/admin/blocks?saved=1#block-${id}`, 303)
 })
 
 /*
@@ -1963,7 +2038,8 @@ app.post('/blocks/:id/move', async (c) => {
     if (moved !== undefined) ids.splice(target, 0, moved)
     await reorderBlocks(db(c), ids)
   }
-  return c.redirect('/admin/blocks', 303)
+  // 動かした行へ戻す。ページの頭に戻すと、続けて動かすたびに行を探し直すことになる
+  return c.redirect(`/admin/blocks#block-${id}`, 303)
 })
 
 /*
@@ -1987,7 +2063,10 @@ app.get('/blocks/:id/delete', async (c) => {
             : '打ち込んだ中身も消えます。'
         }
         action={`/admin/blocks/${id}/delete`}
-        cancelHref="/admin/blocks"
+        // 種類が消えた行は編集画面が開けないので、一覧へ戻す
+        cancelHref={
+          cameFromEdit(c) && type ? `/admin/blocks/${id}/edit` : `/admin/blocks#block-${id}`
+        }
         verb="外す"
       >
         <p>いったん隠したいだけなら、編集で「公開する」を外すほうが安全です。</p>

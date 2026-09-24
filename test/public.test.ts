@@ -617,6 +617,8 @@ describe('絞り込み', () => {
 
   it('絞り込みは、めくっても目次から移っても外れない', async () => {
     const member = await seedMember()
+    // 名前のピルは2人以上いるときだけ並ぶ。1人のサイトでは ?member= を読まない
+    await seedMember({ slug: 'tanaka', name: '田中 未来', sortOrder: 20 })
     await seedItem({ type: 'app', title: 'アプリ壱', memberId: member.id })
     await seedItem({ type: 'app', title: 'アプリ弐', memberId: member.id })
     await seedItem({ type: 'app', title: 'アプリ参', memberId: member.id })
@@ -814,6 +816,7 @@ describe('メンバーページ', () => {
 
   it('一覧への導線は、その人で絞り込んだ Apps へ送る', async () => {
     const member = await seedMember()
+    await seedMember({ slug: 'tanaka', name: '田中 未来', sortOrder: 20 })
     await seedItem({ memberId: member.id })
 
     const html = await (await get('/members/okazaki')).text()
@@ -835,6 +838,7 @@ describe('メンバーページ', () => {
 
   it('Apps が0件の人は、Works の一覧へ送る', async () => {
     const member = await seedMember()
+    await seedMember({ slug: 'tanaka', name: '田中 未来', sortOrder: 20 })
     await seedItem({ type: 'work', memberId: member.id })
 
     // 0件の知らせだけの画面に着かせない

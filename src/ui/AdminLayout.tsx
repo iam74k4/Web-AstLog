@@ -61,6 +61,10 @@ export const AdminLayout = (props: {
             </a>
           </nav>
           <div class="admin-nav__foot">
+            {/* どの画面からも、直した結果をすぐ見に行けるように */}
+            <a class="btn btn--link" href="/" target="_blank" rel="noreferrer">
+              サイトを見る ↗
+            </a>
             <span class="admin-nav__email">{props.email}</span>
             <form method="post" action="/admin/logout">
               <button type="submit" class="btn btn--link">

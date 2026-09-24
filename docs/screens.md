@@ -49,7 +49,8 @@ Hono の `publicRoutes.routes` を読み、catch-all が最後の2本だけで�
 | `?member=<slug>` | Apps と Works の両方 | `/works?member=okazaki` |
 
 知らない key・公開中に居ない slug は、絞り込みとして扱わず全件を出す。ピルに
-並ばないもので絞り込むと、外す手が画面から無くなるため。絞り込みはページャにも
+並ばないもので絞り込むと、外す手が画面から無くなるため。同じ理由で、公開中が
+1人のサイトでは `?member=` を読まない（名前のピルは2人以上いるときだけ並ぶ）。絞り込みはページャにも
 目次にも同じものが付いて画面をまたいで効き、canonical には付けない
 （同じ中身の取り出し方なので、組み合わせのぶんだけ URL を数えさせない）。
 
@@ -200,7 +201,9 @@ canonical を `/` にしていたころは、中身が全部ある唯一のペ�
 - 入口は `/members/<slug>` ひとつ。1枚目に2つ目の URL（`…/hero`）は作らない
 - Apps / Works のカードはここに複製しない。帯と目次の「Apps · Works」から
   `/apps?member=<slug>` へ送り、一覧をその人で絞り込んだ1画面目に着かせる。
-  Apps が0件の人は `/works?member=<slug>` へ。どちらも0件なら帯ごと出さない
+  Apps が0件の人は `/works?member=<slug>` へ。どちらも0件なら帯ごと出さない。
+  **トップに置いていない節へは送らず、その件数も数えない**（Works を外した
+  サイトでは `Apps 2` だけ）。1人のサイトでは `?member=` を付けない
 - 目次は About → Skills → Career → Contact を順に並べ、連なりの外にある
   「Apps · Works」を最後に置く。**1枚目は目次に載らない**（トップの Hero と同じ
   扱い）。1枚目へ1押しで戻れるのはページャの「← 前」だけ——左上のロゴは
@@ -233,6 +236,9 @@ canonical を `/` にしていたころは、中身が全部ある唯一のペ�
   は「&lt;作品名&gt; — Noctifex」、canonical と `og:url` は自分の URL
 - 一覧のカードの題がこの URL へのリンク（`/all` のカードも同じ）。`slug` の無い
   作品は素の題のまま——当てにならない URL を出すくらいなら出さない
+- 「担当」（個人ページへのリンク）は、カードの担当者名と同じ条件で出す。2人以上
+  いるとき、または Team の節を置いていないとき（そうしないと個人ページへの道が
+  トップから1本も無くなる）
 
 ## 管理側
 
@@ -241,26 +247,28 @@ canonical を `/` にしていたころは、中身が全部ある唯一のペ�
 | 画面 | パス | 認証 | 役割 |
 | --- | --- | --- | --- |
 | 入口 | `GET /admin` | 要 | `/admin/members` へ 303 |
-| ログイン | `GET /admin/login` | 不要 | フォーム |
-| ログイン実行 | `POST /admin/login` | 不要 | 成功で Cookie を発行し `/admin/members` へ |
+| ログイン | `GET /admin/login` | 不要 | フォーム。`?next=` を hidden で持ち回す |
+| ログイン実行 | `POST /admin/login` | 不要 | 成功で Cookie を発行し、`next` の画面（`/admin/` の中だけ）か `/admin/members` へ |
 | ログアウト | `POST /admin/logout` | 要 | セッションを消す |
-| 初期設定 | `GET`/`POST /admin/setup` | 不要 | **users が空で、かつ `SETUP_TOKEN` が一致するときだけ**。owner を1件作る。以降は 404 |
-| Members 一覧 | `GET /admin/members` | 要 | 行に 公開/下書き・並び順・編集・削除 |
+| 初期設定 | `GET`/`POST /admin/setup` | 不要 | **users が空で、かつ `SETUP_TOKEN` が一致するときだけ**。owner を1件作り、そのままログインして `/admin/members` へ。以降は 404 |
+| Members 一覧 | `GET /admin/members` | 要 | 行に 公開/下書き・並び順・編集・削除。公開中の行には「サイトで見る ↗」 |
 | Member フォーム | `GET /admin/members/new`<br>`GET /admin/members/:id/edit` | 要 | 追加と編集で同じテンプレート |
-| Member 保存 | `POST /admin/members`<br>`POST /admin/members/:id` | 要 | 成功で `?saved=1` を付けて一覧へ |
-| Member 削除 | `GET /admin/members/:id/delete`（確認）<br>`POST` 同 URL（実行） | 要 | 確認画面を必ず挟む |
+| Member 保存 | `POST /admin/members`<br>`POST /admin/members/:id` | 要 | 成功で `?saved=1`（下書きなら `?saved=draft`）を付けて一覧へ |
+| Member 削除 | `GET /admin/members/:id/delete`（確認）<br>`POST` 同 URL（実行） | 要 | 確認画面を必ず挟む。キャンセルは来た画面へ（編集から来たら `?from=edit` で編集へ） |
 | Items 一覧 | `GET /admin/items?type=app\|work` | 要 | Apps / Works をタブで切り替え。行に恒久リンクの URL（無ければ「恒久リンクなし」） |
 | Item フォーム | `GET /admin/items/new?type=…`<br>`GET /admin/items/:id/edit` | 要 | `type` で欄が変わる（app はプラットフォーム、work は区分と実績値）。恒久リンクの `slug` もここ |
-| Item 保存 | `POST /admin/items`<br>`POST /admin/items/:id` | 要 | タグとリンクは総入れ替え。`slug` の重なりは 400 で戻す |
-| Item 削除 | `GET /admin/items/:id/delete`（確認）<br>`POST` 同 URL（実行） | 要 | 一緒に消えるタグ・リンクの件数を出す |
+| Item 保存 | `POST /admin/items`<br>`POST /admin/items/:id` | 要 | タグとリンクは総入れ替え。`slug` の重なりは 400 で戻す。成功で `?saved=1`（下書きなら `?saved=draft`） |
+| Item 削除 | `GET /admin/items/:id/delete`（確認）<br>`POST` 同 URL（実行） | 要 | 一緒に消えるタグ・リンクの件数を出す。キャンセルは Member と同じく来た画面へ |
 | 構成 | `GET /admin/blocks` | 要 | 公開ページの画面の連なり。行ごとに ↑↓・公開/下書き・編集・外す・**「N 画面」**。頭に合計。ヘッダに「サイトを見る ↗」と「全体を1ページで見る ↗」。下に「足す」のカタログ |
-| ブロック追加 | `POST /admin/blocks`（決まった中身のもの）<br>`GET /admin/blocks/new?type=…` → `POST /admin/blocks`（打ち込むもの） | 要 | 連なりのいちばん後ろに足される |
+| ブロック追加 | `POST /admin/blocks`（決まった中身のもの）<br>`GET /admin/blocks/new?type=…` → `POST /admin/blocks`（打ち込むもの） | 要 | Contact の手前に足され、その行（`#block-<id>`）へ戻る。打ち込むものは下書きから始まる |
 | ブロックフォーム | `GET /admin/blocks/:id/edit`<br>`POST /admin/blocks/:id` | 要 | 決まった中身のものは「公開する」だけ |
 | ブロック公開切替 | `POST /admin/blocks/:id/publish` | 要 | 一覧の行から公開／下書きを直接切り替える。中身は触らない |
-| ブロック移動 | `POST /admin/blocks/:id/move`（`dir=up\|down`） | 要 | 並び順を 10 刻みで振り直す |
+| ブロック移動 | `POST /admin/blocks/:id/move`（`dir=up\|down`） | 要 | 並び順を 10 刻みで振り直し、動かした行（`#block-<id>`）へ戻る |
 | 既定の並び | `POST /admin/blocks/init` | 要 | 何も置いていないときだけ5つを入れる |
 | ブロック削除 | `GET /admin/blocks/:id/delete`（確認）<br>`POST` 同 URL（実行） | 要 | 決まった中身のものは、外しても登録した項目は消えない |
 | 見た目 | `GET /admin/appearance`<br>`POST` 同 URL（保存） | 要 | 骨格・アクセント色・書体を選ぶ。サイト全体に効く |
+
+どの画面も、左ナビの足元の「サイトを見る ↗」から公開ページを別タブで開ける。
 
 一覧・フォーム・確認の3種類だけで、Members・Items・構成をまかなっている。
 一覧にフォームを同居させないのは、「どの行を編集中か」が読めなくなるため。
@@ -320,7 +328,7 @@ canonical を `/` にしていたころは、中身が全部ある唯一のペ�
 | 試行回数の制限 | ログイン | 5回失敗で 15 分。429 を返す |
 | 一覧が空 | 管理の一覧 | 空の表を出さず、「＋ 最初の…を追加」だけ置く |
 | 絞り込みで0件 | Apps の画面 | ピルは残し、1行だけ出す。ピルはリンクなので、遷移した先でも外す手が画面に残る |
-| 保存完了 | 一覧・構成・見た目 | `?saved=1` を読んで帯を1回だけ |
+| 保存完了 | 一覧・構成・見た目 | `?saved=1` を読んで帯を1回だけ。下書きの保存（`?saved=draft`）は「サイトにはまだ出ていません」まで言う |
 | 置けないブロック | 構成 | 400。同じ種類を2つ置こうとしたとき、知らない種類のとき、動かす向きが不明なとき |
 | 出せない中身 | ブロックフォーム | 400。リンク集は URL の形まで見る（「公開」なのに出ない行を作らない）。**長さも見る**——[下の表](#長さの上限)。**下書きに戻す保存では見ない** |
 | 重なった恒久リンク | Item フォーム | 400。`slug` は1つの作品を指すので、自動で `-2` を振らずに人に直してもらう |

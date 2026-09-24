@@ -15,7 +15,8 @@ describe('認証', () => {
   it('ログインしていなければ管理画面に入れない', async () => {
     const response = await get('/admin/members')
     expect(response.status).toBe(303)
-    expect(response.headers.get('location')).toBe('/admin/login')
+    // 開こうとしていた画面は、ログイン後の戻り先として持ち回す
+    expect(response.headers.get('location')).toBe('/admin/login?next=%2Fadmin%2Fmembers')
   })
 
   it('ログインせずに書き込めない', async () => {
@@ -70,7 +71,7 @@ describe('認証', () => {
     const signed = await signIn()
     expect((await signed('/admin/members')).status).toBe(200)
     await signed('/admin/logout', { method: 'POST' })
-    expect((await signed('/admin/members')).headers.get('location')).toBe('/admin/login')
+    expect((await signed('/admin/members')).headers.get('location')).toMatch(/^\/admin\/login/)
   })
 })
 

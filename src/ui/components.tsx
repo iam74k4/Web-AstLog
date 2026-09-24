@@ -328,8 +328,11 @@ export const Band = ({
   <a class="band" href={href}>
     <span class="band__body">
       <strong>{label}</strong>
+      {/* 0件の側は数えない。呼ぶ側は、置いていない節の件数を0で渡す */}
       <span class="band__meta">
-        Apps {app} · Works {work}
+        {[app ? `Apps ${app}` : null, work ? `Works ${work}` : null]
+          .filter((part) => part !== null)
+          .join(' · ')}
       </span>
     </span>
     <span class="band__go">一覧で見る →</span>

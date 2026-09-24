@@ -186,21 +186,22 @@ describe('管理の構成', () => {
     })
     expect(response.status).toBe(303)
 
+    // 足したものは Contact の手前に入る
     const rows = await db().query.blocks.findMany({ orderBy: (t, { asc }) => [asc(t.sortOrder)] })
     expect(rows.map((row) => row.type)).toEqual([
       'hero',
       'apps',
       'works',
       'team',
-      'contact',
       'note',
+      'contact',
     ])
     expect(sectionIds(await (await get('/all')).text())).toEqual([
       'apps',
       'works',
       'team',
+      `block-${rows[4]?.id}`,
       'contact',
-      `block-${rows[5]?.id}`,
     ])
   })
 
