@@ -218,6 +218,15 @@
   --dot: 6px;
 
   /*
+    入口に着いたときの浮かび上がり。ぼかし（--enter-blur）と下からのずれ
+    （--enter-shift）を解きながら、句読点で切った塊を --stagger ずつ遅らせて
+    出す。曲線はばねと同じ1本（--ease-spring）で、量だけをここで決める
+  */
+  --enter-blur: 8px;
+  --enter-shift: var(--sp-4);
+  --stagger: 90ms;
+
+  /*
     夜の地。OS の設定に関わらずこの配色を既定にする。
 
     地は色味を持たない黒にする。紫や青に寄せると、面も文字も全部その色に
@@ -755,29 +764,56 @@ main {
   opacity: var(--moon-glow-ink);
 }
 
-.hero > h1,
-.hero > p {
-  /* 月より前に出す。月は z-index: 0 の背景 */
+/* 月より前に出す。月は z-index: 0 の背景。見出し・リード文・帯のどれも同じ */
+.hero > :not(.moon) {
   position: relative;
   z-index: 1;
 }
 
+/*
+  句読点までの塊（src/ui/components.tsx の Phrases）。塊の中では折らせない。
+  塊が行より長いときだけ中で折れる（inline-block は行の幅を超えない）
+*/
+.phrase {
+  display: inline-block;
+}
+
 /* 素の .hero__headline は置かない。付く先は必ず .hero の直接の子の h1 で、
    こちら（0,1,1）が勝つ。クラスが要るのは下の1段小さくする規則のほうだけ */
+/*
+  大見出し。
+
+  塊（、。まで）を1行ずつに積む。「つくったものを、/ 置いておく。」の2行が
+  左に座り、右の月と画面を分け合う。1行に流していたころは、見出しが月の
+  下を横切り、幅しだいで「置いてお / く。」と語の途中で折れていた。
+
+  palt は和文を詰める字形。仮名と約物（、。）の空きが半分になり、見出しの
+  大きさでもスカスカに見えない。本文には掛けない（小さい字で詰めると読みにくい）。
+
+  大きさははしごのいちばん上（--fs-display-xl）。2行に積んだぶん横幅が半分に
+  なったので、1行のころの --fs-display では左下に小さく固まって見えた。
+  個人ページの名乗りは下の .hero__headline で段を下げる。
+*/
 .hero h1 {
   font-family: var(--font-display);
-  font-size: var(--fs-display);
-  font-weight: 600;
-  line-height: 1.24;
-  letter-spacing: -0.015em;
+  font-size: var(--fs-display-xl);
+  font-weight: 700;
+  font-feature-settings: 'palt';
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.hero h1 .phrase {
+  display: block;
 }
 
 /*
-  個人ページの名乗りは、トップの大見出しより1段小さい。
+  個人ページの名乗りは、トップの大見出しより段を下げる（--fs-display-sm）。
+  名乗りは大見出しより長い文になりやすく、同じ大きさでは2行に収まらない。
 
   要素とクラスの両方で書いてあるのは必須。この見出しは <h1 class="hero__headline">
   になったので、素の .hero__headline（0,1,0）では上の .hero h1（0,1,1）に負け、
-  1段大きい --fs-display を継いでしまう。CSS は何も言わず、変わるのは
+  大見出しの --fs-display-xl を継いでしまう。CSS は何も言わず、変わるのは
   「名乗りだけが画面の高さを食う」という結果だけ。
 */
 .hero h1.hero__headline {
@@ -788,6 +824,41 @@ main {
   max-width: 54ch;
   color: var(--ink-mid);
   font-size: var(--fs-md);
+  /* 塊より細かい所の折れ（1語だけ次の行へ落ちる）を、対応する環境では避ける */
+  text-wrap: pretty;
+}
+
+/*
+  入口に着いたときに、見出しの塊 → リード文 → 帯の順に浮かび上がる。
+
+  出だしの姿は keyframes の from にだけ書き、both で終わりの姿を持たせない
+  ——止まった姿（reduced-motion で animation: none になったとき）がそのまま
+  最後の姿になる。印刷では月と帯ごと落ちるので、ここは何もしない。
+*/
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    filter: blur(var(--enter-blur));
+    translate: 0 var(--enter-shift);
+  }
+}
+
+.hero h1 .phrase,
+.hero > p,
+.hero > .band {
+  animation: rise-in var(--dur-spring) var(--ease-spring) backwards;
+}
+
+.hero h1 .phrase {
+  animation-delay: calc(var(--i, 0) * var(--stagger));
+}
+
+.hero > p {
+  animation-delay: calc(2 * var(--stagger));
+}
+
+.hero > .band {
+  animation-delay: calc(3 * var(--stagger));
 }
 
 /*
@@ -1402,14 +1473,24 @@ main {
 
 /* --- 一覧への帯（トップの入口と、個人ページの1枚目） --- */
 
+/*
+  大見出しの下に置く、丸い札。左に「何の一覧か」と件数、右端にアクセントで
+  塗った「一覧で見る →」。横いっぱいには伸ばさない——伸ばすと入力欄に見える。
+
+  justify-self（Hero が grid のとき）と align-self（/all で flex のとき）の
+  両方で左に寄せる。中央寄せの骨格は下で center に差し替える。
+*/
 .band {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-5);
-  padding: var(--sp-5);
+  justify-self: start;
+  align-self: flex-start;
+  gap: var(--sp-6);
+  max-width: 100%;
+  margin-top: var(--sp-4);
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-6);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: 999px;
   background: var(--surface);
   box-shadow: var(--highlight);
   transition:
@@ -1421,19 +1502,44 @@ main {
 .band__body {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-1);
+  min-width: 0;
+  line-height: 1.4;
 }
 
+.band__body strong {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+/*
+  件数は --ink-mid。帯は入口の光暈の上に乗るので、--ink-weak では 390 の幅で
+  3.80:1 まで落ちる（要 4.5:1。center mint 390x844, 既定書体, Chromium。
+  npm run check:contrast が帯の字も測っている）
+*/
 .band__meta {
-  color: var(--ink-weak);
+  color: var(--ink-mid);
   font-size: var(--fs-label);
   font-family: var(--font-mono);
 }
 
+/* 「外に出る」操作子は --accent（.links a の説明を見ること）。ここは塗りで持つ */
 .band__go {
-  color: var(--accent);
-  font-size: var(--fs-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
   flex-shrink: 0;
+  min-height: var(--tap);
+  padding: var(--sp-2) var(--sp-5);
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.band__arrow {
+  display: inline-block;
+  transition: translate var(--dur-spring) var(--ease-spring);
 }
 
 /* --- Contact --- */
@@ -2692,6 +2798,13 @@ body[data-layout='center'] .contact p {
   margin-inline: auto;
 }
 
+/* 帯は素の姿では左に寄せてある（justify-self / align-self）。ここで中央へ */
+body[data-layout='center'] .band {
+  justify-self: center;
+  align-self: center;
+  text-align: start;
+}
+
 body[data-layout='center'] .head {
   justify-content: center;
 }
@@ -2714,9 +2827,9 @@ body[data-layout='magazine'] .shell {
 }
 
 /* 箱を並べず、罫線で段を区切る */
+/* 帯（.band）は箱ではなく押すもの（丸い札）なので、ここには入れない */
 body[data-layout='magazine'] .card,
 body[data-layout='magazine'] .member,
-body[data-layout='magazine'] .band,
 body[data-layout='magazine'] .numbers__item,
 body[data-layout='magazine'] .contact {
   border: 0;
@@ -2869,6 +2982,10 @@ body[data-layout='magazine'] .head {
   .band:hover {
     border-color: var(--line-strong);
     background: var(--surface-hover);
+  }
+
+  .band:hover .band__arrow {
+    translate: var(--sp-2) 0;
   }
 
   .toc a:hover {

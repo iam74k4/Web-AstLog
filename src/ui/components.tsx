@@ -135,6 +135,33 @@ export const Hero = ({ whole, children }: { whole?: boolean; children: Child }) 
 )
 
 /*
+  文を句読点（、。！？）の直後でだけ折れるようにする。
+
+  日本語は既定だとどの字の間でも折れるので、幅しだいで「置いてお / く。」や、
+  段落の最後の「す。」だけが次の行に落ちる、が起きる。句読点までを1つの塊に
+  して inline-block にし、塊の中では折らせない。塊が行より長いときだけ、その
+  中で折れる（inline-block は行の幅を超えない）。
+
+  word-break: auto-phrase が同じことをブラウザにやらせる指定だが、Chromium に
+  しか無い。句読点で切るのは粗いが、どのブラウザでも同じ所で折れる。
+
+  --i は塊の順番。入口の大見出しは、これで1塊ずつ遅らせて浮かび上がる
+  （app.css の .hero h1 .phrase）。
+*/
+export const splitPhrases = (text: string): string[] =>
+  text.match(/[^、。！？]+[、。！？]*|[、。！？]+/g) ?? [text]
+
+export const Phrases = ({ text }: { text: string }) => (
+  <>
+    {splitPhrases(text).map((part, order) => (
+      <span key={part} class="phrase" style={`--i:${order}`}>
+        {part}
+      </span>
+    ))}
+  </>
+)
+
+/*
   入口の背景に敷く月。ロゴの三日月を立体にして粒子を散らし、Blender で
   焼いた1枚（作り直しは scripts/moon/render.py → scripts/moon/pack.py）。
 
@@ -313,6 +340,10 @@ export const MemberCardCompact = ({ member }: { member: Member }) => (
   「作品そのものは別の URL にある」画面なので、そこに何があるかを数で示して
   から送り出す。行き先は呼ぶ側が決める（項目のある側へ送ること。0件の側へ
   送ると、0件の知らせだけの画面に着く）。
+
+  置く先は Hero の中、リード文のすぐ下。画面の底に横いっぱいの帯として置いて
+  いたころは、見出しと帯のあいだに画面の半分ほどの空白ができ、帯そのものも
+  入力欄のように見えていた。大見出しから続けて読める位置に、押せる形で置く。
 */
 export const Band = ({
   href,
@@ -335,7 +366,13 @@ export const Band = ({
           .join(' · ')}
       </span>
     </span>
-    <span class="band__go">一覧で見る →</span>
+    {/* 矢印は飾り。読み上げには「一覧で見る」だけを流す */}
+    <span class="band__go">
+      一覧で見る{' '}
+      <span class="band__arrow" aria-hidden="true">
+        →
+      </span>
+    </span>
   </a>
 )
 

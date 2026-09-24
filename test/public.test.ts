@@ -6,6 +6,7 @@ import { MEMBER_PER_SCREEN } from '../src/blocks'
 import * as schema from '../src/db/schema'
 import { publicRoutes } from '../src/routes/public'
 import { SITE } from '../src/site'
+import { splitPhrases } from '../src/ui/components'
 import { MARK_POINTS } from '../src/ui/icons'
 import { db, get, resetDb, seedItem, seedMember } from './helpers'
 
@@ -240,6 +241,33 @@ describe('名乗り', () => {
   入口（/）は、このサイトがいちばん仕事をする画面。名前・職種・数がここに
   無いと、最初の1画面から持ち帰れるものが何も無い。
 */
+describe('入口の画面', () => {
+  it('句読点の直後でだけ区切る。語の途中（「置いてお / く。」）では切らない', () => {
+    expect(splitPhrases('つくったものを、置いておく。')).toEqual([
+      'つくったものを、',
+      '置いておく。',
+    ])
+    // 句読点が無ければ1つの塊のまま（英語は塊の中の空白で折れる）
+    expect(splitPhrases('Noctifex')).toEqual(['Noctifex'])
+    expect(splitPhrases('')).toEqual([''])
+  })
+
+  it('見出しとリード文は塊ごとに出し、帯は見出しと同じ Hero の中に置く', async () => {
+    await seedItem()
+
+    const html = await (await get('/')).text()
+    const hero = html.slice(html.indexOf('<header class="hero"'), html.indexOf('</header>'))
+    for (const part of [...splitPhrases(SITE.heroTitle), ...splitPhrases(SITE.heroLead)]) {
+      expect(hero).toContain(`>${part}</span>`)
+    }
+    /*
+      画面の底に横いっぱいの帯を別の節として置いていたころは、見出しと帯の
+      あいだに画面の半分ほどの空白ができていた
+    */
+    expect(hero).toContain('class="band"')
+  })
+})
+
 describe('入口の名乗り', () => {
   it('柱で名前と職種を出す。柱はどの画面にも出るので全画面に載る', async () => {
     await seedMember({ name: '岡崎 昂功', role: 'System Engineer' })
@@ -371,7 +399,9 @@ describe('画面ごとの見出し', () => {
 
     const html = await (await get('/members/okazaki')).text()
     expect(html).toContain('<p class="identity__name">岡崎 昂功</p>')
-    expect(html).toContain('<h1 class="hero__headline">つくる工程そのものを、速くする。</h1>')
+    // 見出しは句読点で塊に分けてある（Phrases）。読める文字列としては1文のまま
+    const h1 = html.match(/<h1 class="hero__headline">(.*?)<\/h1>/)?.[1] ?? ''
+    expect(h1.replace(/<[^>]+>/g, '')).toBe('つくる工程そのものを、速くする。')
 
     // 2枚目以降も、その画面自身の見出しが h1
     expect(await (await get('/members/okazaki/about')).text()).toContain('<h1>About</h1>')

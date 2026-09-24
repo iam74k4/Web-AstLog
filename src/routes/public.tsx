@@ -51,6 +51,7 @@ import {
   Note,
   NowList,
   Numbers,
+  Phrases,
   Screen,
   ScreenPager,
   ScreenSection,
@@ -437,20 +438,22 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
                 この case の中だけ。
               */}
               {split ? <MoonField /> : null}
-              <h1>{SITE.heroTitle}</h1>
-              <p>{SITE.heroLead}</p>
-            </Hero>
-            {/*
-              入口に置く一覧への帯。個人ページの1枚目と同じ形で、同じ理由で
-              置く——この画面には作品が1件も無いので、何件あるかを数で見せて
-              から送り出す。帯は id も名前も持たない（目次からもページャからも
-              指さないので、指すための名前が要らない）
-            */}
-            {band ? (
-              <Screen whole={!split}>
+              <h1>
+                <Phrases text={SITE.heroTitle} />
+              </h1>
+              <p>
+                <Phrases text={SITE.heroLead} />
+              </p>
+              {/*
+                入口に置く一覧への帯。個人ページの1枚目と同じ形で、同じ理由で
+                置く——この画面には作品が1件も無いので、何件あるかを数で見せて
+                から送り出す。帯は id も名前も持たない（目次からもページャからも
+                指さないので、指すための名前が要らない）
+              */}
+              {band ? (
                 <Band href={band.href} label="つくったものの一覧" app={band.app} work={band.work} />
-              </Screen>
-            ) : null}
+              ) : null}
+            </Hero>
           </>
         ),
       }
@@ -1313,13 +1316,15 @@ function memberScreens(member: schema.Member, band: Child): MemberScreen[] {
             同じになってしまう。見出しはその画面の中で完結させる
           */}
           <Hero>
-            <h1 class="hero__headline">{member.headline || member.name}</h1>
+            <h1 class="hero__headline">
+              <Phrases text={member.headline || member.name} />
+            </h1>
+            {/*
+              帯は id も名前も持たない。この画面に同居するだけで、目次からも
+              ページャからも指さないので、指すための名前が要らない
+            */}
+            {band}
           </Hero>
-          {/*
-            帯は id も名前も持たない。この画面に同居するだけで、目次からも
-            ページャからも指さないので、指すための名前が要らない
-          */}
-          {band}
         </>
       ),
     },
@@ -1497,14 +1502,7 @@ async function renderMemberScreen(
   const screens = memberScreens(
     member,
     band ? (
-      <Screen>
-        <Band
-          href={band.href}
-          label="このメンバーの Apps · Works"
-          app={band.app}
-          work={band.work}
-        />
-      </Screen>
+      <Band href={band.href} label="このメンバーの Apps · Works" app={band.app} work={band.work} />
     ) : null,
   )
 

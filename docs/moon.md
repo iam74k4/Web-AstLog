@@ -297,7 +297,7 @@ python3 scripts/moon/pack.py /tmp/moon.png public/assets
 #      （写す先はここ1か所。マークアップに寸法は無い）
 
 # 4) 検査
-npm run check:contrast  # 72通り。見出しが 3:1・リード文が 4.5:1 を保つか。
+npm run check:contrast  # 72通り。見出しが 3:1・リード文と帯の件数が 4.5:1 を保つか。
                         #   素材と --moon-ratio の食い違いもここで落ちる
                         #   （絵の寸法を知るには復号が要り、workerd にその手が無い）
 npm run check:fit       # 月そのものは版面を動かさないが、素材を差し替えたら一応

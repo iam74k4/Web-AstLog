@@ -587,14 +587,14 @@ describe('部品の作法', () => {
     expect(bodyOf(sheet, '.contact :is(h1, h2) {')).toContain('font-size: var(--fs-display-xs)')
   })
 
-  it('個人ページの名乗りは、要素とクラスの両方で1段小さくする', () => {
+  it('個人ページの名乗りは、要素とクラスの両方で段を下げる', () => {
     /*
       この見出しは <h1 class="hero__headline">。素の .hero__headline（0,1,0）
-      では .hero h1（0,1,1）に負け、1段大きい --fs-display を継ぐ。落ちても
+      では .hero h1（0,1,1）に負け、大見出しの --fs-display-xl を継ぐ。落ちても
       エラーは出ず、変わるのは「名乗りだけが画面の高さを食う」という結果だけ。
     */
     expect(bodyOf(sheet, '.hero h1.hero__headline {')).toContain('font-size: var(--fs-display-sm)')
-    expect(bodyOf(sheet, '.hero h1 {')).toContain('font-size: var(--fs-display)')
+    expect(bodyOf(sheet, '.hero h1 {')).toContain('font-size: var(--fs-display-xl)')
 
     /*
       素の .hero__headline は置かない。付く先は必ず .hero の直接の子の h1 で、
@@ -603,6 +603,23 @@ describe('部品の作法', () => {
     */
     // 行頭で見る。部分一致だと .hero h1.hero__headline に当たってしまう
     expect(sheet).not.toMatch(/^\.hero__headline\s*[,{]/m)
+  })
+
+  it('句読点までの塊は中で折らせない。大見出しは塊を1行ずつに積む', () => {
+    expect(bodyOf(sheet, '.phrase {')).toContain('display: inline-block')
+    expect(bodyOf(sheet, '.hero h1 .phrase {')).toContain('display: block')
+  })
+
+  it('入口の浮かび上がりは出だしの姿だけを持つ。止めた姿が最後の姿になる', () => {
+    /*
+      to を書くと、reduced-motion で animation: none になったとき（または
+      古いブラウザで）の姿と、動き終わった姿が別物になりうる。from だけなら
+      どちらも素の姿で同じ
+    */
+    const keyframes = sheet.slice(sheet.indexOf('@keyframes rise-in'))
+    const body = keyframes.slice(0, keyframes.indexOf('\n}\n'))
+    expect(body).toContain('from {')
+    expect(body).not.toMatch(/\bto\s*\{/)
   })
 
   it('技術の小見出しは、見出しに上げても太さを変えない', () => {

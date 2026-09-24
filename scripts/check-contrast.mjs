@@ -16,6 +16,13 @@
   だから h1 とリード文を visibility: hidden にした「地だけ」を撮り、
   文字が実際に乗る行ボックス（Range.getClientRects）の下を読む。
 
+  帯（一覧への丸い札）も同じ Hero の中にあって光暈の上に乗るので、その字
+  （何の一覧か・件数）も測る。帯は半透明の面を持つので、隠すのは字だけで
+  面は残す——面ごと隠すと、実際より暗い地で測ることになる。
+
+  動きは止めて測る（reducedMotion）。入口の見出しは浮かび上がって出てくるので、
+  止めないと、動いている途中の姿を測ることがある。
+
   画素は、撮った PNG をページへ戻して canvas から読む。Node 側に画像を
   展開する道具を増やさずに済む。
 
@@ -55,6 +62,12 @@ const MOON_MIN_PIXELS = 8000
 const MOON_MIN_LUMA = 45
 
 /*
+  「地だけ」を撮るときに隠す字の層。見出しとリード文は丸ごと、帯は字だけ
+  （帯の半透明の面は地の一部として残す）
+*/
+const TEXT_LAYERS = 'main > .hero > :is(h1, p), main > .hero > .band .band__body > *'
+
+/*
   骨格とアクセントを差し替えて、文字の行ボックスと色を集める。
   check-fit.mjs と同じで、保存の経路（D1 とログイン）は通さない——
   測りたいのは版面であって、設定の保存経路ではない。
@@ -66,10 +79,15 @@ const collect = ([layout, accent]) => {
   const hero = document.querySelector('main > .hero')
   if (!hero) return null
 
+  /*
+    子孫の文字ノードを全部たどる。見出しとリード文は句読点で切った塊
+    （<span class="phrase">）に入っているので、直下の子だけを見ると1行も
+    拾えない
+  */
   const lines = (element) => {
     const found = []
-    for (const node of element.childNodes) {
-      if (node.nodeType !== Node.TEXT_NODE) continue
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const range = document.createRange()
       range.selectNodeContents(node)
       for (const box of range.getClientRects()) {
@@ -93,7 +111,18 @@ const collect = ([layout, accent]) => {
     return { name, color: style.color, need: large ? 3 : 4.5, lines: lines(element) }
   }
 
-  return [read(hero.querySelector('h1'), '見出し'), read(hero.querySelector('p'), 'リード文')]
+  const band = hero.querySelector('.band')
+  return [
+    read(hero.querySelector('h1'), '見出し'),
+    read(hero.querySelector('p'), 'リード文'),
+    // 帯は件数が0のサイトでは出ない。出ているときだけ測る
+    ...(band
+      ? [
+          read(band.querySelector('.band__body strong'), '帯の題'),
+          read(band.querySelector('.band__meta'), '帯の件数'),
+        ]
+      : []),
+  ]
 }
 
 // 三日月を消した絵と比べ、三日月が描いた画素とその明るさを返す
@@ -206,7 +235,7 @@ async function main() {
 
   try {
     for (const viewport of VIEWPORTS) {
-      const page = await browser.newPage({ viewport })
+      const page = await browser.newPage({ viewport, reducedMotion: 'reduce' })
       const where = `${viewport.width}x${viewport.height}`
       const response = await page.goto(base + PATH, { waitUntil: 'load' })
       if ((response?.status() ?? 0) !== 200) {
@@ -306,17 +335,17 @@ async function main() {
           }
 
           // 地だけを撮る。グリフを背景として数えないための肝
-          await page.evaluate(() => {
-            for (const node of document.querySelectorAll('main > .hero > :is(h1, p)')) {
+          await page.evaluate((selector) => {
+            for (const node of document.querySelectorAll(selector)) {
               node.style.visibility = 'hidden'
             }
-          })
+          }, TEXT_LAYERS)
           const shot = (await page.screenshot({ type: 'png' })).toString('base64')
-          await page.evaluate(() => {
-            for (const node of document.querySelectorAll('main > .hero > :is(h1, p)')) {
+          await page.evaluate((selector) => {
+            for (const node of document.querySelectorAll(selector)) {
               node.style.visibility = ''
             }
-          })
+          }, TEXT_LAYERS)
 
           const found = await page.evaluate(worstIn, [`data:image/png;base64,${shot}`, targets])
           checked += 1
