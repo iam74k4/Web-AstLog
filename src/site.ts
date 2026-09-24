@@ -21,7 +21,7 @@ export const SITE = {
   name: 'Noctifex',
   tagline: 'つくる人の、置き場所。',
 
-  heroTitle: 'つくったものを、置いておく。',
+  // 入口の見出しは名前（公開中が1人のとき）かサイト名。標語は持たない
   heroLead: '個人でつくったアプリと、仕事で取り組んだ開発効率化をまとめています。',
 
   contactTitle: 'AI 活用の話も、コードの話もしたい。',

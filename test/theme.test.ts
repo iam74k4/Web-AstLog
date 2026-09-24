@@ -622,6 +622,15 @@ describe('部品の作法', () => {
     expect(body).not.toMatch(/\bto\s*\{/)
   })
 
+  it('入口の下の余白は、浮かび上がりのずれ以上に取る。途中で弁を開かせない', () => {
+    // 字を下に寄せた入口で、帯が下から浮かび上がる途中だけ 4px 溢れていた
+    expect(bodyOf(sheet, '.hero {')).toContain('padding-block: var(--sp-3) var(--enter-shift)')
+  })
+
+  it('三日月はパネルからはみ出させない。はみ出すと先が縦一直線に途切れて見える', () => {
+    expect(sheet).toMatch(/--moon-cut:\s*0%?;/)
+  })
+
   it('技術の小見出しは、見出しに上げても太さを変えない', () => {
     // <h2 class="side-head">。欲しかったのは読み上げでの移動と塊の結び付きで、
     // 太さではない。打ち消さないとブラウザ既定の太字が出る

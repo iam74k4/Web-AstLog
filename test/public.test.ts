@@ -252,12 +252,17 @@ describe('入口の画面', () => {
     expect(splitPhrases('')).toEqual([''])
   })
 
-  it('見出しとリード文は塊ごとに出し、帯は見出しと同じ Hero の中に置く', async () => {
+  it('見出しは1人なら名前、肩書きを小さく添える。帯は同じ Hero の中に置く', async () => {
+    await seedMember({ name: '岡崎 昂功', role: 'System Engineer' })
     await seedItem()
 
     const html = await (await get('/')).text()
     const hero = html.slice(html.indexOf('<header class="hero"'), html.indexOf('</header>'))
-    for (const part of [...splitPhrases(SITE.heroTitle), ...splitPhrases(SITE.heroLead)]) {
+    // 標語は置かない。何も伝えないまま画面でいちばん大きな字になっていた
+    expect(hero).not.toContain('つくったものを、置いておく。')
+    expect(hero.match(/<h1>(.*?)<\/h1>/)?.[1]?.replace(/<[^>]+>/g, '')).toBe('岡崎 昂功')
+    expect(hero).toContain('<p class="hero__role">System Engineer</p>')
+    for (const part of splitPhrases(SITE.heroLead)) {
       expect(hero).toContain(`>${part}</span>`)
     }
     /*
@@ -265,6 +270,16 @@ describe('入口の画面', () => {
       あいだに画面の半分ほどの空白ができていた
     */
     expect(hero).toContain('class="band"')
+  })
+
+  it('公開中が2人以上なら、見出しはサイトの名前。肩書きは添えない', async () => {
+    await seedMember()
+    await seedMember({ slug: 'tanaka', name: '田中 未来', sortOrder: 20 })
+
+    const html = await (await get('/')).text()
+    const hero = html.slice(html.indexOf('<header class="hero"'), html.indexOf('</header>'))
+    expect(hero.match(/<h1>(.*?)<\/h1>/)?.[1]?.replace(/<[^>]+>/g, '')).toBe(SITE.name)
+    expect(hero).not.toContain('hero__role')
   })
 })
 

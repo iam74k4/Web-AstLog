@@ -416,15 +416,16 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
   const split = page !== null
 
   switch (block.type) {
-    case 'hero':
+    case 'hero': {
       if (!once) return null
+      const solo = soloMember(members)
       return {
         id,
         slug: id,
         pages: 1,
         nav: null,
         // 入口はサイトそのものの画面。名乗りと同じ文をそのまま出す
-        description: describe(siteDescription(soloMember(members))),
+        description: describe(siteDescription(solo)),
         node: (
           <>
             <Hero whole={!split}>
@@ -438,8 +439,19 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
                 この case の中だけ。
               */}
               {split ? <MoonField /> : null}
+              {/*
+                名乗り。1人のサイトならその人の名前と肩書き、そうでなければ
+                サイトの名前だけ。
+
+                標語は置かない。「つくったものを、置いておく。」を大見出しにして
+                いたころは、何も伝えないまま画面でいちばん大きな字になっていた。
+                採る側が探しに来るのは人の名前と職種なので、それをそのまま出す。
+                肩書きは名前の上に小さく添える札で、899 以下で柱から畳まれる
+                肩書きも、入口ではここで読める。
+              */}
+              {solo?.role ? <p class="hero__role">{solo.role}</p> : null}
               <h1>
-                <Phrases text={SITE.heroTitle} />
+                <Phrases text={solo?.name ?? SITE.name} />
               </h1>
               <p>
                 <Phrases text={SITE.heroLead} />
@@ -457,6 +469,7 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
           </>
         ),
       }
+    }
 
     case 'apps': {
       // 公開中の app が1件も無ければ節ごと出さない。絞り込んで0件になっただけの

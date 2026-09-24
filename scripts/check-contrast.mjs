@@ -16,6 +16,7 @@
   だから h1 とリード文を visibility: hidden にした「地だけ」を撮り、
   文字が実際に乗る行ボックス（Range.getClientRects）の下を読む。
 
+  名前の上の肩書き（小さい字なので 4.5:1 が要る）も同じく測る。
   帯（一覧への丸い札）も同じ Hero の中にあって光暈の上に乗るので、その字
   （何の一覧か・件数）も測る。帯は半透明の面を持つので、隠すのは字だけで
   面は残す——面ごと隠すと、実際より暗い地で測ることになる。
@@ -114,7 +115,10 @@ const collect = ([layout, accent]) => {
   const band = hero.querySelector('.band')
   return [
     read(hero.querySelector('h1'), '見出し'),
-    read(hero.querySelector('p'), 'リード文'),
+    // 名前の上の肩書き（1人のサイトだけ）と、リード文。どちらも Hero の直下の p
+    ...[...hero.querySelectorAll(':scope > p')].map((node) =>
+      read(node, node.classList.contains('hero__role') ? '肩書き' : 'リード文'),
+    ),
     // 帯は件数が0のサイトでは出ない。出ているときだけ測る
     ...(band
       ? [
