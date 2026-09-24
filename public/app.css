@@ -237,6 +237,24 @@
   --stagger: 90ms;
 
   /*
+    入口の月の出かた。着いたときに一度だけ、上からわずかに降りながら焦点が合い
+    （ずれとぼかしは字と同じ --enter-shift / --enter-blur）、字が出そろう頃に
+    月あかりが --moon-bloom の大きさから広がる。字より長く（--dur-slow）かけて、
+    字が止まったあとも少しだけ動いている——この画面の主役は月なので。
+
+    曲線はばねではなく --ease。ばねは 8% 行き過ぎて戻るので、月に掛けると
+    止まった姿を一度通り越す。下へ行き過ぎればリード文に近づき、光暈が
+    行き過ぎれば字の下が明るくなる——どちらも check:contrast が測った上限の
+    外側に出る。行き過ぎない曲線なら、動いている途中のどの姿も止まった姿より
+    暗く・小さく・上にある。
+
+    一度きりで、5 秒以内に止まる（WCAG 2.2.2）。繰り返す動き（ゆらぎ・瞬き）に
+    すると止める手段を別に置かなければならず、このサイトには JavaScript が無い。
+  */
+  --dur-slow: 1600ms;
+  --moon-bloom: 0.8;
+
+  /*
     夜の地。OS の設定に関わらずこの配色を既定にする。
 
     地は色味を持たない黒にする。紫や青に寄せると、面も文字も全部その色に
@@ -740,6 +758,12 @@ main {
   translate: var(--moon-shift) 0;
   /* 光暈（::before）を三日月（::after）の裏に回すための重なりの文脈 */
   isolation: isolate;
+  /*
+    着いたときに一度だけ、上から降りて焦点が合う（--dur-slow の説明を見ること）。
+    ぼかしは親のここに掛ける。filter は mask より先に効くので、::after に
+    掛けても平らな色がぼけるだけで、点はぼけない
+  */
+  animation: moon-settle var(--dur-slow) var(--ease) backwards;
 }
 
 /*
@@ -777,6 +801,33 @@ main {
   background: var(--accent);
   mask-image: var(--moon-glow);
   opacity: var(--moon-glow-ink);
+  /* 月あかりは帯のあと（肩書き 0 → 見出し → リード文 → 帯 3 → ここ 4）に広がる */
+  animation: moon-bloom var(--dur-slow) var(--ease) calc(4 * var(--stagger)) backwards;
+}
+
+/*
+  月の出。rise-in と同じく出だしの姿（from）だけを書き、終わりの姿は持たせない
+  ——reduced-motion で animation: none になった姿が、そのまま動き終わった姿になる。
+
+  **from に書いてよいのは、止まった姿より「暗い・小さい・上」だけ。**
+  check:contrast の本体は動きを止めて測るので、動いている途中に止まった姿より
+  明るくなる瞬間があっても、そこでは見えない（途中の姿は同じ検査の最後に
+  別に測っている）。下へずらす（リード文に近づく）、光暈を大きくする、
+  opacity を上げる、のどれも入れないこと。
+*/
+@keyframes moon-settle {
+  from {
+    opacity: 0;
+    filter: blur(var(--enter-blur));
+    translate: var(--moon-shift) calc(-1 * var(--enter-shift));
+  }
+}
+
+@keyframes moon-bloom {
+  from {
+    opacity: 0;
+    scale: var(--moon-bloom);
+  }
 }
 
 /* 月より前に出す。月は z-index: 0 の背景。見出し・リード文・帯のどれも同じ */

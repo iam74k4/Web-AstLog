@@ -936,16 +936,56 @@ describe('入口の月', () => {
     expect(sheet).toContain("url('/assets/moon.webp') type('image/webp')")
   })
 
-  it('動かさない。止まった姿がそのまま完成形', () => {
+  it('動くのは着いたときの一度だけ。止まった姿がそのまま完成形', () => {
     /*
       三日月の欠け具合は焼いた絵そのものなので、満ち欠けの動きは作れない。
-      動かさないと決めた以上、animation を足すとこの検査が止める
-      （prefers-reduced-motion の人と見え方が変わる作りを、入口に作らない）。
+      動かせるのは出かただけで、入口の字と同じく着いたときに一度だけ出てくる。
+      動きが持ち込みうる壊れ方は4つあり、ここで止める。
+
+      (1) 終わりの姿を keyframes に書くと、reduced-motion の人（animation: none）
+          の姿と動き終わった姿が別物になりうる。from だけにする
+      (2) check:contrast の本体は動きを止めて測る。途中の姿が止まった姿より
+          明るい・大きい・下にあると、そこでは見えない。だから from は
+          opacity 0 から、ずれは上向き（リード文から遠ざかる側）、光暈は縮めた所から
+      (3) ばね（--ease-spring）は 8% 行き過ぎる。月に掛けると止まった姿を
+          通り越して、(2) の外側へ一瞬出る。行き過ぎない --ease を使う
+      (4) 繰り返すと止める手段が要る（WCAG 2.2.2）が、JavaScript が無いので
+          置けない。一度きりで、遅れも含めて 5 秒以内に止める
     */
-    expect(bodyOf(sheet, '.moon {')).not.toContain('animation')
-    expect(bodyOf(sheet, '.moon__mark {')).not.toContain('animation')
-    expect(bodyOf(sheet, '.moon__mark::after {')).not.toContain('animation')
-    expect(sheet).not.toContain('@keyframes moon')
+    const settle = blockAt(sheet, '@keyframes moon-settle')
+    const bloom = blockAt(sheet, '@keyframes moon-bloom')
+    for (const frames of [settle, bloom]) {
+      expect(frames).toContain('from {')
+      expect(frames).not.toMatch(/\bto\s*\{|\d%\s*\{/)
+      expect(frames).toMatch(/opacity:\s*0;/)
+    }
+    expect(settle).toContain('translate: var(--moon-shift) calc(-1 * var(--enter-shift))')
+    expect(bloom).toContain('scale: var(--moon-bloom)')
+
+    const root = blockAt(sheet, ':root {')
+    const token = (name: string) => Number(root.match(new RegExp(`${name}:\\s*([\\d.]+);`))?.[1])
+    // 時間は単位ごと読む。1.6s を 1.6 と読むと、5 秒の上限が素通りになる
+    const ms = (name: string) => {
+      const [, value, unit] = root.match(new RegExp(`${name}:\\s*([\\d.]+)(ms|s);`)) ?? []
+      return Number(value) * (unit === 's' ? 1000 : 1)
+    }
+    expect(token('--moon-bloom')).toBeLessThan(1)
+
+    for (const selector of [
+      '.moon {',
+      '.moon__mark {',
+      '.moon__mark::before {',
+      '.moon__mark::after {',
+    ]) {
+      const rule = bodyOf(sheet, selector)
+      if (!rule.includes('animation')) continue
+      expect(rule, selector).toMatch(/animation: moon-[a-z]+ var\(--dur-slow\) var\(--ease\)[\s;]/)
+      expect(rule, selector).not.toContain('infinite')
+    }
+
+    // 遅れのいちばん長い光暈が止まるまでで 5 秒
+    const delay = bodyOf(sheet, '.moon__mark::before {').match(/calc\((\d+) \* var\(--stagger\)\)/)
+    expect(ms('--dur-slow') + Number(delay?.[1]) * ms('--stagger')).toBeLessThanOrEqual(5000)
   })
 
   it('紙には刷らない', () => {
