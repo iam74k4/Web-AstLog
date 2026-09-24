@@ -18,7 +18,7 @@ describe('見た目のプリセット', () => {
   it('何も選んでいなければ既定の姿で出す', async () => {
     const html = await (await get('/')).text()
     expect(html).toContain('data-layout="rail"')
-    expect(html).toContain('data-accent="iris"')
+    expect(html).toContain('data-accent="violet"')
     expect(html).toContain('data-typeface="sans"')
   })
 
@@ -57,7 +57,7 @@ describe('見た目のプリセット', () => {
     // 1つでも知らなければ、まとめて受け取らない
     const html = await (await get('/')).text()
     expect(html).toContain('data-layout="rail"')
-    expect(html).toContain('data-accent="iris"')
+    expect(html).toContain('data-accent="violet"')
   })
 
   it('DB に知らない値が入っていても既定に戻して描く', async () => {
@@ -823,7 +823,7 @@ describe('入口の月', () => {
       これが今回いちばん静かに壊れた所。カスタムプロパティの var() は
       **宣言した要素**で解決される。:root で
       `--moon-glow: radial-gradient(..., color-mix(in oklab, var(--accent) …))`
-      と組み立てると、--accent は :root の既定（iris）で確定し、body の
+      と組み立てると、--accent は :root の既定の色で確定し、body の
       [data-accent] は二度と効かない。実際、5色すべてで光暈が rgb(45,45,72) の
       紫のまま出ていた（アクセントを変えるとリンクだけが変わった）。
 
@@ -842,7 +842,7 @@ describe('入口の月', () => {
     /*
       三日月そのものも同じ罠にかかる。素材は無彩色（アルファ1面）で運び、
       色はここで --accent から作る。:root が持てるのは「どれだけ寄せるか」の
-      割合だけで、color-mix の式を :root に書くと iris で焼き付く。
+      割合だけで、color-mix の式を :root に書くと既定の色で焼き付く。
     */
     const after = bodyOf(sheet, '.moon__mark::after {')
     expect(after).toMatch(/color-mix\([^;]*var\(--accent\)[^;]*var\(--moon-tint\)/)

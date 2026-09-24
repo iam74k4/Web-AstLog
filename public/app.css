@@ -8,6 +8,11 @@
   メディアクエリは 600 と 900 の2つだけ。連続的に変わるもの（見出し・余白・
   列数）は clamp() と auto-fill に任せ、ブレークポイントを増やさない。
   モバイルファースト: 素の指定が Phone、min-width で足していく。
+
+  質感と手触りは React Bits（reactbits.dev）の Micro を手本にしている。
+  向こうのコードは使っていない。JavaScript を持ち込まず、CSS だけで作り直した:
+  - 面は白をうっすら重ねた「ゴースト」と、上辺の 1px の光で立たせる。線はほぼ見せない
+  - 押すと縮み、離すとばねで戻る。ばねの曲線は :root の --ease-spring だけを使う
 */
 
 :root {
@@ -59,8 +64,10 @@
   --w-center: 880px;
   --w-wide: 1440px;
   --gutter: clamp(16px, 3.4vw, 60px);
-  --radius: 10px;
-  --radius-sm: 6px;
+  /* 面は大きく、操作部品は中くらい、札は小さく丸める */
+  --radius: 16px;
+  --radius-sm: 10px;
+  --radius-xs: 6px;
 
   /*
     画面1つぶんの高さ。公開ページはこの高さに収め、ページ自体は動かさない。
@@ -128,7 +135,7 @@
 
     **色を混ぜる式そのものは :root に置けない。** ここに書けるのは割合だけで、
     color-mix は使う側（.moon__mark::after）に書く——:root で var(--accent) を
-    畳むと iris で焼き付いて [data-accent] が効かなくなるため。同じ罠に
+    畳むと既定の色で焼き付いて [data-accent] が効かなくなるため。同じ罠に
     --moon-glow で一度はまっている。
   */
   --moon-tint: 62%;
@@ -152,7 +159,7 @@
 
     色を混ぜた形（color-mix(in oklab, var(--accent) …)）でここに書いては
     いけない。カスタムプロパティの var() は**宣言した要素**で解決されるので、
-    :root で組み立てると --accent は :root の既定（iris）で焼き付き、
+    :root で組み立てると --accent は :root の既定の色で焼き付き、
     body の [data-accent] は二度と効かない。実際そうなっていて、5色すべてで
     光暈が rgb(45,45,72) の紫のまま——アクセントを変えてもリンクだけが
     変わり、月は動かなかった。坂だけなら色を含まないので、この罠が無い。
@@ -185,7 +192,7 @@
 
     だから光は、余白のあるほうへ逃がす。右端は三日月の右端に合わせ（右 0）、
     左へ 1.15幅・下へ 1.25丈・上へ 0.20丈。12通り（設計サイズ3つ × 骨格3つ
-    ＋ 1024x768）× アクセント5色のすべてで、パネルの四辺の段差は最大
+    ＋ 1024x768）× アクセント5色（ヴァイオレットを足す前）のすべてで、パネルの四辺の段差は最大
     1.9/255 に収まる。
 
     濃さの上限 26% はコントラストで決まっている。この光は見出しもリード文も
@@ -197,20 +204,37 @@
   */
   --moon-glow-inset: -20% 0 -125% -115%;
 
-  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease: cubic-bezier(0.23, 1, 0.32, 1);
   --dur-fast: 180ms;
   --dur: 320ms;
 
-  /* 夜の地。OS の設定に関わらずこの配色を既定にする */
-  --bg: #0c0c0e;
-  --surface: #141418;
-  --surface-hover: #1c1c22;
-  --line: #26262e;
-  --line-strong: #3a3a45;
+  /*
+    ばね。押した部品が戻るとき、スイッチのつまみが走るとき、知らせが出るときに使う。
+    linear() が使えない環境向けの近似をここに置き、本物は下の @supports で差し替える
+  */
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --dur-spring: 640ms;
+  --press: 0.96;
+  --dot: 6px;
+
+  /*
+    夜の地。OS の設定に関わらずこの配色を既定にする。
+
+    面は不透明な色で塗らず、白をうっすら重ねて作る（ゴースト）。線はほとんど
+    見えないくらいに弱くし、代わりに上辺へ 1px の光（--highlight）を入れて面を立たせる
+  */
+  --bg: #120f17;
+  --surface: rgba(255, 255, 255, 0.04);
+  --surface-hover: rgba(255, 255, 255, 0.07);
+  --line: rgba(255, 255, 255, 0.07);
+  --line-strong: rgba(255, 255, 255, 0.13);
+  --highlight: inset 0 1px 0 rgba(255, 255, 255, 0.07);
   --ink: #f2f2f4;
   --ink-mid: #b4b4c2;
   --ink-weak: #8a8a96;
   /* アクセントの候補。どれを使うかは管理画面の「見た目」で選ぶ */
+  --violet: #b58cf8;
+  --violet-soft: rgba(181, 140, 248, 0.16);
   --iris: #8f8ff5;
   --iris-soft: rgba(143, 143, 245, 0.13);
   --ember: #e8a15c;
@@ -222,13 +246,55 @@
   --rose: #f0899f;
   --rose-soft: rgba(240, 137, 159, 0.13);
 
-  --accent: var(--iris);
-  --accent-soft: var(--iris-soft);
+  --accent: var(--violet);
+  --accent-soft: var(--violet-soft);
   --accent-ink: #12121a;
   --danger: #e5848a;
   --danger-soft: rgba(229, 132, 138, 0.14);
 
+  /* 公開する / しない のスイッチ。つまみは押すと潰れて横に伸びる */
+  --switch-w: 44px;
+  --switch-h: 24px;
+  --switch-knob: 18px;
+  --switch-squish: 1.35;
+  --switch-track: rgba(255, 255, 255, 0.1);
+  --switch-track-on: var(--ink);
+  --switch-knob-off: var(--ink-weak);
+  --switch-knob-on: var(--bg);
+
   --tap: 40px;
+}
+
+/*
+  ばねの本物。減衰比 0.62 のばねの応答を、折れ線で近似したもの（行き過ぎて 8% 戻る）。
+  使えないブラウザでは上の cubic-bezier のまま動く
+*/
+@supports (transition-timing-function: linear(0, 1)) {
+  :root {
+    --ease-spring: linear(
+      0,
+      0.008 1.5%,
+      0.032 3%,
+      0.068 4.5%,
+      0.13 6.5%,
+      0.246 9.5%,
+      0.628 18.5%,
+      0.739 21.5%,
+      0.834 24.5%,
+      0.901 27%,
+      0.965 30%,
+      1.007 32.5%,
+      1.043 35.5%,
+      1.076 40.5%,
+      1.083 46%,
+      1.071 52%,
+      1.02 67%,
+      1.003 75%,
+      0.993 88%,
+      0.995 99.5%,
+      1
+    );
+  }
 }
 
 /*
@@ -508,13 +574,15 @@ main {
   font-size: var(--fs-sm);
   transition:
     color var(--dur-fast) var(--ease),
-    background var(--dur-fast) var(--ease);
+    background var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
 }
 
 /* 目次の行き先は節（#apps）ではなく画面の URL（/apps）。だから 'true' ではなく 'page' */
 .toc a[aria-current='page'] {
   color: var(--accent);
   background: var(--accent-soft);
+  box-shadow: var(--highlight);
 }
 
 .socials {
@@ -529,13 +597,16 @@ main {
   gap: var(--sp-2);
   min-height: var(--tap);
   padding: var(--sp-2) var(--sp-4);
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--highlight);
   color: var(--ink-mid);
   font-size: var(--fs-sm);
   transition:
-    border-color var(--dur-fast) var(--ease),
-    color var(--dur-fast) var(--ease);
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
 }
 
 .rail__footer {
@@ -618,13 +689,13 @@ main {
   色はここで --accent から作って敷き、その絵で抜く。
 
   こうしてあるので、見た目プリセットを変えると**光暈だけでなく三日月そのものの
-  色も変わる**。焼き込むと色がそこで固定され、アクセント5色のうち3色と喧嘩する
+  色も変わる**。焼き込むと色がそこで固定され、アクセントの色の多くと喧嘩する
   （実際にそうなっていた）。
 
   色を混ぜる式をここに書いているのは、:root に置けないため。カスタム
   プロパティの var() は**宣言した要素**で解決されるので、:root で
   color-mix(..., var(--accent) ...) と組み立てると --accent が :root の既定
-  （iris）で焼き付き、body の [data-accent] が二度と効かない。
+  の色で焼き付き、body の [data-accent] が二度と効かない。
   :root が持てるのは「どれだけアクセントに寄せるか」の数だけ。
 
   mask は image-set で形式を選ばせる。<picture> を置かなくても AVIF と WebP の
@@ -801,13 +872,16 @@ main {
   justify-self: start;
   min-height: var(--tap);
   padding: var(--sp-2) var(--sp-5);
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--highlight);
   color: var(--ink-mid);
   font-size: var(--fs-sm);
   transition:
-    border-color var(--dur-fast) var(--ease),
-    color var(--dur-fast) var(--ease);
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
 }
 
 .pager__go--next {
@@ -864,14 +938,16 @@ main {
   align-items: center;
   min-height: var(--tap);
   padding: var(--sp-2) var(--sp-5);
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--highlight);
   color: var(--ink-mid);
   font-size: var(--fs-sm);
   transition:
-    border-color var(--dur-fast) var(--ease),
     background var(--dur-fast) var(--ease),
-    color var(--dur-fast) var(--ease);
+    color var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
 }
 
 /* いま効いている絞り込み。もう一度押すと、その軸だけ外れる */
@@ -904,7 +980,9 @@ main {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
+  box-shadow: var(--highlight);
   transition:
+    background var(--dur-fast) var(--ease),
     border-color var(--dur-fast) var(--ease),
     transform var(--dur) var(--ease);
 }
@@ -954,7 +1032,8 @@ main {
   display: inline-flex;
   align-self: flex-start;
   padding: 0 var(--sp-3);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
+  box-shadow: var(--highlight);
   background: var(--accent-soft);
   color: var(--accent);
   font-size: var(--fs-label);
@@ -1059,9 +1138,12 @@ main {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
+  box-shadow: var(--highlight);
   transition:
+    background var(--dur-fast) var(--ease),
     border-color var(--dur-fast) var(--ease),
-    transform var(--dur) var(--ease);
+    transform var(--dur) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
 }
 
 /* 狭い画面では Profile ↗ を下の行に落とし、名前と一言に幅を渡す */
@@ -1277,6 +1359,7 @@ main {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
+  box-shadow: var(--highlight);
 }
 
 .numbers__note {
@@ -1325,7 +1408,11 @@ main {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
-  transition: border-color var(--dur-fast) var(--ease);
+  box-shadow: var(--highlight);
+  transition:
+    background var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
 }
 
 .band__body {
@@ -1356,6 +1443,7 @@ main {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
+  box-shadow: var(--highlight);
   padding: var(--sp-6);
 }
 
@@ -1383,7 +1471,9 @@ main {
   background: var(--accent);
   color: var(--accent-ink);
   font-size: var(--fs-md);
-  transition: opacity var(--dur-fast) var(--ease);
+  transition:
+    opacity var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
 }
 
 .empty {
@@ -1542,19 +1632,46 @@ main {
   border-radius: 999px;
   color: var(--ink-weak);
   font-size: var(--fs-sm);
+  transition:
+    background var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
 }
 
 .tabs a[aria-current='page'] {
   background: var(--accent-soft);
+  box-shadow: var(--highlight);
   color: var(--accent);
 }
 
+/* 保存・削除の知らせ。上からばねで降りてきて、そのまま残る（勝手には消さない） */
 .flash {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
   padding: var(--sp-3) var(--sp-5);
   border-radius: var(--radius-sm);
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--surface-hover);
+  box-shadow: var(--highlight);
+  color: var(--ink);
   font-size: var(--fs-sm);
+  animation: toast-in var(--dur-spring) var(--ease-spring) both;
+}
+
+.flash::before {
+  content: '';
+  width: var(--dot);
+  height: var(--dot);
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    translate: 0 calc(var(--sp-4) * -1);
+    scale: var(--press);
+  }
 }
 
 .banner {
@@ -1586,6 +1703,7 @@ main {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
+  box-shadow: var(--highlight);
 }
 
 .row__main {
@@ -1629,17 +1747,25 @@ main {
   gap: var(--sp-2);
   flex: 1;
   min-height: 44px;
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
+  /*
+    <button> にも使うので、地と書体を必ず自分で持つ。持たないとブラウザ既定の
+    灰色の地が残り、構成の「下書きにする」が 2.6:1 で読めなくなっていた
+  */
+  background: var(--surface);
+  box-shadow: var(--highlight);
   color: var(--ink-mid);
+  font-family: inherit;
   font-size: var(--fs-sm);
   transition:
-    border-color var(--dur-fast) var(--ease),
-    color var(--dur-fast) var(--ease);
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
 }
 
 .icon-btn--danger {
-  border-color: rgba(229, 132, 138, 0.35);
+  background: var(--danger-soft);
   color: var(--danger);
 }
 
@@ -1656,20 +1782,39 @@ main {
 .status {
   display: inline-flex;
   align-items: center;
+  gap: var(--sp-2);
   padding: 0 var(--sp-3);
   border-radius: 999px;
   font-size: var(--fs-label);
   line-height: 1.9;
 }
 
+/* 文字で言い分けたうえで、印の形でも分ける（塗り = 公開、輪 = 下書き）。色だけに頼らない */
+.status::before {
+  content: '';
+  width: var(--dot);
+  height: var(--dot);
+  flex-shrink: 0;
+  border-radius: 999px;
+}
+
 .status--published {
   background: var(--accent-soft);
+  box-shadow: var(--highlight);
   color: var(--accent);
+}
+
+.status--published::before {
+  background: currentColor;
 }
 
 .status--draft {
   border: 1px solid var(--line-strong);
   color: var(--ink-weak);
+}
+
+.status--draft::before {
+  box-shadow: inset 0 0 0 1px currentColor;
 }
 
 .empty-state {
@@ -1700,6 +1845,7 @@ main {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
+  box-shadow: var(--highlight);
 }
 
 .field {
@@ -1729,7 +1875,7 @@ main {
   width: 100%;
   min-height: 44px;
   padding: var(--sp-2) var(--sp-4);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   background: var(--bg);
   color: var(--ink);
@@ -1792,33 +1938,55 @@ main {
 }
 
 .toggle__track {
-  width: 40px;
-  height: 22px;
-  border-radius: 999px;
-  background: var(--line-strong);
   position: relative;
   flex-shrink: 0;
-  transition: background var(--dur-fast) var(--ease);
+  width: var(--switch-w);
+  height: var(--switch-h);
+  border-radius: 999px;
+  background: var(--switch-track);
+  box-shadow: var(--highlight);
+  transition: background var(--dur) var(--ease);
 }
 
+/*
+  つまみ。走るときはばねで、少し行き過ぎてから止まる。
+  押している間は潰れて横に伸びる（Squish Switch）。伸びる向きは、いま居る側と反対
+*/
 .toggle__knob {
   position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--ink);
-  transition: transform var(--dur-fast) var(--ease);
+  top: calc((var(--switch-h) - var(--switch-knob)) / 2);
+  left: calc((var(--switch-h) - var(--switch-knob)) / 2);
+  width: var(--switch-knob);
+  height: var(--switch-knob);
+  border-radius: 999px;
+  background: var(--switch-knob-off);
+  transition:
+    translate var(--dur-spring) var(--ease-spring),
+    width var(--dur-spring) var(--ease-spring),
+    background var(--dur) var(--ease);
 }
 
 .toggle input:checked + .toggle__track {
-  background: var(--accent);
+  background: var(--switch-track-on);
 }
 
 .toggle input:checked + .toggle__track .toggle__knob {
-  transform: translateX(18px);
-  background: var(--accent-ink);
+  translate: calc(var(--switch-w) - var(--switch-h)) 0;
+  background: var(--switch-knob-on);
+}
+
+.toggle:active .toggle__knob {
+  width: calc(var(--switch-knob) * var(--switch-squish));
+}
+
+.toggle:active input:checked + .toggle__track .toggle__knob {
+  translate: calc(
+      var(--switch-w) -
+      var(--switch-h) -
+      var(--switch-knob) *
+      (var(--switch-squish) - 1)
+    )
+    0;
 }
 
 .toggle input:focus-visible + .toggle__track {
@@ -1862,7 +2030,8 @@ main {
   cursor: pointer;
   transition:
     opacity var(--dur-fast) var(--ease),
-    border-color var(--dur-fast) var(--ease);
+    background var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
 }
 
 .btn--primary {
@@ -1871,9 +2040,9 @@ main {
 }
 
 .btn--ghost {
-  border-color: var(--line-strong);
-  background: transparent;
-  color: var(--ink-mid);
+  background: var(--surface);
+  box-shadow: var(--highlight);
+  color: var(--ink);
 }
 
 /* 狭い画面では、フォームのボタンだけ横幅いっぱいに広げる */
@@ -1926,6 +2095,7 @@ main {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
+  box-shadow: var(--highlight);
 }
 
 .login__brand {
@@ -1965,6 +2135,7 @@ main {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
+  box-shadow: var(--highlight);
 }
 
 .confirm h1 {
@@ -2001,13 +2172,17 @@ main {
 .move-btn {
   width: var(--tap);
   min-height: var(--tap);
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  background: transparent;
+  background: var(--surface);
+  box-shadow: var(--highlight);
   color: var(--ink-mid);
   font-family: inherit;
   font-size: var(--fs-sm);
   cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
 }
 
 .move-btn:disabled {
@@ -2053,6 +2228,7 @@ main {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface);
+  box-shadow: var(--highlight);
 }
 
 .catalog__item .btn {
@@ -2082,6 +2258,7 @@ main {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
+  box-shadow: var(--highlight);
 }
 
 .presets__legend {
@@ -2130,7 +2307,8 @@ main {
   background: var(--bg);
   transition:
     border-color var(--dur-fast) var(--ease),
-    background var(--dur-fast) var(--ease);
+    background var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
 }
 
 .preset input:checked + .preset__box {
@@ -2425,6 +2603,11 @@ main {
   body だけでなく要素単位でも効かせる。管理画面の見本が、同じ指定で
   そのまま色を出せるようにするため（見本用の色を別に持たない）。
 */
+[data-accent='violet'] {
+  --accent: var(--violet);
+  --accent-soft: var(--violet-soft);
+}
+
 [data-accent='iris'] {
   --accent: var(--iris);
   --accent-soft: var(--iris-soft);
@@ -2532,6 +2715,7 @@ body[data-layout='magazine'] .contact {
   border-top: 1px solid var(--line-strong);
   border-radius: 0;
   background: transparent;
+  box-shadow: none;
   padding: var(--sp-5) 0 0;
 }
 
@@ -2617,17 +2801,66 @@ body[data-layout='magazine'] .head {
   }
 }
 
+/* ============================================ 押す・選ぶ（手触り） */
+
+/*
+  押すと縮み、離すとばねで戻る。どの操作部品も同じ量（--press）・同じ曲線で動かす。
+  部品ごとに量を変えると、手触りが揃わない。
+  transform ではなく scale を使うのは、ホバーで浮かせる translate とぶつけないため
+*/
+.btn:active,
+.pill-cta:active,
+.filters a:active,
+.pager__go:active,
+.socials a:active,
+.icon-btn:active,
+.move-btn:not(:disabled):active,
+.tabs a:active,
+.toc a:active,
+.preset:active .preset__box,
+.band:active,
+.member:active {
+  scale: var(--press);
+}
+
+/*
+  選んだ瞬間だけ、ぷるんと揺れる（Jelly Radio）。見た目のプリセットの選択肢に使う。
+  :focus を条件にするのは、読み込んだときに最初から選ばれているものまで揺らさないため。
+  クリックでも矢印キーでも、選んだものにはフォーカスが乗る。
+  fill-mode を付けないのは、揺れ終わったあとも押したら縮むようにするため
+*/
+.preset input:checked:focus + .preset__box {
+  animation: jelly var(--dur-spring) var(--ease);
+}
+
+@keyframes jelly {
+  30% {
+    scale: 1.05 0.95;
+  }
+  45% {
+    scale: 0.97 1.03;
+  }
+  60% {
+    scale: 1.02 0.98;
+  }
+  78% {
+    scale: 0.995 1.005;
+  }
+}
+
 /* ============================================ 入力手段で分ける（幅ではなく） */
 
 @media (hover: hover) {
   .card:hover,
   .member:hover {
     border-color: var(--line-strong);
+    background: var(--surface-hover);
     transform: translateY(-2px);
   }
 
   .band:hover {
     border-color: var(--line-strong);
+    background: var(--surface-hover);
   }
 
   .toc a:hover {
@@ -2636,14 +2869,13 @@ body[data-layout='magazine'] .head {
   }
 
   .socials a:hover,
-  .icon-btn:hover {
-    border-color: var(--line-strong);
-    color: var(--ink);
-  }
-
-  .filters a:hover,
+  .icon-btn:not(.icon-btn--danger):hover,
+  .move-btn:not(:disabled):hover,
+  .btn--ghost:hover,
+  .tabs a:not([aria-current='page']):hover,
+  .filters a:not([aria-current]):hover,
   .pager__go:hover {
-    border-color: var(--line-strong);
+    background: var(--surface-hover);
     color: var(--ink);
   }
 
@@ -2660,6 +2892,7 @@ body[data-layout='magazine'] .head {
   body[data-layout='magazine'] .card:hover,
   body[data-layout='magazine'] .member:hover {
     transform: none;
+    background: transparent;
     border-top-color: var(--accent);
   }
 

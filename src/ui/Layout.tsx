@@ -80,7 +80,7 @@ export const Layout = (props: {
 
       <link
         rel="icon"
-        href={`data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%230c0c0e'/%3E%3Cpolygon points='${MARK_POINTS}' fill='%23f2f2f4'/%3E%3C/svg%3E`}
+        href={`data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%23120f17'/%3E%3Cpolygon points='${MARK_POINTS}' fill='%23f2f2f4'/%3E%3C/svg%3E`}
       />
       <link rel="stylesheet" href="/app.css" />
       {props.jsonLd ? (
