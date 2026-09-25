@@ -1,5 +1,5 @@
 """
-入口に敷く三日月を、**折った面の上に並べた点**としてレンダリングする。
+入口に敷く三日月を、**点**としてレンダリングする（いまの final は球として照らした点）。
 ここが本番。詰めるのは scripts/moon/pack.py、設計の経緯は docs/moon.md。
 
   blender -b -P scripts/moon/render.py -- <out.png> <res> <samples> [preset] [fstop]
@@ -26,6 +26,10 @@
      持つと、解像度や pack.py の丈を変えた瞬間に意味が変わる。
   5. 点は外周と同心の輪に並べる（rings）。斜めの格子では、細っていく尖りを
      行が斜めに横切って、切れ端が段々に残る。
+
+**いまの final は 1〜3 の「折った面」を使っていない。** 外周の円を球の輪郭と
+みなし、球として照らしている（sphere。陰影・輪の間隔の遠近・点のつぶれ）。
+折った面の版は preset rings / d / g などに比較のために残してある。
 
 ## 測って捨てたもの
 
@@ -256,14 +260,19 @@ PRESETS = {
         dict(px=10.5, amp=0.0005, k1=3.6, k2=4.2, rot=1.38, ph=2.3, gain=0.50, dot=2.0, seed=2, back=0.16,
              tilt_ref=1.2, tilt_lo=0.40, tilt_hi=1.70, lx_lo=1.15, lx_hi=0.70),
     ],
-    # 設計書が最終的に採った構成。1層・点を粗く（配信で読めるように）。
+    # 本番。外周の円を球の輪郭とみなし、球として照らす（sphere）。
+    # 間隔と点は配信実画素で 9.4 / 2.8 のまま。折りは使わない——球の陰影と
+    # 遠近が立体を受け持つので、面のうねりを重ねると濃淡が二重になる
+    "final": [
+        dict(layout="sphere", px=9.4, gain=1.05, dot=2.8, seed=1),
+    ],
+    # 1つ前の final。折った面の点を外周と同心の輪に並べたもの。
     # d の折り（amp/k1/k2/rot）に g の「傾きで明暗」と「左が濃い」を足し、
-    # 間隔と点を配信実画素で 9.4 / 2.8 まで開いたもの。
-    # 点は斜めの格子ではなく外周と同心の輪に並べる（rings）。折りは 0.38 から
+    # 間隔と点を配信実画素で 9.4 / 2.8 まで開いてある。折りは 0.38 から
     # 0.26 へ浅くした——輪に並べると等高線が輪を横切る細い筋になり、0.38 では
     # 下の尖りの内側が毛羽立って見えた。0.16 まで下げると筋はほぼ消えるが、
-    # 点の濃淡も消えて平らな網になる
-    "final": [
+    # 点の濃淡も消えて平らな網になる。点の大きさが一様で、平らな板に見えた
+    "rings": [
         dict(layout="rings", px=9.4, amp=0.26, k1=6.0, k2=2.6, rot=0.28, ph=0.0, gain=1.05, dot=2.8, seed=1,
              tilt_ref=1.5, tilt_lo=0.45, tilt_hi=1.95, lx_lo=1.15, lx_hi=0.70),
     ],
@@ -408,6 +417,84 @@ def rings(cfg):
     return pts
 
 
+"""
+球として照らす（final はこちら）。
+
+rings の月は、点の大きさも並び方も一様だった。三日月の形はしていても、
+平らな板に打った点に見える。外周の円を**球の輪郭**とみなし、立体の手がかりを
+3つ足した。どれも点の位置と大きさだけで作る——pack.py が点の本体を不透明に
+飽和させるので、明るさの階調は画面まで届かない（届くのは面積だけ）。
+
+  1. **陰影。** 光は三日月の軸の向き（左）から、奥へ alpha だけ回した所に置く。
+     alpha は「明暗の境目が、軸の上でちょうど内周と交わる」角度。点の大きさは
+     その光の量（ランバート）で決め、外縁の真ん中がいちばん大きく、明暗の境目と
+     尖りへ向けて細る。物理どおりだと尖りの先（軸から 98°）は影に入って消える
+     ので、WRAP だけ光を回り込ませて、尖りを細い点で残す。
+  2. **輪の間隔の遠近。** 輪を球面の上で等間隔に置く。画面では縁に近いほど
+     輪が詰まる（球の緯線が縁で混むのと同じ）。詰まりの下限は DU_MIN。
+  3. **点の遠近。** 点は球面に貼った小片なので、縁に近いほど輪の向きに
+     つぶれて見える。つぶれは SQUASH で止める（止めないと縁の点が線に溶ける）。
+
+明暗の境目の先（内周より内側）は描かない。そこは CSS の光暈が受け持っていて、
+欠けた側の暗い球に見える。
+
+点は奥行きを持たせず y=0 の面に置く。球面の奥行きどおりに置くと、透視で
+手前（中央寄り）の点ほど最大 18% 大きく写り、三日月の輪郭が崩れる。
+立体は「位置・大きさ・つぶれ」の計算で作り、輪郭は2つの円のまま守る。
+
+点を小さくしたぶん、画面での明るさの中央値が下がる。1024x768 では
+check:contrast の下限 45 すれすれ（46.3）になったので、app.css の --moon-ink を
+0.52 → 0.58 に上げて戻してある。
+"""
+WRAP = 0.30  # 光の回り込み。0 だと尖りの先が影に入って消える
+SQUASH = 0.60  # 縁での点のつぶれの下限（球面に正対した点を 1 として）
+DOT_SPAN = (0.40, 1.80)  # 点の大きさ（最も暗い所・最も明るい所。dot/2 に対する倍率）
+
+
+def sphere(cfg):
+    """球面上で等間隔の輪に、光の量で大きさを決めた点。戻すのは (x, y, z, 明るさ, 輪を横切る半径, 輪に沿う半径, 角度)。"""
+    step = cfg["px"] / PX_PER_BU
+    half = (cfg["dot"] / 2.0) / PX_PER_BU
+    ox, oz, big_r = OUTER
+    ix, iz, ir = INNER
+    axis = math.atan2(oz - iz, ox - ix)
+    ax, az = math.cos(axis), math.sin(axis)
+    alpha = math.asin((ir - math.hypot(ox - ix, oz - iz)) / big_r)
+    lx, ly, lz = math.cos(alpha) * ax, math.sin(alpha), math.cos(alpha) * az
+
+    # 輪の半径。球面の上で行の間隔ずつ内へ進む（画面では縁ほど詰まる）
+    row = step * math.sqrt(3.0) / 2.0
+    radii = []
+    r = big_r - 1.2 * half
+    while r > 0.0 and dist_in(ox + r * ax, oz + r * az) > 0.0:
+        radii.append(r)
+        phi = math.acos(r / big_r)
+        r = min(big_r * math.cos(phi + row / big_r), r - DU_MIN * step)
+
+    lo, hi = DOT_SPAN
+    pts = []
+    for ring, r in enumerate(radii):
+        start = axis + (0.5 * step / r if ring % 2 else 0.0)
+        for sign in (1.0, -1.0):
+            a = start if sign > 0 else start - step / r
+            while abs(a - axis) < math.pi:
+                x, z = ox + r * math.cos(a), oz + r * math.sin(a)
+                d_in = dist_in(x, z)
+                if d_in <= 0.0:
+                    break  # 内周に着いた。この向きはここまで
+                # 球面の法線。y は手前（カメラ側）が負
+                nx, nz = (x - ox) / big_r, (z - oz) / big_r
+                ny = -math.sqrt(max(0.0, 1.0 - nx * nx - nz * nz))
+                lit = max(0.0, min(1.0, (nx * lx + ny * ly + nz * lz + WRAP) / (1.0 + WRAP)))
+                size = half * (lo + (hi - lo) * lit * smoothstep(0.0, TERM, d_in))
+                pts.append((x, 0.0, z, cfg["gain"] * max(0.35, lit), size * max(SQUASH, -ny), size, a))
+                a += sign * step / r
+    return pts
+
+
+LAYOUTS = {"sphere": sphere, "rings": rings}
+
+
 # ---------------------------------------------------------------- 組み立て
 bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
@@ -430,13 +517,27 @@ nt.links.new(emit.outputs["Emission"], out.inputs["Surface"])
 
 stats = {"preset": PRESET, "layers": []}
 for i, cfg in enumerate(LAYERS):
-    pts = rings(cfg) if cfg.get("layout") == "rings" else lattice(cfg)
-    stats["layers"].append({"i": i, "count": len(pts), "px": cfg["px"], "amp": cfg["amp"]})
+    pts = LAYOUTS.get(cfg.get("layout"), lattice)(cfg)
+    stats["layers"].append({"i": i, "count": len(pts), "px": cfg["px"], "layout": cfg.get("layout", "lattice")})
 
     verts, faces, cols = [], [], []
-    for x, y, z, b, s in pts:
+    for pt in pts:
         j = len(verts)
-        verts += [(x - s, y, z - s), (x + s, y, z - s), (x + s, y, z + s), (x - s, y, z + s)]
+        if len(pt) == 5:
+            # 正方形（lattice / rings）
+            x, y, z, b, s = pt
+            verts += [(x - s, y, z - s), (x + s, y, z - s), (x + s, y, z + s), (x - s, y, z + s)]
+        else:
+            # 輪に沿わせた長方形（sphere）。sr は輪を横切る向き（縁でつぶれる）、st は輪に沿う向き
+            x, y, z, b, sr, st, ang = pt
+            rx, rz = math.cos(ang) * sr, math.sin(ang) * sr
+            tx, tz = -math.sin(ang) * st, math.cos(ang) * st
+            verts += [
+                (x - rx - tx, y, z - rz - tz),
+                (x + rx - tx, y, z + rz - tz),
+                (x + rx + tx, y, z + rz + tz),
+                (x - rx + tx, y, z - rz + tz),
+            ]
         faces.append((j, j + 1, j + 2, j + 3))
         cols += [(b / 4.0, b / 4.0, b / 4.0, 1.0)] * 4
 
