@@ -284,14 +284,20 @@ describe('入口の画面', () => {
 })
 
 describe('入口の名乗り', () => {
-  it('柱で名前と職種を出す。柱はどの画面にも出るので全画面に載る', async () => {
+  it('名乗るのは入口の見出しだけ。柱に名前を置かない（入口で2度並ぶ）', async () => {
     await seedMember({ name: '岡崎 昂功', role: 'System Engineer' })
     await seedItem()
 
-    for (const path of ['/', '/apps', '/team', '/contact']) {
+    const top = await (await get('/')).text()
+    expect(top.match(/<h1>(.*?)<\/h1>/)?.[1]?.replace(/<[^>]+>/g, '')).toBe('岡崎 昂功')
+
+    // 柱はどの画面にも出る。職種は残し、名前だけを外す
+    for (const path of ['/', '/apps', '/team', '/contact', '/all']) {
       const html = await (await get(path)).text()
-      expect(html, path).toContain('<p class="identity__name">岡崎 昂功</p>')
-      expect(html, path).toContain('<span class="identity__role">System Engineer</span>')
+      const rail = html.slice(html.indexOf('<aside class="rail"'), html.indexOf('</aside>'))
+      expect(rail, path).not.toContain('identity__name')
+      expect(rail, path).not.toContain('岡崎 昂功')
+      expect(rail, path).toContain('<span class="identity__role">System Engineer</span>')
     }
   })
 

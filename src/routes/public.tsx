@@ -248,14 +248,17 @@ const metricDigest = (item: ItemView) =>
 /*
   サイトの柱（名札）。どの画面にも出るので、ここに載せたものは全画面に載る。
 
-  1人のサイトなら、そこでその人を名乗る。名前も職種も出さない入口では、
-  最初の1画面から持ち帰れるものが何も無い。.identity__name / __role は
-  個人ページの名札と同じ部品で、新しい見た目は足していない。
+  名前は載せない。名乗るのは入口の大見出し（Hero の h1）で、柱にも置くと
+  入口では同じ名前が上と下に2度並ぶ。899 以下では柱が上の帯に畳まれるので、
+  ロゴのすぐ隣に名前が来て、見出しの前置きのように重なっていた。
+  名前は入口の <title>・description と JSON-LD にも残る。
+
+  職種は残す。.identity__role は個人ページの名札と同じ部品で、
+  新しい見た目は足していない。
 */
 const SiteIdentity = ({ solo }: { solo?: schema.Member }) => (
   <div class="identity">
     <Brand />
-    {solo ? <p class="identity__name">{solo.name}</p> : null}
     {solo?.role ? <span class="identity__role">{solo.role}</span> : null}
     <span class="identity__tagline">{SITE.tagline}</span>
     <Socials github={SITE.github} email={SITE.email} />
