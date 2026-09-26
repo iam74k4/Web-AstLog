@@ -470,6 +470,46 @@ describe('連絡先の行き先', () => {
       expect(main.match(/mailto:/g) ?? [], path).toHaveLength(1)
     }
   })
+
+  it('アドレスはピルの下に字でも置く。リンクにはしない（同じ行き先を2つ置かない）', async () => {
+    await seedMember()
+
+    const main = mainOf(await (await get('/contact')).text())
+    expect(main).toContain(`<p class="contact__address">${SITE.email}</p>`)
+    expect(main).toMatch(/<a class="pill-cta" href="mailto:[^"]+">[\s\S]*?メールを送る/)
+  })
+})
+
+describe('締めの画面（Contact）', () => {
+  it('入口と対になる月を敷き、節を月の受け皿にする', async () => {
+    await seedMember()
+
+    const main = mainOf(await (await get('/contact')).text())
+    expect(main).toContain('<section id="contact" class="moonlit"')
+    expect(main).toContain('<div class="moon moon--closing" aria-hidden="true">')
+  })
+
+  it('見出しは句読点で塊に切る。1字だけ次の行へ落とさない', async () => {
+    await seedMember()
+
+    const main = mainOf(await (await get('/contact')).text())
+    const h1 = main.match(/<h1>([\s\S]*?)<\/h1>/)?.[1] ?? ''
+    expect(h1).toContain('class="phrase"')
+    expect(h1.replace(/<[^>]+>/g, '')).toBe(SITE.contactTitle)
+  })
+
+  it('全体ページと個人ページには月を敷かない', async () => {
+    // 全体ページは印刷・Ctrl-F・翻訳の宛先。個人ページは1枚目に月が無いので、
+    // 締めだけに置くと対にならない
+    await seedMember()
+
+    for (const path of ['/all', '/members/okazaki/contact']) {
+      const html = await (await get(path)).text()
+      const contact = html.slice(html.indexOf('<section id="contact"'))
+      expect(contact, path).not.toContain('moon--closing')
+      expect(contact, path).not.toMatch(/<section id="contact" class="moonlit"/)
+    }
+  })
 })
 
 /*

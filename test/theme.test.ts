@@ -584,7 +584,49 @@ describe('部品の作法', () => {
     expect(bodyOf(sheet, '.head :is(h1, h2) {')).toContain('font-size: var(--fs-lg)')
 
     expect(sheet).not.toContain('.contact h2 {')
-    expect(bodyOf(sheet, '.contact :is(h1, h2) {')).toContain('font-size: var(--fs-display-xs)')
+    // 締めの見出しは入口の大見出しの1段下（個人ページの名乗りと同じ段）
+    expect(bodyOf(sheet, '.contact :is(h1, h2) {')).toContain('font-size: var(--fs-display-sm)')
+    // 塊を1行ずつに積む。流すと 390 で「したい / い。」と1字だけ落ちていた
+    expect(bodyOf(sheet, '.contact :is(h1, h2) .phrase {')).toContain('display: block')
+  })
+
+  it('締めの画面（Contact）は箱に入れず、入口と同じ組み方をする', () => {
+    /*
+      箱（枠・面・影）だったころは、広い画面の真ん中に小さな枠が浮いて周りが
+      空いていた。雑誌風の「箱をやめて罫線で区切る」一覧にも戻さない（そこに
+      居ると、雑誌風でだけ上に罫線が引かれる）
+    */
+    const contact = bodyOf(sheet, '.contact {')
+    expect(contact).not.toMatch(/\bborder|background|box-shadow/)
+    expect(sheet).not.toContain("body[data-layout='magazine'] .contact")
+
+    // 月の受け皿になり、字を月より前に出す。字は入口と同じく画面の下へ
+    expect(bodyOf(sheet, '.moonlit {')).toContain('position: relative')
+    expect(bodyOf(sheet, '.moonlit > :not(.moon) {')).toContain('z-index: 1')
+    const frame = blockAt(sheet, '@supports (height: 100svh)')
+    expect(
+      bodyOf(frame, ':where(body[data-layout]:not([data-whole])) main > .moonlit {'),
+    ).toContain('align-content: safe end')
+  })
+
+  it('締めの月は入口の月を返して小さく置き、動かさない', () => {
+    /*
+      丈は :root の段（--moon-closing-h）から取る。セレクタに生の % を書くと、
+      check:contrast の前提（字と月の間隔）を動かした場所が :root から見えなくなる。
+      動かさないのは、途中の姿を測る段が締めの画面には無いため——ここで
+      月の出を掛けると、check:contrast が見ていない明るさが字の下を通りうる
+    */
+    const root = blockAt(sheet, ':root {')
+    const closing = Number(root.match(/--moon-closing-h:\s*([\d.]+)%/)?.[1])
+    const opening = Number(root.match(/--moon-h:\s*([\d.]+)%/)?.[1])
+    expect(closing).toBeGreaterThan(0)
+    expect(closing).toBeLessThan(opening)
+    expect(bodyOf(sheet, '.moon--closing {')).toContain('--moon-h: var(--moon-closing-h)')
+    expect(bodyOf(sheet, '.moon--closing .moon__mark {')).toContain('scale: -1 1')
+    // 2つを1つの規則で止めている。::before（光暈の広がり）だけ残すと、そちらが動く
+    expect(sheet).toMatch(
+      /\.moon--closing \.moon__mark,\s*\.moon--closing \.moon__mark::before \{\s*animation: none;\s*\}/,
+    )
   })
 
   it('個人ページの名乗りは、要素とクラスの両方で段を下げる', () => {

@@ -117,20 +117,28 @@ export const SectionHead = ({
   label を渡すと、その名前の付いた region として読み上げに出る。名前の無い
   region は読み上げに現れないので、見出しを持たない箱（ひとこと・帯）には
   付けない。渡す文字列は見出しと同じ変数から取ること。
+
+  moonlit は「背景に月（MoonField）を敷く節」。月は節いっぱいに絶対配置で
+  貼るので、節が位置の基準になり、中身は入口と同じく画面の下に寄る
+  （app.css の .moonlit）。月を置くときは必ず一緒に立てること——立てないと
+  月の基準が外枠まで抜け、ページ全体に光暈が広がる。
 */
 export const Screen = ({
   id,
   label,
   whole,
+  moonlit,
   children,
 }: {
   id?: string
   label?: string
   whole?: boolean
+  moonlit?: boolean
   children: Child
 }) => (
   <section
     id={id}
+    class={moonlit ? 'moonlit' : undefined}
     tabindex={whole ? undefined : 0}
     role={label ? 'region' : undefined}
     aria-label={label}
@@ -208,9 +216,14 @@ export const Phrases = ({ text }: { text: string }) => (
   置く側（renderBlock の case 'hero'）が Hero の先頭の子として渡す。Hero 自身に
   埋めないのは、この部品を個人ページの名乗りでも使っているため——埋めると
   全員のページに月が出る。
+
+  closing は連なりの最後の画面（Contact）に置く月。入口の月を左右に返し、
+  ひとまわり小さく、動かさずに置く（app.css の .moon--closing）。最初と最後の
+  画面が同じ構図の裏表になる。置く側は Contact 部品で、受ける節には
+  Screen の moonlit を立てる。
 */
-export const MoonField = () => (
-  <div class="moon" aria-hidden="true">
+export const MoonField = ({ closing }: { closing?: boolean }) => (
+  <div class={closing ? 'moon moon--closing' : 'moon'} aria-hidden="true">
     <span class="moon__mark" />
   </div>
 )

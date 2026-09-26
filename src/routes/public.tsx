@@ -83,19 +83,35 @@ const Socials = ({ github, email }: { github?: string | null; email?: string | n
 )
 
 /*
-  連絡先の画面。
+  連絡先の画面。連なりの最後の1枚で、入口と対になる締め。
+
+  組み方は入口と同じ。月を右上に、字を画面の下に寄せる。月は入口の三日月を
+  左右に返し、ひとまわり小さく置く（MoonField の closing）。箱には入れない——
+  箱に入れていたころは、広い画面の真ん中に小さな枠が浮いて、周りが空いたまま
+  だった。
+
+  見出しは句読点で塊に切り、1塊1行に積む（入口の大見出しと同じ）。そのまま
+  流すと、390 で「したい / い。」と1字だけ次の行へ落ちていた。
+
+  行き先はメールと GitHub の2つを横に並べる。メールは「送る」操作なので
+  塗りのピル、GitHub は外へ出る脇の道なので柱と同じ .socials。アドレスは
+  ピルの下に字で置く——mailto はメールソフトが無い環境では何も起きないので、
+  写し取れる形でも持っておく（user-select: all で1回押せば全部選べる）。
+  アドレスはリンクにしない。同じ行き先を2つ置かない。
 
   GitHub のプロフィールはここに常設する。柱の .socials は 899 以下で畳んで
   あり（横帯に入らない）、プロフィールへの道はそこ1本しか無かった——つまり
   スマホで開いた人には、このサイトの一次動線が外枠の都合で消えていた
-  （WCAG 1.4.10 の「機能の損失」）。Contact は perScreen を持たない画面
-  まるごとのブロックで中身が3つしか無いので、1行足しても高さの予算に響かない。
-
-  メールは上の大きなピルにあるので、ここに並べるのは GitHub だけ。
-  同じ行き先を2つ置かない。
+  （WCAG 1.4.10 の「機能の損失」）。
 
   split は「割られた画面（1画面 = 1ドキュメント）か」。見出しが h1 に上がるのも、
   弁のための tabindex が付くのも同じ条件なので、2つの旗を持たせない。
+
+  moon は締めの月を敷くか。サイトの連なりの Contact（入口に月がある）だけが
+  立てる。個人ページの Contact には敷かない——あちらの1枚目には月が無いので、
+  締めだけに月を置くと「対」にならない。全体ページ（/all）にも敷かない
+  （入口と同じ理由。印刷・Ctrl-F・翻訳の宛先）ので、split が偽なら立っていても
+  敷かない。
 */
 const Contact = ({
   title,
@@ -103,21 +119,38 @@ const Contact = ({
   email,
   github,
   split,
+  moon,
 }: {
   title: string
   lead: string
   email: string
   github?: string | null
   split?: boolean
+  moon?: boolean
 }) => (
-  <Screen id="contact" label={title} whole={!split}>
+  <Screen id="contact" label={title} whole={!split} moonlit={split && moon}>
+    {split && moon ? <MoonField closing /> : null}
     <div class="contact">
-      {split ? <h1>{title}</h1> : <h2>{title}</h2>}
-      <p>{lead}</p>
-      <a class="pill-cta" href={`mailto:${email}`}>
-        {email}
-      </a>
-      <Socials github={github} />
+      <p class="contact__kicker">Contact</p>
+      {split ? (
+        <h1>
+          <Phrases text={title} />
+        </h1>
+      ) : (
+        <h2>
+          <Phrases text={title} />
+        </h2>
+      )}
+      <p class="contact__lead">
+        <Phrases text={lead} />
+      </p>
+      <div class="contact__actions">
+        <a class="pill-cta" href={`mailto:${email}`}>
+          <MailIcon /> メールを送る →
+        </a>
+        <Socials github={github} />
+      </div>
+      <p class="contact__address">{email}</p>
     </div>
   </Screen>
 )
@@ -680,6 +713,8 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
             email={SITE.email}
             github={SITE.github}
             split={split}
+            // サイトの連なりの締め。入口の月と対になる月を敷く
+            moon
           />
         ),
       }
