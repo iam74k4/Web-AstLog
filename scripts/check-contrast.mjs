@@ -22,7 +22,9 @@
   面は残す——面ごと隠すと、実際より暗い地で測ることになる。
 
   動きは止めて測る（reducedMotion）。入口の見出しは浮かび上がって出てくるので、
-  止めないと、動いている途中の姿を測ることがある。
+  止めないと、動いている途中の姿を測ることがある。そのうえで月の出（月が
+  降りてきて焦点が合い、光暈が広がる）だけは、途中の姿を最後に別に測る——
+  止めて測るだけでは、途中で止まった姿より明るくなる瞬間が見えない。
 
   画素は、撮った PNG をページへ戻して canvas から読む。Node 側に画像を
   展開する道具を増やさずに済む。
@@ -67,6 +69,48 @@ const MOON_MIN_LUMA = 45
   （帯の半透明の面は地の一部として残す）
 */
 const TEXT_LAYERS = 'main > .hero > :is(h1, p), main > .hero > .band .band__body > *'
+
+/*
+  月の出（public/app.css の moon-settle / moon-bloom）のどこで止めて測るか。
+  月が止まるまでの時間に対する割合。
+
+  ばねのように行き過ぎる曲線なら、いちばん明るい・いちばん下に来るのは
+  動きの半ばより少し前（ばねの山は 46% 前後）。光暈は遅れて出るので、
+  全体の時間で見るとその山は 4〜6 割に散る。3コマはそこを挟むように置く。
+*/
+const MOTION_FRAMES = [0.2, 0.4, 0.6]
+
+// 月の animation を頭から止め、ほかの動き（字の浮かび上がり）は終わらせる。月が止まる時刻を返す
+const holdMoon = () => {
+  /*
+    まず掛け直す。読み込みが遅いと、ここへ来る前に月の出が終わっていて、
+    終わった animation は getAnimations() に出てこない（CI の遅い日にだけ
+    「見つからない」で落ちる）。いったん外して戻せば頭から始まる。
+    getAnimations() はスタイルを確定させるので、外した姿と戻した姿を1回ずつ通る
+  */
+  const off = document.createElement('style')
+  off.textContent = '.moon, .moon *, .moon *::before, .moon *::after { animation: none !important }'
+  document.head.append(off)
+  document.getAnimations()
+  off.remove()
+
+  let end = 0
+  for (const animation of document.getAnimations()) {
+    if (animation.animationName?.startsWith('moon-')) {
+      animation.pause()
+      end = Math.max(end, animation.effect.getComputedTiming().endTime)
+    } else {
+      animation.finish()
+    }
+  }
+  return end
+}
+
+const seekMoon = (at) => {
+  for (const animation of document.getAnimations()) {
+    if (animation.animationName?.startsWith('moon-')) animation.currentTime = at
+  }
+}
 
 /*
   骨格とアクセントを差し替えて、文字の行ボックスと色を集める。
@@ -233,8 +277,55 @@ async function main() {
   let tightest = { ratio: Number.POSITIVE_INFINITY, where: '' }
   let dimmest = { median: Number.POSITIVE_INFINITY, pixels: 0, where: '' }
 
+  // 骨格 × アクセントを一巡りして、字の下の地を読む。止まった姿も途中の姿もこれを通る
+  const sweep = async (page, where) => {
+    for (const layout of layouts) {
+      for (const accent of accents) {
+        const targets = await page.evaluate(collect, [layout, accent])
+        if (!targets) {
+          failures.push(`${layout} ${accent} ${where} — 入口のパネルが見つからない`)
+          continue
+        }
+
+        // 地だけを撮る。グリフを背景として数えないための肝
+        await page.evaluate((selector) => {
+          for (const node of document.querySelectorAll(selector)) {
+            node.style.visibility = 'hidden'
+          }
+        }, TEXT_LAYERS)
+        const shot = (await page.screenshot({ type: 'png' })).toString('base64')
+        await page.evaluate((selector) => {
+          for (const node of document.querySelectorAll(selector)) {
+            node.style.visibility = ''
+          }
+        }, TEXT_LAYERS)
+
+        const found = await page.evaluate(worstIn, [`data:image/png;base64,${shot}`, targets])
+        checked += 1
+
+        for (const one of found) {
+          if (one.total === 0) {
+            failures.push(`${layout} ${accent} ${where} — ${one.name}の行ボックスが0件`)
+            continue
+          }
+          if (one.worst < tightest.ratio) {
+            tightest = { ratio: one.worst, where: `${layout} ${accent} ${where} の${one.name}` }
+          }
+          if (one.below > 0) {
+            const share = ((one.below / one.total) * 100).toFixed(1)
+            failures.push(
+              `${layout} ${accent} ${where} — ${one.name}が最小 ${one.worst.toFixed(2)}:1（要 ${one.need}:1）。面積の ${share}% が足りない`,
+            )
+          }
+        }
+      }
+    }
+  }
+
+  // 止まった姿1つ + 月の出の途中の姿
+  const poses = 1 + MOTION_FRAMES.length
   console.log(
-    `月の上で文字が読めるか — ${VIEWPORTS.length}ビューポート × ${layouts.length}骨格 × ${accents.length}アクセント = ${VIEWPORTS.length * layouts.length * accents.length}通り`,
+    `月の上で文字が読めるか — ${VIEWPORTS.length}ビューポート × ${layouts.length}骨格 × ${accents.length}アクセント × ${poses}姿（止まった姿 + 月の出の途中 ${MOTION_FRAMES.length}コマ） = ${VIEWPORTS.length * layouts.length * accents.length * poses}通り`,
   )
 
   try {
@@ -330,48 +421,38 @@ async function main() {
       }
       if (moon.median < dimmest.median) dimmest = { ...moon, where }
 
-      for (const layout of layouts) {
-        for (const accent of accents) {
-          const targets = await page.evaluate(collect, [layout, accent])
-          if (!targets) {
-            failures.push(`${layout} ${accent} ${where} — 入口のパネルが見つからない`)
-            continue
-          }
-
-          // 地だけを撮る。グリフを背景として数えないための肝
-          await page.evaluate((selector) => {
-            for (const node of document.querySelectorAll(selector)) {
-              node.style.visibility = 'hidden'
-            }
-          }, TEXT_LAYERS)
-          const shot = (await page.screenshot({ type: 'png' })).toString('base64')
-          await page.evaluate((selector) => {
-            for (const node of document.querySelectorAll(selector)) {
-              node.style.visibility = ''
-            }
-          }, TEXT_LAYERS)
-
-          const found = await page.evaluate(worstIn, [`data:image/png;base64,${shot}`, targets])
-          checked += 1
-
-          for (const one of found) {
-            if (one.total === 0) {
-              failures.push(`${layout} ${accent} ${where} — ${one.name}の行ボックスが0件`)
-              continue
-            }
-            if (one.worst < tightest.ratio) {
-              tightest = { ratio: one.worst, where: `${layout} ${accent} ${where} の${one.name}` }
-            }
-            if (one.below > 0) {
-              const share = ((one.below / one.total) * 100).toFixed(1)
-              failures.push(
-                `${layout} ${accent} ${where} — ${one.name}が最小 ${one.worst.toFixed(2)}:1（要 ${one.need}:1）。面積の ${share}% が足りない`,
-              )
-            }
-          }
-        }
-      }
+      await sweep(page, where)
       await page.close()
+
+      /*
+        月の出の途中の姿も測る。
+
+        上の一巡りは動きを止めて測っている（reducedMotion）。入口の月は着いた
+        ときに一度だけ降りてきて焦点が合い、光暈が広がる（public/app.css の
+        --dur-slow）。その途中に止まった姿より明るい瞬間があっても、上では
+        見えないまま字の下を通り過ぎる——ばねで行き過ぎさせる・下からずらす・
+        光暈を大きい所から縮める、のどれでもそうなる。app.css の keyframes は
+        「暗い・小さい・上」からしか出ないように書いてあり、test/theme.test.ts が
+        その書き方を見張っているが、実際に描いて確かめられるのはここだけ。
+
+        動きを止めずに開き、月の animation だけを止めて途中の時刻へ送る。
+        字の浮かび上がりは先に終わらせる——行ボックスを止まった位置で読むため。
+      */
+      const moving = await browser.newPage({ viewport })
+      await moving.goto(base + PATH, { waitUntil: 'load' })
+      await moving.evaluate(() => document.fonts.ready.then(() => true))
+      const end = await moving.evaluate(holdMoon)
+      if (end === 0) {
+        failures.push(
+          `${where} — 月の出の animation（名前が moon- で始まるもの）が見つからない。途中の姿を1つも測れていない（月を動かすのをやめたなら、この段ごと外すこと）`,
+        )
+      }
+      for (const share of end > 0 ? MOTION_FRAMES : []) {
+        const at = Math.round(end * share)
+        await moving.evaluate(seekMoon, at)
+        await sweep(moving, `${where} 月の出 ${at}ms`)
+      }
+      await moving.close()
     }
   } finally {
     await browser.close()
