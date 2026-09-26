@@ -24,8 +24,8 @@
   /projects/2 124px → /projects/4 243px と跳ねていた（= rail @390x844）。
   比べないのは Hero（入口・個人ページの1枚目）と月の節（Contact）——どちらも
   見出しで始まる画面ではなく、名乗り・誘いを中央や下に置く構図そのもの。
-  作品のページは「← 一覧に戻る」が見出しの上に立つので、その札の上端で比べる
-  （見出しより前に何かがある画面は、節の最初の子の上端が錨）。
+  作品のページ（1枚目と本文の画面 Story）は「← 一覧に戻る」が見出しの上に立つので、
+  その札の上端で比べる（見出しより前に何かがある画面は、節の最初の子の上端が錨）。
 
   (1) は documentElement ではなく document.scrollingElement で測る。
   以前このサイトの HTML には `<!DOCTYPE html>` が無く、ブラウザは互換モードで
@@ -90,8 +90,14 @@ const ANCHORED = 'main > section:not(.moonlit)'
 
   手で並べた表を持つと、画面を1つ足した日にこちらだけ古くなる——しかも
   古くなったことは緑のまま分からない。sitemap は公開ページと同じ式
-  （siteSteps / memberScreens / itemHref）から数え上げているので、
+  （siteSteps / memberScreens / itemHref / itemStoryHref）から数え上げているので、
   新しい連なりを足せばこの検査の対象も自動で増える。
+
+  そのぶん、D1 に無い姿は測らない。作品の本文の画面（…/story）は本文を書いた
+  作品にしか無く、seed.sql は本文を書かない（本人の作品の中身を作り話で埋めない）
+  ので、seed のままでは1枚も測られない。本文の画面の上限は src/blocks.ts の
+  MAX_CHARS.itemBody に 27通りの実測があり、画面を測りたいときは本文を書いた作品を
+  置いてから回すこと（成功行の URL の数が本文のある作品の数だけ増える）。
 */
 async function screenPaths(base) {
   const response = await fetch(`${base}/sitemap.xml`)

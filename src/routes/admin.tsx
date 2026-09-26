@@ -1685,17 +1685,19 @@ const ItemForm = (props: ItemFormData) => {
               ようにするため。
 
               説明は目録の文なので常体（〜する。〜した。）。本文（下の欄）は
-              「です・ます」。同じ作品のページに2つが続けて出るので、文体で
-              目録と本文を分ける（CLAUDE.md「文言」）
+              「です・ます」。作品のページの1枚目（説明）から「くわしく読む →」で
+              次の画面（本文）へ続けて読まれるので、文体で目録と本文を分ける
+              （CLAUDE.md「文言」）
             */
             hint={`「何であるか。何をしたか。」の2文を常体で（〜する。〜した。）· ${MAX_CHARS.itemSummary} 字まで（電話の幅のカードは2行で、${MAX_CHARS.itemSummaryVisible} 字までしか出ません）`}
             maxlength={MAX_CHARS.itemSummary}
             error={props.errors?.summary}
           />
           {/*
-            本文は作品のページにだけ出る（カードには出ない）。作品のページは
-            1画面に収める決まりで、同じ画面に説明・画像・実績値・行き先が並ぶ
-            ので、上限は紹介文よりずっと短い（数と測り方は src/blocks.ts）。
+            本文は作品のページの2枚目（本文の画面 Story。/apps/item/<slug>/story）に
+            だけ出る（カードにも1枚目にも出ない。1枚目には「くわしく読む →」の入口が
+            出る）。上限は本文の画面1枚に収まる数（割らない。数と測り方は
+            src/blocks.ts）。空なら本文の画面は作らない。
             「空行で段落を分ける」は段落を2つ以上置けるときだけ言う——1段落まで
             のときに言うと、言われたとおりに分けた人が保存で止められる
           */}
@@ -1703,8 +1705,8 @@ const ItemForm = (props: ItemFormData) => {
             label="本文"
             name="body"
             value={d.body}
-            rows={4}
-            hint={`背景・やったこと・結果を「です・ます」で。${MAX_CHARS.itemBodyParagraphs > 1 ? '空行で段落を分ける' : '空行を入れずに1段落で'} · ${MAX_CHARS.itemBody} 字・${MAX_CHARS.itemBodyParagraphs} 段落まで（作品のページに出る。カードには出ない）`}
+            rows={6}
+            hint={`背景・やったこと・結果を「です・ます」で。${MAX_CHARS.itemBodyParagraphs > 1 ? '空行で段落を分ける' : '空行を入れずに1段落で'} · ${MAX_CHARS.itemBody} 字・${MAX_CHARS.itemBodyParagraphs} 段落まで（作品のページの次の画面「Story」に出る。空なら画面を作らない。カードには出ない）`}
             maxlength={MAX_CHARS.itemBody}
             error={props.errors?.body}
           />

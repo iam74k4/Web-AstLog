@@ -129,10 +129,12 @@ export const items = sqliteTable(
     summary: text('summary').notNull().default(''),
     /*
       作品ページの本文。背景・やったこと・結果を段落で（段落の数の上限は
-      MAX_CHARS.itemBodyParagraphs。いまは1段落）。
-      カードには出さない——カードの説明（summary）は行数で切られる要約で、
-      中身を読みに来た人が着く先は作品のページ（/apps/item/<slug>）。
-      長さの上限は src/blocks.ts の MAX_CHARS（1画面に収まる実測）。
+      MAX_CHARS.itemBodyParagraphs。いまは3段落）。
+      カードにも作品のページの1枚目にも出さない——出るのは1枚目の次の本文の
+      画面（/apps/item/<slug>/story）だけで、空なら（段落が1つも無ければ）その
+      画面を作らない（src/blocks.ts の itemStory）。カードの説明（summary）は行数で
+      切られる要約で、1枚目はカードを開いたもの。
+      長さの上限は src/blocks.ts の MAX_CHARS（本文の画面1枚に収まる実測）。
 
       既にある行は '' のまま（NOT NULL に定数の既定値なので ALTER で入る）。
       本人の作品の中身をこちらで書いて埋めない。

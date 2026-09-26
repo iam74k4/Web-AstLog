@@ -30,6 +30,7 @@ flowchart LR
     Filtered["絞り込んだ1画面目<br>/projects?kind= ・ ?member="]
     Moved["以前の一覧<br>/apps ・ /works（続きも）"]
     Item["作品1件（恒久リンク）<br>/apps/item/:slug ・ /works/item/:slug"]
+    Story["作品の本文（Story）<br>…/item/:slug/story<br>（本文のある作品だけ）"]
     Whole["全体 GET /all<br>（縦に伸びる唯一の1本）"]
     Profile["メンバー個別<br>/members/:slug"]
     OldTeam["1人のサイトの Team<br>/team ・ /team/:page"]
@@ -55,12 +56,19 @@ flowchart LR
 
     Screen -->|"カード（面ごと押せる）"| Item
     Page -->|"カード（面ごと押せる）"| Item
-    Item -->|"ページャ ← 前 / 次 →（作品同士。一覧と同じ並び）"| Item
+    Item -->|"ページャ ← 前 / 次 →（作品同士。一覧と同じ並び。本文の無い作品）"| Item
+    Item -->|"くわしく読む → / ページャ 次 →（本文のある作品）"| Story
+    Item -->|"ページャ ← 前（前の作品に本文があれば、その Story）"| Story
+    Story -->|"ページャ ← 前（同じ作品の1枚目）"| Item
+    Story -->|"ページャ 次 →（次の作品の1枚目）"| Item
+    Story -->|"← 一覧に戻る（その作品が載っている画面）"| Screen
+    Story -->|"目次（Projects に印）"| Screen
     Item -->|"← 一覧に戻る（その作品が載っている画面）"| Screen
     Item -->|"← 一覧に戻る（2画面目から先に載っている作品）"| Page
     Item -->|"目次（Projects に印）"| Screen
     Item -->|"行き先の「担当 名前 →」（2人以上、または Team が無いとき）"| Profile
     Item -->|"前の slug・前の区分の URL → 301（いまの URL へ）"| Item
+    Story -->|"前の slug・前の区分の URL → 301（いまの URL の …/story へ）"| Story
     Profile -->|"前の slug → 301（同じ画面のいまの URL へ）"| Profile
 
     Screen -->|"Team のカード / プロフィール →（2人以上）"| Profile
@@ -87,11 +95,13 @@ flowchart LR
     MScreen -.->|"書いていない画面"| NotFound
     Page -.->|"範囲の外のページ数"| NotFound
     Item -.->|"下書き / 知らない slug"| NotFound
+    Story -.->|"本文の無い作品"| NotFound
     NotFound -->|"トップへ戻る"| Top
 
     Top -.->|"柱の「管理画面」（ログイン中だけ）"| Admin
     Screen -.->|"柱の「管理画面」（ログイン中だけ）"| Admin
     Item -.->|"柱の「管理画面」（ログイン中だけ）"| Admin
+    Story -.->|"柱の「管理画面」（ログイン中だけ）"| Admin
     MScreen -.->|"柱の「管理画面」（ログイン中だけ）"| Admin
 ```
 
@@ -114,8 +124,11 @@ flowchart LR
 作品1件のページ（`/apps/item/<slug>` ・ `/works/item/<slug>`）は**作品同士でめくる、
 自分たちだけの連なり**。ページャは一覧と同じ並びで前後の作品へ行き（`← 前`
 `Projects 3 / 7` `次 →`。恒久リンクの無い作品は飛ばす）、サイトの連なりには継がない。
-中身はカードを開いたもので、本文と画像（あれば）はここにだけ出る。
-本文の頭の「← 一覧に戻る」は、その作品が載っている Projects の画面（`/projects/N`）へ
+中身はカードを開いたもので、画像（あれば）はここにだけ出る。本文を書いた作品は、
+1枚目の次に本文だけの画面（Story、`…/<slug>/story`）を持ち、1枚目 → Story → 次の作品と
+めくる。入口は1枚目の説明のすぐ下の「くわしく読む →」とページャの「次 →」。ページャが
+数えるのは作品なので、Story でも `Projects 3 / 7` のまま（同じ作品の2枚目）。
+どちらの画面も頭の「← 一覧に戻る」は、その作品が載っている Projects の画面（`/projects/N`）へ
 戻す——目次の Projects は1画面目へ行くので、4画面目から入った人が最初からめくり直さずに
 済む。目次の印は Projects に付く。一覧のカードは面ごとここへのリンクで（中の Repository と
 担当者名はそれぞれの行き先へ）、出る条件は「その作品が公開中」の1つだけ——Projects の
@@ -160,7 +173,7 @@ flowchart LR
 | Contact | 構成のその行（中身は `src/site.ts` にあり、管理画面からは変えられない） |
 | 打ち込むブロック（ひとこと・メモ …） | そのブロックの編集 |
 | 全体ページ（`/all`）・0件のトップ | 構成 |
-| 作品1件 | その項目の編集 |
+| 作品1件（1枚目・本文の画面 Story） | その項目の編集 |
 | 個人ページ（どの画面でも。1人のサイトのプロフィールも） | その人の編集 |
 
 同じタブで開く（管理画面の「サイトを見る ↗」は別タブ。両方を別タブにすると、

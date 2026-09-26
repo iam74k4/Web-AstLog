@@ -165,9 +165,11 @@ export async function findPublishedItem(db: Db, slug: string): Promise<ItemView 
 }
 
 /*
-  公開中の作品の並びだけ（id・区分・slug・題）。作品1件のページの行き来に使う
-  ——前後の作品へめくるページャと、「← 一覧に戻る」がその作品の載っている
-  Projects の何画面目かを数えるのに。
+  公開中の作品の並びだけ（id・区分・slug・題・本文）。作品1件のページの行き来に
+  使う——前後の作品へめくるページャと、「← 一覧に戻る」がその作品の載っている
+  Projects の何画面目かを数えるのに。本文を引くのは、その作品が本文の画面
+  （Story）を持つかを決めるため（src/blocks.ts の itemStory）。ページャは
+  1枚目 → Story → 次の作品の1枚目とめくるので、前後の作品の本文の有無も要る。
 
   並びは一覧と同じ itemOrder。別の並びで数えると、「次」で着く作品が一覧の
   隣のカードと食い違い、戻った画面にその作品が居ない。
@@ -182,6 +184,7 @@ export function listPublishedItemKeys(db: Db) {
       type: schema.items.type,
       slug: schema.items.slug,
       title: schema.items.title,
+      body: schema.items.body,
     })
     .from(schema.items)
     .where(itemsWhere({}))

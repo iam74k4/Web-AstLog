@@ -1355,6 +1355,19 @@ main > :is(.hero, section)[tabindex] > .moon {
   gap: var(--sp-7);
 }
 
+/*
+  全体ページ（/all）の Projects の節の、カードの下に並べる作品の本文
+  （components.tsx の ItemStories）。1作品ずつが Profile の小節と同じ組
+  （h3 の見出しと段落）なので、間隔も .profile と同じ段。カードの grid とのあいだも
+  同じだけ空ける。割られた画面には出ない（本文は作品ごとの Story の画面）。
+*/
+.stories {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-7);
+  margin-top: var(--sp-7);
+}
+
 /* --- 画面の中身の2つの箱 --- */
 
 /*
@@ -1457,23 +1470,26 @@ main > :is(.hero, section)[tabindex] > .moon {
 }
 
 /*
-  作品1件のページの「← 一覧に戻る」（components.tsx の BackLink）。
+  作品1件のページの「← 一覧に戻る」（components.tsx の BackLink）と、1枚目の
+  「くわしく読む →」（StoryLink）。対になる2枚の丸い札で、同じ1本の規則を読む。
 
   ページャの手（.pager__go）と同じ丸い札。ページャは作品同士を横にめくる手、
-  こちらは一覧（1つ上の階層）へ上がる手なので、画面の底ではなく見出しの上に
-  置く。行き先はその作品が載っている Projects の画面で、1画面目とは限らない。
+  「← 一覧に戻る」は一覧（1つ上の階層）へ上がる手なので、画面の底ではなく
+  見出しの上に置く。行き先はその作品が載っている Projects の画面で、1画面目とは
+  限らない。「くわしく読む →」は同じ作品の続き（本文の画面）へ進む手で、説明の
+  すぐ下に置く（.detail__text の中）。
 
-  justify-self は必須。節は grid なので、子になった inline-flex は blockify
-  され、既定の stretch で節の幅いっぱいに伸びる（.pager__go と同じ罠）。
+  justify-self は必須。節も .detail__text も grid なので、子になった inline-flex は
+  blockify され、既定の stretch で幅いっぱいに伸びる（.pager__go と同じ罠）。
   当たり判定は --tap（pointer: coarse では 44px）。
 */
-.back {
+.back,
+.more {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
   justify-self: start;
   min-height: var(--tap);
-  margin-bottom: var(--sp-5);
   padding: var(--sp-2) var(--sp-5);
   border: 1px solid transparent;
   border-radius: 999px;
@@ -1485,6 +1501,11 @@ main > :is(.hero, section)[tabindex] > .moon {
     background var(--dur-fast) var(--ease),
     color var(--dur-fast) var(--ease),
     scale var(--dur-spring) var(--ease-spring);
+}
+
+/* 見出しの上に立つ札。見出しとのあいだを空ける（入口の札は .detail__text の gap に任せる） */
+.back {
+  margin-bottom: var(--sp-5);
 }
 
 /* --- 絞り込み --- */
@@ -3967,7 +3988,8 @@ body[data-layout='magazine'] .head :is(h1, h2) {
 .preset:active .preset__box,
 .band:active,
 .member:active,
-.back:active {
+.back:active,
+.more:active {
   scale: var(--press);
 }
 
@@ -4052,7 +4074,8 @@ body[data-layout='magazine'] .head :is(h1, h2) {
   .tabs a:not([aria-current='page']):hover,
   .filters a:not([aria-current]):hover,
   .pager__go:hover,
-  .back:hover {
+  .back:hover,
+  .more:hover {
     background: var(--surface-hover);
     color: var(--ink);
   }
@@ -4544,6 +4567,7 @@ body[data-layout='magazine'] .head :is(h1, h2) {
   .filters,
   .pager,
   .back,
+  .more,
   .skip,
   .band,
   .hero__whole,

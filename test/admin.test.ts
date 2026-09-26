@@ -268,7 +268,7 @@ describe('Items — 本文と画像', () => {
     expect(row?.imageAlt).toBe('')
   })
 
-  it('画像は KV の items/ に置き、作品のページに代替テキストつきで出る。本文は説明に続く段落で出る', async () => {
+  it('画像は KV の items/ に置き、作品のページに代替テキストつきで出る。本文は次の画面（Story）に出る', async () => {
     const signed = await signIn()
     const response = await signed('/admin/items', {
       method: 'POST',
@@ -298,8 +298,13 @@ describe('Items — 本文と画像', () => {
     expect(html).toContain(
       `<figure class="shot"><img src="${url}" alt="音量ミキサーの画面" decoding="async"/></figure>`,
     )
-    // 説明が頭の1段落、本文がそのあとに続く1つの段落の列（ItemDetail の Note）
-    expect(html).toContain('<p>音量を分ける常駐アプリ。</p><p>背景と結果の段落です。</p>')
+    // 1枚目は説明だけの段落と、本文の画面への入口。本文は1枚目に出さない
+    expect(html).toContain('<div class="bio"><p>音量を分ける常駐アプリ。</p></div>')
+    expect(html).toContain('<a class="more" href="/apps/item/appmixer/story">')
+    expect(html).not.toContain('背景と結果の段落です。')
+    // 本文は本文の画面に、同じ段落の部品（Note）で出る
+    const story = await (await get('/apps/item/appmixer/story')).text()
+    expect(story).toContain('<div class="bio"><p>背景と結果の段落です。</p></div>')
   })
 
   it('画像があるのに代替テキストが空なら、公開では止める。打った内容は残し、画像は書かない', async () => {

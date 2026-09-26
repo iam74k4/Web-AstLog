@@ -9,7 +9,8 @@
 
   列の作り方だけを呼ぶ側に残し、連ね方はここ1本にする。3本目の連なり——作品1件の
   ページ同士をめくる列（src/routes/public.tsx の renderItem）——も、列を1つ用意した
-  だけでページャと目次が付いてきた。
+  だけでページャと目次が付いてきた。作品の本文の画面（Story）を足したときに要った
+  のは、数える単位（countKey）を1つ足すことだけだった。
 
   DOM も env も見ない純関数。src/lib/paginate.ts と同じ理由で、ブラウザ無しに
   確かめられる場所に置く。
@@ -40,6 +41,17 @@ export type Step = {
   */
   tocKey?: string
   tocLabel?: string | null
+  /*
+    ページャが1つと数えるまとまり。省けば1枚ずつ（href）。
+
+    作品のページがそれで、1枚目と本文の画面（Story）の2枚が作品1件——ページャは
+    作品を数える（「Projects 3 / 7」、単位は件）ので、Story の画面でも数は動かない。
+    2枚目を別に数えると、同じ作品の2枚が「3 / 12」「4 / 12」になり、作品の数とも
+    画面の数とも読めない数が出る。節（navKey）は分けない——分けると 1枚目 → Story
+    で節をまたぎ、Story の次の作品へ出る手が「Projects →」（一覧へ行くと読める）を
+    名乗ってしまう。
+  */
+  countKey?: string
   // この画面自身の URL。絞り込み（?kind= / ?member=）はここに含める
   href: string
   /*
@@ -85,7 +97,7 @@ export type Sequence = {
     nextSection: string | null
     // いまの節の名前。名前を持たない節（Hero・ひとこと）では null
     section: string | null
-    // 節の中での位置と、その節の画面数
+    // 節の中での位置と、その節の数。数える単位はふつう画面、作品のページは作品（countKey）
     index: number
     total: number
   } | null
@@ -130,6 +142,8 @@ function assertUniqueHrefs(steps: Step[]) {
 
 // 目次のまとめ単位と名前。省いたものは節（navKey / nav）と同じ
 const tocKeyOf = (step: Step) => step.tocKey ?? step.navKey
+// ページャが数える単位。省いたものは1枚ずつ
+const countKeyOf = (step: Step) => step.countKey ?? step.href
 // null は「目次に出さない」なので ?? では書けない（null も既定へ落ちてしまう）
 const tocLabelOf = (step: Step) => (step.tocLabel === undefined ? step.nav : step.tocLabel)
 
@@ -172,10 +186,11 @@ export function sequence(steps: Step[], index: number): Sequence | null {
     節の中での位置。navKey が同じものを1つの節として数える。
 
     列は節ごとにまとまって並んでいる（ブロックをほどいた順）ので、
-    同じ navKey の連続した範囲がその節になる。
+    同じ navKey の連続した範囲がその節になる。数える単位は countKey（作品の
+    ページでは作品1件）で、同じ単位の画面は1つと数える。
   */
-  const sameSection = steps.filter((step) => step.navKey === current.navKey)
-  const within = sameSection.indexOf(current)
+  const units = [...new Set(steps.filter((step) => step.navKey === current.navKey).map(countKeyOf))]
+  const within = units.indexOf(countKeyOf(current))
 
   const prevStep = steps[index - 1] ?? null
   const nextStep = steps[index + 1] ?? null
@@ -196,7 +211,7 @@ export function sequence(steps: Step[], index: number): Sequence | null {
             nextSection: crossing(nextStep),
             section: current.nav,
             index: within + 1,
-            total: sameSection.length,
+            total: units.length,
           }
         : null,
   }

@@ -187,6 +187,48 @@ describe('目次のまとめ単位', () => {
   })
 })
 
+/*
+  ページャが数える単位（countKey）。作品のページは、本文のある作品が2枚（1枚目と
+  本文の画面 Story）を持つ。ページャが数えるのは作品なので、2枚目を別に数えると
+  同じ作品の2枚が「2 / 4」「3 / 4」になり、作品の数とも画面の数とも読めない数が出る。
+*/
+describe('数える単位', () => {
+  const work = (href: string, of: string): Step => ({
+    ...step('item', href, 'Projects'),
+    countKey: of,
+  })
+  const WORKS: Step[] = [
+    work('/apps/item/a', '/apps/item/a'),
+    work('/apps/item/a/story', '/apps/item/a'),
+    work('/apps/item/b', '/apps/item/b'),
+    work('/apps/item/c', '/apps/item/c'),
+    work('/apps/item/c/story', '/apps/item/c'),
+  ]
+
+  it('同じ countKey の画面は1つと数える。2枚目でも数は動かない', () => {
+    expect(sequence(WORKS, 0)?.pager).toMatchObject({ index: 1, total: 3 })
+    expect(sequence(WORKS, 1)?.pager).toMatchObject({ index: 1, total: 3 })
+    expect(sequence(WORKS, 2)?.pager).toMatchObject({ index: 2, total: 3 })
+    expect(sequence(WORKS, 4)?.pager).toMatchObject({ index: 3, total: 3 })
+  })
+
+  it('めくる先は1枚ずつ。同じ節の中なので名乗らない', () => {
+    expect(sequence(WORKS, 0)?.pager).toMatchObject({
+      next: '/apps/item/a/story',
+      nextSection: null,
+    })
+    expect(sequence(WORKS, 1)?.pager).toMatchObject({
+      prev: '/apps/item/a',
+      next: '/apps/item/b',
+      nextSection: null,
+    })
+  })
+
+  it('省けば1枚ずつ数える（トップも個人ページも今までどおり）', () => {
+    expect(sequence(STEPS, 2)?.pager).toMatchObject({ index: 2, total: 2 })
+  })
+})
+
 describe('URL から画面を引く', () => {
   it('名指しが無ければ先頭。どちらの連なりも入口は1枚目', () => {
     expect(stepAt(STEPS, null)).toBe(0)

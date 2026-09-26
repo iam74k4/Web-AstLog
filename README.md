@@ -197,10 +197,16 @@ npm run deploy
 
 `items.body`（作品の本文）・`items.image_url`（スクリーンショット）・`items.image_alt`
 （その代替テキスト）はマイグレーションで入り、既にある作品は本文と代替テキストが
-空、画像は無しのまま——作品のページに `figure` も本文も出ず、カードにサムネイルも
-出ないだけ。`seed.sql` も書かない（本人の作品の中身を作り話で埋めない）。管理画面の
-作品のフォームから書く。画像は KV の `items/` に置かれ、`/images/items/…` から出る。
-画像を公開するときは代替テキストが要る。
+空、画像は無しのまま——作品のページに `figure` も本文の画面（`…/story`）も無く、
+カードにサムネイルも出ないだけ。`seed.sql` も書かない（本人の作品の中身を作り話で
+埋めない）。管理画面の作品のフォームから書く。本文を書いた作品は、作品のページの
+1枚目の次に本文だけの画面（`/apps/item/<slug>/story`。300 字・3段落まで）を持つ。
+画像は KV の `items/` に置かれ、`/images/items/…` から出る。画像を公開するときは
+代替テキストが要る。
+
+seed に本文が無いので、seed のままの `check:fit` は本文の画面を1枚も測らない
+（URL は 17 のまま）。本文の画面に触れたら、本文を書いた作品を置いてから測ること
+（本文のある作品の数だけ URL が増える）。
 
 `items.image_width` / `image_height`（画像の寸法。共有カードの `og:image:width` /
 `height` と `twitter:card` の大きさにだけ使う）は `0008_item_image_size` で入る。
@@ -266,8 +272,9 @@ src/
     paginate.ts      一覧を1画面ぶんずつに割る（chunk / screenCount）
     sequence.ts      画面の連なり。前後・目次・通し番号・canonical をここで組む
                      目次のまとめ単位（tocKey）は節（navKey）より大きくてよい
+                     ページャが数える単位（countKey）は画面より大きくてよい
   routes/
-    public.tsx       画面ごとの URL・/members/:slug の連なり・作品の恒久リンク
+    public.tsx       画面ごとの URL・/members/:slug の連なり・作品の恒久リンクと本文の画面
                      /all・/robots.txt・/sitemap.xml・/images/*
     admin.tsx        /admin/*
   ui/

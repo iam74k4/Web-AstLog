@@ -1,7 +1,7 @@
 import { raw } from 'hono/html'
 import type { Child } from 'hono/jsx'
 import type { Item, Member } from '../db/schema'
-import { initials, isSafeUrl, paragraphs, type SkillGroup, skillRows } from '../lib/format'
+import { initials, isSafeUrl, type SkillGroup, skillRows } from '../lib/format'
 import { MarkIcon, PencilIcon } from './icons'
 
 /*
@@ -391,6 +391,21 @@ export const itemHref = (item: { type: 'app' | 'work'; slug: string | null }) =>
   item.slug ? `/${item.type === 'app' ? 'apps' : 'works'}/item/${item.slug}` : null
 
 /*
+  作品の本文の画面（Story）。恒久リンクの続きの4語目で、本文を持つ作品にだけある
+  （持つかどうかは呼ぶ側が src/blocks.ts の itemStory で決める。ここは URL の
+  形だけ）。
+
+  名前の語（story）にしてあるのは、数（/2）だと「作品の2枚目」としか言わず、
+  1枚目と本文のあいだに画面を1枚足した日に、貼られた URL が別の画面を指すため。
+  個人ページの /members/<slug>/about と同じ文法でもある（名前の画面・数は続き）。
+  4語なので catch-all（1語・2語）とも /members/:slug/:screen とも取り合わない。
+*/
+export const itemStoryHref = (item: { type: 'app' | 'work'; slug: string | null }) => {
+  const at = itemHref(item)
+  return at ? `${at}/story` : null
+}
+
+/*
   カードのサムネイルの枠を取るか。作品に画像があるか、同じ行（1画面ぶんの
   カードの並び）のどれかに画像があるときに取る——呼ぶ側（public.tsx の
   projects）が行ごとに数えて渡す。
@@ -563,9 +578,9 @@ export const LinkRow = ({ links }: { links: { label: string; url: string }[] }) 
   絵はその中に object-fit: contain で縮めて収める（切らない）。寸法は共有カードの
   ためにだけ持っていて（items.image_width / image_height。この列より前の画像には
   無い）、枠には使わない。絵に合わせて枠を伸び縮みさせると、読み込んだ瞬間に下の
-  本文が押し下げられ、1画面に収まるかどうかが絵の縦横比しだいになる。枠を
-  決めておけば、どんな絵でも高さは同じで、本文の上限（src/blocks.ts の
-  MAX_CHARS.itemBody）を1つの数で決められる。
+  文の列が押し下げられ、1画面に収まるかどうかが絵の縦横比しだいになる。枠を
+  決めておけば、どんな絵でも高さは同じで、1枚目の上限（src/blocks.ts の
+  MAX_CHARS の説明・タグ・リンク）を1つの数で決められる。
 
   遅延読み込みにしない。この画面の主役で、開いた時点で画面の中にある。
 */
@@ -576,51 +591,103 @@ export const Shot = ({ src, alt }: { src: string; alt: string }) => (
 )
 
 /*
-  作品1件のページの、見出し（SectionHead）の下。**カードを開いたもの**として
+  作品1件のページの1枚目の、見出し（SectionHead）の下。**カードを開いたもの**として
   組む——説明・実績値・タグ・行き先はカードと同じ部品（Note の段落・Metric・
-  Tags・LinkRow）で、2行止め（--card-lines）を外した全文。足すのは画像（Shot）と
-  本文（body）の2つだけ。
+  Tags・LinkRow）で、行止め（--card-lines）を外した全文。足すのは画像（Shot）と、
+  本文の画面への入口（StoryLink）の2つだけ。
 
   カードと同じ部品にしたのは高さのため。以前は実績値をトップの「数字」の箱
   （Numbers）で、行き先をリンク集の行（LinkList）で出していて、説明 100 字・
   実績値・行き先3本の作品では、それだけで画面が埋まっていた——画像を置くと、
   本文が1字も無くても弁が 82px 開いた（= center @1440x900, Hiragino Sans,
-  macOS Chromium）。箱を1行に、3行を1行にすると、本文と画像の入る場所が空く。
+  macOS Chromium）。箱を1行に、3行を1行にすると、画像の入る場所が空く。
   カードから開いた先で同じ形に着く、という続き方にもなる。
 
-  並びは 画像 → 文の列（説明・本文・実績値・タグ・行き先）。900 未満では
+  並びは 画像 → 文の列（説明・入口・実績値・タグ・行き先）。900 未満では
   縦に、900 以上では文の列を左・画像を右に並べる（app.css の .detail--shot）。
   画像を先に置くのは、縦に積んだとき見出しのすぐ下に来るように。横に並べた
   ときは左から読み始める文の頭を見出しにそろえたいので、画像は右へ回す。
 
-  説明と本文は1つの段落の列（Note）に続けて置く——説明（「何であるか。
-  何をしたか。」）が頭の1段落、そのあとに本文（背景・やったこと・結果）。
-  別々の箱にすると、説明と本文の間だけ段落の間隔と違う空きが入り、1つの
-  文章が2つに割れて見える。
+  **本文（背景・やったこと・結果）はここに置かない。** 次の画面（Story。
+  story に渡す URL）に1枚まるごと取ってある。この画面に置いていたころは、説明・
+  画像・実績値・行き先4本と同じ1画面に収めるために、本文が 60 字・1段落まで
+  縮んでいた——「背景・やったこと・結果」が書けない長さで、作品のページが
+  カードを大きくしただけになっていた。入りきらないぶんは次の URL へ、の決まりの
+  とおりに送る。入口は説明のすぐ下——説明を読み終えた所で、続きがあると分かる。
 
   links は行き先（作品のリンクと、複数人のサイトなら「担当」）。呼ぶ側が
   組む——担当を出す条件（showMemberOf）はサイトの構成を知っている側にしかない。
+  story も呼ぶ側が決める（本文があるときだけ URL。無ければ入口を出さない）。
 */
 export const ItemDetail = ({
   item,
   links,
+  story,
 }: {
   item: ItemView
   links: { label: string; url: string }[]
-}) => {
-  const text = [item.summary, ...paragraphs(item.body)].filter(Boolean)
-  return (
-    <div class={item.imageUrl ? 'detail detail--shot' : 'detail'}>
-      {item.imageUrl ? <Shot src={item.imageUrl} alt={item.imageAlt} /> : null}
-      <div class="detail__text">
-        {text.length ? <Note paragraphs={text} /> : null}
-        <Metric item={item} />
-        <Tags tags={item.tags} />
-        <LinkRow links={links} />
-      </div>
+  story?: string | null
+}) => (
+  <div class={item.imageUrl ? 'detail detail--shot' : 'detail'}>
+    {item.imageUrl ? <Shot src={item.imageUrl} alt={item.imageAlt} /> : null}
+    <div class="detail__text">
+      {item.summary ? <Note paragraphs={[item.summary]} /> : null}
+      {story ? <StoryLink href={story} /> : null}
+      <Metric item={item} />
+      <Tags tags={item.tags} />
+      <LinkRow links={links} />
     </div>
-  )
-}
+  </div>
+)
+
+/*
+  作品の1枚目から、本文の画面（Story）への入口。「← 一覧に戻る」（BackLink）と
+  対の丸い札で、見た目も当たり判定（--tap）も同じ（app.css の .back, .more）。
+  向きだけが逆——あちらは1つ上の一覧へ戻る手、こちらは同じ作品の続きへ進む手。
+
+  ページャの「次 →」も同じ行き先を指す。それでも置くのは、ページャの手は
+  行き先を言わない（同じ作品の中なので名乗らない。src/lib/sequence.ts の
+  countKey）から——説明を読み終えた所に「続きがある」と言う手が無いと、
+  本文の画面があることは押してみるまで分からない。ページャの側を落とさない
+  理由は CLAUDE.md の「同じ行き先を1つの画面に2つ置かない」。
+
+  矢印は飾りなので読み上げに流さない（BackLink・帯と同じ）。
+*/
+export const StoryLink = ({ href }: { href: string }) => (
+  <a class="more" href={href}>
+    くわしく読む
+    <span aria-hidden="true">→</span>
+  </a>
+)
+
+/*
+  全体ページ（/all）の Projects の節に置く、作品の本文の列。カードの grid の下。
+
+  全体ページは中身を全部載せる場所（印刷・Ctrl-F・翻訳の宛先）なので、割られた
+  画面では Story の画面にしか無い本文も、ここで読めなければならない。カードの
+  中には入れない——カードは面ごと作品のページへのリンクで（題の ::after が
+  覆う）、覆いの下の段落は選べも読み上げの移動もしにくい。2列の grid の片方だけが
+  本文の長さぶん伸びるのも避ける。
+
+  見出しは Story の画面と同じ組（作品名に「Story」の添え）で、段は節の中の小節の
+  h3（SectionHead の sub。/all の Profile の About と同じ段）。本文の無い作品は
+  並べない（見出しだけ残さない）。1つも無ければ列ごと出さない。
+*/
+export const ItemStories = ({
+  stories,
+}: {
+  stories: { key: number; title: string; paragraphs: string[] }[]
+}) =>
+  stories.length ? (
+    <div class="stories">
+      {stories.map((story) => (
+        <div key={story.key}>
+          <SectionHead title={story.title} note="Story" sub />
+          <Note paragraphs={story.paragraphs} />
+        </div>
+      ))}
+    </div>
+  ) : null
 
 /*
   個人ページの1枚目に置く名札。顔・名前・肩書きと所在地を、Team のカード
@@ -952,9 +1019,10 @@ export const Empty = ({ children }: { children: Child }) => <p class="empty">{ch
   めくっても真ん中の数字が左右に動かない。
 
   unit は数える単位で、読み上げにだけ出る（目に見えるのは「3 / 7」だけ）。
-  ふつうは「画面」。作品1件のページ同士をめくるときは1枚が作品1件なので
-  「件」——「Projects の 7 画面のうち 3 画面目」と読むと、一覧の画面の数と
-  取り違える（一覧は同じ7件を4画面に割っている）。
+  ふつうは「画面」。作品1件のページ同士をめくるときは作品1件（1枚目と本文の
+  画面 Story の2枚でも1件）を数えるので「件」——「Projects の 7 画面のうち
+  3 画面目」と読むと、一覧の画面の数と取り違える（一覧は同じ7件を4画面に
+  割っている）。
 */
 export const ScreenPager = ({
   prev,
@@ -1026,8 +1094,8 @@ export const ScreenPager = ({
 }
 
 /*
-  一覧へ戻る道。作品1件のページの本文の頭に1本だけ置く（src/routes/public.tsx の
-  renderItem）。
+  一覧へ戻る道。作品1件のページの2つの画面（1枚目と本文の画面 Story）の頭に
+  1本ずつ置く（src/routes/public.tsx の renderItem）。行き先はどちらも同じ一覧の画面。
 
   作品のページから戻る道は、目次の「Projects」しか無かった。目次は一覧の
   1画面目へ行くので、4画面目のカードから入った人は、戻ると最初からめくり
@@ -1106,7 +1174,7 @@ export const Numbers = ({ rows }: { rows: string[][] }) => (
   （isSafeUrl。通らない行は描かない）。呼ぶ側（blockLines）も同じ検査で
   落としていて、画面の数はそちらの行数で決まる——ここで落とすのは、呼ぶ側が
   掛け忘れたときの最後の受け。作品1件のページの行き先は、カードと同じ1行の
-  LinkRow に移した（1画面に本文と画像を入れる高さのため。ItemDetail を見ること）。
+  LinkRow に移した（1画面に説明と画像を入れる高さのため。ItemDetail を見ること）。
 
   矢印は行き先で変える。↗ はこのサイトでは「外へ出る・別タブで開く」の印
   （カードの .links、管理画面の「サイトを見る ↗」）で、サイトの中の続き——

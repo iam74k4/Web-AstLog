@@ -10,6 +10,7 @@ import {
   blockTexts,
   blockType,
   blockVisibleParts,
+  itemStory,
   MEMBER_PER_SCREEN,
   memberUnits,
 } from '../blocks'
@@ -49,8 +50,10 @@ import {
   ItemDetail,
   type ItemFilter,
   type ItemKind,
+  ItemStories,
   type ItemView,
   itemHref,
+  itemStoryHref,
   KIND_LABEL,
   LinkList,
   langOf,
@@ -804,6 +807,20 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
             ) : (
               <p class="filter-empty">この条件に当てはまるものはまだありません</p>
             )}
+            {/*
+              作品の本文。割られた画面では作品ごとの本文の画面（…/story）にしか
+              無いので、全体ページ（中身を全部載せる場所）ではカードの下に並べる
+            */}
+            {split ? null : (
+              <ItemStories
+                stories={projects.rows.flatMap((item) => {
+                  const story = itemStory(item.body)
+                  return story.length
+                    ? [{ key: item.id, title: item.title, paragraphs: story }]
+                    : []
+                })}
+              />
+            )}
           </ScreenSection>
         ),
       }
@@ -1532,6 +1549,11 @@ async function renderScreen(c: Context<AppEnv>, want: { slug: string; page: numb
     置いた構成でページャごと落とすと、前へ戻る手まで消える。行き先が違うとき
     （入口と Projects の間にひとことを置いた構成）は、ページャが次の画面へ、
     帯が一覧へ、と別の道なので両方出す。
+
+    入口のページャは「前」も数も持たない（Hero は名前の無い節）ので、落としても
+    何も失わない。作品の1枚目の「くわしく読む →」はページャの「次 →」と同じ
+    行き先だが、あちらのページャは作品の数（Projects 3 / 7）を持つので落とさない
+    （renderItem）。
   */
   const band = current.block.type === 'hero' ? data.band : null
   const pager =
@@ -1576,15 +1598,28 @@ async function renderScreen(c: Context<AppEnv>, want: { slug: string; page: numb
   同じ壊れ方を、名前を変えて持ち込むことになる。出る条件は「作品が公開中」の
   1つだけ。
 
+  作品1件は1枚か2枚。
+    - 1枚目（/apps/item/<slug>）: カードを開いたもの（ItemDetail）
+    - 本文の画面（/apps/item/<slug>/story）: 本文（items.body）だけ。本文を
+      書いた作品にだけある。1枚目の説明・画像・実績値・行き先と同じ画面に
+      置いていたころは、本文が 60 字・1段落しか入らなかった
+  screen はどちらを出すか。本文の無い作品の story は「その URL は無い」（404）。
+
   行き来は2本。
-    - ページャ（画面の底）: 作品同士を一覧と同じ並びでめくる。「← 前」
-      「Projects 3 / 7」「次 →」。数えるのは恒久リンクを持つ作品だけ
-    - 「← 一覧に戻る」（本文の頭）: その作品が載っている Projects の画面へ
+    - ページャ（画面の底）: 作品同士を一覧と同じ並びでめくる。本文のある作品は
+      1枚目 → Story → 次の作品の1枚目。「← 前」「Projects 3 / 7」「次 →」。
+      数えるのは作品（Story の画面でも 3 / 7 のまま）で、恒久リンクを持つ作品だけ
+    - 「← 一覧に戻る」（どちらの画面も頭）: その作品が載っている Projects の画面へ
   1枚きりの行き止まりだったころは、戻る道が目次しか無かった。目次の Projects は
   一覧の1画面目へ行くので、4画面目のカードから入った人は最初からめくり直し、
   隣の作品を見るにも一覧へ戻ってカードを探し直すしかなかった。
 */
-async function renderItem(c: Context<AppEnv>, type: 'app' | 'work', slug: string) {
+async function renderItem(
+  c: Context<AppEnv>,
+  type: 'app' | 'work',
+  slug: string,
+  screen: 'first' | 'story',
+) {
   const db = drizzle(c.env.DB, { schema })
   const [item, order, members, theme, blocks] = await Promise.all([
     findPublishedItem(db, slug),
@@ -1593,6 +1628,10 @@ async function renderItem(c: Context<AppEnv>, type: 'app' | 'work', slug: string
     loadTheme(db),
     publishedBlocks(db),
   ])
+
+  // 同じ作品のどちらの画面か。転送の行き先も、名指しされた画面のまま継ぐ
+  const hrefOf = (row: { type: 'app' | 'work'; slug: string | null }) =>
+    screen === 'story' ? itemStoryHref(row) : itemHref(row)
 
   /*
     貼られたあとで動いた URL は、いまの URL へ 301 で寄せる。2つある。
@@ -1603,16 +1642,21 @@ async function renderItem(c: Context<AppEnv>, type: 'app' | 'work', slug: string
       （/works/item/<slug> と書かれた、いまは個人開発の作品）が残る
 
     どちらも「同じ作品に2つの URL」ではない——開けば必ずいまの1つへ移る。
-    知らない slug と、下書きの作品（転送先も含めて）は 404 のまま。
+    本文の画面（…/story）はいまの URL の …/story へ送る（本文が無くなっていれば、
+    着いた先が 404）。知らない slug と、下書きの作品（転送先も含めて）は 404 のまま。
   */
   if (!item) {
     const moved = await findMovedItem(db, slug)
-    const to = moved ? itemHref(moved) : null
+    const to = moved ? hrefOf(moved) : null
     return to ? c.redirect(to, 301) : c.notFound()
   }
-  const href = itemHref(item)
+  const href = hrefOf(item)
   if (!href) return c.notFound()
   if (item.type !== type) return c.redirect(href, 301)
+
+  // 本文の段落。1つも無ければ本文の画面は無い（開く式は src/blocks.ts の itemStory）
+  const story = itemStory(item.body)
+  if (screen === 'story' && !story.length) return c.notFound()
 
   const solo = soloMember(members)
   // 目次はサイトの画面のまま。この画面に絞り込みは無いので、素の並びを聞く
@@ -1622,11 +1666,16 @@ async function renderItem(c: Context<AppEnv>, type: 'app' | 'work', slug: string
   /*
     作品の列。並びは一覧と同じ（listPublishedItemKeys が itemOrder で引く）で、
     恒久リンクを持つ作品だけ——slug の無い作品にはめくって着く URL が無い。
+    本文のある作品は、1枚目のすぐ後ろに本文の画面を並べる。
 
     navKey はどれも同じ 'item' なので、sequence は列ぜんぶを1つの節として
-    数え（3 / 7）、手は節をまたがないので行き先を名乗らず「← 前」「次 →」の
-    まま。節の名前（nav）は一覧の名前そのもので、ページャの真ん中に
-    「Projects」と出る。
+    数え、手は節をまたがないので行き先を名乗らず「← 前」「次 →」のまま。
+    節の名前（nav）は一覧の名前そのもので、ページャの真ん中に「Projects」と出る。
+
+    数える単位（countKey）は作品——1枚目の URL を2枚に共通の札にする。
+    1枚目と Story は同じ作品なので、どちらでも「Projects 3 / 7」。Story を
+    別の節にしないのは src/lib/sequence.ts の countKey の注記のとおり
+    （次の作品へ出る手が「Projects →」を名乗り、一覧へ行くと読める）。
 
     目次の単位（tocKey）は一覧の 'projects'。目次に行は持たず（tocLabel: null）、
     印だけがこの作品の載っている一覧（Projects）に付く——個人ページが Team に
@@ -1634,19 +1683,21 @@ async function renderItem(c: Context<AppEnv>, type: 'app' | 'work', slug: string
   */
   const own: Step[] = order.flatMap((row) => {
     const at = itemHref(row)
-    return at
-      ? [
-          {
-            navKey: 'item',
-            tocKey: 'projects',
-            tocLabel: null,
-            href: at,
-            canonical: at,
-            nav: 'Projects',
-            title: pageTitle(row.title),
-          },
-        ]
-      : []
+    if (!at) return []
+    const first: Step = {
+      navKey: 'item',
+      countKey: at,
+      tocKey: 'projects',
+      tocLabel: null,
+      href: at,
+      canonical: at,
+      nav: 'Projects',
+      title: pageTitle(row.title),
+    }
+    const told = itemStory(row.body).length ? itemStoryHref(row) : null
+    return told
+      ? [first, { ...first, href: told, canonical: told, title: pageTitle(row.title, 'Story') }]
+      : [first]
   })
   const index = stepAt(own, href)
   const step = own[index]
@@ -1659,8 +1710,8 @@ async function renderItem(c: Context<AppEnv>, type: 'app' | 'work', slug: string
     作品の列だけで聞く。サイトの列と継いだままめくると、最初の作品の「←」が
     Contact を指してしまう。
 
-    index は作品の列の中の位置。構造化データ（CreativeWork）はどの作品にも
-    載せるので、firstOnly は通さない。
+    index は作品の列の中の位置。構造化データ（CreativeWork）はどの作品の
+    1枚目にも載せるので、firstOnly は通さない（下の jsonLd）。
   */
   const seq: Sequence = {
     index,
@@ -1673,6 +1724,7 @@ async function renderItem(c: Context<AppEnv>, type: 'app' | 'work', slug: string
     「← 一覧に戻る」の行き先。この作品が一覧の何画面目に載っているかを、
     一覧と同じ並び（order。slug の無い作品も一覧には載るので数に入れる）の
     中の位置と perScreen から出す。1画面目なら /projects、ほかは /projects/N。
+    本文の画面からも同じ所へ戻す（本文の画面は一覧には載っていない）。
 
     URL は自分で組まず、サイトの画面の列から Projects の N 枚目を引く。
     Projects を先頭に置いた構成では1枚目が / になり、Projects を置いて
@@ -1686,18 +1738,54 @@ async function renderItem(c: Context<AppEnv>, type: 'app' | 'work', slug: string
     return screen?.kind === 'block' && screen.block.type === 'projects'
   })
   const back = listSteps[listPage - 1]?.href ?? null
+  const backLink = back ? <BackLink href={back} label="一覧に戻る" /> : null
+
+  // どちらの画面にも共通のもの。題と canonical は seq が持つ
+  const common = {
+    theme,
+    sidebar: <SiteIdentity solo={solo} />,
+    adminPath: `/admin/items/${item.id}/edit`,
+    // 1枚が作品1件。読み上げは「Projects の 7 件のうち 3 件目」
+    unit: '件' as const,
+    // 貼られたときの札は、この作品の画像（あれば）。本文の画面も同じ作品の話
+    image: itemOgImage(item),
+  }
+
+  /*
+    本文の画面。見出し（作品名に「Story」の添え）と本文の段落（Note。紹介文・
+    メモと同じ部品）と、戻る道だけ。1枚目の説明・画像・行き先は繰り返さない
+    ——同じ作品の2枚目で、ページャの「← 前」で1枚戻れば全部ある。
+
+    説明文は本文そのもの（画面に出ている文字から作る。1枚目の説明文は要約）。
+    構造化データは載せない。「この URL が何か」を名乗るのは作品の1枚目で、
+    同じ作品の CreativeWork を2つの URL が名乗ると、どちらが作品か決められない。
+  */
+  if (screen === 'story') {
+    return screenPage(c, seq, {
+      node: (
+        <Screen id="story" label={item.title}>
+          {backLink}
+          <SectionHead title={item.title} note="Story" h1 />
+          <Note paragraphs={story} />
+        </Screen>
+      ),
+      description: describe(story.join(' ')),
+      ...common,
+    })
+  }
 
   /*
     見出しと添え（SectionHead）の下は ItemDetail——カードを開いたもの。説明
     （Note = .bio）・実績値（Metric）・タグ（Tags）・行き先（LinkRow）はカードと
-    同じ部品で、足すのは画像（Shot）と本文（Note）だけ。なぜカードの部品かは
-    ItemDetail に書いてある（高さ）。足した見た目は「← 一覧に戻る」の札と、
-    画像の枠（.shot）と、列の組み方（.detail）。
+    同じ部品で、足すのは画像（Shot）と本文の画面への入口（StoryLink）だけ。
+    なぜカードの部品かは ItemDetail に書いてある（高さ）。足した見た目は
+    「← 一覧に戻る」の札と、画像の枠（.shot）と、列の組み方（.detail）と、
+    入口の札（.more）。
 
     説明文にカードの <p> を使わないのは、あちらが行数で切られるため
     （app.css の --card-lines。電話の幅では2行）。この画面は作品1件のためだけにあるので、
-    書いたぶんが全部出る形にする。本文と画像はここにしか出ない（カードには
-    出さない。サムネイルは同じ画像の飾り）。
+    書いたぶんが全部出る形にする。画像はここにしか出ない（カードのサムネイルは
+    同じ画像の飾り）。本文は次の画面（Story）。
   */
   const note = [item.platformLabel ?? item.category, item.year].filter(Boolean).join(' · ')
   const links = [
@@ -1714,12 +1802,12 @@ async function renderItem(c: Context<AppEnv>, type: 'app' | 'work', slug: string
   return screenPage(c, seq, {
     node: (
       <Screen id="item" label={item.title}>
-        {back ? <BackLink href={back} label="一覧に戻る" /> : null}
+        {backLink}
         <SectionHead title={item.title} note={note || undefined} h1 />
-        <ItemDetail item={item} links={links} />
+        <ItemDetail item={item} links={links} story={story.length ? itemStoryHref(item) : null} />
       </Screen>
     ),
-    // 説明文は要約（summary）のまま。本文は長く、検索結果の1行には畳めない
+    // 説明文は要約（summary）のまま。本文は次の画面が自分の説明文にする
     description: item.summary || siteDescription(solo),
     /*
       この URL が何を名指ししているかを、貼った先にも検索にも1つだけ置く。
@@ -1735,13 +1823,7 @@ async function renderItem(c: Context<AppEnv>, type: 'app' | 'work', slug: string
       ...(item.summary ? { description: item.summary } : {}),
       ...(item.imageUrl ? { image: absoluteUrl(item.imageUrl) } : {}),
     },
-    theme,
-    sidebar: <SiteIdentity solo={solo} />,
-    adminPath: `/admin/items/${item.id}/edit`,
-    // 1枚が作品1件。読み上げは「Projects の 7 件のうち 3 件目」
-    unit: '件',
-    // 貼られたときの札は、この作品の画像（あれば）
-    image: itemOgImage(item),
+    ...common,
   })
 }
 
@@ -2187,19 +2269,28 @@ publicRoutes.get('/members/:slug/:screen/:page', (c) => {
 })
 
 /*
-  作品1件の恒久リンク。1語目が種類、3語目が slug。
+  作品1件の恒久リンク。1語目が種類、3語目が slug。4語目の story は本文の画面。
 
   3語にしてあるのは catch-all（`/:screen` と `/:screen/:page`）と取り合わない
   ため——`/apps/2` は数字だけの2語のまま残り、`/apps/item/appmixer` はこの2本
   だけが拾う。2語（`/apps/<slug>`）にすると、めくる先の番号と作品の名前が
-  同じ位置で取り合うので、slug が数字の作品を作れなくなる。
+  同じ位置で取り合うので、slug が数字の作品を作れなくなる。本文の画面を数
+  （`/2`）ではなく名前の語にした理由は components.tsx の itemStoryHref。
 
   1語目を `:list` の1本にまとめないのは、URL の語と作品の種類がここで結び
   ついていることを、読む人にも型にも見せておくため。
 */
-publicRoutes.get('/apps/item/:slug', (c) => renderItem(c, 'app', c.req.param('slug')))
+publicRoutes.get('/apps/item/:slug', (c) => renderItem(c, 'app', c.req.param('slug'), 'first'))
 
-publicRoutes.get('/works/item/:slug', (c) => renderItem(c, 'work', c.req.param('slug')))
+publicRoutes.get('/apps/item/:slug/story', (c) =>
+  renderItem(c, 'app', c.req.param('slug'), 'story'),
+)
+
+publicRoutes.get('/works/item/:slug', (c) => renderItem(c, 'work', c.req.param('slug'), 'first'))
+
+publicRoutes.get('/works/item/:slug/story', (c) =>
+  renderItem(c, 'work', c.req.param('slug'), 'story'),
+)
 
 /*
   Apps と Works は Projects の1つの一覧にまとめた。貼られた一覧の URL は
@@ -2298,8 +2389,15 @@ publicRoutes.get('/sitemap.xml', async (c) => {
     ...members.flatMap((member) =>
       memberScreens(member, null).map((screen) => memberHref(member.slug, screen.key, screen.page)),
     ),
-    // 作品1件の恒久リンク。slug の無い行（列より前からある作品）は URL を持たない
-    ...items.flatMap((item) => itemHref(item) ?? []),
+    /*
+      作品1件の恒久リンクと、本文のある作品の本文の画面（…/story）。slug の無い行
+      （列より前からある作品）は URL を持たない
+    */
+    ...items.flatMap((item) =>
+      [itemHref(item), itemStory(item.body).length ? itemStoryHref(item) : null].filter(
+        (path) => path !== null,
+      ),
+    ),
   ]
 
   const body = [

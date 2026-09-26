@@ -1375,7 +1375,7 @@ describe('作品1件の恒久リンク', () => {
     expect(main).not.toContain('class="card"')
   })
 
-  it('画像と本文があれば、画像は代替テキストつきの figure、本文は説明に続く段落で出る', async () => {
+  it('画像と本文があれば、画像は代替テキストつきの figure。本文は1枚目に出さず、入口だけを置く', async () => {
     await seedItem({
       title: 'AppMixer',
       slug: 'appmixer',
@@ -1392,17 +1392,22 @@ describe('作品1件の恒久リンク', () => {
     expect(main).toContain(
       '<figure class="shot"><img src="/images/items/appmixer-ab12.png" alt="音量ミキサーの画面" decoding="async"/></figure>',
     )
-    // 説明が頭の1段落、本文がそのあとに続く1つの段落の列
+    /*
+      1枚目の段落は説明だけ。本文は次の画面（Story）で、ここには説明のすぐ下に
+      入口を置く。1枚目に置いていたころは、説明・画像・行き先と同じ1画面に収める
+      ために本文が 60 字・1段落しか書けなかった
+    */
     expect(main).toContain(
-      '<div class="bio"><p>音を配る常駐アプリ。</p><p>背景の段落。</p><p>結果の段落。</p></div>',
+      '<div class="bio"><p>音を配る常駐アプリ。</p></div><a class="more" href="/apps/item/appmixer/story">くわしく読む<span aria-hidden="true">→</span></a>',
     )
+    expect(main).not.toContain('背景の段落。')
     // 構造化データの画像は絶対 URL（相対のままでは、この文書の外で読む側が解決できない）
     expect(html).toContain(`"image":"${SITE.origin}/images/items/appmixer-ab12.png"`)
     // 説明文（<meta>）は要約のまま。本文は検索結果の1行には畳めない
     expect(html).toContain('<meta name="description" content="音を配る常駐アプリ。"/>')
   })
 
-  it('画像も本文も無ければ、figure も横に並べる組み方も出さない', async () => {
+  it('画像も本文も無ければ、figure も横に並べる組み方も本文の画面への入口も出さない', async () => {
     await seedItem({ title: 'AppMixer', slug: 'appmixer', summary: '音を配る常駐アプリ。' })
 
     const html = await (await get('/apps/item/appmixer')).text()
@@ -1410,6 +1415,7 @@ describe('作品1件の恒久リンク', () => {
     expect(main).toContain('<div class="detail">')
     expect(main).not.toContain('<figure')
     expect(main).toContain('<div class="bio"><p>音を配る常駐アプリ。</p></div>')
+    expect(main).not.toContain('class="more"')
     expect(html).not.toContain('"image"')
   })
 
@@ -1579,6 +1585,159 @@ describe('作品1件のページの行き来', () => {
     expect(main).toContain(
       '<a href="https://example.test/r" rel="noreferrer" target="_blank">Repository</a>',
     )
+  })
+})
+
+/*
+  作品の本文の画面（Story）。本文を1枚目に置いていたころは、説明・画像・実績値・
+  行き先4本と同じ1画面に収めるために、本文が 60 字・1段落しか書けなかった
+  ——「背景・やったこと・結果」が書けない長さ。入りきらないぶんは次の URL へ、の
+  決まりどおりに、本文だけの画面を1枚目の次に置く。
+*/
+describe('作品の本文の画面（Story）', () => {
+  const pagerOf = (html: string) => html.split('<nav class="pager"')[1]?.split('</nav>')[0] ?? ''
+  const backOf = (html: string) => mainOf(html).match(/<a class="back" href="([^"]*)"/)?.[1] ?? null
+  const STORY = '背景の段落です。\n\nやったことの段落です。\n\n結果の段落です。'
+
+  it('本文のある作品は、1枚目の次に本文だけの画面を持つ。見出しは作品名、段落は Note、戻る道つき', async () => {
+    await seedItem({
+      title: 'AppMixer',
+      slug: 'appmixer',
+      summary: '音を配る常駐アプリ。',
+      body: STORY,
+    })
+
+    const response = await get('/apps/item/appmixer/story')
+    expect(response.status).toBe(200)
+    const html = await response.text()
+    const main = mainOf(html)
+    // 1画面 = 1ドキュメント。h1 は作品名の1つで、添えが「どの画面か」を言う
+    expect(html.match(/<h1[^>]*>/g) ?? []).toHaveLength(1)
+    expect(main).toContain('<h1>AppMixer</h1><span class="note">Story</span>')
+    expect(main).toContain(
+      '<div class="bio"><p>背景の段落です。</p><p>やったことの段落です。</p><p>結果の段落です。</p></div>',
+    )
+    // 1枚目の説明・行き先・画像は繰り返さない（← 前 で1枚戻れば全部ある）
+    expect(main).not.toContain('音を配る常駐アプリ。')
+    expect(main).not.toContain('class="detail')
+    // 戻る道は1枚目と同じ一覧の画面へ
+    expect(backOf(html)).toBe('/projects')
+    // 弁を開いたときに中身へ行ける。region の名前は見出しと同じ
+    expect(main).toContain('<section id="story" tabindex="0" role="region" aria-label="AppMixer">')
+  })
+
+  it('本文の無い作品に本文の画面は無い。空白と空行だけの本文も、下書きの作品も同じ', async () => {
+    await seedItem({ title: 'AppMixer', slug: 'appmixer', sortOrder: 10 })
+    await seedItem({ title: '空白だけ', slug: 'blank', body: '  \n\n \n', sortOrder: 20 })
+    await seedItem({ title: '下書き', slug: 'draft', body: STORY, published: 0, sortOrder: 30 })
+
+    expect((await get('/apps/item/appmixer/story')).status).toBe(404)
+    expect((await get('/apps/item/blank/story')).status).toBe(404)
+    expect((await get('/apps/item/draft/story')).status).toBe(404)
+    // 無い画面への入口も、めくる先も出さない
+    const blank = await (await get('/apps/item/blank')).text()
+    expect(mainOf(blank)).not.toContain('class="more"')
+    expect(pagerOf(blank)).not.toContain('/story')
+  })
+
+  it('めくる順は 1枚目 → Story → 次の作品。数えるのは作品で、Story でも数は動かない', async () => {
+    await seedItem({ title: '一番目', slug: 'ichi', body: STORY, sortOrder: 10 })
+    await seedItem({ title: '二番目', slug: 'ni', sortOrder: 20 })
+
+    const first = pagerOf(await (await get('/apps/item/ichi')).text())
+    expect(first).toContain(
+      '<a class="pager__go pager__go--next" href="/apps/item/ichi/story" rel="next">次 →</a>',
+    )
+    expect(first).toContain('<span class="pager__of">1 / 2</span>')
+
+    const story = pagerOf(await (await get('/apps/item/ichi/story')).text())
+    // 同じ作品の中の移動なので名乗らない。次の作品へ出る手も「Projects →」とは言わない
+    expect(story).toContain('<a class="pager__go" href="/apps/item/ichi" rel="prev">← 前</a>')
+    expect(story).toContain('href="/apps/item/ni" rel="next">次 →</a>')
+    // 作品1件の2枚目。3 / 4 のような画面の数にしない
+    expect(story).toContain('<span class="pager__section">Projects</span>')
+    expect(story).toContain('<span class="pager__of">1 / 2</span>')
+    expect(story).toContain('Projects の 2 件のうち 1 件目')
+
+    // 次の作品の「←」は、前の作品の本文の画面（列の中の1つ前）
+    const next = pagerOf(await (await get('/apps/item/ni')).text())
+    expect(next).toContain('href="/apps/item/ichi/story" rel="prev">← 前</a>')
+    expect(next).toContain('<span class="pager__of">2 / 2</span>')
+  })
+
+  it('作品が1件でも、本文があれば2枚をめくるページャを出す。数は添えない', async () => {
+    await seedItem({ title: 'AppMixer', slug: 'appmixer', body: STORY })
+
+    const first = pagerOf(await (await get('/apps/item/appmixer')).text())
+    expect(first).toContain('href="/apps/item/appmixer/story" rel="next"')
+    expect(first).not.toContain('pager__of')
+    const story = pagerOf(await (await get('/apps/item/appmixer/story')).text())
+    expect(story).toContain('href="/apps/item/appmixer" rel="prev"')
+    expect(story).not.toContain('rel="next"')
+  })
+
+  it('題・説明文・canonical は本文の画面のもの。構造化データは1枚目にだけ', async () => {
+    await seedItem({
+      title: 'AppMixer',
+      slug: 'appmixer',
+      summary: '音を配る常駐アプリ。',
+      body: STORY,
+      imageUrl: '/images/items/appmixer-ab12.png',
+      imageAlt: '音量ミキサーの画面',
+    })
+
+    const html = await (await get('/apps/item/appmixer/story')).text()
+    expect(html).toContain(`<title>AppMixer · Story — ${SITE.name}</title>`)
+    expect(html).toContain(`<link rel="canonical" href="${SITE.origin}/apps/item/appmixer/story"/>`)
+    // 説明文は画面に出ている本文から（1枚目の説明文は要約）
+    expect(html).toContain(
+      '<meta name="description" content="背景の段落です。 やったことの段落です。 結果の段落です。"/>',
+    )
+    // 同じ作品の CreativeWork を2つの URL が名乗らない
+    expect(html).not.toContain('"@type":"CreativeWork"')
+    expect(await (await get('/apps/item/appmixer')).text()).toContain('"@type":"CreativeWork"')
+    // 貼られたときの札は同じ作品の画像
+    expect(html).toContain(
+      `<meta property="og:image" content="${SITE.origin}/images/items/appmixer-ab12.png"/>`,
+    )
+  })
+
+  it('前の slug・前の区分の本文の画面は、いまの URL の本文の画面へ 301', async () => {
+    const item = await seedItem({ type: 'app', title: 'AppMixer', slug: 'appmixer', body: STORY })
+    await db().insert(schema.itemSlugRedirects).values({ oldSlug: 'old-mixer', itemId: item.id })
+
+    const moved = await get('/apps/item/old-mixer/story')
+    expect(moved.status).toBe(301)
+    expect(moved.headers.get('location')).toBe('/apps/item/appmixer/story')
+    const kind = await get('/works/item/appmixer/story')
+    expect(kind.status).toBe(301)
+    expect(kind.headers.get('location')).toBe('/apps/item/appmixer/story')
+  })
+
+  it('sitemap には、本文のある作品の本文の画面だけを載せる', async () => {
+    await seedItem({ title: 'AppMixer', slug: 'appmixer', body: STORY, sortOrder: 10 })
+    await seedItem({ title: 'AllTasks', slug: 'alltasks', sortOrder: 20 })
+
+    const xml = await (await get('/sitemap.xml')).text()
+    expect(xml).toContain(`<loc>${SITE.origin}/apps/item/appmixer/story</loc>`)
+    expect(xml).toContain(`<loc>${SITE.origin}/apps/item/alltasks</loc>`)
+    expect(xml).not.toContain('/apps/item/alltasks/story')
+  })
+
+  it('全体ページは本文も載せる。カードの下に、作品名と Story の添えの小節で', async () => {
+    await seedItem({ title: 'AppMixer', slug: 'appmixer', body: STORY, sortOrder: 10 })
+    await seedItem({ title: 'AllTasks', slug: 'alltasks', sortOrder: 20 })
+
+    const whole = mainOf(await (await get('/all')).text())
+    expect(whole).toContain(
+      '<div class="stories"><div><div class="head head--sub"><h3>AppMixer</h3><span class="note">Story</span></div><div class="bio"><p>背景の段落です。</p>',
+    )
+    // カードの grid のあと（本文は grid の2列の片方だけを伸ばさない）
+    expect(whole.indexOf('class="grid"')).toBeLessThan(whole.indexOf('class="stories"'))
+    // 本文の無い作品は並べない（見出しだけ残さない）
+    expect(whole).not.toContain('<h3>AllTasks</h3>')
+    // 割られた一覧には出さない（本文は作品ごとの画面）
+    expect(mainOf(await (await get('/projects')).text())).not.toContain('class="stories"')
   })
 })
 
@@ -2810,7 +2969,14 @@ async function seedEverything() {
     ).join('\n'),
   })
   for (let i = 0; i < blockPerScreen('projects') + 1; i += 1) {
-    await seedItem({ title: `作品${i}`, slug: `item-${i}`, year: `20${20 + i}`, sortOrder: i })
+    await seedItem({
+      title: `作品${i}`,
+      slug: `item-${i}`,
+      year: `20${20 + i}`,
+      sortOrder: i,
+      // 1件目だけ本文を持つ（本文の画面 /…/story が sitemap に載る）
+      body: i === 0 ? '背景の段落です。\n\n結果の段落です。' : '',
+    })
   }
   await db()
     .insert(schema.blocks)
@@ -2928,6 +3094,9 @@ describe('連なりの全画面', () => {
     // 1画面しかない節には数を添えない
     expect(titles.get('/contact')).toBe(`Contact — ${SITE.name}`)
     expect(titles.get('/members/okazaki/about')).toBe(`岡崎 昂功 · About — ${SITE.name}`)
+    // 作品の本文の画面は、作品の1枚目と違う題
+    expect(titles.get('/apps/item/item-0')).toBe(`作品0 — ${SITE.name}`)
+    expect(titles.get('/apps/item/item-0/story')).toBe(`作品0 · Story — ${SITE.name}`)
     // 名前の無い画面は、その画面の文の頭（入口と同じ題にしない）
     expect([...titles.values()]).toContain(`つくる速さは、設計で決まる。 — ${SITE.name}`)
   })

@@ -724,14 +724,32 @@ describe('部品の作法', () => {
     expect(bodyOf(sheet, '.card:has(.card__link:active) {')).toContain('scale: var(--press)')
   })
 
-  it('「← 一覧に戻る」は列いっぱいに伸びない丸い札で、当たり判定は --tap', () => {
-    // 節は grid。子の inline-flex は blockify され、既定の stretch で節の幅いっぱいに伸びる
-    const back = bodyOf(sheet, '.back {')
-    expect(back).toContain('justify-self: start')
+  it('「← 一覧に戻る」と「くわしく読む →」は同じ1本の丸い札。列いっぱいに伸びず、当たり判定は --tap', () => {
+    /*
+      節も .detail__text も grid。子の inline-flex は blockify され、既定の stretch で
+      幅いっぱいに伸びる。対の2枚は同じ規則を読む（片方だけ写すと、同じ札が少しずつ
+      違う姿で増える）
+    */
+    const pill = bodyOf(sheet, '.back,\n.more {')
+    expect(pill).toContain('justify-self: start')
     // pointer: coarse では --tap が 44px になる。ここで生の高さを書かない
-    expect(back).toContain('min-height: var(--tap)')
+    expect(pill).toContain('min-height: var(--tap)')
+    // 見出しから離すのは見出しの上に立つ札だけ
+    expect(bodyOf(sheet, '.back {')).toContain('margin-bottom')
+    expect(pill).not.toContain('margin')
     // 紙の上では押せない
-    expect(ruleWith(blockAt(sheet, '@media print'), 'display: none').selector).toContain('.back')
+    const printed = ruleWith(blockAt(sheet, '@media print'), 'display: none').selector
+    expect(printed).toContain('.back')
+    expect(printed).toContain('.more')
+    // 押して縮み、ホバーで地が明るくなるのも同じ
+    const head = sheet.indexOf('.btn:active,')
+    expect(sheet.slice(head, sheet.indexOf('{', head))).toContain('.more:active')
+    expect(
+      ruleWith(
+        blockAt(sheet, '@media (hover: hover)'),
+        'background: var(--surface-hover);\n    color: var(--ink);',
+      ).selector,
+    ).toContain('.more:hover')
   })
 
   it('読み上げだけに残す部品は、padding のある要素に付けても見えない', () => {
