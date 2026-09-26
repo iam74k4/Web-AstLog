@@ -22,7 +22,7 @@ const bandOf = (html: string) => {
 }
 
 describe('個人ページ → 一覧', () => {
-  it('構成で Apps と Works を外したら、一覧へは案内しない', async () => {
+  it('構成で Projects を外したら、一覧へは案内しない', async () => {
     const member = await seedMember()
     await seedItem({ type: 'app', memberId: member.id })
     await seedItem({ type: 'work', title: '業務の実績', memberId: member.id })
@@ -31,31 +31,30 @@ describe('個人ページ → 一覧', () => {
     // 送った先に節が無いと、行き止まり（404）になる
     const html = await (await get('/members/okazaki')).text()
     expect(bandOf(html)).toBe('')
-    expect(html).not.toContain('href="/apps')
-    expect(html).not.toContain('href="/works')
+    expect(html).not.toContain('href="/projects')
   })
 
-  it('帯の件数は、置いてある節のぶんだけ', async () => {
+  it('帯の件数は区分ごと。その人に項目の無い区分は数えない', async () => {
     const member = await seedMember()
     await seedItem({ type: 'app', memberId: member.id })
-    await seedItem({ type: 'work', title: '業務の実績', memberId: member.id })
-    await place(['hero', 'works', 'team', 'contact'])
+    await seedItem({ type: 'work', title: '業務の実績' })
+    await place(['hero', 'projects', 'team', 'contact'])
 
     const band = bandOf(await (await get('/members/okazaki')).text())
-    expect(band).toContain('href="/works"')
-    expect(band).toContain('Works 1')
-    // Apps の節が無いのに「Apps 1」と出すと、どこにも無い1件になる
-    expect(band).not.toContain('Apps 1')
+    expect(band).toContain('href="/projects"')
+    expect(band).toContain('個人開発 1')
+    // 業務はほかの人のもの。その人の帯で「業務 1」と出すと、どこにも無い1件になる
+    expect(band).not.toContain('業務')
   })
 
-  it('入口の帯も、置いてある節のぶんだけ数える', async () => {
+  it('入口の帯は、個人開発と業務を別々に数えて1つの一覧へ送る', async () => {
     await seedItem({ type: 'app' })
     await seedItem({ type: 'work', title: '業務の実績' })
-    await place(['hero', 'apps', 'contact'])
+    await place(['hero', 'projects', 'contact'])
 
     const band = bandOf(await (await get('/')).text())
-    expect(band).toContain('Apps 1')
-    expect(band).not.toContain('Works 1')
+    expect(band).toContain('href="/projects"')
+    expect(band).toContain('個人開発 1 · 業務 1')
   })
 })
 
@@ -65,7 +64,7 @@ describe('1人のサイトの ?member=', () => {
     await seedItem({ memberId: member.id })
 
     const html = await (await get('/members/okazaki')).text()
-    expect(bandOf(html)).toContain('href="/apps"')
+    expect(bandOf(html)).toContain('href="/projects"')
     expect(html).not.toContain('?member=')
   })
 
@@ -75,9 +74,9 @@ describe('1人のサイトの ?member=', () => {
     await seedItem({ title: '担当の無いアプリ', sortOrder: 20 })
 
     // 名前のピルが無いので、効かせると「すべて」にも名前にも印が付かなくなる
-    const html = await (await get('/apps?member=okazaki')).text()
+    const html = await (await get('/projects?member=okazaki')).text()
     expect(html).toContain('担当の無いアプリ')
-    expect(html).toContain('href="/apps" aria-current="true"')
+    expect(html).toContain('href="/projects" aria-current="true"')
   })
 })
 
@@ -85,9 +84,9 @@ describe('トップ → 個人ページ', () => {
   it('Team を外したら、メンバーが1人でもカードから個人ページへ行ける', async () => {
     const member = await seedMember()
     await seedItem({ slug: 'appmixer', memberId: member.id })
-    await place(['hero', 'apps', 'contact'])
+    await place(['hero', 'projects', 'contact'])
 
-    expect(await (await get('/apps')).text()).toContain(
+    expect(await (await get('/projects')).text()).toContain(
       'class="card__member" href="/members/okazaki"',
     )
     // 作品1件のページの「担当」も同じ条件
@@ -98,7 +97,7 @@ describe('トップ → 個人ページ', () => {
     const member = await seedMember()
     await seedItem({ memberId: member.id })
 
-    expect(await (await get('/apps')).text()).not.toContain('card__member')
+    expect(await (await get('/projects')).text()).not.toContain('card__member')
   })
 })
 

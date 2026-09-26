@@ -15,7 +15,8 @@ flowchart LR
     Top["トップ（連なりの先頭）<br>GET /"]
     Screen["画面<br>GET /:screen"]
     Page["画面の続き<br>GET /:screen/:page"]
-    Filtered["絞り込んだ1画面目<br>/apps?platform= ・ ?member="]
+    Filtered["絞り込んだ1画面目<br>/projects?kind= ・ ?member="]
+    Moved["以前の一覧<br>/apps ・ /works（続きも）"]
     Item["作品1件（恒久リンク）<br>/apps/item/:slug ・ /works/item/:slug"]
     Whole["全体 GET /all<br>（縦に伸びる唯一の1本）"]
     Profile["メンバー個別<br>/members/:slug"]
@@ -32,7 +33,8 @@ flowchart LR
     Top -->|"左の目次"| Screen
     Screen -->|"左の目次（Hero は載らない）"| Screen
     Screen -->|"左上のロゴ"| Top
-    Top -->|"入口の帯 Apps · Works"| Screen
+    Top -->|"入口の帯（個人開発 N · 業務 M）"| Screen
+    Moved -->|"301。同じ区分で絞る"| Filtered
 
     Screen -->|"ピルを押す"| Filtered
     Page -->|"ピルを押す"| Filtered
@@ -52,7 +54,7 @@ flowchart LR
     MScreen -->|"最後の画面の Contact →"| Contact
     Profile -->|"目次（サイトのもの。Team に印）"| Screen
     MScreen -->|"目次（サイトのもの。Team に印）"| Screen
-    Profile -->|"Apps · Works の帯"| Filtered
+    Profile -->|"このメンバーの Projects の帯"| Filtered
 
     Top -->|"柱の足元（900 以上）"| Whole
     Screen -->|"柱の足元（900 以上）"| Whole
@@ -71,29 +73,34 @@ flowchart LR
     MScreen -.->|"柱の「管理画面」（ログイン中だけ）"| Admin
 ```
 
-めくる先はページャ。数えるのは**節の中**（`Apps  2 / 3`）で、サイト全体の通し番号では
+めくる先はページャ。数えるのは**節の中**（`Projects  2 / 4`）で、サイト全体の通し番号では
 ない——全体で数えると、絞り込みが無関係な画面の番号まで動かす（[画面の一覧](screens.md)）。
-節をまたぐ手だけが行き先を名乗る（`← 前` ではなく `← Apps`）。
-`/apps/1` は `/apps` へ 303 で寄せる（同じ画面に URL を2つ作らない）。1画面しか
+節をまたぐ手だけが行き先を名乗る（`← 前` ではなく `← Projects`）。
+`/projects/1` は `/projects` へ 303 で寄せる（同じ画面に URL を2つ作らない）。1画面しか
 無いサイトではページャを出さない。目次には番号を振らない——数え上げはページャ1つに
 寄せてある。画面の連なり（前後・目次・通し番号・canonical）は `src/lib/sequence.ts` が
 1本で持っていて、トップも個人ページも同じところを通る。
 
-絞り込み（プラットフォーム・メンバー）は**ページを移る**。ピルはリンクで、
+絞り込み（区分・メンバー）は**ページを移る**。ピルはリンクで、
 押すとそのブロックの1画面目へ遷移する——3画面目で絞り込むと、絞ったあとの
 3画面目が無いことがあるため。絞り込みはページャにも目次にも同じ query が付いて
 画面をまたいで効き、もう一度同じピルを押すとその軸だけ外れる（「すべて」は両方）。
 公開ページは JavaScript を1バイトも持たないので、切っても何も変わらない。
 
-作品1件のページ（`/apps/item/<slug>`）は**連なりの外にある1枚**。ページャは出さず、
-戻る道は目次だけ。一覧のカードの題がここへのリンクで、出る条件は「その作品が
-公開中」の1つだけ——Apps の節を外しても、貼られたリンクは死なない。
+作品1件のページ（`/apps/item/<slug>` ・ `/works/item/<slug>`）は**連なりの外にある1枚**。
+ページャは出さず、戻る道は目次だけ（印は Projects に付く）。一覧のカードの題がここへの
+リンクで、出る条件は「その作品が公開中」の1つだけ——Projects の節を外しても、
+貼られたリンクは死なない。
+
+個人開発と業務は、公開ページでは Projects の1つの一覧（新しい順）。以前の一覧の URL
+（`/apps` `/works` とその続き）は、同じ区分で絞った `/projects` へ 301 で寄せる
+（ページ数は引き継がない。区分を混ぜて並べ直したので、同じ番号に同じカードは居ない）。
 
 「構成」で節を外しても、行き止まりを作らない。
 
-- 帯（入口と個人ページの1枚目）は、**置いてある節のぶんだけ**数えて送る。Apps と
-  Works を両方外したサイトでは帯ごと出さない。Works だけ外したなら件数も
-  `Apps 2` だけ
+- 帯（入口と個人ページの1枚目）は Projects へ送り、件数は区分ごとに数える
+  （`個人開発 5 · 業務 2`。項目の無い区分は数えない）。Projects を外したサイトでは
+  帯ごと出さない
 - カードの担当者名（個人ページへのリンク）は、2人以上いるとき**か、Team を
   置いていないとき**に出す。Team が無いと、トップから個人ページへ行く道が
   ほかに1本も無い。作品1件のページの「担当」も同じ条件
@@ -114,7 +121,7 @@ flowchart LR
 | 見ている画面 | 行き先 |
 |---|---|
 | 入口（Hero） | 1人のサイトならその人の編集、それ以外は Members 一覧 |
-| Apps / Works | 項目の一覧（`/admin/items?type=app` / `work`） |
+| Projects | 項目の一覧（`/admin/items`。個人開発 / 業務のタブ） |
 | Team | Members 一覧 |
 | Contact | 構成のその行（中身は `src/site.ts` にあり、管理画面からは変えられない） |
 | 打ち込むブロック（ひとこと・メモ …） | そのブロックの編集 |
@@ -136,7 +143,7 @@ flowchart LR
 flowchart TD
     Login["ログイン<br>GET /admin/login"]
     Members["Members 一覧<br>GET /admin/members"]
-    Items["Apps・Works 一覧<br>GET /admin/items?type="]
+    Items["Projects（個人開発 / 業務）<br>GET /admin/items?type="]
     MForm["Member フォーム<br>/members/new ・ /:id/edit"]
     IForm["Item フォーム<br>/items/new ・ /:id/edit"]
     MDel["削除の確認<br>GET /members/:id/delete"]

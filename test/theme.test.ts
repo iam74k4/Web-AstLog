@@ -491,13 +491,13 @@ describe('画面に収める外枠', () => {
 describe('部品の作法', () => {
   it('目次に番号は振らず、数えるのはページャだけ', async () => {
     // 節が1つも無いと目次もページャも出ない。位置を名乗るのは2画面以上の
-    // 節だけなので、Apps が割れる件数（perScreen 2 に対して3件）を置く
+    // 節だけなので、Projects が割れる件数（perScreen 2 に対して3件）を置く
     for (const title of ['壱', '弐', '参']) await seedItem({ type: 'app', title })
 
     /*
       目次の 01〜04（ブロックの並び順）とページャの 01 · 07（いま何画面目か）が
       同じ 11px mono・同じ色で並ぶと、同じ数え上げに見える。しかも目次の番号は
-      /apps でも /apps/3 でも「01」のまま動かない。動く番号の隣で動かない番号が
+      /projects でも /projects/3 でも「01」のまま動かない。動く番号の隣で動かない番号が
       同じ姿をしているのが、いちばん読み違えやすい。
       落とすと .toc__num の opacity: 0.7（3.34:1 で AA 割れ）も同時に消える。
     */
@@ -512,9 +512,9 @@ describe('部品の作法', () => {
       位置を名乗るのは節の名前を持つ画面だけ——入口（Hero）は目次に
       出ない＝名前が無いので、何画面目かを言わない（言える位置が無い）。
     */
-    const apps = await (await get('/apps')).text()
-    expect(apps).toContain('画面のうち')
-    expect(apps).toContain('class="pager__section"')
+    const projects = await (await get('/projects')).text()
+    expect(projects).toContain('画面のうち')
+    expect(projects).toContain('class="pager__section"')
   })
 
   it('柱の足元のリンクは、著作権表示と見分けが付く', () => {
@@ -762,20 +762,15 @@ describe('一覧の列数', () => {
     await seedItem({ title: 'アプリ' })
     await seedItem({ title: '業務', type: 'work' })
 
-    const apps = await (await get('/apps')).text()
-    const works = await (await get('/works')).text()
-    expect(apps).toContain(`<div class="grid" style="--cols:${perScreenOf('apps')}">`)
-    expect(works).toContain(`<div class="grid" style="--cols:${perScreenOf('works')}">`)
-
+    const cols = `<div class="grid" style="--cols:${perScreenOf('projects')}">`
+    expect(await (await get('/projects')).text()).toContain(cols)
     // 全体ページも同じ。ここだけ別の数にすると、1枚の中で列の幅が変わる
-    expect(await (await get('/all')).text()).toContain(
-      `<div class="grid" style="--cols:${perScreenOf('apps')}">`,
-    )
+    expect(await (await get('/all')).text()).toContain(cols)
   })
 
   it('渡さない一覧を作らない（渡し忘れると列が1つに落ちる）', async () => {
     await seedItem({ title: 'アプリ' })
-    const html = await (await get('/apps')).text()
+    const html = await (await get('/projects')).text()
     // repeat(var(--cols)) は --cols が無いと計算できず、規則ごと無かったことに
     // なる（1列に戻る）。落ちてもエラーは出ないので、markup 側で数える
     const grids = html.match(/<div class="grid"/g) ?? []

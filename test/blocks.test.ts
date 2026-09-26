@@ -45,15 +45,16 @@ describe('トップの構成', () => {
 
     const html = await (await get('/all')).text()
     expect(html).toContain('class="hero"')
-    expect(sectionIds(html)).toEqual(['apps', 'works', 'team', 'contact'])
+    // 個人開発と業務は Projects の1つの節に並ぶ
+    expect(sectionIds(html)).toEqual(['projects', 'team', 'contact'])
   })
 
   it('置いた順に出る', async () => {
     await seedMember()
     await seedItem({ type: 'app' })
-    await place([{ type: 'team' }, { type: 'contact' }, { type: 'apps' }])
+    await place([{ type: 'team' }, { type: 'contact' }, { type: 'projects' }])
 
-    expect(sectionIds(await (await get('/all')).text())).toEqual(['team', 'contact', 'apps'])
+    expect(sectionIds(await (await get('/all')).text())).toEqual(['team', 'contact', 'projects'])
   })
 
   it('目次も置いた順に従う', async () => {
@@ -62,7 +63,7 @@ describe('トップの構成', () => {
 
     const html = await (await get('/all')).text()
     expect(html.indexOf('href="#contact"')).toBeLessThan(html.indexOf('href="#team"'))
-    expect(html).not.toContain('href="#apps"')
+    expect(html).not.toContain('href="#projects"')
   })
 
   it('下書きのブロックは出ない。全部下書きでも既定には戻らない', async () => {
@@ -73,8 +74,8 @@ describe('トップの構成', () => {
   })
 
   it('中身の無い節は見出しごと出さない', async () => {
-    // apps は登録が0件、note は本文が空
-    await place([{ type: 'apps' }, { type: 'note', title: '空のメモ' }, { type: 'contact' }])
+    // projects は登録が0件、note は本文が空
+    await place([{ type: 'projects' }, { type: 'note', title: '空のメモ' }, { type: 'contact' }])
 
     const html = await (await get('/all')).text()
     expect(sectionIds(html)).toEqual(['contact'])
@@ -133,11 +134,10 @@ describe('画面ごとの URL', () => {
     // renderBlock が節ごと出さないものは、URL も無い。「公開なのに開けない
     // ページ」と「開けるのに空のページ」を、どちらも作らないため
     await seedMember()
-    await place([{ type: 'apps' }, { type: 'team', published: 0 }, { type: 'contact' }])
+    await place([{ type: 'projects' }, { type: 'team', published: 0 }, { type: 'contact' }])
 
-    expect((await get('/apps')).status).toBe(404) // 公開中の登録が0件
+    expect((await get('/projects')).status).toBe(404) // 公開中の登録が0件
     expect((await get('/team')).status).toBe(404) // 下書き
-    expect((await get('/works')).status).toBe(404) // 置いていない
     expect((await get('/contact')).status).toBe(200)
   })
 
@@ -169,10 +169,10 @@ describe('管理の構成', () => {
     await signed('/admin/blocks/init', { method: 'POST' })
 
     const rows = await db().select().from(schema.blocks)
-    expect(rows.map((row) => row.type)).toEqual(['hero', 'apps', 'works', 'team', 'contact'])
+    expect(rows.map((row) => row.type)).toEqual(['hero', 'projects', 'team', 'contact'])
   })
 
-  it('何も置いていないまま足しても、既定の5節は消えない', async () => {
+  it('何も置いていないまま足しても、既定の節は消えない', async () => {
     // 0件のトップは既定の並びで出ている。そこへ1つ足して、見えていた節が
     // 消えるなら「足したのに減った」になる
     await seedMember()
@@ -188,19 +188,11 @@ describe('管理の構成', () => {
 
     // 足したものは Contact の手前に入る
     const rows = await db().query.blocks.findMany({ orderBy: (t, { asc }) => [asc(t.sortOrder)] })
-    expect(rows.map((row) => row.type)).toEqual([
-      'hero',
-      'apps',
-      'works',
-      'team',
-      'note',
-      'contact',
-    ])
+    expect(rows.map((row) => row.type)).toEqual(['hero', 'projects', 'team', 'note', 'contact'])
     expect(sectionIds(await (await get('/all')).text())).toEqual([
-      'apps',
-      'works',
+      'projects',
       'team',
-      `block-${rows[4]?.id}`,
+      `block-${rows[3]?.id}`,
       'contact',
     ])
   })
@@ -211,7 +203,8 @@ describe('管理の構成', () => {
 
     const response = await signed('/admin/blocks', { method: 'POST', body: form({ type: 'team' }) })
     expect(response.status).toBe(400)
-    expect(await db().select().from(schema.blocks)).toHaveLength(5)
+    // 既定の4つ（hero・projects・team・contact）のまま増えない
+    expect(await db().select().from(schema.blocks)).toHaveLength(4)
   })
 
   it('リンク集は URL の形まで見る', async () => {
@@ -303,17 +296,19 @@ describe('管理の構成', () => {
   it('動かす向きが分からなければ何もしない', async () => {
     const signed = await signIn()
     await signed('/admin/blocks/init', { method: 'POST' })
-    const apps = await db().query.blocks.findFirst({ where: (t, { eq }) => eq(t.type, 'apps') })
-    if (!apps) throw new Error('apps が無い')
+    const projects = await db().query.blocks.findFirst({
+      where: (t, { eq }) => eq(t.type, 'projects'),
+    })
+    if (!projects) throw new Error('projects が無い')
 
-    const response = await signed(`/admin/blocks/${apps.id}/move`, {
+    const response = await signed(`/admin/blocks/${projects.id}/move`, {
       method: 'POST',
       body: form({ dir: 'DOWN' }),
     })
     expect(response.status).toBe(400)
 
     const rows = await db().query.blocks.findMany({ orderBy: (t, { asc }) => [asc(t.sortOrder)] })
-    expect(rows.map((row) => row.type)).toEqual(['hero', 'apps', 'works', 'team', 'contact'])
+    expect(rows.map((row) => row.type)).toEqual(['hero', 'projects', 'team', 'contact'])
   })
 
   it('種類が消えた行も外せる', async () => {
@@ -340,10 +335,9 @@ describe('管理の構成', () => {
     if (!team) throw new Error('team が無い')
 
     await signed(`/admin/blocks/${team.id}/move`, { method: 'POST', body: form({ dir: 'up' }) })
-    await signed(`/admin/blocks/${team.id}/move`, { method: 'POST', body: form({ dir: 'up' }) })
 
     const rows = await db().query.blocks.findMany({ orderBy: (t, { asc }) => [asc(t.sortOrder)] })
-    expect(rows.map((row) => row.type)).toEqual(['hero', 'team', 'apps', 'works', 'contact'])
+    expect(rows.map((row) => row.type)).toEqual(['hero', 'team', 'projects', 'contact'])
   })
 
   it('一番上で上へ動かしても何も起きない', async () => {
@@ -371,5 +365,64 @@ describe('管理の構成', () => {
     const response = await signed(`/admin/blocks/${team.id}/delete`, { method: 'POST' })
     expect(response.headers.get('location')).toBe('/admin/blocks?deleted=1')
     expect(sectionIds(await (await get('/all')).text())).not.toContain('team')
+  })
+})
+
+/*
+  Apps と Works を Projects に畳む移行（drizzle/0004_merge_apps_works.sql）。
+
+  スキーマは変わらないので、drizzle-kit の生成物ではなく手で書いた SQL
+  （--custom）。構成に置いた行だけが相手で、放っておくと apps / works の行は
+  「知らない種類」として公開ページから黙って消える。テスト用の D1 には移行が
+  流れたあとなので、同じ SQL を旧い行に当て直して確かめる。
+*/
+describe('Apps と Works を Projects に畳む移行', () => {
+  const migrate = async () => {
+    const found = env.TEST_MIGRATIONS.find((one) => one.name.includes('merge_apps_works'))
+    if (!found) throw new Error('0004_merge_apps_works の移行が無い')
+    for (const query of found.queries) await env.DB.prepare(query).run()
+  }
+  const insert = (rows: [string, number, number][]) =>
+    env.DB.batch(
+      rows.map(([type, published, order]) =>
+        env.DB.prepare('INSERT INTO blocks (type, published, sort_order) VALUES (?, ?, ?)').bind(
+          type,
+          published,
+          order,
+        ),
+      ),
+    )
+  const rows = () => db().query.blocks.findMany({ orderBy: (t, { asc }) => [asc(t.sortOrder)] })
+
+  it('先に並んでいたほうの位置に1行だけ残す。どちらかが公開中なら公開', async () => {
+    // 個人開発は下書き、業務だけ出していたサイト。一覧ごと消さない
+    await insert([
+      ['hero', 1, 10],
+      ['apps', 0, 20],
+      ['works', 1, 30],
+      ['team', 1, 40],
+    ])
+    await migrate()
+
+    const after = await rows()
+    expect(after.map((row) => [row.type, row.published, row.sortOrder])).toEqual([
+      ['hero', 1, 10],
+      ['projects', 1, 20],
+      ['team', 1, 40],
+    ])
+  })
+
+  it('片方しか置いていなければ、それを Projects にする。どちらも無ければ何もしない', async () => {
+    await insert([
+      ['works', 1, 10],
+      ['contact', 1, 20],
+    ])
+    await migrate()
+    expect((await rows()).map((row) => row.type)).toEqual(['projects', 'contact'])
+
+    await resetDb()
+    await insert([['team', 1, 10]])
+    await migrate()
+    expect((await rows()).map((row) => row.type)).toEqual(['team'])
   })
 })

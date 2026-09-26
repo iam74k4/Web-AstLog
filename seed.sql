@@ -9,13 +9,13 @@ DELETE FROM members;
 DELETE FROM platforms;
 DELETE FROM blocks;
 
--- トップの並び。移行前の index.html と同じ順（src/blocks.ts の DEFAULT_BLOCKS と揃える）
+-- トップの並び（src/blocks.ts の DEFAULT_BLOCKS と揃える）。
+-- Projects は個人開発と業務を1つにした一覧（以前の Apps と Works）
 INSERT INTO blocks (type, published, sort_order) VALUES
-  ('hero',    1, 10),
-  ('apps',    1, 20),
-  ('works',   1, 30),
-  ('team',    1, 40),
-  ('contact', 1, 50);
+  ('hero',     1, 10),
+  ('projects', 1, 20),
+  ('team',     1, 30),
+  ('contact',  1, 40);
 
 INSERT INTO platforms (key, label, sort_order) VALUES
   ('macos',  'macOS',  10),

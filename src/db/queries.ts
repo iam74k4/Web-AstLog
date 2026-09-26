@@ -1,13 +1,24 @@
-import { and, asc, count, eq, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, sql } from 'drizzle-orm'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import { DEFAULT_BLOCKS } from '../blocks'
 import { normalizeTheme, THEME_KEYS, type Theme, type ThemeKey } from '../theme'
-import type { ItemView } from '../ui/components'
+import type { ItemKind, ItemView } from '../ui/components'
 import * as schema from './schema'
 
 export type Db = DrizzleD1Database<typeof schema>
 
-const publicOrder = [asc(schema.items.sortOrder), asc(schema.items.id)]
+/*
+  公開ページの並び。新しい順で、個人開発と業務を混ぜて並べる（Projects は
+  1つの一覧）。年は頭の4桁で比べる——「2024 —」（2024年から続いている）は
+  2024。年を書いていない行は最後に回る（空文字は数字より小さい）。
+  同じ年の中は管理画面で決めた並び（sort_order）。区分ごとに別々に振った
+  数なので、同じ数どうしは先に作ったほう（id）が前に来る。
+*/
+const publicOrder = [
+  desc(sql`substr(${schema.items.year}, 1, 4)`),
+  asc(schema.items.sortOrder),
+  asc(schema.items.id),
+]
 
 export function listPublishedMembers(db: Db) {
   return db.query.members.findMany({
@@ -23,13 +34,14 @@ export function findPublishedMember(db: Db, slug: string) {
 }
 
 /*
-  一覧を絞り込む条件。プラットフォームとメンバーの2軸で、どちらも無ければ全件。
+  一覧を絞り込む条件。区分（個人開発 app / 業務 work）とメンバーの2軸で、
+  どちらも無ければ全件。
 
   メンバーは slug ではなく id で受ける。呼ぶ側は公開中のメンバーの一覧から
   引き当てるので、下書きのメンバーの slug では絞り込めない（絞り込まずに
   全件が出る）。ここで slug を受けると、その一手間を飛ばせてしまう。
 */
-export type ItemScope = { platformKey?: string | null; memberId?: number | null }
+export type ItemScope = { kind?: ItemKind | null; memberId?: number | null }
 
 /*
   1画面ぶんだけを引くための範囲。limit と offset は必ず対で渡すこと。
@@ -37,11 +49,10 @@ export type ItemScope = { platformKey?: string | null; memberId?: number | null 
 */
 type ItemSlice = ItemScope & { limit?: number; offset?: number }
 
-const itemsWhere = (type: 'app' | 'work', scope: ItemScope) =>
+const itemsWhere = (scope: ItemScope) =>
   and(
-    eq(schema.items.type, type),
     eq(schema.items.published, 1),
-    scope.platformKey ? eq(schema.items.platformKey, scope.platformKey) : undefined,
+    scope.kind ? eq(schema.items.type, scope.kind) : undefined,
     scope.memberId ? eq(schema.items.memberId, scope.memberId) : undefined,
   )
 
@@ -86,13 +97,9 @@ function toItemView(row: ItemRow): ItemView {
   }
 }
 
-export async function listPublishedItems(
-  db: Db,
-  type: 'app' | 'work',
-  slice: ItemSlice = {},
-): Promise<ItemView[]> {
+export async function listPublishedItems(db: Db, slice: ItemSlice = {}): Promise<ItemView[]> {
   const rows = await db.query.items.findMany({
-    where: itemsWhere(type, slice),
+    where: itemsWhere(slice),
     orderBy: publicOrder,
     limit: slice.limit,
     offset: slice.offset,
@@ -124,40 +131,27 @@ export async function findPublishedItem(db: Db, slug: string): Promise<ItemView 
   画面が何枚になるかを決める数。カードを引かずに数えるので、出さない画面の
   中身は取ってこない。
 */
-export async function countPublishedItems(db: Db, type: 'app' | 'work', scope: ItemScope = {}) {
-  const [row] = await db.select({ n: count() }).from(schema.items).where(itemsWhere(type, scope))
+export async function countPublishedItems(db: Db, scope: ItemScope = {}) {
+  const [row] = await db.select({ n: count() }).from(schema.items).where(itemsWhere(scope))
   return row?.n ?? 0
-}
-
-/*
-  絞り込みのピルは、公開中の一覧に実際に出てくるものだけ並べる。
-  空振りするピルを置かないため。
-
-  作るのは絞り込む前の全件から。絞り込んだ結果から作ると、押すたびにピルの
-  並びが変わり、いま外したばかりのピルが消えて戻れなくなる。
-*/
-export async function usedPlatforms(db: Db, type: 'app' | 'work'): Promise<schema.Platform[]> {
-  return await db
-    .selectDistinct({
-      key: schema.platforms.key,
-      label: schema.platforms.label,
-      sortOrder: schema.platforms.sortOrder,
-    })
-    .from(schema.platforms)
-    .innerJoin(schema.items, eq(schema.items.platformKey, schema.platforms.key))
-    .where(and(eq(schema.items.type, type), eq(schema.items.published, 1)))
-    .orderBy(asc(schema.platforms.sortOrder))
 }
 
 export function listPlatforms(db: Db) {
   return db.query.platforms.findMany({ orderBy: [asc(schema.platforms.sortOrder)] })
 }
 
-export async function countMemberItems(db: Db, memberId: number) {
+/*
+  区分ごとの公開中の件数。絞り込みのピル（両方の区分に項目があるときだけ並べる）
+  と、一覧への帯の「個人開発 5 · 業務 2」に使う。memberId を渡せばその人のぶん。
+
+  ピルは絞り込む前の件数から決める。絞り込んだ結果から決めると、押すたびに
+  ピルの並びが変わり、いま押したピルが消えて戻れなくなる。
+*/
+export async function countPublishedByKind(db: Db, memberId: number | null = null) {
   const rows = await db
     .select({ type: schema.items.type, n: count() })
     .from(schema.items)
-    .where(and(eq(schema.items.memberId, memberId), eq(schema.items.published, 1)))
+    .where(itemsWhere({ memberId }))
     .groupBy(schema.items.type)
 
   return {

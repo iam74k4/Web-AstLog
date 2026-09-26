@@ -13,18 +13,15 @@ import {
   MEMBER_PER_SCREEN,
 } from '../blocks'
 import {
-  countMemberItems,
+  countPublishedByKind,
   countPublishedItems,
   type Db,
   findPublishedItem,
   findPublishedMember,
-  type ItemScope,
-  listPlatforms,
   listPublishedItems,
   listPublishedMembers,
   loadTheme,
   publishedBlocks,
-  usedPlatforms,
 } from '../db/queries'
 import * as schema from '../db/schema'
 import type { AppEnv } from '../env'
@@ -43,8 +40,10 @@ import {
   Hero,
   ItemCard,
   type ItemFilter,
+  type ItemKind,
   type ItemView,
   itemHref,
+  KIND_LABEL,
   LinkList,
   MemberCardCompact,
   MemberCardWide,
@@ -212,12 +211,12 @@ const siteJsonLd = (members: schema.Member[]) => {
 /*
   入口の題と説明。1人なら名前と職種を載せる。
 
-  ここが「Noctifex — Apps & Works」だけだと、共有リンクのカードにも検索の
+  ここが「Noctifex — Projects」だけだと、共有リンクのカードにも検索の
   スニペットにも、誰のサイトなのかが1文字も出ない。画面に出ている名乗りと
   同じものを head にも置く。
 */
 const siteTitle = (solo?: schema.Member) =>
-  solo ? `${solo.name}（${solo.role}） — ${SITE.name}` : `${SITE.name} — Apps & Works`
+  solo ? `${solo.name}（${solo.role}） — ${SITE.name}` : `${SITE.name} — Projects`
 
 const siteDescription = (solo?: schema.Member) =>
   solo ? `${solo.name}（${solo.role}）のポートフォリオ。${SITE.heroLead}` : SITE.heroLead
@@ -232,7 +231,7 @@ const siteDescription = (solo?: schema.Member) =>
 
   作るのは「その画面に実際に出ている文字」から。数と名前を並べ替えるだけなので、
   中身を足した日に説明文だけ古くなることが無い（固定の文を書くと必ずそうなる）。
-  割った2画面目には2画面目に出ているものが入るので、/apps と /apps/2 も
+  割った2画面目には2画面目に出ているものが入るので、/projects と /projects/2 も
   同じ文にならない。
 */
 // 検索結果は日本語なら 110 字あたりで切られる。どこで切れるかはこちらで決める
@@ -309,16 +308,14 @@ async function adminHref(c: Context<AppEnv>, to: string): Promise<string | undef
   サイトの画面から、その中身を直す管理画面へ。
 
   打ち込むブロックはその編集画面。決まった中身のブロックは、中身の出どころへ
-  ——Apps / Works は項目の一覧、Team はメンバーの一覧、入口の名前と職種は
+  ——Projects は項目の一覧、Team はメンバーの一覧、入口の名前と職種は
   メンバー（1人のサイトならその人の編集）。Contact と入口のリード文は
   src/site.ts にあって管理画面からは変えられないので、「構成」のその行へ送る。
 */
 const blockAdminPath = (block: schema.Block, solo?: schema.Member) => {
   switch (block.type) {
-    case 'apps':
-      return '/admin/items?type=app'
-    case 'works':
-      return '/admin/items?type=work'
+    case 'projects':
+      return '/admin/items'
     case 'team':
       return '/admin/members'
     case 'hero':
@@ -334,19 +331,16 @@ const blockAdminPath = (block: schema.Block, solo?: schema.Member) => {
 /*
   一覧への帯（行き先と件数）。
 
-  項目のある側へ送ること。Apps が0件の人を /apps へ送ると、0件の知らせ
-  だけの画面に着く。その節を置いていないサイトでは、そもそもその URL が
-  無い（404）ので、置いてあるかどうかも見る。
+  送る先は Projects の1画面目。その節を置いていないサイトでは、そもそも
+  その URL が無い（404）ので、置いてあるかどうかも見る。
 
-  件数も、置いてある節のぶんだけ数える。Works を外したサイトで「Works 3」と
-  出すと、どこを探しても見つからない3件になる。送る先が無ければ null
-  （帯ごと出さない）。
+  件数は区分ごと（個人開発 5 · 業務 2）。Projects を置いていないサイトでは、
+  どこを探しても見つからない件数になるので帯ごと出さない。項目が1件も無い
+  ときも同じ（0件の知らせだけの画面へ送らない）。
 */
-const bandOf = (blocks: schema.Block[], app: number, work: number, query = '') => {
-  const placed = (key: string) => blocks.some((block) => block.type === key)
-  const counts = { app: placed('apps') ? app : 0, work: placed('works') ? work : 0 }
-  const href = counts.app > 0 ? `/apps${query}` : counts.work > 0 ? `/works${query}` : null
-  return href ? { href, ...counts } : null
+const bandOf = (blocks: schema.Block[], counts: KindCounts, query = '') => {
+  const placed = blocks.some((block) => block.type === 'projects')
+  return placed && counts.app + counts.work > 0 ? { href: `/projects${query}`, ...counts } : null
 }
 
 /*
@@ -366,9 +360,7 @@ const showMemberOf = (blocks: schema.Block[], members: schema.Member[]) =>
 
   total は絞り込みを外したときの件数で、節を出すかどうかを決める。
   matched は絞り込んだあとの件数で、画面が何枚になるかを決める。
-  Apps は matched が0でも節を出す（ピルを残して1行だけ出す）ので、2つに
-  分けて持つ。Works にはピルが無く、0件なら節ごと消えるので、
-  Works の total には絞り込んだあとの件数が入る。
+  matched が0でも節は出す（ピルを残して1行だけ出す）ので、2つに分けて持つ。
 */
 type ItemSlice = {
   total: number
@@ -377,12 +369,19 @@ type ItemSlice = {
   rows: ItemView[]
 }
 
+// 区分ごとの公開中の件数（queries.ts の countPublishedByKind）
+type KindCounts = { app: number; work: number }
+
+// 区分のピルに並べるもの。公開中の項目が実在する区分だけ（FilterLinks を見ること）
+const kindsOf = (counts: KindCounts): ItemKind[] =>
+  (['app', 'work'] as const).filter((kind) => counts[kind] > 0)
+
 type TopData = {
   members: schema.Member[]
-  apps: ItemSlice
-  works: ItemSlice
-  // ピルに並べるぶん（公開中の Apps に実在するものだけ）
-  platforms: schema.Platform[]
+  // Projects（個人開発と業務を1つにした一覧）
+  projects: ItemSlice
+  // 区分のピルに並べるぶん（公開中の項目が実在する区分だけ）
+  kinds: ItemKind[]
   filter: ItemFilter
   // カードに担当者を出すか（showMemberOf）
   showMember: boolean
@@ -397,14 +396,13 @@ type TopData = {
   band: { href: string; app: number; work: number } | null
 }
 
-// 一覧を持つブロックだけ、DB から行を引く
-const itemTypeOf = (key: string): 'app' | 'work' | null =>
-  key === 'apps' ? 'app' : key === 'works' ? 'work' : null
+// 一覧を持つブロック（Projects）だけ、DB から行を引く
+const hasList = (key: string) => key === 'projects'
 
 /*
   ブロック1つを描いた結果。
 
-  id は DOM のアンカー（#apps）、slug は URL の1語（/apps）。同じ文字列を
+  id は DOM のアンカー（#projects）、slug は URL の1語（/projects）。同じ文字列を
   わざと2つ持たせてある。全体ページは id で、画面ごとの URL は slug で同じ
   節を指すので、どちらか片方だけを変えたくなったときに変える先が見える。
 
@@ -441,14 +439,14 @@ function screenOf<T>(rows: T[], perScreen: number, page: number | null) {
   ブロック1つを節に描く。中身が無ければ null を返し、節ごと出さない
   （見出しだけ残さない）。
 
-  決まった中身のもの（apps・team …）は id を type と同じにして、
-  #apps のようなアンカーと /apps という URL の1語を保つ。
+  決まった中身のもの（projects・team …）は id を type と同じにして、
+  #projects のようなアンカーと /projects という URL の1語を保つ。
   打ち込むものは block-<id>。
 
   page は「このブロックの何画面目か」（1始まり）。null なら割らずに全件を出す
   ——全体ページ（/all）はこちら。
 
-  Apps / Works の行は、呼ぶ側が limit / offset で切って渡す（ここでは切らない）。
+  Projects の行は、呼ぶ側が limit / offset で切って渡す（ここでは切らない）。
   画面の枚数を数えるためだけに呼ぶとき（screenList）は行が空で、描いた節は
   そのまま捨てられる。枚数と中身を同じ関数から出す形は変えないこと——別々に
   数えると、いつか「節は出ないのに URL だけある」画面ができる。
@@ -469,7 +467,7 @@ const ROW_LISTS = {
 function renderBlock(block: schema.Block, data: TopData, page: number | null): Rendered | null {
   const type = blockType(block.type)
   if (!type) return null
-  const { members, apps, works, platforms, filter, showMember, band } = data
+  const { members, projects, kinds, filter, showMember, band } = data
   const id = type.kind === 'fixed' ? type.key : `block-${block.id}`
   // 見出しが空なら、フォームの初期値と同じ名前（それも無ければ種類の名前）
   const title = block.title || ('title' in type && type.title) || type.label
@@ -540,55 +538,71 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
       }
     }
 
-    case 'apps': {
-      // 公開中の app が1件も無ければ節ごと出さない。絞り込んで0件になっただけの
-      // ときは出す——ピルごと消えると、絞り込みを外す手が画面から無くなる
-      if (!apps.total) return null
-      const pages = Math.max(1, screenCount(apps.matched, perScreen))
+    case 'projects': {
+      /*
+        個人開発（app）と業務（work）を1つの一覧に並べる。並びは新しい順
+        （queries.ts の publicOrder）。区分はカードの札（プラットフォーム /
+        業界）と絞り込みのピルで見分ける。
+
+        公開中の項目が1件も無ければ節ごと出さない。絞り込んで0件になっただけの
+        ときは出す——ピルごと消えると、絞り込みを外す手が画面から無くなる
+      */
+      if (!projects.total) return null
+      const pages = Math.max(1, screenCount(projects.matched, perScreen))
       if (page !== null && page > pages) return null
       return {
         id,
         slug: id,
         pages,
-        nav: 'Apps',
+        nav: 'Projects',
         /*
-          件数とプラットフォームは、この画面に出ている絞り込みのピルそのもの。
-          そのあとに、いまの画面に載っているカードの名前を並べる——ここが
-          画面ごとに変わるので、/apps と /apps/2 が同じ説明にならない
+          件数と区分は、この画面に出ている絞り込みのピルそのもの。そのあとに、
+          いまの画面に載っているカードの名前を並べる——ここが画面ごとに変わるので、
+          /projects と /projects/2 が同じ説明にならない。
+
+          業務のカードは実績値まで入れる。このサイトでいちばん強い一文（見込み
+          40人日 → 実績 20人日）はカードの .metric にしか無く、検索結果にも
+          貼られたカードにも1文字も出ていなかった。並べる順はカードの並び順
+          そのまま（値・単位・添え）——言い換えると、書いた人の数字がこちらの
+          都合で別の意味になる。
         */
         description: describe(
           joinParts(
-            `個人開発 ${apps.total} 件`,
-            platforms.map((row) => row.label).join(' / '),
-            apps.rows.map((row) => row.title).join('、'),
+            `つくったもの ${projects.total} 件`,
+            kinds.map((kind) => KIND_LABEL[kind]).join(' / '),
+            projects.rows.map((row) => `${row.title}${metricDigest(row)}`).join('、'),
           ),
         ),
         node: (
           <ScreenSection
             id={id}
-            label="Apps"
+            label="Projects"
             whole={!split}
             head={
               <>
-                <SectionHead title="Apps" note="個人開発" h1={split} />
+                <SectionHead
+                  title="Projects"
+                  note={kinds.map((kind) => KIND_LABEL[kind]).join(' · ')}
+                  h1={split}
+                />
                 {/* 行き先はこのブロックの1画面目。いま何画面目に居ても同じ */}
                 <FilterLinks
                   base={`/${id}`}
-                  platforms={platforms}
+                  kinds={kinds}
                   members={members.map((member) => ({ slug: member.slug, name: member.name }))}
                   filter={filter}
                 />
               </>
             }
           >
-            {apps.matched ? (
+            {projects.matched ? (
               /*
                 列の数は1画面ぶんの件数そのもの。CSS は repeat(var(--cols), …)
                 と書くだけで数を持たない（app.css の「600px 以上」）。perScreen を
                 変えれば列も一緒に変わるので、件数と見た目が二重にならない
               */
               <div class="grid" style={`--cols:${perScreen}`}>
-                {apps.rows.map((item) => (
+                {projects.rows.map((item) => (
                   <ItemCard key={item.id} item={item} showMember={showMember} />
                 ))}
               </div>
@@ -596,43 +610,6 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
               <p class="filter-empty">この条件に当てはまるものはまだありません</p>
             )}
           </ScreenSection>
-        ),
-      }
-    }
-
-    case 'works': {
-      // Works にはピルが無い。絞り込んで0件になったら節ごと消す——0件の知らせ
-      // だけが残っても、そこから絞り込みを外す手が無い（total は絞り込み後の件数）
-      if (!works.total) return null
-      const pages = screenCount(works.matched, perScreen)
-      if (page !== null && page > pages) return null
-      return {
-        id,
-        slug: id,
-        pages,
-        nav: 'Works',
-        /*
-          実績値まで入れる。このサイトでいちばん強い一文（見込み 40人日 →
-          実績 20人日）はカードの .metric にしか無く、検索結果にも貼られた
-          カードにも1文字も出ていなかった。並べる順はカードの並び順そのまま
-          （値・単位・添え）にする——言い換えると、書いた人の数字が
-          こちらの都合で別の意味になる。
-        */
-        description: describe(
-          joinParts(
-            `業務での開発 ${works.total} 件`,
-            works.rows.map((row) => `${row.title}${metricDigest(row)}`).join('、'),
-          ),
-        ),
-        node: (
-          <Screen id={id} label="Works" whole={!split}>
-            <SectionHead title="Works" note="業務" h1={split} />
-            <div class="grid" style={`--cols:${perScreen}`}>
-              {works.rows.map((item) => (
-                <ItemCard key={item.id} item={item} showMember={showMember} />
-              ))}
-            </div>
-          </Screen>
         ),
       }
     }
@@ -793,27 +770,27 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
 */
 async function renderWholePage(c: Context<AppEnv>) {
   const db = drizzle(c.env.DB, { schema })
-  const [members, apps, works, platforms, theme, blocks] = await Promise.all([
+  const [members, items, theme, blocks] = await Promise.all([
     listPublishedMembers(db),
-    listPublishedItems(db, 'app'),
-    listPublishedItems(db, 'work'),
-    usedPlatforms(db, 'app'),
+    listPublishedItems(db),
     loadTheme(db),
     publishedBlocks(db),
   ])
 
   /*
     このページだけは絞り込まない。全部を1ページに載せるのが役目なので、
-    ?platform= も ?member= も読まない（ピルは画面ごとの URL へのリンクとして
+    ?kind= も ?member= も読まない（ピルは画面ごとの URL へのリンクとして
     残る）。
   */
   const data: TopData = {
     members,
-    platforms,
-    filter: { platform: null, member: null },
+    kinds: kindsOf({
+      app: items.filter((item) => item.type === 'app').length,
+      work: items.filter((item) => item.type === 'work').length,
+    }),
+    filter: { kind: null, member: null },
     showMember: showMemberOf(blocks, members),
-    apps: { total: apps.length, matched: apps.length, rows: apps },
-    works: { total: works.length, matched: works.length, rows: works },
+    projects: { total: items.length, matched: items.length, rows: items },
     // このページには一覧そのものがすぐ下に並ぶ。送り出す先が無いので帯は置かない
     band: null,
   }
@@ -871,7 +848,7 @@ async function renderWholePage(c: Context<AppEnv>) {
   画面1つ。管理の「構成」で置いた順に、ブロックを画面へほどいた列の1要素。
 
   通し番号（「07 · 23」の 07）はこの列の添字で、ブロック単位ではなく画面単位。
-  だから Apps の最後の画面の「次」は、次のブロックの1画面目になる。目次に
+  だから Projects の最後の画面の「次」は、次のブロックの1画面目になる。目次に
   載らない画面（Hero・ひとこと）も列には並ぶので、めくれば必ずたどり着ける。
 */
 type BlockScreen = {
@@ -900,9 +877,9 @@ function screenList(blocks: schema.Block[], data: TopData): BlockScreen[] {
 }
 
 /*
-  1画面目は /apps、2画面目からは /apps/2。同じ画面に URL を2つ作らない。
+  1画面目は /projects、2画面目からは /projects/2。同じ画面に URL を2つ作らない。
 
-  query は絞り込み（?platform=… / ?member=…）。めくる先にも目次の行き先にも
+  query は絞り込み（?kind=… / ?member=…）。めくる先にも目次の行き先にも
   同じものを付ける。付けないと、次の画面へ移った瞬間に絞り込みだけが外れ、
   通し番号（07 · 23）だけが絞り込んだままの数で残る。
 */
@@ -912,40 +889,30 @@ const screenHref = (screen: { slug: string; page: number }, query = '') =>
 /*
   URL の絞り込みを読む。
 
-  知らないプラットフォームの key も、公開中に居ないメンバーの slug も、
-  絞り込みとして扱わない（絞り込まずに全件を出す）。ピルに並ばないもので
-  絞り込むと、画面のどこにも印が出ず、外す手が無くなる。
+  知らない区分も、ピルに並んでいない区分（項目が片方の区分にしか無いサイト）も、
+  公開中に居ないメンバーの slug も、絞り込みとして扱わない（絞り込まずに全件を
+  出す）。ピルに並ばないもので絞り込むと、画面のどこにも印が出ず、外す手が
+  無くなる。
 
   1人のサイトでは ?member= を読まない。名前のピルは2人以上いるときにしか
   並ばない（FilterLinks）ので、効かせると「すべて」にも名前にも印が付かない
   まま一覧だけが絞られる。
 */
-function readFilter(c: Context<AppEnv>, platforms: schema.Platform[], members: schema.Member[]) {
-  const platform = c.req.query('platform') ?? ''
+function readFilter(c: Context<AppEnv>, kinds: ItemKind[], members: schema.Member[]) {
+  const asked = c.req.query('kind')
+  // 区分のピルは両方の区分に項目があるときだけ並ぶ（FilterLinks）
+  const kind = kinds.length > 1 ? (kinds.find((one) => one === asked) ?? null) : null
   const member =
     members.length > 1 ? (members.find((row) => row.slug === c.req.query('member')) ?? null) : null
-  const filter: ItemFilter = {
-    platform: platforms.some((row) => row.key === platform) ? platform : null,
-    member: member?.slug ?? null,
-  }
+  const filter: ItemFilter = { kind, member: member?.slug ?? null }
   return { filter, memberId: member?.id ?? null }
 }
 
-/*
-  その一覧に効く条件。
-
-  プラットフォームは Apps だけの軸。Works は platform_key を持たない（区分で
-  分ける）ので、そのまま渡すと Works が丸ごと0件になり、目次から節ごと消える。
-  メンバーは両方に効く——個人ページから来た人に、Works だけ全員ぶんを見せない
-  ため。
-*/
-const scopeOf = (type: 'app' | 'work', filter: ItemFilter, memberId: number | null): ItemScope => ({
-  platformKey: type === 'app' ? filter.platform : null,
-  memberId,
-})
+// その一覧に効く条件。区分もメンバーも Projects の1つの一覧に効く
+const scopeOf = (filter: ItemFilter, memberId: number | null) => ({ kind: filter.kind, memberId })
 
 /*
-  いま出す画面のぶんだけを引く。Apps / Works 以外の画面では1件も引かない
+  いま出す画面のぶんだけを引く。Projects 以外の画面では1件も引かない
   ——その画面に一覧は無い。絞り込みが画面をまたいで効くのは、どの画面でも
   同じ絞り込みから条件を作っているから。
 */
@@ -955,12 +922,11 @@ async function screenRows(
   filter: ItemFilter,
   memberId: number | null,
 ): Promise<ItemView[]> {
-  const type = itemTypeOf(screen.block.type)
-  const kind = blockType(screen.block.type)
-  if (!type || !kind) return []
-  const perScreen = blockPerScreen(kind.key)
-  return listPublishedItems(db, type, {
-    ...scopeOf(type, filter, memberId),
+  const type = blockType(screen.block.type)
+  if (!hasList(screen.block.type) || !type) return []
+  const perScreen = blockPerScreen(type.key)
+  return listPublishedItems(db, {
+    ...scopeOf(filter, memberId),
     limit: perScreen,
     offset: (screen.page - 1) * perScreen,
   })
@@ -1028,43 +994,22 @@ async function siteScreens(
   members: schema.Member[],
   filter: ItemFilter,
   memberId: number | null,
+  // 区分ごとの件数。呼ぶ側が絞り込みを読むのに先に引いていれば渡す（二度引かない）
+  byKind?: KindCounts,
 ): Promise<{ screens: BlockScreen[]; counted: TopData }> {
-  const [pills, appTotal, appMatched, workTotal, workMatched] = await Promise.all([
-    usedPlatforms(db, 'app'),
-    countPublishedItems(db, 'app'),
-    filter.platform || memberId
-      ? countPublishedItems(db, 'app', scopeOf('app', filter, memberId))
-      : null,
-    /*
-      入口の帯に出す、絞り込みを見ない Works の件数。works.total とは別に
-      持つ——あちらには「絞り込んだあとの件数」が入っていて、0になったら
-      Works の節ごと消すのに使っている。同じ名前で兼ねると、絞り込みで
-      節を消す仕組みか、入口の数のどちらかが必ず狂う。
-    */
-    countPublishedItems(db, 'work'),
-    /*
-      絞り込んだあとの Works の件数。**memberId が無いときは引かない。**
-
-      scopeOf は Works に platformKey を渡さない（type === 'app' のときだけ
-      渡す）ので、Works に効く絞り込みは memberId だけ。?member= の付かない
-      全リクエスト——トップ・各画面・/sitemap.xml・作品1件ページ——で、
-      すぐ上と同じ SQL を2回投げていた。
-
-      **このガードは「scopeOf が Works に platformKey を渡さない」ことに
-      依存している。** Works に2つ目の絞り込み軸を足すなら、ここも一緒に
-      直すこと。直さないと件数が全件に化ける。
-    */
-    memberId ? countPublishedItems(db, 'work', scopeOf('work', filter, memberId)) : null,
-  ])
+  const counts = byKind ?? (await countPublishedByKind(db))
+  const total = counts.app + counts.work
+  // 絞り込みが効いていないときは数え直さない（同じ数になる）
+  const matched =
+    filter.kind || memberId ? await countPublishedItems(db, scopeOf(filter, memberId)) : total
 
   const counted: TopData = {
     members,
-    platforms: pills,
+    kinds: kindsOf(counts),
     filter,
     showMember: showMemberOf(blocks, members),
-    apps: { total: appTotal, matched: appMatched ?? appTotal, rows: [] },
-    works: { total: workMatched ?? workTotal, matched: workMatched ?? workTotal, rows: [] },
-    band: bandOf(blocks, appTotal, workTotal),
+    projects: { total, matched, rows: [] },
+    band: bandOf(blocks, counts),
   }
 
   return { screens: screenList(blocks, counted), counted }
@@ -1095,19 +1040,15 @@ async function siteScreens(
   20画面のサイトに対して辿れる URL が 58本あった（/hero?platform=macos、
   /contact?member=okazaki のたぐい）。
 
-  どれが効くかは scopeOf が正——platform は Apps にしか渡らず（Works には
-  必ず null）、member は Apps と Works の両方に渡る。ここはその写しなので、
-  scopeOf を変えるときは一緒に直すこと。
+  効くのは一覧を持つ画面（Projects）だけで、区分もメンバーもそこに効く
+  （scopeOf）。ここはその写しなので、scopeOf を変えるときは一緒に直すこと。
 
   絞り込みが画面をまたいで残ること自体は意図どおり（test/public.test.ts の
   「絞り込みは、めくっても目次から移っても外れない」）。落とすのは、
   その画面では何の意味も持たない項目だけ。
 */
 const stepQuery = (slug: string, filter: ItemFilter): string =>
-  filterQuery({
-    platform: slug === 'apps' ? filter.platform : null,
-    member: slug === 'apps' || slug === 'works' ? filter.member : null,
-  })
+  hasList(slug) ? filterQuery(filter) : ''
 
 const siteSteps = (screens: BlockScreen[], filter: ItemFilter, solo?: schema.Member): Step[] =>
   screens.map((screen, position) => ({
@@ -1126,21 +1067,21 @@ const siteSteps = (screens: BlockScreen[], filter: ItemFilter, solo?: schema.Mem
 
   want が null ならトップ（列の先頭）。そうでなければ URL が名指しした画面で、
   見つからなければ 404。知らない画面名も、範囲の外のページ数も、
-  「その URL は無い」の一言に落とす。絞り込みで中身が無くなった画面（その人の
-  Works が0件のときの /works?member=…）も同じ扱い。目次にもページャにも
+  「その URL は無い」の一言に落とす。絞り込みで画面が減ったあとの続き（業務が
+  1画面ぶんしか無いときの /projects/3?kind=work）も同じ扱い。目次にもページャにも
   出てこないので、たどり着くのは URL を手で書いたときだけ。
 */
 async function renderScreen(c: Context<AppEnv>, want: { slug: string; page: number } | null) {
   const db = drizzle(c.env.DB, { schema })
-  const [members, platforms, theme, blocks] = await Promise.all([
+  const [members, byKind, theme, blocks] = await Promise.all([
     listPublishedMembers(db),
-    listPlatforms(db),
+    countPublishedByKind(db),
     loadTheme(db),
     publishedBlocks(db),
   ])
 
-  const { filter, memberId } = readFilter(c, platforms, members)
-  const { screens, counted } = await siteScreens(db, blocks, members, filter, memberId)
+  const { filter, memberId } = readFilter(c, kindsOf(byKind), members)
+  const { screens, counted } = await siteScreens(db, blocks, members, filter, memberId, byKind)
 
   const solo = soloMember(members)
   const sidebar = <SiteIdentity solo={solo} />
@@ -1177,7 +1118,7 @@ async function renderScreen(c: Context<AppEnv>, want: { slug: string; page: numb
   const first = screens[0]
   /*
     引くときも stepQuery を通す。その画面に効かない絞り込みを付けて来た URL
-    （手で打った /works?platform=web など）は、余分なぶんを落として同じ1枚に
+    （手で打った /team?kind=work など）は、余分なぶんを落として同じ1枚に
     当てる——列の href には付いていないので、素通しすると 404 になる。
     中身は絞り込み無しと同じで、canonical も素の URL を指す。
   */
@@ -1189,12 +1130,7 @@ async function renderScreen(c: Context<AppEnv>, want: { slug: string; page: numb
 
   // ここで初めてカードを引く。出す画面に載らない行は、1件も取ってこない
   const rows = await screenRows(db, current, filter, memberId)
-  const type = itemTypeOf(current.block.type)
-  const data: TopData = {
-    ...counted,
-    apps: { ...counted.apps, rows: type === 'app' ? rows : [] },
-    works: { ...counted.works, rows: type === 'work' ? rows : [] },
-  }
+  const data: TopData = { ...counted, projects: { ...counted.projects, rows } }
 
   const rendered = renderBlock(current.block, data, current.page)
   // screenList が数えた画面なので、ここで null は返らない
@@ -1220,7 +1156,7 @@ async function renderScreen(c: Context<AppEnv>, want: { slug: string; page: numb
   外しても指す先が動かない。作品名が <title> と og:title に入るのも、
   「AppMixer 見て」と貼れる URL がサイトに1つも無かったのを閉じるため。
 
-  トップの構成（どのブロックを置いているか）には依らない。Apps の節を外した
+  トップの構成（どのブロックを置いているか）には依らない。Projects の節を外した
   日に、貼られた作品のリンクまで死んではいけない——それでは一覧の URL と
   同じ壊れ方を、名前を変えて持ち込むことになる。出る条件は「作品が公開中」の
   1つだけ。
@@ -1244,12 +1180,12 @@ async function renderItem(c: Context<AppEnv>, type: 'app' | 'work', slug: string
 
   const solo = soloMember(members)
   // 目次はサイトの画面のまま。この画面に絞り込みは無いので、素の並びを聞く
-  const { screens } = await siteScreens(db, blocks, members, { platform: null, member: null }, null)
-  const steps = siteSteps(screens, { platform: null, member: null }, solo)
+  const { screens } = await siteScreens(db, blocks, members, { kind: null, member: null }, null)
+  const steps = siteSteps(screens, { kind: null, member: null }, solo)
 
   const step: Step = {
     // 印は、この作品が載っている一覧に付く（この画面は目次に並ばない）
-    navKey: item.type === 'app' ? 'apps' : 'works',
+    navKey: 'projects',
     href,
     canonical: href,
     // 目次には出さない。めくって着く先ではないので、連なりの行として並べない
@@ -1576,9 +1512,9 @@ async function renderMemberScreen(
 
   const solo = soloMember(members)
   // サイトの画面の列。個人ページはこの列の Team の続きに差し込む（目次もここから借りる）
-  const none: ItemFilter = { platform: null, member: null }
+  const none: ItemFilter = { kind: null, member: null }
   const [counts, { screens: site }] = await Promise.all([
-    countMemberItems(db, member.id),
+    countPublishedByKind(db, member.id),
     siteScreens(db, blocks, members, none, null),
   ])
   const siteList = siteSteps(site, none, solo)
@@ -1602,15 +1538,14 @@ async function renderMemberScreen(
   */
   const band = bandOf(
     blocks,
-    counts.app,
-    counts.work,
-    filterQuery({ platform: null, member: members.length > 1 ? member.slug : null }),
+    counts,
+    filterQuery({ kind: null, member: members.length > 1 ? member.slug : null }),
   )
 
   const screens = memberScreens(
     member,
     band ? (
-      <Band href={band.href} label="このメンバーの Apps · Works" app={band.app} work={band.work} />
+      <Band href={band.href} label="このメンバーの Projects" app={band.app} work={band.work} />
     ) : null,
   )
 
@@ -1740,6 +1675,28 @@ publicRoutes.get('/apps/item/:slug', (c) => renderItem(c, 'app', c.req.param('sl
 publicRoutes.get('/works/item/:slug', (c) => renderItem(c, 'work', c.req.param('slug')))
 
 /*
+  Apps と Works は Projects の1つの一覧にまとめた。貼られた一覧の URL は
+  死なせずに、同じ区分で絞り込んだ Projects の1画面目へ寄せる（恒久的な移動
+  なので 301）。
+
+  ページ数（/apps/3）は引き継がない。区分を混ぜて新しい順に並べ直したので、
+  同じ番号の画面に同じカードは載っていない。メンバーの絞り込み（?member=）は
+  引き継ぐ——個人ページの帯から貼られた URL がそれを持っている。
+
+  作品1件の恒久リンク（/apps/item/<slug>）は上の2本がそのまま受けるので、
+  ここでは寄せない。catch-all（/:screen）より前に置くこと。
+*/
+for (const [list, kind] of [
+  ['apps', 'app'],
+  ['works', 'work'],
+] as const) {
+  const moved = (c: Context<AppEnv>) =>
+    c.redirect(`/projects${filterQuery({ kind, member: c.req.query('member') ?? null })}`, 301)
+  publicRoutes.get(`/${list}`, moved)
+  publicRoutes.get(`/${list}/:page`, moved)
+}
+
+/*
   クローラ向けの2本。どちらも 404 だった。
 
   画面が7つに分かれたので、sitemap の有無がそのまま「どれだけ拾われるか」に
@@ -1779,15 +1736,14 @@ const xmlText = (text: string) =>
 
 publicRoutes.get('/sitemap.xml', async (c) => {
   const db = drizzle(c.env.DB, { schema })
-  const [members, blocks, apps, works] = await Promise.all([
+  const [members, blocks, items] = await Promise.all([
     listPublishedMembers(db),
     publishedBlocks(db),
-    listPublishedItems(db, 'app'),
-    listPublishedItems(db, 'work'),
+    listPublishedItems(db),
   ])
 
-  // 絞り込みを付けない素のサイト。?platform= 付きの URL は正ではないので載せない
-  const { screens } = await siteScreens(db, blocks, members, { platform: null, member: null }, null)
+  // 絞り込みを付けない素のサイト。?kind= 付きの URL は正ではないので載せない
+  const { screens } = await siteScreens(db, blocks, members, { kind: null, member: null }, null)
 
   const paths = [
     /*
@@ -1801,14 +1757,14 @@ publicRoutes.get('/sitemap.xml', async (c) => {
       2つの URL で開けるので、正の1つだけを出す（その1枚目の正は上の / と
       同じ文字列になる。重なりは下で落とす）。
     */
-    ...siteSteps(screens, { platform: null, member: null }).map((step) => step.canonical),
+    ...siteSteps(screens, { kind: null, member: null }).map((step) => step.canonical),
     // 縦に積んだ全体版。正が自分自身になったので、ここに並ぶ資格がある
     '/all',
     ...members.flatMap((member) =>
       memberScreens(member, null).map((screen) => memberHref(member.slug, screen.key, screen.page)),
     ),
     // 作品1件の恒久リンク。slug の無い行（列より前からある作品）は URL を持たない
-    ...[...apps, ...works].flatMap((item) => itemHref(item) ?? []),
+    ...items.flatMap((item) => itemHref(item) ?? []),
   ]
 
   const body = [

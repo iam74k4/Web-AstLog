@@ -1,5 +1,5 @@
 import type { Child } from 'hono/jsx'
-import type { Item, Member, Platform } from '../db/schema'
+import type { Item, Member } from '../db/schema'
 import { initials } from '../lib/format'
 import { MarkIcon, PencilIcon } from './icons'
 
@@ -25,7 +25,7 @@ export const Brand = () => (
 /*
   公開ページから管理画面への入口。ログインしている人にだけ柱に出る
   （出すかどうかと行き先は src/routes/public.tsx の adminHref が決める）。
-  行き先は「いま見ている画面を直す場所」——/apps なら Apps の一覧、
+  行き先は「いま見ている画面を直す場所」——/projects なら項目の一覧、
   作品1件のページならその作品の編集。
 
   同じタブで開く。管理画面の側には「サイトを見る ↗」が別タブで付いているので、
@@ -423,9 +423,9 @@ export const Band = ({
   <a class="band" href={href}>
     <span class="band__body">
       <strong>{label}</strong>
-      {/* 0件の側は数えない。呼ぶ側は、置いていない節の件数を0で渡す */}
+      {/* 0件の区分は数えない。呼ぶ側は、一覧を置いていないサイトでは帯ごと出さない */}
       <span class="band__meta">
-        {[app ? `Apps ${app}` : null, work ? `Works ${work}` : null]
+        {[app ? `${KIND_LABEL.app} ${app}` : null, work ? `${KIND_LABEL.work} ${work}` : null]
           .filter((part) => part !== null)
           .join(' · ')}
       </span>
@@ -441,10 +441,18 @@ export const Band = ({
 )
 
 /*
-  いま効いている絞り込み。プラットフォーム（Apps だけ）とメンバー（Apps と
-  Works の両方）の2軸で、効いていない軸は null。
+  項目の区分。データでは app / work、画面では「個人開発 / 業務」。
+  Projects の絞り込みのピルと、一覧への帯の件数で同じ言葉を使う。
 */
-export type ItemFilter = { platform: string | null; member: string | null }
+export type ItemKind = 'app' | 'work'
+export const KIND_LABEL: Record<ItemKind, string> = { app: '個人開発', work: '業務' }
+const KINDS: ItemKind[] = ['app', 'work']
+
+/*
+  いま効いている絞り込み。区分（個人開発 / 業務）とメンバーの2軸で、
+  効いていない軸は null。
+*/
+export type ItemFilter = { kind: ItemKind | null; member: string | null }
 
 /*
   絞り込みを URL の query にする。付けるのは効いている軸だけ。
@@ -455,7 +463,7 @@ export type ItemFilter = { platform: string | null; member: string | null }
 */
 export const filterQuery = (filter: ItemFilter) => {
   const params = new URLSearchParams()
-  if (filter.platform) params.set('platform', filter.platform)
+  if (filter.kind) params.set('kind', filter.kind)
   if (filter.member) params.set('member', filter.member)
   const query = params.toString()
   return query ? `?${query}` : ''
@@ -472,15 +480,21 @@ export const filterQuery = (filter: ItemFilter) => {
 
   2つの軸は独立に効く。いま効いているピルをもう一度押すと、その軸だけ外れる。
   「すべて」は両方外す。
+
+  区分のピルは、公開中の項目が両方の区分にあるときだけ並べる（kinds は
+  絞り込む前に実在する区分）。片方しか無いサイトで「業務」を置いても、押した
+  先は0件の知らせだけになる。以前はプラットフォーム（macOS / iOS …）で絞って
+  いたが、Apps と Works を1つにしたときに区分の軸へ替えた。プラットフォームは
+  カードの札に残っている。
 */
 export const FilterLinks = ({
   base,
-  platforms,
+  kinds,
   members,
   filter,
 }: {
   base: string
-  platforms: Platform[]
+  kinds: ItemKind[]
   members: { slug: string; name: string }[]
   filter: ItemFilter
 }) => {
@@ -488,23 +502,25 @@ export const FilterLinks = ({
   return (
     <nav class="filters" aria-label="一覧を絞り込む">
       <a
-        href={href({ platform: null, member: null })}
-        aria-current={!filter.platform && !filter.member ? 'true' : undefined}
+        href={href({ kind: null, member: null })}
+        aria-current={!filter.kind && !filter.member ? 'true' : undefined}
       >
         すべて
       </a>
-      {platforms.map((platform) => {
-        const on = filter.platform === platform.key
-        return (
-          <a
-            key={platform.key}
-            href={href({ platform: on ? null : platform.key, member: filter.member })}
-            aria-current={on ? 'true' : undefined}
-          >
-            {platform.label}
-          </a>
-        )
-      })}
+      {kinds.length > 1
+        ? KINDS.filter((kind) => kinds.includes(kind)).map((kind) => {
+            const on = filter.kind === kind
+            return (
+              <a
+                key={kind}
+                href={href({ kind: on ? null : kind, member: filter.member })}
+                aria-current={on ? 'true' : undefined}
+              >
+                {KIND_LABEL[kind]}
+              </a>
+            )
+          })
+        : null}
       {/* 1人しか居ないサイトで名前のピルを1つ置いても、絞り込む先が無い */}
       {members.length > 1
         ? members.map((member) => {
@@ -512,7 +528,7 @@ export const FilterLinks = ({
             return (
               <a
                 key={member.slug}
-                href={href({ platform: filter.platform, member: on ? null : member.slug })}
+                href={href({ kind: filter.kind, member: on ? null : member.slug })}
                 aria-current={on ? 'true' : undefined}
               >
                 {member.name}
@@ -529,10 +545,10 @@ export const Empty = ({ children }: { children: Child }) => <p class="empty">{ch
 /*
   画面と画面を行き来する帯。main の2行目（本文の下）に置く。
 
-  数えるのは**節の中**（Apps 2 / 3）。全体の通し番号にしない理由は
+  数えるのは**節の中**（Projects 2 / 4）。全体の通し番号にしない理由は
   src/lib/sequence.ts の Sequence.pager に書いてある。
 
-  節をまたぐ手は、行き先を名乗る（「次 → Works」）。兼ねていたころは
+  節をまたぐ手は、行き先を名乗る（「Team →」）。兼ねていたころは
   /apps/3 で「次」を押すと予告なく Works に出ていた。名乗らせるだけで
   驚きが消え、押す前に決められる。
 
@@ -561,7 +577,7 @@ export const ScreenPager = ({
   total: number
 }) => {
   /*
-    読み上げに渡す言い方。節の名前があるときは「Apps の 3 画面のうち 2 画面目」、
+    読み上げに渡す言い方。節の名前があるときは「Projects の 4 画面のうち 2 画面目」、
     無いとき（Hero・ひとこと）は画面が1枚しかないので位置を言わない。
   */
   const spoken = section

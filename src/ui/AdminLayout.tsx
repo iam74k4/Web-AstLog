@@ -48,7 +48,7 @@ export const AdminLayout = (props: {
               Members
             </a>
             <a href="/admin/items" aria-current={props.active === 'items' ? 'page' : undefined}>
-              Apps &amp; Works
+              Projects
             </a>
             <a href="/admin/blocks" aria-current={props.active === 'blocks' ? 'page' : undefined}>
               構成

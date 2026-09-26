@@ -56,7 +56,7 @@ import {
   type ThemeKey,
 } from '../theme'
 import { AdminBare, AdminLayout } from '../ui/AdminLayout'
-import { Avatar, itemHref, StatusPill } from '../ui/components'
+import { Avatar, itemHref, KIND_LABEL, StatusPill } from '../ui/components'
 import { ExternalIcon, MarkIcon, PencilIcon, TrashIcon } from '../ui/icons'
 
 export const adminRoutes = new Hono<AppEnv>()
@@ -809,7 +809,13 @@ app.post('/members/:id/delete', async (c) => {
 
 /* --------------------------------------------------------------- Items */
 
-const typeLabel = (type: 'app' | 'work') => (type === 'app' ? 'Apps' : 'Works')
+/*
+  管理画面の呼び名は公開ページにそろえる。公開ページでは Apps と Works を
+  1つの一覧（Projects）にまとめ、区分を「個人開発 / 業務」と呼んでいる。
+  入力欄は区分ごとに違う（個人開発はプラットフォーム、業務は業界と実績値）ので、
+  タブは2つのまま。
+*/
+const typeLabel = (type: 'app' | 'work') => KIND_LABEL[type]
 
 app.get('/items', async (c) => {
   const type = c.req.query('type') === 'work' ? 'work' : 'app'
@@ -820,21 +826,16 @@ app.get('/items', async (c) => {
   })
 
   return c.html(
-    <AdminLayout
-      title="Apps & Works"
-      active="items"
-      email={c.get('user').email}
-      flash={flashFor(c)}
-    >
+    <AdminLayout title="Projects" active="items" email={c.get('user').email} flash={flashFor(c)}>
       <div class="admin-head">
         <div class="admin-head__title">
-          <h1>Apps &amp; Works</h1>
+          <h1>Projects</h1>
           <div class="tabs">
             <a href="/admin/items?type=app" aria-current={type === 'app' ? 'page' : undefined}>
-              Apps
+              {typeLabel('app')}
             </a>
             <a href="/admin/items?type=work" aria-current={type === 'work' ? 'page' : undefined}>
-              Works
+              {typeLabel('work')}
             </a>
           </div>
         </div>
@@ -976,7 +977,7 @@ const ItemForm = (props: ItemFormData) => {
       <div class="admin-head">
         <div class="admin-head__title">
           <span class="crumbs">
-            Apps &amp; Works / {typeLabel(props.type)} / {item ? '編集' : '追加'}
+            Projects / {typeLabel(props.type)} / {item ? '編集' : '追加'}
           </span>
           <h1>{item ? item.title : '新しい項目'}</h1>
         </div>
@@ -993,7 +994,7 @@ const ItemForm = (props: ItemFormData) => {
             error={props.errors?.title}
           />
           {/*
-            この作品だけを指す URL。一覧の URL（/apps/3）は並べ替えるたびに
+            この作品だけを指す URL。一覧の URL（/projects/3）は並べ替えるたびに
             別の作品を指すので、貼るならこちら。変えると前の URL は 404 に
             なる——貼ったあとで変えないこと
           */}
@@ -1390,19 +1391,19 @@ const blockLabel = (block: schema.Block) =>
   画面の数を決める、公開中のものの件数。行そのものは引かない
   （数えるだけなら、カードの中身まで取ってくる必要が無い）。
 */
-type SiteCounts = { apps: number; works: number; members: number }
+type SiteCounts = { projects: number; members: number }
 
 async function siteCounts(database: ReturnType<typeof db>): Promise<SiteCounts> {
-  const [apps, works, members] = await Promise.all([
-    countPublishedItems(database, 'app'),
-    countPublishedItems(database, 'work'),
+  const [projects, members] = await Promise.all([
+    // Projects は個人開発と業務を1つの一覧に並べるので、区分を問わず数える
+    countPublishedItems(database),
     database
       .select({ n: count() })
       .from(schema.members)
       .where(eq(schema.members.published, 1))
       .then((rows) => rows[0]?.n ?? 0),
   ])
-  return { apps, works, members }
+  return { projects, members }
 }
 
 /*
@@ -1419,7 +1420,7 @@ async function siteCounts(database: ReturnType<typeof db>): Promise<SiteCounts> 
 
   下書きと、中身が0件のものは 0 画面——公開ページが節ごと出さないので、
   URL も生まれない。数えるのは絞り込みのかかっていない素のサイトで、
-  ?platform= を付けた URL はこれより少ない画面になることがある。
+  ?kind= を付けた URL はこれより少ない画面になることがある。
 */
 function blockScreens(block: schema.Block, counts: SiteCounts): number {
   const type = blockType(block.type)
@@ -1436,10 +1437,8 @@ function blockScreens(block: schema.Block, counts: SiteCounts): number {
       return block.title ? 1 : 0
 
     // 件数で割れるもの。行は DB に入っている
-    case 'apps':
-      return screenCount(counts.apps, perScreen)
-    case 'works':
-      return screenCount(counts.works, perScreen)
+    case 'projects':
+      return screenCount(counts.projects, perScreen)
     case 'team':
       return screenCount(counts.members, perScreen)
 
@@ -1503,8 +1502,7 @@ const BlocksPage = (props: {
       {props.rows.length === 0 ? (
         <div class="empty-state">
           <p>
-            まだ何も置いていないので、既定の並び（Hero → Apps → Works → Team → Contact）で
-            出しています
+            まだ何も置いていないので、既定の並び（Hero → Projects → Team → Contact）で 出しています
           </p>
           <form method="post" action="/admin/blocks/init">
             <button class="btn btn--primary" type="submit">
@@ -1688,7 +1686,7 @@ const BlockForm = (props: {
   /*
     入力エラーで描き直すとき、外した「公開する」も外したまま返す。
     新しく書くときは下書きから始める（メンバー・項目と同じ。置くだけのもの——
-    Apps や Team——はフォームを通らず、置いた時点で出る）
+    Projects や Team——はフォームを通らず、置いた時点で出る）
   */
   const published = props.values ? Number(props.values.published === '1') : (block?.published ?? 0)
 

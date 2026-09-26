@@ -51,17 +51,17 @@ export const BLOCK_TYPES = [
   // 決まった中身を持つもの。1つだけ置ける
   // hero と contact は画面まるごとなので perScreen を持たない
   { key: 'hero', label: 'Hero', note: '大見出しとリード。文言は src/site.ts', kind: 'fixed' },
+  /*
+    個人開発（app）と業務（work）を1つの一覧に並べる。以前は Apps と Works の
+    2つの節だったが、見る側にとってはどちらも「つくったもの」で、節が分かれて
+    いると目次もページャも2倍に伸びるだけだった。区分はデータに残り、カードの
+    札（プラットフォーム / 業界）と絞り込みのピル（すべて・個人開発・業務）で
+    見分ける。並びは新しい順（src/db/queries.ts の publicOrder）
+  */
   {
-    key: 'apps',
-    label: 'Apps',
-    note: '個人開発。公開中の app が0件なら出ない',
-    kind: 'fixed',
-    perScreen: 2,
-  },
-  {
-    key: 'works',
-    label: 'Works',
-    note: '業務。公開中の work が0件なら出ない',
+    key: 'projects',
+    label: 'Projects',
+    note: '個人開発と業務の一覧。公開中の項目が0件なら出ない',
     kind: 'fixed',
     perScreen: 2,
   },
@@ -260,4 +260,4 @@ export const MEMBER_PER_SCREEN = {
   「まだ置いていない」と出す。空のテーブルで真っ白なトップが出るより、
   まず何か見えて、そこから外していけるほうが迷わない。
 */
-export const DEFAULT_BLOCKS: FixedBlockKey[] = ['hero', 'apps', 'works', 'team', 'contact']
+export const DEFAULT_BLOCKS: FixedBlockKey[] = ['hero', 'projects', 'team', 'contact']

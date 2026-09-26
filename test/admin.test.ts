@@ -347,24 +347,29 @@ describe('構成 — 何画面になるかを見せる', () => {
   it('行の「N 画面」は chunk() と同じ数で、合計は公開ページの画面数と一致する', async () => {
     const signed = await signIn()
     await signed('/admin/blocks/init', { method: 'POST' })
-    // Apps だけ登録する。works と members は0件なので、その2節は画面にならない
-    const titles = ['アプリ 1', 'アプリ 2', 'アプリ 3', 'アプリ 4']
+    // 個人開発と業務を混ぜて登録する。Projects は区分を問わず1つの一覧で数える。
+    // members は0件なので、Team は画面にならない
+    const titles = ['アプリ 1', 'アプリ 2', '業務 1', '業務 2']
     for (const [index, title] of titles.entries()) {
-      await seedItem({ title, sortOrder: (index + 1) * 10 })
+      await seedItem({
+        title,
+        type: title.startsWith('業務') ? 'work' : 'app',
+        sortOrder: (index + 1) * 10,
+      })
     }
-    const per = perScreenOf('apps')
+    const per = perScreenOf('projects')
 
     const before = await (await signed('/admin/blocks')).text()
-    // hero・apps・works・team・contact の順
-    expect(screenBadges(before)).toEqual([1, chunk(titles, per).length, 0, 0, 1])
+    // hero・projects・team・contact の順
+    expect(screenBadges(before)).toEqual([1, chunk(titles, per).length, 0, 1])
     expect(before).toContain('合計 4 画面')
     /*
       公開ページ側と突き合わせる。ページャは**節の中**を数えるので、
-      見るのは Apps の画面に出る数（管理画面の Apps の「N 画面」と同じ数）。
+      見るのは Projects の画面に出る数（管理画面の Projects の「N 画面」と同じ数）。
       全体の通し番号は持っていない——絞り込みで動いてしまうのでやめた。
     */
-    expect(await (await get('/apps')).text()).toContain(
-      `Apps の ${chunk(titles, per).length} 画面のうち 1 画面目`,
+    expect(await (await get('/projects')).text()).toContain(
+      `Projects の ${chunk(titles, per).length} 画面のうち 1 画面目`,
     )
 
     // 1件足すと画面が1枚増える。それが管理画面から見えることがこのテストの主題
@@ -372,10 +377,10 @@ describe('構成 — 何画面になるかを見せる', () => {
     await seedItem({ title: 'アプリ 5', sortOrder: 50 })
 
     const after = await (await signed('/admin/blocks')).text()
-    expect(screenBadges(after)).toEqual([1, chunk(grown, per).length, 0, 0, 1])
+    expect(screenBadges(after)).toEqual([1, chunk(grown, per).length, 0, 1])
     expect(after).toContain('合計 5 画面')
-    expect(await (await get('/apps')).text()).toContain(
-      `Apps の ${chunk(grown, per).length} 画面のうち 1 画面目`,
+    expect(await (await get('/projects')).text()).toContain(
+      `Projects の ${chunk(grown, per).length} 画面のうち 1 画面目`,
     )
   })
 
@@ -406,8 +411,8 @@ describe('構成 — 何画面になるかを見せる', () => {
     await signed(`/admin/blocks/${team.id}`, { method: 'POST', body: form({}) })
 
     const html = await (await signed('/admin/blocks')).text()
-    // hero・apps(0件)・works(0件)・team(下書き)・contact
-    expect(screenBadges(html)).toEqual([1, 0, 0, 0, 1])
+    // hero・projects(0件)・team(下書き)・contact
+    expect(screenBadges(html)).toEqual([1, 0, 0, 1])
     expect(html).toContain('合計 2 画面')
   })
 

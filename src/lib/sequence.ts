@@ -17,13 +17,13 @@
 /*
   連なりの1枚。
 
-  navKey は目次の印を付ける単位。ブロックの2画面目（/apps/2）でも Apps の見出しに
+  navKey は目次の印を付ける単位。ブロックの2画面目（/projects/2）でも Projects の見出しに
   印が残るよう、URL ではなくこちらで揃える。目次に並ぶのは同じ navKey のうち
   最初の1枚だけで、行き先はその画面の URL（＝そのブロックの1画面目）。
 */
 export type Step = {
   navKey: string
-  // この画面自身の URL。絞り込み（?platform= / ?member=）はここに含める
+  // この画面自身の URL。絞り込み（?kind= / ?member=）はここに含める
   href: string
   /*
     正の URL。絞り込みは付けない——同じ中身の取り出し方なので、ピルの
@@ -45,7 +45,7 @@ export type Sequence = {
   /*
     ページャに渡す値。1枚しか無いときは null——めくる先が無いので帯ごと出さない。
 
-    数えるのは**節の中**（Apps 2 / 3）で、全体の通し番号ではない。
+    数えるのは**節の中**（Projects 2 / 4）で、全体の通し番号ではない。
 
     全体で数えていたころ（01 · 07）は3つ困っていた。
       1. 柱の「Apps」を押しても、Apps が3画面あることがどこにも出ない。
@@ -98,7 +98,7 @@ export function sequence(steps: Step[], index: number): Sequence | null {
 
   /*
     目次は navKey ごとに1行。2画面目以降を並べると、同じ見出しが数だけ増える
-    （Apps · Apps · Apps）。行き先は最初の1枚＝そのブロックの1画面目。
+    （Projects · Projects · Projects）。行き先は最初の1枚＝そのブロックの1画面目。
   */
   const seen = new Set<string>()
   const nav: NavLink[] = []
