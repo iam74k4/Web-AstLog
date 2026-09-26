@@ -74,7 +74,7 @@ export function parseLines(text: string): string[][] {
   管理画面から入る URL でも、javascript: のような形は通さない。
 
   **掛ける場所は2か所——保存するときと、描くとき。** 保存で弾くのは「公開ページで
-  落とすものは、管理画面でも保存させない」ため（作品のリンクは admin.tsx の
+  落とすものは、管理画面でも保存させない」ため（作品のリンクは src/routes/admin/items.tsx の
   readLinks、リンク集は blockErrors）。描くときにもう一度見るのは、この検査より
   前に保存された行や、手で DB に入れた行を守るため（components.tsx の LinkRow・
   LinkList）。呼ぶ側が掛けたはずだ、という前提に部品を寄りかからせない——
@@ -97,7 +97,7 @@ export function isSafeUrl(url: string | undefined | null): url is string {
 
 /*
   外のサイトを指す https:// の絶対 URL だけ。メンバーの GitHub に使う
-  （保存は admin.tsx の memberErrors、描くのは public.tsx の Socials と
+  （保存は src/routes/admin/members.tsx の memberErrors、描くのは components.tsx の Socials と
   構造化データの sameAs）。isSafeUrl より狭い——GitHub のプロフィールに
   mailto: や / で始まるサイトの中の経路が入ることは無く、sameAs は
   この文書の外で読まれるので、相対の URL では何も指さない。
@@ -197,7 +197,7 @@ export function int(value: FormValue): number | null {
   return /^-?\d{1,9}$/.test(text) ? Number(text) : null
 }
 
-// 全角の数字（０〜９）を半角に。作品の年の欄は保存のときにこれを通す（admin.tsx の readItemForm）
+// 全角の数字（０〜９）を半角に。作品の年の欄は保存のときにこれを通す（src/routes/admin/items.tsx の readItemForm）
 export const halfWidthDigits = (text: string) =>
   text.replace(/[０-９]/g, (digit) => String.fromCharCode(digit.charCodeAt(0) - 0xfee0))
 

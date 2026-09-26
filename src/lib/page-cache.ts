@@ -42,7 +42,7 @@ import { SESSION_COOKIE } from './auth'
 
   404 も持つのは、形の合う名前（/members/<slug> など）を探し回る要求が、
   写しがあれば D1 を引かずに済むから。形の合わない名前は、写しより前に
-  ルートが D1 を引かずに 404 にしている（public.tsx の SCREEN_NAME）。
+  ルートが D1 を引かずに 404 にしている（src/routes/public/routes.ts の SCREEN_NAME）。
 */
 
 export const SITE_VERSION_KEY = 'site:version'

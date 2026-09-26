@@ -3,7 +3,7 @@
 
   ここは提供元に何を送り、返ってきたものをどう読むかだけを持つ。D1 も
   クッキーも触らない——state を1回きりにする・誰を通すかを決めるのは
-  src/routes/admin.tsx（/admin/auth/*）と src/lib/auth.ts の仕事。
+  src/routes/admin/auth.tsx（/admin/auth/*）と src/lib/auth.ts の仕事。
 
   どちらも認可コードフロー＋PKCE（S256）。GitHub の OAuth App も PKCE に
   対応している（公式ドキュメント「Authorizing OAuth apps」の code_challenge /

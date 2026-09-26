@@ -1,6 +1,7 @@
 import { relations, sql } from 'drizzle-orm'
 import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { BLOCK_KEYS, FIXED_BLOCK_KEYS } from '../blocks'
+import { ITEM_KIND_KEYS } from '../domain'
 import { PROVIDER_KEYS } from '../lib/oauth'
 
 /*
@@ -21,8 +22,8 @@ export const members = sqliteTable(
     /*
       /members/:slug になる。管理画面から変えられるが、変えたときは前の slug を
       member_slug_redirects に残し、前の URL は新しい URL へ 301 で送る
-      （src/routes/public.tsx の renderMemberScreen）。欄を空にして保存しても
-      作り直さず、いまの値のまま（src/routes/admin.tsx の readMemberForm）
+      （src/routes/public/member.tsx の renderMemberScreen）。欄を空にして保存しても
+      作り直さず、いまの値のまま（src/routes/admin/members.tsx の readMemberForm）
     */
     slug: text('slug').notNull().unique(),
     name: text('name').notNull(),
@@ -72,13 +73,14 @@ export const platforms = sqliteTable('platforms', {
   sortOrder: integer('sort_order').notNull().default(0),
 })
 
-// Apps と Works は列がほぼ同じなので1つの表にし、type で分ける。
-// 分けると、横断で並べたいときのたびに UNION が要る
+// 個人開発と業務は列がほぼ同じなので1つの表にし、type で分ける。
+// 分けると、横断で並べる（Projects の一覧）たびに UNION が要る
 export const items = sqliteTable(
   'items',
   {
     id: integer('id').primaryKey({ autoIncrement: true }),
-    type: text('type', { enum: ['app', 'work'] }).notNull(),
+    // 値の一覧は src/domain.ts の ITEM_KINDS が正（呼び名・URL の1語目と対）
+    type: text('type', { enum: ITEM_KIND_KEYS }).notNull(),
     memberId: integer('member_id').references(() => members.id, { onDelete: 'set null' }),
     platformKey: text('platform_key').references(() => platforms.key, { onDelete: 'set null' }),
     // work のときの区分（「金融系基幹システム」など）
@@ -87,7 +89,7 @@ export const items = sqliteTable(
     /*
       作品1件の恒久リンク（/apps/item/<slug> と /works/item/<slug>）。
 
-      一覧の URL（/apps/3）は「いまの並びの3枚目」でしかない。並べ替え・公開の
+      一覧の URL（/projects/3）は「いまの並びの3枚目」でしかない。並べ替え・公開の
       切り替え・追加のたびに、200 のまま別の作品を指す——404 なら気づけるが、
       これは誰にも気づかれないまま貼ったリンクの中身が入れ替わる。作品を1件だけ
       名指しできる URL を、並び順から切り離してここに持つ。
@@ -97,7 +99,7 @@ export const items = sqliteTable(
 
       管理画面から変えられるが、変えたときは前の slug を item_slug_redirects に
       残し、前の URL は新しい URL へ 301 で送る。欄を空にして保存しても
-      作り直さず、いまの値のまま（src/routes/admin.tsx の readItemForm）。
+      作り直さず、いまの値のまま（src/routes/admin/items.tsx の readItemForm）。
       NOT NULL にしないのは、既にある行を1つの既定値で埋めると、その値が
       重なって unique を張れないため。SQLite は unique の中の NULL を
       互いに別物として扱うので、埋まっていない行が何行あっても通る。
@@ -119,7 +121,7 @@ export const items = sqliteTable(
       誰にも気づかれない。生成列なら、既にある行の移行（埋め直し）も要らない。
       規則を変えるときは src/lib/format.ts の yearFrom（管理画面の「並びに
       使われません」の知らせ）も一緒に。全角の数字は、年の欄を保存するときに
-      半角へ直してある（admin.tsx の readItemForm）。
+      半角へ直してある（src/routes/admin/items.tsx の readItemForm）。
     */
     yearFrom: integer('year_from').generatedAlwaysAs(
       sql`case when "year" glob '[0-9][0-9][0-9][0-9]*' then cast(substr("year", 1, 4) as integer) end`,
@@ -256,7 +258,7 @@ export const itemLinks = sqliteTable(
   公開ページは見つからない slug をここで引いて、いまの URL へ 301 で送る。
 
   old_slug は主キー（1つの前の URL は1つの行だけを指す）。ほかの行が前に使って
-  いた slug は、いまの slug として使わせない（src/routes/admin.tsx の itemSlugTaken / memberSlugTaken）
+  いた slug は、いまの slug として使わせない（src/routes/admin/items.tsx の itemSlugTaken と src/routes/admin/members.tsx の memberSlugTaken）
   ——使わせると、貼られた前の URL が黙って別の作品を指す（それは 404 より悪い）。
   自分の前の slug へ戻すのは通り、そのとき行はここから消える。
   行を消すとここも消える（cascade）。消した作品の前の URL は 404 のまま。
@@ -364,7 +366,7 @@ export const users = sqliteTable('users', {
   出すための写し（@ログイン名・メールアドレス）で、照合には使わない。
   ログインのたびに書き直す。
 
-  最初の1行は src/routes/admin.tsx の linkOwner が作る——環境変数の
+  最初の1行は src/lib/auth.ts の userForIdentity が作る——環境変数の
   OWNER_GITHUB_ID / OWNER_GOOGLE_EMAIL と一致したときだけ。以後は subject で
   引くので、環境変数を変えても既に紐づいた行は外れない（外すなら行を消す）。
 */

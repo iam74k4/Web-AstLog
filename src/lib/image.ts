@@ -12,7 +12,7 @@
   Safari 以外で表示できない（Mac の Safari から上げると「保存しました」と
   出て、Chrome と Firefox の訪問者にだけ壊れて見えていた）。
 
-  配る側（src/routes/public.tsx の /images/*）も同じ一覧を読み、一覧に無い
+  配る側（src/routes/public/images.ts の /images/*）も同じ一覧を読み、一覧に無い
   content-type が KV に残っていたら、画像として返さずに添付として返す。
 */
 

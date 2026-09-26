@@ -417,7 +417,7 @@ export function fixture({ solo = false } = {}) {
   const blocks = blockRows()
   /*
     solo は同じ中身の1人のサイト。公開中のメンバーが1人なら、Team の位置に
-    その人のプロフィールが入り、柱が名前と職種で名乗る（src/routes/public.tsx の
+    その人のプロフィールが入り、柱が名前と職種で名乗る（src/routes/public/data.ts の
     soloMember）——複数人のサイトには無い姿で、本人のサイトはこちら。
     ほかの5人は下書きに置く（作品の担当はそのまま残る）
   */

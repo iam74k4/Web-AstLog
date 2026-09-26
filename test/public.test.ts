@@ -4,9 +4,10 @@ import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { blockPerScreen, MEMBER_PER_SCREEN } from '../src/blocks'
 import * as schema from '../src/db/schema'
-import { publicRoutes } from '../src/routes/public'
+import { ITEM_KINDS } from '../src/domain'
+import { publicRoutes } from '../src/routes/public/routes'
 import { SITE } from '../src/site'
-import { LinkList, LinkRow, splitPhrases } from '../src/ui/components'
+import { itemHref, LinkList, LinkRow, splitPhrases } from '../src/ui/components'
 import { MARK_POINTS } from '../src/ui/icons'
 import { db, form, get, okText, resetDb, seedItem, seedMember, signIn, touch } from './helpers'
 
@@ -2842,8 +2843,8 @@ describe('共有カードと画面ごとの説明文', () => {
   いちばん最後に置いてある。あとから固定のルート（`/all` や `/robots.txt` の
   たぐい）をその下に足すと、一致が catch-all に吸われて**そのページだけが
   静かに 404 になる**。足した本人はその URL のテストを書くので気づけるが、
-  「登録順」という決まり自体を守らせるものは、これまで CLAUDE.md・
-  public.tsx のコメント・docs/screens.md という散文3か所しか無かった。
+  「登録順」という決まり自体は散文（CLAUDE.md・src/routes/public/routes.ts の
+  コメント・docs/screens.md）だけでは守れない。
 
   Hono は登録した順のまま `.routes` を公開しているので、そこを読めばよい。
   CSS を文字列で読む test/theme.test.ts の契約テストと同じ手口——実装の
@@ -2854,6 +2855,25 @@ describe('URL の登録順', () => {
 
   it('catch-all は最後の2本だけ。固定の URL は必ずその前', () => {
     expect(paths().slice(-2)).toEqual(['/:screen', '/:screen/:page'])
+  })
+
+  /*
+    区分の URL の語は src/domain.ts の ITEM_KINDS から作る。区分を1つ足した日に、
+    恒久リンク（itemHref が組む URL）と前の一覧の 301 が、その区分のぶんだけ
+    黙って欠けないこと（URL の組み方とルートが同じ表を読んでいること）。
+  */
+  it('区分ごとに、恒久リンク・本文の画面・前の一覧のルートがある', () => {
+    for (const kind of ITEM_KINDS) {
+      expect(paths()).toEqual(
+        expect.arrayContaining([
+          `/${kind.path}/item/:slug`,
+          `/${kind.path}/item/:slug/story`,
+          `/${kind.path}`,
+          `/${kind.path}/:page`,
+        ]),
+      )
+      expect(itemHref({ type: kind.key, slug: 'x' })).toBe(`/${kind.path}/item/x`)
+    }
   })
 
   it('1語目が可変のルートは、この2本のほかに作らない', () => {

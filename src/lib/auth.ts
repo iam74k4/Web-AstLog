@@ -7,7 +7,7 @@ import type { Identity } from './oauth'
   管理画面のセッションと、「このアカウントを通してよいか」。
 
   ログインは GitHub / Google の OAuth だけで、パスワードは持たない（往復は
-  src/routes/admin.tsx の /admin/auth/*、提供元との約束は src/lib/oauth.ts）。
+  src/routes/admin/auth.tsx の /admin/auth/*、提供元との約束は src/lib/oauth.ts）。
   以前ここにあった PBKDF2・ダミーのハッシュ・KV の試行回数は、パスワードと
   一緒に外した——当てられるパスワードが無ければ、数える相手も居ない。
 */

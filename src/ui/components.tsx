@@ -3,8 +3,18 @@ import type { Child } from 'hono/jsx'
 import adminCss from '../../public/admin.css'
 import appCss from '../../public/app.css'
 import type { Item, Member } from '../db/schema'
-import { initials, isSafeUrl, type SkillGroup, skillRows } from '../lib/format'
-import { MarkIcon, PencilIcon } from './icons'
+import {
+  ITEM_KIND_KEYS,
+  type ItemFilter,
+  type ItemKind,
+  type ItemView,
+  KIND_LABEL,
+  KIND_PATH,
+  type KindCounts,
+} from '../domain'
+import { initials, isHttpsUrl, isSafeUrl, type SkillGroup, skillRows } from '../lib/format'
+import { SITE } from '../site'
+import { GithubIcon, MailIcon, MarkIcon, PencilIcon } from './icons'
 
 /*
   画面はこの部品だけで組む。新しい見た目が要るときは、まずここに足してから使う。
@@ -111,7 +121,7 @@ export const Brand = () => (
 
 /*
   公開ページから管理画面への入口。ログインしている人にだけ柱に出る
-  （出すかどうかと行き先は src/routes/public.tsx の adminHref が決める）。
+  （出すかどうかと行き先は src/routes/public/page.tsx の adminHref が決める）。
   行き先は「いま見ている画面を直す場所」——/projects なら項目の一覧、
   作品1件のページならその作品の編集。
 
@@ -315,12 +325,13 @@ export const Phrases = ({ text }: { text: string }) => (
 )
 
 /*
-  入口の背景に敷く月。ロゴの三日月を立体にして粒子を散らし、Blender で
-  焼いた1枚（作り直しは scripts/moon/render.py → scripts/moon/pack.py）。
+  入口の背景に敷く月。ロゴの三日月を球として照らし、点の並びで Blender で
+  焼いた1枚（作り直しは scripts/moon/render.py → scripts/moon/pack.py。
+  経緯は docs/moon.md）。
 
   ここだけが、このサイトで唯一のラスターの装飾。CSS の幾何では出せない
-  ものを持っているから、その代償として置いている——粒の立ち方と、縁が
-  粒に散っていくこと。
+  ものを持っているから、その代償として置いている——点の1つずつの明るさで
+  立体を描くこと。
 
   **絵は色も光暈も持たない。** 運ぶのはアルファ1面だけで、そこに
   「どこがどれだけ光っているか」が入っている。色は app.css が --accent から
@@ -396,7 +407,7 @@ export const ScreenSection = ({
   見た目もこの印で分ける。等幅の書体は英字の札（技術の小見出し・タグ・入口の
   肩書き）にだけ掛け、app.css はそれを :lang(en) で選ぶ——打ち込んだ字が
   和文なら、等幅の字間も 11px の段も付かない（app.css の :root の --font-mono）。
-  使うのは SkillGroups・Tags と、入口の肩書き（src/routes/public.tsx）。
+  使うのは SkillGroups・Tags と、入口の肩書き（src/routes/public/blocks.tsx の case 'hero'）。
 */
 const LATIN_ONLY = /^[ -~]+$/
 export const langOf = (text: string) => (LATIN_ONLY.test(text) ? 'en' : undefined)
@@ -413,26 +424,19 @@ export const Tags = ({ tags }: { tags: string[] }) =>
     </ul>
   ) : null
 
-export type ItemView = Item & {
-  tags: string[]
-  links: { label: string; url: string }[]
-  platformLabel: string | null
-  memberName: string | null
-  memberSlug: string | null
-}
-
 /*
-  作品1件の恒久リンク。1語目は種類（apps / works）、3語目が slug。
+  作品1件の恒久リンク。1語目は区分の URL の語（src/domain.ts の ITEM_KINDS。
+  apps / works）、3語目が slug。
 
   3語にしてあるのは、1語・2語の URL を何でも拾う catch-all（/:screen と
-  /:screen/:page）と取り合わせないため。/apps/2 は数字だけの2語のまま残る。
+  /:screen/:page）と取り合わせないため（前の一覧の /apps/2 は、routes.ts が 301 で寄せる2語）。
 
   slug の無い行（この列より前からある作品）は null を返す。呼ぶ側は
   「恒久リンクがまだ無い」として、リンクそのものを出さない——中身の当てに
   ならない URL を出すくらいなら、出さないほうがよい。
 */
-export const itemHref = (item: { type: 'app' | 'work'; slug: string | null }) =>
-  item.slug ? `/${item.type === 'app' ? 'apps' : 'works'}/item/${item.slug}` : null
+export const itemHref = (item: { type: ItemKind; slug: string | null }) =>
+  item.slug ? `/${KIND_PATH[item.type]}/item/${item.slug}` : null
 
 /*
   作品の本文の画面（Story）。恒久リンクの続きの4語目で、本文を持つ作品にだけある
@@ -444,14 +448,14 @@ export const itemHref = (item: { type: 'app' | 'work'; slug: string | null }) =>
   個人ページの /members/<slug>/about と同じ文法でもある（名前の画面・数は続き）。
   4語なので catch-all（1語・2語）とも /members/:slug/:screen とも取り合わない。
 */
-export const itemStoryHref = (item: { type: 'app' | 'work'; slug: string | null }) => {
+export const itemStoryHref = (item: { type: ItemKind; slug: string | null }) => {
   const at = itemHref(item)
   return at ? `${at}/story` : null
 }
 
 /*
   カードのサムネイルの枠を取るか。作品に画像があるか、同じ行（1画面ぶんの
-  カードの並び）のどれかに画像があるときに取る——呼ぶ側（public.tsx の
+  カードの並び）のどれかに画像があるときに取る——呼ぶ側（src/routes/public/blocks.tsx の
   projects）が行ごとに数えて渡す。
 
   画像の無いカードにも枠だけを置くのは、同じ行のカードの題をそろえるため。
@@ -566,7 +570,7 @@ export const ItemCard = ({
   主役の節で、こちらは作品の中の1行。
 
   並びは値・単位・添えのまま。書いた人の数字の意味を並べ替えで変えない
-  （public.tsx の metricDigest と同じ決まり）。添えは値のあとに続けて読まれる
+  （src/routes/public/meta.ts の metricDigest と同じ決まり）。添えは値のあとに続けて読まれる
   ので、そう読んで意味が通る形で書いてもらう（「20 人日 見込み 40人日から半減」。
   管理画面の実績値の欄にヒントがある）。
 */
@@ -592,7 +596,7 @@ export const Metric = ({
   別タブで開く」の印で、同じタブで開くサイトの中の続きには付けない）。
 
   URL の形はこの部品が自分で見る（isSafeUrl）。通らない行は描かない。保存でも
-  弾いている（admin.tsx の readLinks）が、その検査より前に入った行を呼ぶ側の
+  弾いている（src/routes/admin/items.tsx の readLinks）が、その検査より前に入った行を呼ぶ側の
   検査に頼らずに落とす。javascript: が同じオリジンの href に載るのを、
   target="_blank" の副作用で止まっているだけにしない。
 */
@@ -744,7 +748,7 @@ export const ItemStories = ({
   （MemberCardWide）と同じ並びで出す——カードを押した先で、同じ顔と名前に着く。
 
   個人ページの柱はサイトの柱のまま。1人のサイトなら柱にも名前は出る
-  （入口以外のどの画面でも。src/routes/public.tsx の SiteIdentity）が、
+  （入口以外のどの画面でも。SiteIdentity）が、
   顔が出るのはここだけ。heading は「名前がこの画面の見出しか」。
   大見出し（headline）を書いていない人では名前が h1 になる——書いている人では
   大見出しが h1 で、名前は添え。全体ページ（/all）の Profile の節でも使い、
@@ -893,26 +897,24 @@ export const MemberCardCompact = ({ member }: { member: Member }) => (
   題（label）は「何が入っているか」、右端は「どうするか（一覧で見る）」で、言葉を
   分ける。「つくったものの一覧」と書くと、1枚の札の中で「一覧」を2度言う。
   入口では、帯の行き先がページャの「次」と同じならページャのほうを出さない
-  （src/routes/public.tsx の renderScreen。同じ行き先を2つ置かない）。
+  （src/routes/public/top.tsx の renderScreen。同じ行き先を2つ置かない）。
 */
 export const Band = ({
   href,
   label,
-  app,
-  work,
+  counts,
 }: {
   href: string
   label: string
-  app: number
-  work: number
+  counts: KindCounts
 }) => (
   <a class="band" href={href}>
     <span class="band__body">
       <strong>{label}</strong>
       {/* 0件の区分は数えない。呼ぶ側は、一覧を置いていないサイトでは帯ごと出さない */}
       <span class="band__meta">
-        {[app ? `${KIND_LABEL.app} ${app}` : null, work ? `${KIND_LABEL.work} ${work}` : null]
-          .filter((part) => part !== null)
+        {ITEM_KIND_KEYS.filter((kind) => counts[kind] > 0)
+          .map((kind) => `${KIND_LABEL[kind]} ${counts[kind]}`)
           .join(' · ')}
       </span>
     </span>
@@ -928,7 +930,7 @@ export const Band = ({
 
 /*
   入口から全体ページ（/all）への控えめな1本。Hero の帯のすぐ下に置く
-  （src/routes/public.tsx の case 'hero'。割られた入口にだけ出し、/all 自身には
+  （src/routes/public/blocks.tsx の case 'hero'。割られた入口にだけ出し、/all 自身には
   出さない——自分への行き先になる）。
 
   柱の足元の「全体を1ページで見る →」は 899 以下の帯で畳まれる（.rail__footer は
@@ -948,20 +950,6 @@ export const WholeLink = () => (
     すべてを1ページで読む <span aria-hidden="true">→</span>
   </a>
 )
-
-/*
-  項目の区分。データでは app / work、画面では「個人開発 / 業務」。
-  Projects の絞り込みのピルと、一覧への帯の件数で同じ言葉を使う。
-*/
-export type ItemKind = 'app' | 'work'
-export const KIND_LABEL: Record<ItemKind, string> = { app: '個人開発', work: '業務' }
-const KINDS: ItemKind[] = ['app', 'work']
-
-/*
-  いま効いている絞り込み。区分（個人開発 / 業務）とメンバーの2軸で、
-  効いていない軸は null。
-*/
-export type ItemFilter = { kind: ItemKind | null; member: string | null }
 
 /*
   絞り込みを URL の query にする。付けるのは効いている軸だけ。
@@ -992,9 +980,8 @@ export const filterQuery = (filter: ItemFilter) => {
 
   区分のピルは、公開中の項目が両方の区分にあるときだけ並べる（kinds は
   絞り込む前に実在する区分）。片方しか無いサイトで「業務」を置いても、押した
-  先は0件の知らせだけになる。以前はプラットフォーム（macOS / iOS …）で絞って
-  いたが、Apps と Works を1つにしたときに区分の軸へ替えた。プラットフォームは
-  カードの札に残っている。
+  先は0件の知らせだけになる。プラットフォーム（macOS / iOS …）は絞り込みの
+  軸ではなく、カードの札。
 */
 export const FilterLinks = ({
   base,
@@ -1017,7 +1004,7 @@ export const FilterLinks = ({
         すべて
       </a>
       {kinds.length > 1
-        ? KINDS.filter((kind) => kinds.includes(kind)).map((kind) => {
+        ? ITEM_KIND_KEYS.filter((kind) => kinds.includes(kind)).map((kind) => {
             const on = filter.kind === kind
             return (
               <a
@@ -1057,9 +1044,8 @@ export const Empty = ({ children }: { children: Child }) => <p class="empty">{ch
   数えるのは**節の中**（Projects 2 / 4）。全体の通し番号にしない理由は
   src/lib/sequence.ts の Sequence.pager に書いてある。
 
-  節をまたぐ手は、行き先を名乗る（「Team →」）。兼ねていたころは
-  /apps/3 で「次」を押すと予告なく Works に出ていた。名乗らせるだけで
-  驚きが消え、押す前に決められる。
+  節をまたぐ手は、行き先を名乗る（「Team →」）。押す前に、同じ節の続きか
+  次の節へ移るかが分かる。
 
   数はサーバーが数えて渡す。CSS の counter で数えると、印刷にも読み上げにも
   数が出ず、「いま何枚目か」だけが落ちる。
@@ -1145,7 +1131,7 @@ export const ScreenPager = ({
 
 /*
   一覧へ戻る道。作品1件のページの2つの画面（1枚目と本文の画面 Story）の頭に
-  1本ずつ置く（src/routes/public.tsx の renderItem）。行き先はどちらも同じ一覧の画面。
+  1本ずつ置く（src/routes/public/item.tsx の renderItem）。行き先はどちらも同じ一覧の画面。
 
   作品のページから戻る道は、目次の「Projects」しか無かった。目次は一覧の
   1画面目へ行くので、4画面目のカードから入った人は、戻ると最初からめくり
@@ -1285,7 +1271,7 @@ export const Note = ({ paragraphs, children }: { paragraphs: string[]; children?
   全体ページ（/all）に置く、1人のサイトのプロフィールの節の中身。
 
   1人のサイトでは Team の画面を作らず、その人の画面（1枚目・About・Skills・
-  Career）がサイトの連なりに入る（src/routes/public.tsx の profileOf）。/all は
+  Career）がサイトの連なりに入る（src/routes/public/data.ts の profileOf）。/all は
   その連なりを1つの文書に積んだものなので、Team のカード1枚ではなく、
   プロフィールそのものを1つの節として置く。見出しの段は
   Hero の h1 → Profile の h2（節の SectionHead）→ About / Skills / Career の h3
@@ -1337,3 +1323,144 @@ export const ProfileWhole = ({
     ) : null}
   </div>
 )
+
+/* ------------------------------------------------------------- 連絡先と柱 */
+
+/*
+  GitHub とメールの行き先。GitHub は https:// の絶対 URL だけを描く（isHttpsUrl。
+  保存でも同じ検査で弾いている——src/routes/admin/members.tsx の memberErrors）。
+  部品の側でも見るのは、その検査より前に保存された行を、呼ぶ側に頼らずに落とすため。
+
+  メールの札は「メール」。押す手の言葉は日本語（CLAUDE.md「文言」）で、GitHub は
+  サービスの固有名なのでそのまま。
+*/
+export const Socials = ({ github, email }: { github?: string | null; email?: string | null }) => (
+  <div class="socials">
+    {isHttpsUrl(github) ? (
+      <a href={github} rel="me noreferrer" target="_blank">
+        <GithubIcon /> GitHub
+      </a>
+    ) : null}
+    {email ? (
+      <a href={`mailto:${email}`}>
+        <MailIcon /> メール
+      </a>
+    ) : null}
+  </div>
+)
+
+/*
+  その人だけの連絡先。サイトと違う行き先を持つ人のぶんだけ出す（同じ行き先を
+  2つ置かない）。個人ページの1枚目と、全体ページ（/all）のプロフィールの節で使う。
+*/
+export const OwnSocials = ({ member }: { member: Member }) => {
+  const github = isHttpsUrl(member.github) && member.github !== SITE.github ? member.github : null
+  const email = member.email && member.email !== SITE.email ? member.email : null
+  return github || email ? <Socials github={github} email={email} /> : null
+}
+
+/*
+  連絡先の画面。連なりの最後の1枚で、入口と対になる締め。
+
+  画面に出すのは月と、誘う1文（SITE.contactLead）と、ボタン2つ（メール・GitHub）。
+  月を右上に、字とボタンを画面の下に寄せる（入口と同じ組み方）。月は入口の
+  三日月を左右に返し、ひとまわり小さく置く（MoonField の closing）。
+
+  - 誘いの1文は、何の相談なら送ってよいかを言う唯一の言葉なので置く。目に
+    見える見出しは置かない（「Contact」と書いてもボタンと同じことを言うだけ）
+  - 字は --ink-mid。締めの月の光暈の上に乗る小さい字なので 4.5:1 が要る
+    （npm run check:contrast が測る）
+  - 見出しは読み上げ用の h1「Contact」（HiddenHeading）。割られた画面は h1 を
+    ちょうど1つ持つ（WCAG 1.3.1）。全体ページ（/all）では、ほかの節と同じ
+    見出しを目に見える形で置き、アドレスも字で残す（印刷の宛先。紙の上では
+    ボタンの行き先が読めない）
+  - メールは「送る」操作なので塗りのピル、GitHub は外へ出る脇の道なので柱と
+    同じ .socials
+  - GitHub はここに常設する。柱の .socials は 899 以下で畳むので、ここが
+    899 以下の唯一の道（WCAG 1.4.10）。この画面では柱の GitHub / メールを出さない
+    （SiteIdentity の contact。同じ行き先が2組並ぶ）
+
+  split は「割られた画面（1画面 = 1ドキュメント）か」。見出しが h1 に上がるのも、
+  弁のための tabindex が付くのも、締めの月を敷くのも同じ条件。全体ページには
+  月を敷かない（印刷・Ctrl-F・翻訳の宛先）。
+*/
+export const Contact = ({
+  email,
+  github,
+  split,
+}: {
+  email: string
+  github?: string | null
+  split?: boolean
+}) => (
+  <Screen id="contact" label="Contact" whole={!split} moonlit={split}>
+    {split ? <MoonField closing /> : null}
+    {/*
+      全体ページの見出しは節の直下に置く（ほかの節と同じ位置）。.contact の中に
+      入れると、左寄せの縦積みに縮められて下線が「Contact」の字幅で切れる。
+      読み上げ用の h1 は .contact の中——節の直下に置くと、月の受け皿の
+      「中身を月より前に出す」規則（position: relative）に .sr-only の
+      position: absolute が負けて、1px の段が1つ増える
+    */}
+    {split ? null : <SectionHead title="Contact" />}
+    <div class="contact">
+      {split ? <HiddenHeading text="Contact" h1 /> : null}
+      {/* 句読点までの塊で折る（入口のリード文と同じ Phrases）。語の途中で折らない */}
+      <p class="contact__lead">
+        <Phrases text={SITE.contactLead} />
+      </p>
+      <div class="contact__actions">
+        <a class="pill-cta" href={`mailto:${email}`}>
+          <MailIcon /> メールを送る →
+        </a>
+        <Socials github={github} />
+      </div>
+      {split ? null : <p class="contact__address">{email}</p>}
+    </div>
+  </Screen>
+)
+
+/*
+  サイトの柱（名札）。どの画面にも出るので、ここに載せたものは全画面に載る。
+
+  solo は1人のサイトのその人（src/routes/public/data.ts の soloMember）。1人の
+  サイトなら名前と職種を載せる——入口の外（Projects・個人ページ・作品・Contact・
+  /all）には、ほかに誰のサイトかを言うものが無い（検索や貼られたリンクから
+  直接着く画面）。
+
+  entrance は「Hero の画面か」。入口では名乗らない。Hero の h1 が名乗っていて、
+  柱にも置くと同じ名前が2度並ぶ（899 以下ではロゴの隣に来て、見出しの前置きの
+  ように重なる）。連なりの何枚目かでは決めない——名乗っているのは Hero の h1 なので、
+  Hero を2枚目に置いた構成でも、そこでだけ外す。
+
+  899 以下の帯では名前を残し、ワードマーク（NOCTIFEX）と職種を畳む（app.css の
+  .identity--named）。畳むのは見た目だけで、ロゴのリンクの読み上げには
+  「NOCTIFEX」が残る。
+
+  2人以上のサイトでは名前を出さない。誰か1人の名前を柱に置くと、その人の
+  サイトに見える。
+
+  contact は「Contact の画面か」。本文にメールと GitHub のボタンがあるので、
+  柱の GitHub / メールは出さない（同じ行き先を2組置かない）。全体ページ（/all）
+  では出す（あそこの Contact は節の1つで、柱は全体の柱）。
+*/
+export const SiteIdentity = ({
+  solo,
+  entrance,
+  contact,
+}: {
+  solo?: Member
+  entrance?: boolean
+  contact?: boolean
+}) => {
+  const named = entrance ? undefined : solo
+  return (
+    <div class={named ? 'identity identity--named' : 'identity'}>
+      <Brand />
+      {named ? <span class="identity__name">{named.name}</span> : null}
+      {named?.role ? <span class="identity__role">{named.role}</span> : null}
+      <span class="identity__tagline">{SITE.tagline}</span>
+      {contact ? null : <Socials github={SITE.github} email={SITE.email} />}
+    </div>
+  )
+}

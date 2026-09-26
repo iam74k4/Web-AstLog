@@ -1,8 +1,8 @@
 import { Hono } from 'hono'
 import type { AppEnv } from './env'
 import { pageCache } from './lib/page-cache'
-import { adminRoutes } from './routes/admin'
-import { publicRoutes } from './routes/public'
+import { adminRoutes } from './routes/admin/index'
+import { publicRoutes } from './routes/public/routes'
 import { SITE } from './site'
 import { HtmlDocument, Stylesheets } from './ui/components'
 import { MarkIcon } from './ui/icons'
@@ -31,7 +31,7 @@ const app = new Hono<AppEnv>()
 
   Referrer-Policy は strict-origin-when-cross-origin。no-referrer にしては
   いけない——Chromium は no-referrer のページから出た同じオリジンのフォームの
-  POST に Origin: null を付け、sameOrigin（src/routes/admin.tsx）がそれを
+  POST に Origin: null を付け、sameOrigin（src/routes/admin/session.ts）がそれを
   403 で弾くので、ログインしたあとの保存がすべて止まる。
 
   管理画面（/admin/*）は no-store。共用の端末でログアウトしたあと「戻る」で、

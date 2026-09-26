@@ -211,7 +211,7 @@
       見出し #f2f2f4 は大きい文字なので 3:1。地は 140/255 まで許される
       リード文 #b4b4c2 は通常の文字なので 4.5:1。地は 71/255 まで
 
-    粒子はいちばん明るい所が 255。--moon-ink で 0.50 まで落とすと 133/255 に
+    月の点はいちばん明るい所が 255。--moon-ink で 0.50 まで落とすと 133/255 に
     なり、見出しは 3.27:1 で通る。リード文を通すには 0.25 あたりまで
     落とすことになり、そこまで行くと月が見えない。だから**見出しは横切らせ、
     リード文は避ける**——オーナーが選んだ「見出しがその手前を横切る」構図は
@@ -720,7 +720,7 @@ main {
 }
 
 /*
-  柱の名乗り（1人のサイトの、入口以外の画面。src/routes/public.tsx の SiteIdentity）。
+  柱の名乗り（1人のサイトの、入口以外の画面。src/ui/components.tsx の SiteIdentity）。
 
   入口の外の画面——検索や貼られたリンクから直接着く画面——には、誰のサイトかが
   どこにも出ていなかった。名乗りは入口の Hero の h1 にしか無く、柱には置かない
@@ -775,13 +775,9 @@ main {
 }
 
 /*
-  目次に番号は振らない。
-
-  ページャの 01 · 07（いま何画面目か）と同じ 11px の mono・同じ色で並ぶと、
-  同じ数え上げに見える。しかも目次の番号はブロックの並び順なので、/apps でも
-  /apps/2 でも /apps/3 でも「01」のまま動かない——動くほうの番号の隣で、
-  動かない番号が同じ姿をしているのがいちばん読み違えやすい。数えるのは
-  ページャ1つに寄せる。
+  目次に番号は振らない。数えるのはページャ1つ（Projects 2 / 4）に寄せる——
+  目次の番号はブロックの並び順で、節の何画面目に居ても動かないので、動く数の
+  隣に動かない数を並べると読み違える（src/ui/Layout.tsx の目次の注記）。
 */
 .toc a {
   display: inline-flex;
@@ -797,7 +793,7 @@ main {
     scale var(--dur-spring) var(--ease-spring);
 }
 
-/* 目次の行き先は節（#apps）ではなく画面の URL（/apps）。だから 'true' ではなく 'page' */
+/* 目次の行き先は節（#projects）ではなく画面の URL（/projects）。だから 'true' ではなく 'page' */
 .toc a[aria-current='page'] {
   color: var(--accent);
   background: var(--accent-soft);
@@ -906,7 +902,7 @@ main {
 }
 
 /*
-  入口の背景の月。粒子で焼いた三日月（部品は components.tsx の MoonField、
+  入口の背景の月。点で焼いた三日月（部品は components.tsx の MoonField、
   作り直しは scripts/moon/render.py → scripts/moon/pack.py）と、その周りの
   光暈。光暈は絵ではなく radial-gradient なので、アクセント色に追従する。
 
@@ -1165,7 +1161,7 @@ main > :is(.hero, section)[tabindex] > .moon {
 /*
   名前の上に添える肩書き。札なので名詞のまま、小さく置く。英字だけの肩書き
   （System Engineer）は等幅の札にし、和文の肩書きは本文の書体のまま
-  （lang="en" は public.tsx が langOf で付ける。等幅の決まりは :root の
+  （lang="en" は components.tsx の langOf が決める。等幅の決まりは :root の
   --font-mono を見ること）。
 
   先頭の点はアクセント色。月と同じ色の粒を1つだけ字の側に置いて、右上の月と
@@ -1416,7 +1412,7 @@ main > :is(.hero, section)[tabindex] > .moon {
 
 /*
   main の2行目。本文（1行目）が残りの高さを全部取るので、この帯はいつも
-  画面の底に座る。通し番号はサーバーが数えて入れてあるので、counter は使わない
+  画面の底に座る。節の中の数はサーバーが数えて入れてあるので、counter は使わない
   （counter の数は印刷にも読み上げにも出ない）。
 
   端では <a> を出さず、ますだけを残す。3列を固定しておけば、めくっても
@@ -1483,8 +1479,7 @@ main > :is(.hero, section)[tabindex] > .moon {
   名前だけの節（1画面しか無いもの）では位置が出ないので、隙間も出ない。
 
   名前のほうを少し明るくしてあるのは、数より先に「どこに居るか」を読ませる
-  ため。全体の通し番号（01 · 07）だったころは読む順序が無く、2つの数が
-  同じ重さで並んでいた。
+  ため（2つを同じ重さで並べると、読む順序が無くなる）。
 */
 .pager__section {
   color: var(--ink-mid);
@@ -2390,7 +2385,7 @@ main > :is(.hero, section)[tabindex] > .moon {
   月を右上に（.moon--closing）、誘いの1文とボタンを画面の下に（.moonlit）。
 
   画面に出すのは月と、誘いの1文（.contact__lead）と、ボタン2つ。見出しは
-  読み上げ用の .sr-only（理由は src/routes/public.tsx の Contact）。箱（枠・面・
+  読み上げ用の .sr-only（理由は src/ui/components.tsx の Contact）。箱（枠・面・
   影）には入れない。箱だったころは、広い画面の真ん中に小さな枠が浮き、周りの
   大半が空いたままだった（1440 でパネル 869x802 のうち枠が 869x281）。
   下の余白は .hero と同じ。
@@ -3359,8 +3354,7 @@ body[data-layout='magazine'] .head :is(h1, h2) {
       本文の予算が減る（トップの帯は rail で 30.1px、center で 64.2px =
       @390x844, Hiragino Sans, macOS Chromium。プリセットを書き落とさないこと
       ——条件抜きの数だけ並べると食い違って見える）。
-      個人ページも同じ柱を使う。以前は個人ページ専用の名札（顔・名前・肩書き・
-      所在地）で、帯だけで 188.7px を取っていた。
+      個人ページも同じ柱を使う（顔と所在地は本文の名札 .nameplate にだけ出す）。
     */
     :where(body[data-layout]:not([data-whole])) .identity {
       flex-direction: row;
@@ -3387,11 +3381,9 @@ body[data-layout='magazine'] .head :is(h1, h2) {
       名前（.identity__name）は畳まない。1人のサイトの入口以外の画面で、誰の
       サイトかを言うのは帯ではここだけになる。代わりにワードマークを畳む（下）。
 
-      肩書きを畳むのは幅の勘定でもある。390 の帯は 358px しかない。
-      柱に名前を置いていた前の時期には、ワードマーク・名前・肩書きを並べると
-      名札が 310px を取って目次が 36px になり（必要 220px）、肩書きを畳んで
-      名札 200px・目次 146px だった（= rail @390x844, Hiragino Sans, macOS
-      Chromium）。いまはワードマークも畳むので、もう一段空く（下の2本）。
+      肩書きを畳むのは幅の勘定でもある。390 の帯は 358px しかなく、ワードマーク・
+      名前・肩書きを並べると名札だけで 310px を取って目次が入らない（必要 220px。
+      = rail @390x844, Hiragino Sans, macOS Chromium）。ワードマークも畳む（下の2本）。
     */
     :where(body[data-layout]:not([data-whole])) .identity__role,
     :where(body[data-layout]:not([data-whole])) .identity__tagline,

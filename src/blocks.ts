@@ -1,4 +1,4 @@
-import type { Member } from './db/schema'
+import type { Block, Member } from './db/schema'
 import { isSafeUrl, paragraphs, parseLines, parseSkills } from './lib/format'
 import { chunk, screenCount } from './lib/paginate'
 
@@ -10,10 +10,10 @@ import { chunk, screenCount } from './lib/paginate'
   components.tsx と app.css の :root だけで決まるので、どう並べても
   同じ設計の中に収まる。
 
-  種類はここが正。ブロックを1つ足すには、ここに1行 → components.tsx に
-  部品 → public.tsx の renderBlock に1分岐 → admin.tsx の blockScreens に
-  1分岐（何画面になるかの知らせ）。4か所とも要る。後ろの2つは switch に
-  default を置いていないので、足し忘れると TS2366 で落ちる。
+  種類はここが正。ブロックを1つ足すには、ここに1行 → このファイルの blockPages に
+  1分岐（何画面になるか。公開ページと管理画面の「N 画面」が読む）→ components.tsx に
+  部品 → src/routes/public/blocks.tsx の renderBlock に1分岐。4か所とも要る。
+  2つの分岐は switch に default を置いていないので、足し忘れると TS2366 で落ちる。
 
   perScreen は「1画面に何件まで出すか」。CSS の値ではなく件数で、サーバーが
   画面を割る（src/lib/paginate.ts）のに使うので :root ではなくここに置く。
@@ -68,11 +68,11 @@ export const BLOCK_TYPES = [
   // hero と contact は画面まるごとなので perScreen を持たない
   { key: 'hero', label: 'Hero', note: '大見出しとリード。文言は src/site.ts', kind: 'fixed' },
   /*
-    個人開発（app）と業務（work）を1つの一覧に並べる。以前は Apps と Works の
-    2つの節だったが、見る側にとってはどちらも「つくったもの」で、節が分かれて
-    いると目次もページャも2倍に伸びるだけだった。区分はデータに残り、カードの
-    札（プラットフォーム / 業界）と絞り込みのピル（すべて・個人開発・業務）で
-    見分ける。並びは新しい順（src/db/queries.ts の itemOrder）
+    個人開発（app）と業務（work）を1つの一覧に並べる。見る側にとってはどちらも
+    「つくったもの」で、節を分けると目次もページャも2倍に伸びる。区分はデータに
+    残り（src/domain.ts の ITEM_KINDS）、カードの札（プラットフォーム / 業界）と
+    絞り込みのピル（すべて・個人開発・業務）で見分ける。並びは新しい順
+    （src/db/queries.ts の itemOrder）
   */
   {
     key: 'projects',
@@ -207,9 +207,9 @@ export const BLOCK_TYPES = [
   複数人のサイトの「担当」）の姿なので、公開できるのはその数まで。それより多い
   作品は、測っていない高さを持つことになる。増やすなら 27通りを測り直すこと
   （本文を次の画面へ移したので、1枚目はいちばん惜しい所で 44px 余っている）。
-  リンクの欄が3行なのも同じ数（src/routes/admin.tsx の ItemForm）。
+  リンクの欄が空けて出す行の数も同じ数（src/routes/admin/items.tsx の ItemForm）。
   下書きでは数を見ない（保存そのものは何個でも通る——D1 の束縛変数の上限は
-  書き込みを行ごとに分けて避けている。admin.tsx の childWrites）。
+  書き込みを行ごとに分けて避けている。src/routes/admin/items.tsx の childWrites）。
 */
 /*
   memberHeadline（個人ページの大見出し）と blockHeading（打ち込むブロックの見出し。
@@ -259,8 +259,8 @@ export const BLOCK_KEYS = BLOCK_TYPES.map((type) => type.key) as [BlockKey, ...B
   画面の列に同じ URL（/projects）が2度並び、ページャの「次」が自分自身を指して
   入口から先へ進めなくなった（二重送信で実際に2行できた）。だから3か所で守る——
   DB の部分一意索引（src/db/schema.ts の blocks_fixed_once。この一覧から作る）、
-  書く側の onConflictDoNothing（src/db/queries.ts の ensureBlocks と admin.tsx の
-  「置く」）、読む側の重複落とし（publishedBlocks）。
+  書く側の1文（src/db/queries.ts の initBlocks と src/routes/admin/blocks.tsx の
+  「置く」の onConflictDoNothing）、読む側の重複落とし（publishedBlocks）。
 */
 export const FIXED_BLOCK_KEYS = BLOCK_TYPES.filter((type) => type.kind === 'fixed').map(
   (type) => type.key,
@@ -306,14 +306,10 @@ export function blockPerScreen(key: BlockKey): number {
 /*
   ブロックの中身を「画面に割る単位」の列に開く。
 
-  公開ページ（renderBlock）はこの列をそのまま描き、管理画面（blockScreens と
-  screenChars）は数えるだけ。同じ式を2か所に書くと、片方だけ直した日に管理画面の
-  「N 画面」が静かに古い数を出し続ける——あの表示は「13件目を公開したら画面が1枚
-  増えた」と気づかせるためにあるので、いちばん要るときに嘘をつくことになる。
-
-  種類を足し忘れる方向は型が守っている（switch に default を置かない判断で、
-  ここに1つ足すと renderBlock と blockScreens の両方が TS2366 で落ちる）。
-  既存の分岐の中身がずれる方向は、開く式をここに寄せる以外に守りようが無い。
+  公開ページ（renderBlock）はこの列をそのまま描き、画面の数（blockPages）と字数の
+  関門（screenChars）は数えるだけ。同じ式を2か所に書くと、片方だけ直した日に
+  管理画面の「N 画面」が静かに古い数を出し続ける（あの表示は「13件目を公開したら
+  画面が1枚増えた」と気づかせるためにある）。
 */
 
 // 1行1件のもの（いま・数字・リンク集・できごと）の行
@@ -332,7 +328,7 @@ export function blockTexts(body: string): string[] {
   1行のうち、本文として出る列だけを残す。
 
   リンク集の2列目は URL で、href にはなるが本文には出ない。だから
-  説明文に畳むとき（public.tsx の lineDigest）も字数を数えるとき
+  説明文に畳むとき（src/routes/public/meta.ts の lineDigest）も字数を数えるとき
   （このファイルの screenChars）も、そこは外す。その規則が2か所に別々に
   書いてあった——このファイルは「開く式は blockLines / blockTexts /
   blockUnitCount が1本の正」と宣言しているのに、ここだけ漏れていた。
@@ -629,11 +625,11 @@ export const MEMBER_PER_SCREEN = {
 
 /*
   個人ページの中身を「画面に割る単位」の列に開く。ブロックの blockLines /
-  blockTexts と同じ役目で、公開ページ（src/routes/public.tsx の memberScreens）は
+  blockTexts と同じ役目で、公開ページ（src/routes/public/member-screens.tsx の memberScreens）は
   この列を描き、管理画面（構成の「N 画面」）は数えるだけ。
 
   管理画面が数えるようになったのは、1人のサイトでは Team の行がその人の
-  プロフィールに置き換わるため（public.tsx の profileOf）。「Team 1 画面」と
+  プロフィールに置き換わるため（src/routes/public/data.ts の profileOf）。「Team 1 画面」と
   出しているあいだに、公開ページでは4画面が並ぶ——数え方を2か所に書くと、
   いちばん要るときに「N 画面」が嘘をつく。
 */
@@ -649,8 +645,8 @@ export function memberUnits(member: Pick<Member, 'bio' | 'skillsText' | 'careerT
   作品の本文（items.body）を段落の列に開く。段落が1つでもあれば、その作品は
   本文の画面（/apps/item/<slug>/story）を持つ。
 
-  開く式はこの1本——公開ページ（src/routes/public.tsx の renderItem・sitemap・
-  全体ページ）が画面を作るかどうかを決めるのも、公開の関門（itemPublishErrors）が
+  開く式はこの1本——公開ページ（src/routes/public/ の item.tsx・crawl.ts・
+  全体ページの blocks.tsx）が画面を作るかどうかを決めるのも、公開の関門（itemPublishErrors）が
   段落を数えるのも、ここを読む。空白と空行だけの本文は0段落で、画面を作らない。
   「画面はあるのに中身が無い」も「中身があるのに sitemap に無い」も起こさない。
 
@@ -675,6 +671,69 @@ export function memberScreenCount(member: Pick<Member, 'bio' | 'skillsText' | 'c
     screenCount(skills.length, MEMBER_PER_SCREEN.skills) +
     screenCount(career.length, MEMBER_PER_SCREEN.career)
   )
+}
+
+/*
+  画面の数を決める、サイトの件数。公開ページは描く中身から、管理画面は DB を
+  数えて作る（src/routes/admin/blocks.tsx の siteCounts）。
+
+  items.matched は絞り込んだあとの件数。絞り込みの無い数え方（管理画面・sitemap）
+  では total と同じ数。profile は1人のサイトで Team の位置に並ぶプロフィールの
+  画面数（memberScreenCount）で、Team を置いた1人のサイトでだけ数、ほかは null。
+*/
+export type SiteCounts = {
+  items: { total: number; matched: number }
+  members: number
+  profile: number | null
+}
+
+/*
+  そのブロックが公開ページで何画面になるか。0 なら節ごと出さない（URL も生まれない）。
+
+  **公開ページと管理画面が同じこの1本を読む。** 公開ページ（src/routes/public/blocks.tsx
+  の renderBlock）はこの数で節を出すかどうかと画面の枚数を決め、管理画面の構成の
+  「N 画面」はこの数をそのまま出す。「節を出す条件」を2本の switch に書いていた
+  ころは、片方だけ直した日に「N 画面」が実際の画面数から静かにずれる形だった。
+
+  種類を足し忘れる方向は型が守る（switch に default を置かないので TS2366 で落ちる）。
+  行の開き方は blockUnitCount、割り方は screenCount / perScreen。
+
+  - 下書き（published が 1 でない）は 0。公開ページは publishedBlocks が先に落とす
+  - Projects は、公開中が0件なら 0、絞り込んで0件になっただけなら 1（ピルを残して
+    絞り込みを外す手を画面に置く）
+  - 1人のサイトの Team は、その人のプロフィールの画面数（Team の画面は作らず、
+    その位置にプロフィールが並ぶ。src/routes/public/site.ts の screenList）
+*/
+export function blockPages(
+  block: Pick<Block, 'type' | 'title' | 'body' | 'published'>,
+  counts: SiteCounts,
+): number {
+  const type = blockType(block.type)
+  if (!type || block.published !== 1) return 0
+  const perScreen = blockPerScreen(type.key)
+
+  switch (type.key) {
+    // 画面まるごとのもの。2画面目は無い
+    case 'hero':
+    case 'contact':
+      return 1
+    case 'statement':
+      return block.title ? 1 : 0
+
+    // 件数で割れるもの。行は DB に入っている
+    case 'projects':
+      return counts.items.total ? Math.max(1, screenCount(counts.items.matched, perScreen)) : 0
+    case 'team':
+      return counts.profile ?? screenCount(counts.members, perScreen)
+
+    // 件数で割れるもの。行は body に入っている（通らない URL は数に入らない）
+    case 'links':
+    case 'note':
+    case 'now':
+    case 'numbers':
+    case 'timeline':
+      return screenCount(blockUnitCount(type.key, block.body), perScreen)
+  }
 }
 
 /*

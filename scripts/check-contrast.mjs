@@ -6,7 +6,7 @@
   どちらも字の後ろに光暈が回る。
   測る画面と字の一覧は下の SCREENS。
 
-  月は入口の画面の h1 とリード文の後ろを通る。粒子はいちばん明るい所が白
+  月は入口の画面の h1 とリード文の後ろを通る。月の点はいちばん明るい所が白
   （255）で、見出しも #f2f2f4 なので、置き方を間違えると白の上の白になる。
   実際にそうなっていた——リード文が明るい縁に載って **1.00:1**、つまり
   その字は背景と同じ明るさで、完全に消えていた。
@@ -44,20 +44,17 @@ import process from 'node:process'
 import { chromium } from 'playwright'
 import { devServer } from './lib/dev-server.mjs'
 import { keysOf } from './lib/theme.mjs'
+import { DESIGN_SIZES, SHORT_WIDE } from './lib/viewports.mjs'
 
 /*
-  設計サイズ3つ（check-fit.mjs と同じ電話・板・机）に 1024x768 を足す。
-
-  1024x768 は「幅は広いのに背が低い」窓で、パネルがいちばん短くなる
-  （center で 810x366）。月と文字の間隔がいちばん詰まるのがここなので、
-  収まりの検査には入れていなくても、重なりの検査には要る。
+  設計サイズ3つ（scripts/lib/viewports.mjs。check:fit と同じ電話・板・机）に、
+  背の低い窓（SHORT_WIDE）を足して幅の順に並べる。指（touch）の印はまだ使って
+  いない（細いポインタの姿で測っている）。指で測るように変えるなら、柱の帯が
+  伸びたぶん月と字の位置が動くので、全部の組を測り直すこと。
 */
-const VIEWPORTS = [
-  { width: 390, height: 844 },
-  { width: 768, height: 1024 },
-  { width: 1024, height: 768 },
-  { width: 1440, height: 900 },
-]
+const VIEWPORTS = [...DESIGN_SIZES, SHORT_WIDE]
+  .map(({ width, height }) => ({ width, height }))
+  .sort((a, b) => a.width - b.width)
 
 /*
   月が出る画面。サイトの連なりの最初（入口）と最後（Contact）の2枚だけ——

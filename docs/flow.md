@@ -164,7 +164,7 @@ flowchart LR
 
 管理画面へは、**ログインしている人にだけ**柱に出る「管理画面」から行く（訪問者の
 見た目は変わらない）。目次のすぐ後ろに置くので、899 以下の横帯でも右端に残る。
-行き先は「いま見ている画面を直す場所」で、`src/routes/public.tsx` の `blockAdminPath`
+行き先は「いま見ている画面を直す場所」で、`src/routes/public/page.tsx` の `blockAdminPath`
 が決める。
 
 | 見ている画面 | 行き先 |

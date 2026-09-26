@@ -90,25 +90,10 @@ import { chromium } from 'playwright'
 import { devServer, ROOT, scratchState } from './lib/dev-server.mjs'
 import { fixture } from './lib/fit-fixture.mjs'
 import { keysOf } from './lib/theme.mjs'
+import { DESIGN_SIZES } from './lib/viewports.mjs'
 
-/*
-  設計サイズ。CLAUDE.md と public/app.css の「9通り」は、この3つ × 骨格3つのこと。
-  電話・板・机。WCAG 1.4.10 の 320x256 はここに入れない——あの寸法にはカードが
-  1枚も入らず、収めにいくと設計サイズの件数まで削ることになる。あちらは弁を開けて
-  受け、そのかわりキーボードで操作できるようにしてある（節の tabindex）。
-
-  電話と板は指で測る（touch: hasTouch で pointer: coarse になる）。実物は指で
-  触る寸法で、指のときは押す手が --tap の 44px になり、目次の行き先も 44px の
-  的になって 899 以下の柱の帯が 30px → 44px に伸びる（app.css の
-  @media (pointer: coarse)）。細いポインタで測っていたころは、電話の実物より
-  14px 以上多い予算で合格を出していた。指の姿は細いポインタの姿より必ず高い
-  （足すだけで削る規則が無い）ので、指で閉じれば細いポインタでも閉じる。
-*/
-const VIEWPORTS = [
-  { width: 390, height: 844, touch: true },
-  { width: 768, height: 1024, touch: true },
-  { width: 1440, height: 900, touch: false },
-]
+// 設計サイズ（390 と 768 は指で測る）。一覧と理由は scripts/lib/viewports.mjs
+const VIEWPORTS = DESIGN_SIZES
 
 /*
   柱が本文の左に立つ骨格と、その幅。ほかの骨格・幅では柱は本文の上の帯になる。

@@ -497,7 +497,7 @@ describe('Items — 本文と画像', () => {
 
 /*
   画像の受け入れ（SEC-2 / ADM-4）。アバターと作品の画像は同じ1本の検査
-  （src/routes/admin.tsx の pickImage → src/lib/image.ts の sniffImage）を通る。
+  （src/routes/admin/images.ts の pickImage → src/lib/image.ts の sniffImage）を通る。
 
   種類は中身の先頭のバイトで決め、ブラウザの名乗り（file.type）は見ない。
   以前は file.type が image/ で始まれば何でも受け、その名乗りのまま KV に
@@ -1139,10 +1139,11 @@ describe('構成 — 何画面になるかを見せる', () => {
   /*
     自由文の5種を1つずつ突き合わせる。
 
-    「N 画面」は公開ページとは別の関数（blockScreens）が数えている。行の開き方が
-    公開側とずれると、置いた本人だけが古い数を見続ける——「13件目を公開したら
-    画面が1枚増えた」と気づかせるのがこの表示の存在理由なので、いちばん要る
-    ときに嘘をつく。数え方の出どころは src/blocks.ts の blockUnitCount 1本。
+    「N 画面」と公開ページの画面数は、どちらも src/blocks.ts の blockPages
+    （行の開き方は blockUnitCount）から出る。ずれると、置いた本人だけが古い数を
+    見続ける——「13件目を公開したら画面が1枚増えた」と気づかせるのがこの表示の
+    存在理由なので、いちばん要るときに嘘をつく。管理画面の描き方と公開ページの
+    描き方の両方を通して突き合わせる。
   */
   it('自由文のどの種類でも、「N 画面」と公開ページの画面数が一致する', async () => {
     const signed = await signIn()

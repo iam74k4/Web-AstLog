@@ -183,7 +183,7 @@ seed を先に流さなくてよい）。
 **見出しの錨のずれ**（1px を超えたら落ちる）。
 
 `check:contrast` も同じ理由でブラウザが要る。入口と締め（Contact）の画面の背景には
-粒子で焼いた三日月があり、いちばん明るい所は白、見出しも `#f2f2f4` なので、置き方を間違えると
+点で焼いた三日月があり、いちばん明るい所は白、見出しも `#f2f2f4` なので、置き方を間違えると
 白の上の白になる（実際そうなっていて、リード文が明るい縁に載って **1.00:1** ——
 その字は背景と同じ明るさで、完全に消えていた）。4寸法 × 3骨格 × 6アクセント＝
 72通りを画面ごとに描き、月の上に乗る字の行ボックスの下の画素を読んで WCAG 1.4.3 に
@@ -402,8 +402,11 @@ src/
   index.tsx          入口。応答のヘッダ（CSP など）を全部に付け、ルートを束ねて 404 / 500 を出す
   site.ts            サイト全体の文言と宛先（管理画面からは変えない）
   theme.ts           見た目のプリセット。選べる値はここが正
-  blocks.ts          置けるブロックの種類と、1画面あたりの件数。ここが正
-                     個人ページを画面に割る単位（memberUnits / memberScreenCount）も
+  domain.ts          作品の区分（ITEM_KINDS: データの値・URL の語・呼び名の対応）と、
+                     UI と DB が共有する作品の型（ItemView・ItemFilter）
+  blocks.ts          置けるブロックの種類と、1画面あたりの件数・字数。ここが正
+                     何画面になるか（blockPages。公開ページと管理画面の「N 画面」が読む）、
+                     個人ページを画面に割る単位（memberUnits / memberScreenCount）、公開の関門も
   env.ts             バインディングの型
   db/
     schema.ts        テーブル定義。ここが正
@@ -414,16 +417,38 @@ src/
     format.ts        テキストの解釈とフォーム値の受け取り
     page-cache.ts    公開ページの写し（Cache API）と、その版（KV の site:version）の上げ方
     paginate.ts      一覧を1画面ぶんずつに割る（chunk / screenCount）
-    sequence.ts      画面の連なり。前後・目次・通し番号・canonical をここで組む
+    sequence.ts      画面の連なり。前後・目次・ページャの数・canonical をここで組む
                      目次のまとめ単位（tocKey）は節（navKey）より大きくてよい
                      ページャが数える単位（countKey）は画面より大きくてよい
   routes/
-    public.tsx       画面ごとの URL・/members/:slug の連なり・作品の恒久リンクと本文の画面
-                     /all・/robots.txt・/sitemap.xml・/images/*
-    admin.tsx        /admin/*
+    public/          公開ページ
+      routes.ts      URL の登録だけ（登録順の決まり。catch-all は最後）
+      data.ts        サイトの今の姿（1人か・帯・絞り込みの読み方と効く画面）
+      meta.ts        題・説明文・構造化データの組み方
+      site.ts        サイトの画面の列（構成を画面にほどき、連なりの1枚ずつに写す）
+      blocks.tsx     ブロック1つを節に描く（renderBlock）
+      page.tsx       連なりの1枚をページにする（screenPage）・管理画面への入口
+      top.tsx        トップの画面（/ と /:screen）と全体ページ（/all）
+      member-screens.tsx  個人ページの画面ひとそろい（中身・URL・連なりの1枚）
+      member.tsx     個人ページの連なり（/members/:slug …）
+      item.tsx       作品1件の恒久リンクと本文の画面
+      crawl.ts       /robots.txt・/sitemap.xml
+      images.ts      /images/*（KV の画像。キーの形の検査と配るときのヘッダ）
+    admin/           管理画面（/admin/*）
+      index.ts       組み立て（送り元の検査 → ログインの往復 → 認証の壁 → 資源ごと）
+      session.ts     送り元の検査（sameOrigin）と認証の壁（requireAuth）
+      request.ts     要求の読み方（id・並び順・slug・札）と保存の知らせ
+      auth.tsx       ログインの往復（/admin/login・/admin/auth/*・ログアウト）
+      images.ts      画像の取り込み（pickImage / putImage）と KV・D1 の順序
+      members.tsx    Members
+      items.tsx      Projects の項目（個人開発・業務）
+      blocks.tsx     構成
+      appearance.tsx 見た目
+      account.tsx    アカウント
   ui/
     Layout.tsx       公開ページの外枠
     AdminLayout.tsx  管理画面の外枠
+    AdminForm.tsx    管理画面のフォームの部品（欄・公開のトグル・確認）
     components.tsx   画面を組む部品。main の直接の子は Screen / Hero だけが作る
                      外枠はどれも HtmlDocument で <html> を開く（DOCTYPE を出す）
     icons.tsx        インライン SVG
@@ -450,7 +475,7 @@ scripts/
   moon/              入口の月。render.py が Blender で焼き、pack.py が配信用に詰める
                      配るのは無彩色の三日月だけ。光暈は app.css が --accent から描く
   lib/               上の2本の共通部分。dev サーバの立て方と使い捨ての D1（dev-server.mjs）、
-                     src/theme.ts の読み方（theme.mjs）。写しを2本持たない
+                     src/theme.ts の読み方（theme.mjs）、設計サイズ（viewports.mjs）。写しを2本持たない
                      wrangler.toml の id の読み方（wrangler-ids.mjs）も
                      fit-fixture.mjs は check:fit の上限ちょうどの中身を src/blocks.ts の
                      上限から作る。ts-import.mjs は src/ の .ts を Node からそのまま読む口

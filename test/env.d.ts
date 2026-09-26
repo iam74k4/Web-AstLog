@@ -50,3 +50,13 @@ declare module 'virtual:repo:*' {
   const content: string
   export default content
 }
+
+/*
+  ソースと文書の中身（vitest.config.ts の sourcePlugin）。files はリポジトリの
+  パス（src・scripts・public・docs・test・drizzle・.github と、根のファイル）、
+  texts は src の .ts / .tsx・scripts の .mjs・public の CSS・文書の中身。
+*/
+declare module 'virtual:sources' {
+  const content: { files: string[]; texts: Record<string, string> }
+  export default content
+}

@@ -1,8 +1,8 @@
 import { and, asc, count, eq, sql } from 'drizzle-orm'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import { blockType, DEFAULT_BLOCKS, LEGACY_BLOCK_KEYS } from '../blocks'
+import { ITEM_KIND_KEYS, type ItemKind, type ItemView, type KindCounts } from '../domain'
 import { normalizeTheme, THEME_KEYS, type Theme, type ThemeKey } from '../theme'
-import type { ItemKind, ItemView } from '../ui/components'
 import * as schema from './schema'
 
 export type Db = DrizzleD1Database<typeof schema>
@@ -160,7 +160,7 @@ export async function findMovedMember(db: Db, oldSlug: string) {
 /*
   作品1件を恒久リンク（/apps/item/<slug>）から引く。
 
-  並び順も絞り込みも見ない。一覧の URL（/apps/3）は「いまの並びの3枚目」で、
+  並び順も絞り込みも見ない。一覧の URL（/projects/3）は「いまの並びの3枚目」で、
   並べ替えれば同じ URL が別の作品を指すが、こちらは slug で名指しするので
   何を足しても外しても指す先が動かない。それがこの列の全部の理由。
 
@@ -223,17 +223,20 @@ export function listPlatforms(db: Db) {
   ピルは絞り込む前の件数から決める。絞り込んだ結果から決めると、押すたびに
   ピルの並びが変わり、いま押したピルが消えて戻れなくなる。
 */
-export async function countPublishedByKind(db: Db, memberId: number | null = null) {
+export async function countPublishedByKind(
+  db: Db,
+  memberId: number | null = null,
+): Promise<KindCounts> {
   const rows = await db
     .select({ type: schema.items.type, n: count() })
     .from(schema.items)
     .where(itemsWhere({ memberId }))
     .groupBy(schema.items.type)
 
-  return {
-    app: rows.find((row) => row.type === 'app')?.n ?? 0,
-    work: rows.find((row) => row.type === 'work')?.n ?? 0,
-  }
+  // 公開中の項目が無い区分も 0 として持つ（区分の一覧は src/domain.ts の ITEM_KINDS）
+  return Object.fromEntries(
+    ITEM_KIND_KEYS.map((kind) => [kind, rows.find((row) => row.type === kind)?.n ?? 0]),
+  ) as KindCounts
 }
 
 /* ------------------------------------------------------------- 見た目 */

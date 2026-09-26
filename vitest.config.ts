@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-pool-workers'
 import type { Plugin } from 'vite'
 import { defineConfig } from 'vitest/config'
@@ -91,11 +91,55 @@ const repoPlugin = (): Plugin => ({
   },
 })
 
+/*
+  ソースと文書を、テストから中身として読む（test/source.test.ts）。
+
+  見るのは2つ——層の向き（DB の層と規則が UI とルートを import しないこと）と、
+  コメントと文書が名指しするファイルが実在すること。ファイルを分けたり名前を
+  変えたりした日に、それを説明していた散文だけが古い名前を指して残る（黙って
+  嘘になる）のを、ここで落とす。
+
+  files は置いてあるファイルの一覧（在るかどうかを見るだけ）、texts は読む相手の中身。
+  読む相手は src・scripts・public の CSS・文書（CLAUDE.md・README.md・docs/）。
+*/
+const SOURCES = 'virtual:sources'
+const TREE = ['src', 'scripts', 'public', 'docs', 'test', 'drizzle', '.github']
+const TEXT =
+  /^(?:src\/.*\.tsx?|scripts\/.*\.mjs|public\/[^/]+\.css|docs\/.*\.md|CLAUDE\.md|README\.md)$/
+
+const walk = (dir: string): string[] =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = `${dir}/${entry.name}`
+    return entry.isDirectory() ? walk(path) : [path]
+  })
+
+const sourcePlugin = (): Plugin => ({
+  name: 'noctifex:sources',
+  resolveId: (id) => (id === SOURCES ? `\0${SOURCES}.js` : null),
+  load(id) {
+    if (id !== `\0${SOURCES}.js`) return null
+    const files = [
+      ...TREE.flatMap(walk),
+      ...readdirSync('.').filter((name) => /\.[a-z]+$/.test(name)),
+    ]
+    const texts = Object.fromEntries(
+      files
+        .filter((file) => TEXT.test(file))
+        .map((file) => {
+          this.addWatchFile(`./${file}`)
+          return [file, readFileSync(`./${file}`, 'utf8')]
+        }),
+    )
+    return `export default ${JSON.stringify({ files, texts })}`
+  },
+})
+
 export default defineConfig({
   plugins: [
     cssTextPlugin(),
     assetPlugin(),
     repoPlugin(),
+    sourcePlugin(),
     cloudflareTest({
       singleWorker: true,
       wrangler: { configPath: './wrangler.toml' },

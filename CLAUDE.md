@@ -56,7 +56,25 @@
 メディアクエリは増えていない。係数は設計サイズ3つで今までと同じ数になるよう選んである。
 
 **部品は `src/ui/components.tsx` に置いてから使う。** その場で新しい見た目を書くと、
-同じものが少しずつ違う姿で増える。
+同じものが少しずつ違う姿で増える。ルートのファイルに見た目の部品を書かない（柱の
+`SiteIdentity`・`Contact`・`Socials` も components.tsx）。管理画面のフォームの部品
+（欄・公開のトグル・確認）は `src/ui/AdminForm.tsx`。
+
+**ルートは責務ごとのモジュールに分け、層の向きを守る。** 公開ページは
+`src/routes/public/`（登録だけの `routes.ts`・サイトの今の姿 `data.ts`・題と説明文の
+`meta.ts`・画面の列 `site.ts`・ブロックを描く `blocks.tsx`・画面ごとの `top` / `member` /
+`item`・`crawl.ts`・`images.ts`）、管理画面は `src/routes/admin/`（組み立ての `index.ts`
+と資源ごとのファイル）。一覧は README の「どこに何があるか」。1ファイルに全部を
+抱えていたころ（公開 2500 行・管理 3300 行）は、どの関数がどの画面に効くかを
+コメント越しに追うことになり、公開ページの規則を直すのに管理画面のファイルを開く
+必要があった。
+- **DB の層（`src/db/`）と規則（`src/blocks.ts`・`src/domain.ts`・`src/lib/`）は、
+  UI（`src/ui/`）とルート（`src/routes/`）を読まない。** UI と DB が共有する型
+  （`ItemView`・`ItemFilter`・区分）は `src/domain.ts` に置く。`test/source.test.ts` の
+  「層の向き」が import を見ている
+- **公開ページと管理画面が同じ答えを要るものは、`src/blocks.ts` に1本だけ置く**
+  （何画面になるか `blockPages`・公開の関門 `publishErrors`・開く式 `blockLines` ほか）。
+  片方のファイルに書くと、もう片方が写しを持つ
 
 **スタイルシートは2枚。公開ページは `app.css` だけ、管理画面は `app.css` のあとに
 `admin.css`。** 管理画面の部品（`.admin-*`・`.btn`・`.field`・`.row`・`.toggle`・
@@ -172,7 +190,7 @@ URL は恒久リンクの続きの `/apps/item/<slug>/story`（`itemStoryHref`�
 **画像の置き場は KV の2つだけ。** メンバーの顔は `avatars/`、作品の画像は `items/`。
 KV にはほかに、公開ページの写しの版の1行（`site:version`。下の「気をつける場所」）だけが
 同居している。これは置き場ではなく、`/images/*` からは読めない（`IMAGE_KEY`）。
-キーは `<置き場>/<slug>-<乱数8桁>.<拡張子>` で、付けるのは `src/routes/admin.tsx` の
+キーは `<置き場>/<slug>-<乱数8桁>.<拡張子>` で、付けるのは `src/routes/admin/images.ts` の
 `putImage` だけ。取り込みの検査は `pickImage` の1本で、どちらの置き場も同じ。
 **画像があるのに代替テキストが空なら、公開として保存させない**（公開の関門 `publishErrors`）。
 
@@ -204,7 +222,7 @@ GitHub・リンク集）は、保存で弾き（公開ページで落とすも�
 `target="_blank"` のおかげで Chromium では走らなかっただけで、それは守りではない。
 
 **作品のページの共有カードは、その作品の画像。** 画像がある作品は `og:image` をその
-画像にする（`src/routes/public.tsx` の `itemOgImage`。種類は経路の拡張子、寸法は
+画像にする（`src/routes/public/item.tsx` の `itemOgImage`。種類は経路の拡張子、寸法は
 `image_width` / `image_height`。分からないものは名乗らない。AVIF は貼り先が読まない
 のでサイトの1枚に戻す）。`twitter:card` は寸法で決め、横長で 300x157 以上なら
 `summary_large_image`（`src/ui/Layout.tsx` の `cardOf`）。
@@ -241,7 +259,7 @@ Projects の**列の数もサーバーが決める**。`perScreen` をそのま�
 見た目を変える口を作らないから、どう並べても統一感が崩れない。
 
 **同じ行き先を1つの画面に2つ置かない。** 入口の帯（一覧へ送る札）の行き先が
-ページャの「次 →」と同じなら、入口にはページャを出さない（`src/routes/public.tsx` の
+ページャの「次 →」と同じなら、入口にはページャを出さない（`src/routes/public/top.tsx` の
 `renderScreen`）。既定の並び（入口 → Projects …）ではいつもそうなり、同じ
 `/projects` へのリンクが画面の中ほどと底に2つ並んでいた。件数を添えた帯のほうを
 残す。落とすのは入口が連なりの先頭（「前」が無い）のときだけで、行き先が違うとき
@@ -301,7 +319,8 @@ GitHub / メールを出さないのも、1人のサイトのプロフィール�
   月は広げたぶん内へ戻す。`public/app.css` の `:focus-visible` の下）
 - **設計サイズで弁が開いていたら、それは弁の不具合ではなく `perScreen` か
   `maxChars` の不具合。まず件数と字数を疑う。** 設計サイズは 390x844 / 768x1024 /
-  1440x900 の3つ × 骨格3つ＝**9通り**。`npm run check:fit` はこれに書体3つを掛けた
+  1440x900 の3つ × 骨格3つ＝**9通り**（一覧の正は `scripts/lib/viewports.mjs`。
+  check:fit と check:contrast が同じ一覧を読む）。`npm run check:fit` はこれに書体3つを掛けた
   **27通り**を、訪問者とログインした姿の両方で、seed と上限ちょうどの fixture の中身で測る。
   **390 と 768 は指で測る**（`hasTouch` で `pointer: coarse`）——設計上は電話と板で、
   実物は指で触る。指では押す手が 44px になり、柱の帯も目次の的のぶん伸びる。
@@ -332,7 +351,7 @@ GitHub / メールを出さないのも、1人のサイトのプロフィール�
 全 URL と、書くブロックの全種類を置いたサイトで `h1` を数える）。
 `<title>`・`description`・canonical・構造化データも画面ごとに変える——
 同じ題と同じ説明文の URL が7つ並ぶと、履歴からも検索結果からも選び直せない。
-`<title>` の組み方は `src/routes/public.tsx` の `pageTitle` 1本で、割られた節は
+`<title>` の組み方は `src/routes/public/meta.ts` の `pageTitle` 1本で、割られた節は
 ページャと同じ数え方を添え（「Projects 2 / 4 — Noctifex」「岡崎 昂功 · About 2 / 2 —
 Noctifex」）、名前の無い画面（ひとこと・見出しを空けたメモ）はその画面の文の頭を
 使う。作品の本文の画面は「AppMixer · Story — Noctifex」（1枚目は作品名だけ）。
@@ -341,7 +360,7 @@ Noctifex」）、名前の無い画面（ひとこと・見出しを空けたメ
 sitemap の全 URL の題が重ならないことをテストが見ている。
 
 名乗りの構造化データ（サイトの `Person` / `Organization`、個人ページの `Person`）は
-連なりの**先頭の画面にだけ**載せる（`src/routes/public.tsx` の `firstOnly`）。作品1件の
+連なりの**先頭の画面にだけ**載せる（`src/routes/public/page.tsx` の `firstOnly`）。作品1件の
 ページの `CreativeWork` は名乗りではなく「この URL が何か」なので、作品同士をめくる
 列の中でも**どの作品の1枚目にも**載せる。本文の画面（Story）には載せない（同じ作品を
 2つの URL が名乗ると、どちらが作品か決められない）。載せるかどうかは呼ぶ側が決めて
@@ -370,7 +389,7 @@ Hero の肩書き・個人ページの名札・`<title>`・`description`・JSON-
 
 **柱は入口の外で名乗る。** 1人のサイトなら、入口（Hero の画面）以外のすべての画面
 （Projects・個人ページ・作品・Contact・`/all`）で、柱に名前と職種を出す
-（`src/routes/public.tsx` の `SiteIdentity`）。入口では出さない——Hero の `h1` が名乗って
+（`src/ui/components.tsx` の `SiteIdentity`）。入口では出さない——Hero の `h1` が名乗って
 いるので、柱にも置くと同じ名前が2度並び、899 以下ではロゴの隣に来て見出しの前置きの
 ように重なる。入口の外に名乗りが無かったころは、奥の画面（検索や貼られたリンクから
 直接着く画面）を開いた人に、誰のサイトかがどこにも出ていなかった。899 以下の帯には
@@ -383,7 +402,7 @@ GitHub / メールを出さない（本文にボタンがあり、同じ行き�
 **個人ページはサイトの連なりの一部。** 柱も目次もサイトのままで、個人ページ専用の柱や
 目次に入れ替えないこと。入れ替えていたころは、Team のカードを押すと別のサイトへ
 飛んだように見え、Team へ戻る道も無かった。連なり方は人数で2つに分かれ、どちらも
-組み方は `src/routes/public.tsx` の `renderMemberScreen`。
+組み方は `src/routes/public/member.tsx` の `renderMemberScreen`。
 
 - 1人のサイト（Team を置いているとき。`profileOf`）: Team の画面を作らず、その位置に
   その人の画面（1枚目 → About → Skills → Career）がサイトの列として入る。`/` から
@@ -402,7 +421,7 @@ GitHub / メールを出さない（本文にボタンがあり、同じ行き�
 
 **このサイトは1人として名乗る。** 文言は `src/site.ts` の `tagline` と `heroLead`
 の2つ、構造化データ・柱の名乗り・Team の置き換えは「公開中のメンバーがちょうど1人か」
-（`src/routes/public.tsx` の `soloMember`）で決まる。1人のあいだは Team の画面の代わりに
+（`src/routes/public/data.ts` の `soloMember`）で決まる。1人のあいだは Team の画面の代わりに
 その人のプロフィールが並び、`/all` でも Team のカードの節の代わりに Profile の節
 （名札・大見出し・紹介・技術・経歴）を置く。管理画面の「構成」の Team の行も、その旨と
 プロフィールの画面数を出す（数えるのは `src/blocks.ts` の `memberScreenCount`。公開側の
@@ -438,8 +457,12 @@ GitHub / メールを出さない（本文にボタンがあり、同じ行き�
 2件とその子だけを読む。並びだけ変えると、公開中の全件とその子を読んで並べ直す形に
 黙って戻る（`test/queries.test.ts` の「索引」が EXPLAIN QUERY PLAN で見ている）。見分けるのはカードの札と
 絞り込みのピル（すべて / 個人開発 / 業務）。区分のピルは両方の区分に項目がある
-ときだけ並ぶ。呼び名は `src/ui/components.tsx` の `KIND_LABEL` が正で、帯の件数
-（「個人開発 5 · 業務 2」）と管理画面のタブも同じ言葉を使う。以前の `/apps` `/works`
+ときだけ並ぶ。**区分の一覧は `src/domain.ts` の `ITEM_KINDS` が正**——データの値
+（`app` / `work`）・恒久リンクの1語目（`apps` / `works`）・呼び名（個人開発 / 業務）の
+対応を1つの表で持ち、スキーマの enum・`KIND_LABEL`・`itemHref`・公開のルートと 301・
+区分ごとの件数・帯の件数（「個人開発 5 · 業務 2」）・管理画面のタブはどれもここから作る
+（区分を1つ足すと全部に一度に出る。区分ごとに違う入力欄——プラットフォーム / 業界と
+実績値——だけは管理画面のフォームが区分を名指しする）。以前の `/apps` `/works`
 （とその続き）は同じ区分で絞った `/projects` へ 301。作品の恒久リンク
 （`/apps/item/:slug` `/works/item/:slug`）は貼られたまま動かす。
 
@@ -552,8 +575,9 @@ GitHub / メールを出さない（本文にボタンがあり、同じ行き�
 リポジトリに残らず、作り直した環境から消える。
 
 **メンバーの項目（列）を増やす** → `src/db/schema.ts` に足す →
-`npm run db:generate` → `src/routes/admin.tsx` のフォームと
-`src/routes/public.tsx` の表示に足す。`drizzle/` の SQL は手で書かない。
+`npm run db:generate` → `src/routes/admin/members.tsx` のフォームと
+`src/routes/public/member-screens.tsx`（個人ページ）・`src/ui/components.tsx`（名札・
+カード）の表示に足す。`drizzle/` の SQL は手で書かない。
 
 **見た目のプリセットを増やす** → `src/theme.ts` の一覧に1つ足す →
 `public/app.css` に同じ key の `[data-layout]` / `[data-accent]` /
@@ -562,9 +586,10 @@ GitHub / メールを出さない（本文にボタンがあり、同じ行き�
 
 **トップの節を足す・外す・並べ替える** → 管理画面の「構成」から。コードは触らない。
 
-**ブロックの種類を増やす** → **4か所**。`src/blocks.ts` に1行足す → 中身を描く部品を
-`src/ui/components.tsx` に置く → `src/routes/public.tsx` の `renderBlock` に1分岐 →
-`src/routes/admin.tsx` の `blockScreens` に1分岐（「N 画面」の知らせ）。後ろの2つは
+**ブロックの種類を増やす** → **4か所**。`src/blocks.ts` の `BLOCK_TYPES` に1行足す →
+同じファイルの `blockPages` に1分岐（何画面になるか。公開ページが節を出すかどうかと、
+管理画面の「N 画面」が同じこの1本を読む）→ 中身を描く部品を `src/ui/components.tsx` に
+置く → `src/routes/public/blocks.tsx` の `renderBlock` に1分岐。2つの分岐は
 `switch` に `default` を置いていないので、足し忘れると TS2366 で落ちる。
 中身が無ければ `null` を返して節ごと出さないこと。body は他と同じく「1行1件・`|`
 区切り」で持ち、`parseLines` で開く。中身を「画面に割る単位」に開く式は
@@ -623,7 +648,7 @@ GitHub / メールを出さない（本文にボタンがあり、同じ行き�
 中身が空なら下書きでも作らせない（空の行を一覧に増やさない）。
 
 **作品の保存は、全部書けるか何も書かないか。** 行・タグ・リンク・転送表を1つの
-`db.batch`（D1 ではトランザクション）で書く（`src/routes/admin.tsx` の `childWrites`）。
+`db.batch`（D1 ではトランザクション）で書く（`src/routes/admin/items.tsx` の `childWrites`）。
 1本ずつ await していたころは、途中で落ちると前のタグとリンクだけが消えた。新しく作る
 ときの子の行は、親を slug で引く（`(SELECT id FROM items WHERE slug = ?)`。slug は保存の
 前に決まっていて unique なので、同じ batch の先の INSERT が作った行を指せる）。
@@ -658,17 +683,18 @@ DB の部分一意索引（`blocks_fixed_once`。種類の一覧は `src/blocks.
 `npm run check:fit` を通すこと——設計サイズ9通り × 書体3つを、seed と上限ちょうどの fixture の中身で実際にブラウザで測る。数えるだけなら
 `screenCount`、行を割るなら `chunk`（どちらも `src/lib/paginate.ts`）。
 
-**画面や URL を足す・変える** → `src/routes/public.tsx` の**登録順の決まりを守る**
+**画面や URL を足す・変える** → `src/routes/public/routes.ts` の**登録順の決まりを守る**
 （下の「気をつける場所」）。新しい**連なり**（作品の恒久リンクのような URL の族）を
 足したら、`/sitemap.xml` の数え上げにも1行足す——足さないと、その URL だけが検索から
-見えない。画面の連なりそのもの（前後・目次・通し番号・canonical）は
+見えない（`src/routes/public/crawl.ts`）。画面の連なりそのもの（前後・目次・ページャの数・canonical）は
 `src/lib/sequence.ts` が1本で持っているので、`Step[]` を作って `sequence()` に渡せば
 ページャも目次も付いてくる。`docs/screens.md` と `docs/flow.md` も同じ変更の中で直す。
 実装とずれた図は、無いよりたちが悪い。
 
 **作品の恒久リンクの URL を変える** → `src/ui/components.tsx` の `itemHref` /
-`itemStoryHref` と `src/routes/public.tsx` のルート4本（`/apps/item/:slug` と
-`…/:slug/story`、`/works/item/:slug` と `…/:slug/story`）はセット。片方だけ変えると 404 になる。
+`itemStoryHref` と `src/routes/public/routes.ts` のルート（区分ごとに `/<語>/item/:slug` と
+`…/:slug/story`）はセット。1語目はどちらも `src/domain.ts` の `ITEM_KINDS` の `path`
+から作るので、語を変えるならそこ1か所。形（3語・4語目の `story`）を変えるなら両方。
 
 **slug は管理画面から変えてよい。前の URL は新しい URL へ 301。** 作品とメンバーの
 slug を変える保存は、前の slug を転送表（`item_slug_redirects` / `member_slug_redirects`）
@@ -719,6 +745,16 @@ D1 の `user_identities` の行（外すときは行を消す）。手順は REA
 
 ## 触るときの作法
 
+- **コメントは WHY を厚く書く。ただし「いま成り立つ理由」だけを。** 決まりの理由
+  （なぜこの形か・外すと何が壊れるか）は省かない。経緯（「以前は〜だった」）は、
+  いまの判断の理由として要るぶん——外すと同じ失敗に戻る、の1〜2文——だけに縮め、
+  実測の推移や細かな顛末はコミットメッセージに置く。コメントは検査より強い権威と
+  して読まれるのに、検査では守られない。**実装を変えた日は、その実装を説明していた
+  コメント（ほかのファイルのものも、CLAUDE.md・README・docs も）を grep して同じ変更の
+  中で直す。** 名前を変えた・消した関数やファイル、畳んだ URL（`/apps`）を「いまの
+  もの」として書いたコメントを残さない。安全の根拠を述べる箇所（ガードを省いてよい
+  理由・ヘッダを付ける理由・層を分ける理由）はとくに正確に。名指ししたファイルが
+  在ることと層の向きは `test/source.test.ts` が見ている
 - `npm run typecheck` `npm run lint` `npm test` を通してから push する。CSS や
   件数・字数・マークアップの高さを触ったら `npm run check:fit` も（dev サーバを自分で
   立てて実際に測る。`npm test` は workerd の中で動くので版面を持たない）
@@ -764,7 +800,8 @@ D1 の `user_identities` の行（外すときは行を消す）。手順は REA
   床が止めるのは「消えた・ほぼ消えた」までで、1割の目減りではない
 - 直した不具合には、同じ形のテストを1つ足す（`test/` の既存のものに倣う）。CSS の
   不変条件は `test/theme.test.ts` の `ruleWith` / `blockAt` / `bodyOf` で、
-  **必ずコメントを落とした写し（`sheet`）を読む**——app.css は WHY を厚く書く決まりで、
+  **必ずコメントを落とした写し（`sheet`）を読む**——app.css は WHY を厚く書く決まり（この節の
+  頭）で、
   規則をそのまま引用したコメントに当たって永久に緑になったことが実際に3件ある。
   管理画面の規則は `adminSheet`（admin.css の写し）、段や書体のようなサイト全体の
   決まりは2枚を合わせた `sheets` を読む（「文字の段」の許可リストは2枚を数える）。
@@ -838,7 +875,7 @@ D1 の `user_identities` の行（外すときは行を消す）。手順は REA
 
 ## 気をつける場所
 
-- **固定のルートは `/:screen` より前に登録する。** `src/routes/public.tsx` の
+- **固定のルートは `/:screen` より前に登録する。** `src/routes/public/routes.ts` の
   `/:screen` と `/:screen/:page` は1語・2語の URL を何でも拾う catch-all で、
   いちばん最後に置いてある。あとから固定ルート（`/all` `/robots.txt` `/sitemap.xml`
   `/members/:slug` `/apps/item/:slug` のたぐい）をその下に足すと、一致が catch-all に
@@ -848,7 +885,7 @@ D1 の `user_identities` の行（外すときは行を消す）。手順は REA
   - catch-all は1語目が**画面の名前の形**（`SCREEN_NAME`: 決まった中身の種類
     `FIXED_BLOCK_KEYS` か `block-<id>`）のときだけ D1 に聞く。ほかは聞かずに 404——
     `/wp-login.php` や `/.env` を探し回る要求が、1本ごとに D1 を4本引いていた。
-    画面の名前の付け方（`renderBlock` の `id`）を変えるなら、ここも一緒に変えること。
+    画面の名前の付け方（`src/routes/public/blocks.tsx` の `renderBlock` の `id`）を変えるなら、ここも一緒に変えること。
     変え忘れると、その画面だけが静かに 404 になる
 - **`<html>` を直に書かない。** 外枠（`Layout` / `AdminLayout` / `AdminBare` /
   `src/index.tsx` の `ErrorPage`）はどれも `src/ui/components.tsx` の
@@ -894,7 +931,7 @@ D1 の `user_identities` の行（外すときは行を消す）。手順は REA
     CSP を変えたら同じことを確かめること——`npm test` は workerd の中で動き、
     ブラウザの CSP を持たない
 - **公開ページの「管理画面」の入口はログイン中だけ出る。** 判定は
-  `src/routes/public.tsx` の `adminHref`（クッキーが無ければ D1 に聞かない）で、
+  `src/routes/public/page.tsx` の `adminHref`（クッキーが無ければ D1 に聞かない）で、
   出したページは `cache-control: private, no-store`。外すと、共有のキャッシュに
   置かれた「入口つきのページ」が次の訪問者に出る（下の写しも、セッションのクッキーを
   持つ要求と `cache-control` を持つ応答を通さないことで同じ約束を守っている）。行き先は同じファイルの
@@ -940,7 +977,7 @@ D1 の `user_identities` の行（外すときは行を消す）。手順は REA
 - **`/images/*`** は KV をそのまま読む。いまの KV には画像と、上の写しの版の1行
   （`site:version`）しか無い（ログイン試行の記録はパスワードのログインと一緒に
   無くなった）。版の行が外から読めないのも、キーの形の検査のおかげで、その検査
-  （`src/routes/public.tsx` の `IMAGE_KEY`: `avatars/` か `items/` の下の、英数字で
+  （`src/routes/public/images.ts` の `IMAGE_KEY`: `avatars/` か `items/` の下の、英数字で
   始まり英数字と `. _ -` だけの名前）は外さない・緩めないこと。この URL は KV の
   キーを外に開く口で、あとから同じ KV に何かを置いた日に、それが黙って読めるように
   なる（実際、以前は `login:<メール>` が同居していた）。置き場を足すときは `( | )` に
@@ -961,7 +998,7 @@ D1 の `user_identities` の行（外すときは行を消す）。手順は REA
   ブラウザ以外からしか来ず、管理画面の POST はどれも Lax のセッションのクッキーが
   要るので、別のサイトからは成り立たない。**クッキー無しで受ける POST を足すなら**
   （昔のパスワードのログインのような）、この「3つとも無ければ通す」を見直すこと
-- **ログインは GitHub / Google の OAuth だけ。** 往復は `src/routes/admin.tsx` の
+- **ログインは GitHub / Google の OAuth だけ。** 往復は `src/routes/admin/auth.tsx` の
   `/admin/auth/:provider/start` と `callback`（壁の外・`sameOrigin` の内側。どちらも
   GET なので Origin は見ない）、提供元との約束は `src/lib/oauth.ts`、誰を通すかは
   `src/lib/auth.ts` の `userForIdentity`。パスワード・`/admin/setup`・
