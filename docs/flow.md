@@ -7,7 +7,8 @@ GitHub 上でそのまま図として表示される（Mermaid）。画面の一
 
 公開ページは1画面に1つぶん。ページはスクロールせず、移動は普通のフルページ遷移で
 やる。見る人は連なりをめくるか、目次で飛ぶか、カードから作品1件へ入るか、
-個人ページへ抜けるかの4つだけ。
+Team のカードから個人ページへ入るかの4つだけ。個人ページも柱と目次はサイトのままで、
+Team の続きとしてめくり、最後は Contact へ抜ける。
 
 ```mermaid
 flowchart LR
@@ -18,7 +19,8 @@ flowchart LR
     Item["作品1件（恒久リンク）<br>/apps/item/:slug ・ /works/item/:slug"]
     Whole["全体 GET /all<br>（縦に伸びる唯一の1本）"]
     Profile["メンバー個別<br>/members/:slug"]
-    MScreen["その人の画面<br>/about ・ /skills ・ /career ・ /contact<br>（続きは …/:page）"]
+    MScreen["その人の画面<br>/about ・ /skills ・ /career<br>（続きは …/:page）"]
+    Contact["サイトの Contact<br>/contact"]
     Mail["メールソフト"]
     NotFound["404"]
     Admin["管理画面（その画面を直す場所）"]
@@ -40,21 +42,23 @@ flowchart LR
     Page -->|"カードの題"| Item
     Item -->|"目次（戻る道はこれだけ）"| Screen
 
-    Screen -->|"Team のカード / Profile ↗"| Profile
+    Screen -->|"Team のカード / Profile →"| Profile
     Screen -->|"カードの担当者名（2人以上、または Team が無いとき）"| Profile
+    Profile -->|"ページャ ← Team"| Screen
     Profile -->|"左上のロゴ"| Top
-    Profile -->|"ページャ 次 → / 目次"| MScreen
-    MScreen -->|"ページャ ← 前（1枚目は目次に無い）"| Profile
-    MScreen -->|"目次 About・Skills・Career・Contact"| MScreen
+    Profile -->|"ページャ About →"| MScreen
+    MScreen -->|"ページャ ← その人の名前"| Profile
+    MScreen -->|"ページャ（About → Skills → Career）"| MScreen
+    MScreen -->|"最後の画面の Contact →"| Contact
+    Profile -->|"目次（サイトのもの。Team に印）"| Screen
+    MScreen -->|"目次（サイトのもの。Team に印）"| Screen
     Profile -->|"Apps · Works の帯"| Filtered
-    MScreen -->|"目次の Apps · Works"| Filtered
 
     Top -->|"柱の足元（900 以上）"| Whole
     Screen -->|"柱の足元（900 以上）"| Whole
     Whole -->|"左上のロゴ"| Top
 
     Screen -->|"Contact の画面（メール / GitHub）"| Mail
-    MScreen -->|"Contact の画面（メール / GitHub）"| Mail
     Profile -.->|"下書き / 存在しない slug"| NotFound
     MScreen -.->|"書いていない画面"| NotFound
     Page -.->|"範囲の外のページ数"| NotFound

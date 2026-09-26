@@ -544,8 +544,23 @@ const MemberForm = (props: {
             value={value('sortOrder', '10')}
             hint="小さいほど先。10刻み"
           />
-          <Field label="GitHub URL" name="github" value={value('github')} />
-          <Field label="Email" name="email" type="email" value={value('email')} />
+          {/*
+            個人ページは柱も Contact もサイトのものを使う。この人の行き先が出るのは、
+            サイトの行き先と違うときの1枚目だけ（同じ行き先を2つ置かない）
+          */}
+          <Field
+            label="GitHub URL"
+            name="github"
+            value={value('github')}
+            hint="サイトの GitHub と違うときだけ、個人ページの1枚目に出る"
+          />
+          <Field
+            label="Email"
+            name="email"
+            type="email"
+            value={value('email')}
+            hint="サイトのメールと違うときだけ、個人ページの1枚目に出る"
+          />
           {/*
             紹介文は個人ページの About 1枚に全段落が出る（件数で割れない）。
             段落の数も高さを決めるので、字数と一緒に添える

@@ -88,10 +88,11 @@ export function stepAt(steps: Step[], href: string | null): number {
 /*
   index 枚目を出すための一式。範囲の外（-1 を含む）なら null を返す。
 
-  tail は連なりの外にある行き先（個人ページの「Apps · Works」）。めくって着く先
-  ではないので、目次の最後に置いて、ページャとは別のものだと分かるようにする。
+  2つの連なりをつなぐ（個人ページを Team の続きに差し込む）ときは、呼ぶ側が
+  列を継ぎ合わせてからここへ渡す。目次とページャを別の列から取りたいときも
+  同じで、2回呼んで要るほうを取る（src/routes/public.tsx の renderMemberScreen）。
 */
-export function sequence(steps: Step[], index: number, tail: NavLink[] = []): Sequence | null {
+export function sequence(steps: Step[], index: number): Sequence | null {
   const current = steps[index]
   if (!current) return null
 
@@ -124,7 +125,7 @@ export function sequence(steps: Step[], index: number, tail: NavLink[] = []): Se
   return {
     index,
     current,
-    nav: [...nav, ...tail],
+    nav,
     pager:
       steps.length > 1
         ? {

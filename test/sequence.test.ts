@@ -93,12 +93,25 @@ describe('画面の連なり', () => {
     expect(sequence(STEPS, -1)).toBeNull()
   })
 
-  it('連なりの外の行き先は目次のいちばん最後', () => {
-    const seq = sequence(STEPS, 0, [{ href: '/apps?member=okazaki', label: 'Apps · Works' }])
-    expect(seq?.nav.at(-1)?.label).toBe('Apps · Works')
-    // めくって着く先ではないので、ページャの数には入らない
-    expect(seq?.pager?.total).toBe(1)
-    expect(seq?.pager?.next).toBe('/apps')
+  it('継ぎ合わせた列では、継ぎ目の手が隣の連なりの節を名乗る', () => {
+    /*
+      個人ページは Team の直後に差し込んだ列でめくる（renderMemberScreen）。
+      1枚目の「←」は Team を、最後の「→」は Contact を名乗る——「← 前」の
+      ままだと、別の連なりへ出ることが押す前に分からない
+    */
+    const spliced = [
+      step('team', '/team', 'Team'),
+      step('member:', '/members/okazaki', '岡崎 昂功'),
+      step('member:about', '/members/okazaki/about', 'About'),
+      step('contact', '/contact', 'Contact'),
+    ]
+    const first = sequence(spliced, 1)?.pager
+    expect(first?.prevSection).toBe('Team')
+    expect(first?.nextSection).toBe('About')
+    const last = sequence(spliced, 2)?.pager
+    expect(last?.prevSection).toBe('岡崎 昂功')
+    expect(last?.nextSection).toBe('Contact')
+    expect(last?.next).toBe('/contact')
   })
 })
 

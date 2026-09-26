@@ -539,40 +539,14 @@ main {
   letter-spacing: 0.03em;
 }
 
-.brand--sm {
-  color: var(--ink-mid);
-  gap: var(--sp-2);
-}
-
-.brand--sm .brand__word {
-  font-size: var(--fs-label);
-}
-
-.brand--sm:hover {
-  color: var(--ink);
-}
-
 .identity__tagline {
   color: var(--ink-weak);
   font-size: var(--fs-meta);
 }
 
-.identity__name {
-  font-size: var(--fs-lg);
-  font-weight: 600;
-  line-height: 1.4;
-}
-
 .identity__role {
   color: var(--ink-mid);
   font-size: var(--fs-sm);
-}
-
-.identity__place {
-  color: var(--ink-weak);
-  font-size: var(--fs-label);
-  font-family: var(--font-mono);
-  letter-spacing: 0.04em;
 }
 
 .avatar {
@@ -1003,6 +977,43 @@ main {
   font-size: var(--fs-display-sm);
 }
 
+/*
+  個人ページの1枚目の名札（components.tsx の Nameplate）。Team のカードと同じ
+  並び——顔・名前・肩書きと所在地——で、カードを押した先で同じ顔に着く。
+  柱はサイトのものなので、その人の顔と名前はここにしか出ない。
+
+  名前は h1 になることがある（大見出しを書いていない人）。上の .hero h1
+  （0,1,1）の大見出しの書き方を継がないよう、2つのクラス（0,2,0）で書き、
+  書体・大きさ・字詰めを自分で持つ。
+*/
+.nameplate {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+.nameplate__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+  text-align: start;
+}
+
+.nameplate .nameplate__name {
+  font-family: inherit;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  font-feature-settings: normal;
+  line-height: 1.4;
+  letter-spacing: normal;
+}
+
+.nameplate__meta {
+  color: var(--ink-mid);
+  font-size: var(--fs-sm);
+}
+
 .hero p {
   max-width: 54ch;
   color: var(--ink-mid);
@@ -1028,11 +1039,12 @@ main {
 
 .hero h1 .phrase,
 .hero > p,
+.hero > .nameplate,
 .hero > .band {
   animation: rise-in var(--dur-spring) var(--ease-spring) backwards;
 }
 
-/* 肩書き → 見出しの塊 → リード文 → 帯の順 */
+/* 肩書き（個人ページでは名札） → 見出しの塊 → リード文 → 帯の順 */
 .hero h1 .phrase {
   animation-delay: calc((var(--i, 0) + 1) * var(--stagger));
 }
@@ -1041,7 +1053,8 @@ main {
   animation-delay: calc(2 * var(--stagger));
 }
 
-.hero > .hero__role {
+.hero > .hero__role,
+.hero > .nameplate {
   animation-delay: 0s;
 }
 
@@ -1408,7 +1421,7 @@ main {
     scale var(--dur-spring) var(--ease-spring);
 }
 
-/* 狭い画面では Profile ↗ を下の行に落とし、名前と一言に幅を渡す */
+/* 狭い画面では Profile → を下の行に落とし、名前と一言に幅を渡す */
 .member--wide {
   display: flex;
   align-items: center;
@@ -2995,8 +3008,9 @@ body[data-layout='center'] .hero p {
   margin-inline: auto;
 }
 
-/* 帯は素の姿では左に寄せてある（justify-self / align-self）。ここで中央へ */
-body[data-layout='center'] .band {
+/* 帯と名札（個人ページ）は素の姿では左に寄せてある（justify-self / align-self）。ここで中央へ */
+body[data-layout='center'] .band,
+body[data-layout='center'] .nameplate {
   justify-self: center;
   align-self: center;
   text-align: start;
@@ -3465,13 +3479,12 @@ body[data-layout='magazine'] .head {
     }
 
     /*
-      名札の中身も横に寝かせる。個人ページの名札はトップより中身が多く
-      （顔・名前・肩書き・所在地）、縦積みのままだと帯だけで 188.7px——
-      トップの帯 30.1px の6倍、画面の 1/4 を使ってしまう。
-      （188.7px = rail の個人ページ、30.1px = rail のトップ。どちらも
-      @390x844, Hiragino Sans, macOS Chromium。プリセットを書き落とさないこと——
-      同じトップの帯でも center では 64.2px で、条件抜きの数だけ並べると
-      食い違って見える）
+      名札の中身も横に寝かせる。縦積みのままだと帯が何段にも伸びて、そのぶん
+      本文の予算が減る（トップの帯は rail で 30.1px、center で 64.2px =
+      @390x844, Hiragino Sans, macOS Chromium。プリセットを書き落とさないこと
+      ——条件抜きの数だけ並べると食い違って見える）。
+      個人ページも同じ柱を使う。以前は個人ページ専用の名札（顔・名前・肩書き・
+      所在地）で、帯だけで 188.7px を取っていた。
     */
     :where(body[data-layout]:not([data-whole])) .identity {
       flex-direction: row;
@@ -3481,10 +3494,9 @@ body[data-layout='magazine'] .head {
     }
 
     /*
-      帯に入らないものは畳む。畳むのは6つ——顔（飾りなので alt は空）、所在地、
-      ひとこと、肩書き、柱の中の GitHub / Mail、著作権表示。ロゴと目次（個人
-      ページでは名前も）に場所を譲る。900 以上の柱と、縦に伸びる全体ページ
-      （/all）では今までどおり出る。
+      帯に入らないものは畳む。畳むのは4つ——肩書き、ひとこと、柱の中の
+      GitHub / Mail、著作権表示。ロゴと目次に場所を譲る。900 以上の柱と、
+      縦に伸びる全体ページ（/all）では今までどおり出る。
 
       **畳んだぶんが「どこにも無くなる」ものを、この中に入れてはいけない。**
       GitHub のプロフィールはかつてここにしか無く、この1行がスマホからの
@@ -3495,21 +3507,16 @@ body[data-layout='magazine'] .head {
       肩書きも同じ理由で畳んでよい: Team の画面のカード（.member__role）と、
       入口の <title> / meta description / JSON-LD の jobTitle に残っている。
 
-      名前（.identity__name）はここに入れない。いまこれを持つのは個人ページの
-      名札だけで、そこは誰のページかを名乗る場所（1枚目の h1 はふつう見出しの
-      一文で、2枚目からは名前がほかのどこにも出ない）。いちばん人の多い幅で
-      消したら意味が無い。サイトの柱には名前を置いていない——名乗るのは入口の
-      Hero の h1。
+      柱に名前は置いていない（個人ページでも）。名乗るのは入口の Hero の h1 と、
+      個人ページの1枚目の名札（.nameplate、本文の側なので幅では畳まれない）。
 
       肩書きを畳むのは幅の勘定でもある。390 の帯は 358px しかなく、
       名前と肩書きを両方出すと名札が 310px を取って目次が 36px になる
-      （必要 220px）。肩書きを畳むと名札 200px・目次 146px。個人ページの
-      目次も 70px → 180px に戻る。高さは1pxも動かない——設計サイズ3つ ×
+      （必要 220px）。肩書きを畳むと名札 200px・目次 146px。
+      高さは1pxも動かない——設計サイズ3つ ×
       3骨格 × 12URL で、ページの動きも弁の開きも畳む前と同じ0のまま
       （146px = rail @390x844, Hiragino Sans, macOS Chromium）。
     */
-    :where(body[data-layout]:not([data-whole])) .identity .avatar,
-    :where(body[data-layout]:not([data-whole])) .identity__place,
     :where(body[data-layout]:not([data-whole])) .identity__role,
     :where(body[data-layout]:not([data-whole])) .identity__tagline,
     :where(body[data-layout]:not([data-whole])) .identity .socials,
@@ -3529,8 +3536,7 @@ body[data-layout='magazine'] .head {
 
       右端をぼかすのは、切れていることを見せるため。ページ自体が動かないので、
       帯が切れていることに気づく手がかりが他に1つも無い（タッチ端末では
-      スクロールバーも出ない）。390px の個人ページの目次は、番号を落とした
-      あとでも 272px の帯に収まらない。
+      スクロールバーも出ない）。
     */
     body[data-layout]:not([data-whole]) .toc {
       flex: 1;

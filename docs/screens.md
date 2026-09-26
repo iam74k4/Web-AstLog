@@ -20,8 +20,8 @@
 | --- | --- | --- | --- |
 | 全体 | `GET /all` | 公開中のブロックを全部、1ページに縦に積んで | その節ごと出さない。見出しだけ残さない |
 | トップ | `GET /` | 連なりの先頭の画面（ふつうは Hero） | 置いたものが全部空なら「まだ何も置いていません」 |
-| メンバー個別 | `GET /members/:slug` | 名乗りと、この人の一覧への帯 | 下書き・不明な slug は 404 |
-| メンバーの画面 | `GET /members/:slug/:screen` | `about` `skills` `career` `contact` | 書いていない画面は 404 |
+| メンバー個別 | `GET /members/:slug` | 名札（顔・名前・肩書きと所在地）と大見出しと、この人の一覧への帯 | 下書き・不明な slug は 404 |
+| メンバーの画面 | `GET /members/:slug/:screen` | `about` `skills` `career`（`contact` はサイトの `/contact` へ 301） | 書いていない画面は 404 |
 | その画面の続き | `GET /members/:slug/:screen/:page` | 2画面目から（`/members/okazaki/career/2`） | 範囲の外は 404。`…/1` は `…` へ 303 |
 | 作品1件（app） | `GET /apps/item/:slug` | その作品だけの画面 | 下書き・不明な slug は 404 |
 | 作品1件（work） | `GET /works/item/:slug` | 同上 | 1語目と種類が食い違う URL も 404 |
@@ -176,13 +176,25 @@ canonical を `/` にしていたころは、中身が全部ある唯一のペ�
 個人ページもトップと同じ規則の連なりで、1画面 = 1ドキュメント。件数の軸も同じ形で
 持つ（`src/blocks.ts` の `MEMBER_PER_SCREEN`。割るのは同じ `src/lib/paginate.ts`）。
 
+**個人ページはサイトの Team の続き。** 柱と目次はサイトのまま（目次は Team に印）で、
+ページャはサイトの列の Team の直後にこの人の画面を差し込んだ列でめくる。
+
+```
+Team ──カード──▶ 1枚目 ──▶ About ──▶ Skills ──▶ Career ──▶ Contact（サイトの締め）
+  ◀── ← Team ───┘                                  └── Contact → ──▶
+```
+
+以前は柱（顔・名前・所在地）も目次（About / Skills / Career / Contact /
+Apps · Works）も個人ページ専用のものに丸ごと入れ替わり、Team のカードを押すと
+別のサイトへ飛んだように見えた。1枚目には「←」が無く、Team へ戻る道はロゴ
+（入口まで戻る）しか無かった。
+
 | パス | 出すもの | 出す条件 | 1画面あたり |
 | --- | --- | --- | --- |
-| `/members/<slug>` | 名乗り（大見出し）と、この人の一覧への帯 | 常に | 画面まるごと |
+| `/members/<slug>` | 名札（顔・名前・肩書きと所在地）と大見出しと、この人の一覧への帯 | 常に | 画面まるごと |
 | `/members/<slug>/about` | 紹介文 | 常に。空なら「準備中です」 | 6 段落 |
 | `/members/<slug>/skills` | 技術 | 書いてあるときだけ | 3 塊 |
 | `/members/<slug>/career` | 経歴 | 書いてあるときだけ | 5 行 |
-| `/members/<slug>/contact` | 連絡先（無ければサイトの宛先） | 常に | 画面まるごと |
 
 割れた2画面目からは `/members/<slug>/<screen>/<page>`（例
 `/members/okazaki/career/2`）。1画面目は `…/<screen>` ひとつに寄せてあり、`…/1` は
@@ -203,21 +215,24 @@ canonical を `/` にしていたころは、中身が全部ある唯一のペ�
 - About を空でも残すのは、まだ書いていないのか URL を間違えたのかを、読み手が
   見分けられるようにするため
 - 入口は `/members/<slug>` ひとつ。1枚目に2つ目の URL（`…/hero`）は作らない
-- Apps / Works のカードはここに複製しない。帯と目次の「Apps · Works」から
+- Apps / Works のカードはここに複製しない。1枚目の帯から
   `/apps?member=<slug>` へ送り、一覧をその人で絞り込んだ1画面目に着かせる。
   Apps が0件の人は `/works?member=<slug>` へ。どちらも0件なら帯ごと出さない。
   **トップに置いていない節へは送らず、その件数も数えない**（Works を外した
   サイトでは `Apps 2` だけ）。1人のサイトでは `?member=` を付けない
-- 目次は About → Skills → Career → Contact を順に並べ、連なりの外にある
-  「Apps · Works」を最後に置く。**1枚目は目次に載らない**（トップの Hero と同じ
-  扱い）。1枚目へ1押しで戻れるのはページャの「← 前」だけ——左上のロゴは
-  サイトのトップ `/` へ行く
-- 柱の名前は `<p class="identity__name">`。`h1` は `main` の側にある（柱はどの画面
-  にも同じ文字列で出るので、`h1` にすると全画面の見出しが同じになる）。1枚目の
-  `h1` は `<h1 class="hero__headline">`
-- 900 未満では名札を横帯に畳む。顔・所在地・肩書きはそこで畳まれる（`/all` と
-  900 以上の柱では今までどおり出る）。肩書きは Team のカード・`<title>`・
-  `description`・JSON-LD の `jobTitle` に残る
+- 目次はサイトのもの（Apps / Works / Team / Contact）で、印は Team に付く
+  （作品1件のページが、載っている一覧に印を付けるのと同じ借り方）。About /
+  Skills / Career はページャでめくる。ページャは節をまたぐ手だけ行き先を名乗る——
+  1枚目の「← Team」、About の「← 岡崎 昂功」、最後の画面の「Contact →」
+- Team の画面自身の「次」は変えない（Contact のまま）。個人ページはカードから入る
+  脇の道で、何人いても Team の次は Contact。Team を置いていないサイト（カードの
+  担当者名から入る）では、差し込む先が無いのでその人の画面だけで連ねる
+- 顔と名前は1枚目の名札（`.nameplate`）にだけ出る。Team のカードと同じ並びで、
+  押した先で同じ顔に着く。`h1` は大見出し（`<h1 class="hero__headline">`）、
+  大見出しを書いていない人では名札の名前（`<h1 class="nameplate__name">`）
+- 連絡先はサイトの Contact に合流させた。`/members/<slug>/contact` はそこへ 301
+  （サイトに Contact が無ければ 404）。サイトと違う GitHub / メールを持つ人だけ、
+  1枚目にその行き先を置く（同じ行き先を2つ置かない）
 - 構造化データは `Person`。公開中が1人のあいだは `worksFor` を出さない——トップが
   同じ URL を `Person` として名乗っているので、書くと1つの URL が2つの型を持つ
 

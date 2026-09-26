@@ -31,11 +31,10 @@ import type { AppEnv } from '../env'
 import { getSessionUser, SESSION_COOKIE } from '../lib/auth'
 import { isSafeRedirect, paragraphs, parseLines, parseSkills } from '../lib/format'
 import { chunk, screenCount } from '../lib/paginate'
-import { type NavLink, type Sequence, type Step, sequence, stepAt } from '../lib/sequence'
+import { type Sequence, type Step, sequence, stepAt } from '../lib/sequence'
 import { SITE } from '../site'
 import type { Theme } from '../theme'
 import {
-  Avatar,
   Band,
   Brand,
   Empty,
@@ -50,6 +49,7 @@ import {
   MemberCardCompact,
   MemberCardWide,
   MoonField,
+  Nameplate,
   Note,
   NowList,
   Numbers,
@@ -107,25 +107,21 @@ const Socials = ({ github, email }: { github?: string | null; email?: string | n
   split は「割られた画面（1画面 = 1ドキュメント）か」。見出しが h1 に上がるのも、
   弁のための tabindex が付くのも同じ条件なので、2つの旗を持たせない。
 
-  moon は締めの月を敷くか。サイトの連なりの Contact（入口に月がある）だけが
-  立てる。個人ページの Contact には敷かない——あちらの1枚目には月が無いので、
-  締めだけに月を置くと「対」にならない。全体ページ（/all）にも敷かない
-  （入口と同じ理由。印刷・Ctrl-F・翻訳の宛先）ので、split が偽なら立っていても
-  敷かない。
+  締めの月も split のときだけ敷く。全体ページ（/all）には敷かない（入口と
+  同じ理由。印刷・Ctrl-F・翻訳の宛先）。呼ぶのはサイトの Contact ブロックだけ
+  ——個人ページの Contact は外してサイトの Contact に合流させた。
 */
 const Contact = ({
   email,
   github,
   split,
-  moon,
 }: {
   email: string
   github?: string | null
   split?: boolean
-  moon?: boolean
 }) => (
-  <Screen id="contact" label="Contact" whole={!split} moonlit={split && moon}>
-    {split && moon ? <MoonField closing /> : null}
+  <Screen id="contact" label="Contact" whole={!split} moonlit={split}>
+    {split ? <MoonField closing /> : null}
     {/*
       全体ページの見出しは節の直下に置く（ほかの節と同じ位置）。.contact の中に
       入れると、左寄せの縦積みに縮められて下線が「Contact」の字幅で切れる。
@@ -698,15 +694,7 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
         pages: 1,
         nav: 'Contact',
         description: describe(SITE.contactLead),
-        node: (
-          <Contact
-            email={SITE.email}
-            github={SITE.github}
-            split={split}
-            // サイトの連なりの締め。入口の月と対になる月を敷く
-            moon
-          />
-        ),
+        node: <Contact email={SITE.email} github={SITE.github} split={split} />,
       }
 
     // ここから打ち込むもの。目次に載せるのは見出しを持つものだけ
@@ -1354,11 +1342,19 @@ publicRoutes.get('/', (c) => renderScreen(c, null))
 /*
   個人ページの画面ひとそろい。トップと同じ規則で、1画面 = 1ドキュメント。
 
-    /members/<slug>          名乗りと、この人の一覧への帯
+    /members/<slug>          名札と大見出しと、この人の一覧への帯
     /members/<slug>/about    紹介文
     /members/<slug>/skills   技術
     /members/<slug>/career   経歴
-    /members/<slug>/contact  連絡先
+
+  **個人ページはサイトの Team の続き。** 柱と目次はサイトのまま（目次は Team に
+  印）で、ページャはサイトの列の Team の直後にこの人の画面を差し込んだ列で
+  めくる——← Team → 1枚目 → About → Skills → Career → Contact →。
+  以前は柱（顔・名前・所在地）も目次（About / Skills / Career / Contact /
+  Apps · Works）も個人ページ専用のものに丸ごと入れ替わり、Team のカードを
+  押すと別のサイトへ飛んだように見えた。戻る道もロゴ（入口まで戻る）しか
+  無かった。連絡先はサイトの Contact に合流させた（/members/<slug>/contact は
+  そこへ 301 で寄せる）。
 
   中身の無い画面は作らない（Skills と Career）。トップの「中身が無ければ節ごと
   出さない」がそのまま伸びた形で、URL も目次もページャも一度に消える。
@@ -1400,6 +1396,10 @@ function memberScreens(member: schema.Member, band: Child): MemberScreen[] {
   const skills = parseSkills(member.skillsText)
   const career = parseLines(member.careerText)
 
+  // サイトの連絡先と違うときだけ、その人の行き先として1枚目に出す
+  const ownGithub = member.github && member.github !== SITE.github ? member.github : null
+  const ownEmail = member.email && member.email !== SITE.email ? member.email : null
+
   const screens: MemberScreen[] = [
     {
       key: '',
@@ -1410,23 +1410,33 @@ function memberScreens(member: schema.Member, band: Child): MemberScreen[] {
         member.headline || bio[0] || `${member.name}（${member.role}）のプロフィール`,
       ),
       node: (
-        <>
+        <Hero>
           {/*
-            この画面のいちばん上の見出し。名札（柱）の名前ではなくこちらが h1
-            ——柱はどの画面にも同じ文字列で出るので、5画面ぶんの h1 が全部
-            同じになってしまう。見出しはその画面の中で完結させる
+            名札（顔・名前・肩書きと所在地）。柱はサイトのままなので、その人の
+            顔と名前はここにしか出ない。Team のカードと同じ並びにして、カードを
+            押した先で同じ顔に着くようにする。
+
+            見出し（h1）は大見出しがあればそれ、無ければ名札の名前。どちらでも
+            この画面の中で完結する1つの h1 になる
           */}
-          <Hero>
+          <Nameplate member={member} heading={!member.headline} />
+          {member.headline ? (
             <h1 class="hero__headline">
-              <Phrases text={member.headline || member.name} />
+              <Phrases text={member.headline} />
             </h1>
-            {/*
-              帯は id も名前も持たない。この画面に同居するだけで、目次からも
-              ページャからも指さないので、指すための名前が要らない
-            */}
-            {band}
-          </Hero>
-        </>
+          ) : null}
+          {/*
+            この人だけの連絡先。個人ページの Contact の画面は外してサイトの
+            Contact に合流させたので、サイトと違う行き先を持つ人のぶんはここに
+            置く。サイトと同じ行き先なら出さない（同じ行き先を2つ置かない）
+          */}
+          {ownGithub || ownEmail ? <Socials github={ownGithub} email={ownEmail} /> : null}
+          {/*
+            帯は id も名前も持たない。この画面に同居するだけで、目次からも
+            ページャからも指さないので、指すための名前が要らない
+          */}
+          {band}
+        </Hero>
       ),
     },
   ]
@@ -1534,20 +1544,6 @@ function memberScreens(member: schema.Member, band: Child): MemberScreen[] {
     })),
   )
 
-  screens.push({
-    key: 'contact',
-    page: 1,
-    nav: 'Contact',
-    /*
-      トップの Contact と同じ文言の画面なので、誰あての連絡先かを頭に置く。
-      置かないと、この2つの URL だけが同じ説明文のまま残る
-    */
-    description: describe(joinParts(`${member.name}への連絡先`, SITE.contactLead)),
-    node: (
-      <Contact email={member.email ?? SITE.email} github={member.github ?? SITE.github} split />
-    ),
-  })
-
   return screens
 }
 
@@ -1578,7 +1574,24 @@ async function renderMemberScreen(
   ])
   if (!member) return c.notFound()
 
-  const counts = await countMemberItems(db, member.id)
+  const solo = soloMember(members)
+  // サイトの画面の列。個人ページはこの列の Team の続きに差し込む（目次もここから借りる）
+  const none: ItemFilter = { platform: null, member: null }
+  const [counts, { screens: site }] = await Promise.all([
+    countMemberItems(db, member.id),
+    siteScreens(db, blocks, members, none, null),
+  ])
+  const siteList = siteSteps(site, none, solo)
+
+  /*
+    個人ページの Contact は外して、サイトの Contact に合流させた。貼られた
+    URL は死なせずにそちらへ寄せる（恒久的な移動なので 301）。サイトに
+    Contact を置いていなければ、寄せる先が無いので「その URL は無い」
+  */
+  if (want?.key === 'contact' && want.page === 1) {
+    const contact = siteList.find((step) => step.navKey === 'contact')
+    return contact ? c.redirect(contact.canonical, 301) : c.notFound()
+  }
 
   /*
     この人の一覧への帯。カードをここに複製せず、絞り込んだ一覧の1画面目へ送る。
@@ -1601,32 +1614,53 @@ async function renderMemberScreen(
     ) : null,
   )
 
-  const steps: Step[] = screens.map((screen) => ({
-    // 割られた画面（/career/2）でも Career の見出しに印が残る
-    navKey: screen.key,
+  const own: Step[] = screens.map((screen) => ({
+    /*
+      割られた画面（/career/2）も同じ節として数える。サイトの画面の navKey
+      （ブロックの slug）と取り合わないよう、頭に印を付ける
+    */
+    navKey: `member:${screen.key}`,
     href: memberHref(member.slug, screen.key, screen.page),
     // 個人ページに絞り込みは無いので、正の URL は開いた URL と同じ
     canonical: memberHref(member.slug, screen.key, screen.page),
-    nav: screen.nav,
+    /*
+      ページャが名乗る名前。目次には出さない（目次はサイトのもの）。1枚目は
+      名前で呼ぶ——About から戻る手が「← 前」ではなく「← 岡崎 昂功」になる
+    */
+    nav: screen.nav ?? member.name,
     title: screen.nav
       ? `${member.name} · ${screen.nav} — ${SITE.name}`
       : `${member.name} — ${SITE.name}`,
   }))
 
-  /*
-    一覧はこの人の連なりの外にある。目次の最後に置いて、めくって着く先
-    （ページャ）とは別のものだと分かるようにする。
-  */
-  const tail: NavLink[] = band ? [{ href: band.href, label: 'Apps · Works' }] : []
-
   // 1枚目は /members/<slug> だけで開く。名指し（3語目）では当たらない
-  const seq = sequence(
-    steps,
-    stepAt(steps, want === null ? null : memberHref(member.slug, want.key, want.page)),
-    tail,
-  )
-  const current = seq && screens[seq.index]
-  if (!seq || !current) return c.notFound()
+  const index = stepAt(own, want === null ? null : memberHref(member.slug, want.key, want.page))
+  const step = own[index]
+  const current = screens[index]
+  if (!step || !current) return c.notFound()
+
+  /*
+    めくる列。サイトの列の Team（割られていれば最後の画面）の直後に、この人の
+    画面を差し込む。1枚目の「←」は Team へ、最後の画面の「→」は Team の次の
+    節（ふつうは Contact）へ出る。Team の画面自身の「次」は変えない——個人
+    ページはカードから入る脇の道で、何人いても Team の次は Contact のまま。
+
+    Team を置いていないサイト（カードの担当者名から入る）では、差し込む先が
+    無いので、この人の画面だけで連ねる。
+  */
+  const teamEnd = siteList.map((one) => one.navKey).lastIndexOf('team')
+  const around =
+    teamEnd < 0 ? own : [...siteList.slice(0, teamEnd + 1), ...own, ...siteList.slice(teamEnd + 1)]
+  const pager = sequence(around, (teamEnd < 0 ? 0 : teamEnd + 1) + index)?.pager ?? null
+
+  /*
+    目次はサイトの目次のまま。印は Team に付ける——作品1件のページが「載って
+    いる一覧」に印を付けるのと同じ借り方で、印を付ける手続きは sequence に任せる
+  */
+  const nav = sequence([...siteList, { ...step, navKey: 'team', nav: null }], siteList.length)?.nav
+
+  // index は個人ページの中での位置。0（1枚目）にだけ構造化データが載る
+  const seq: Sequence = { index, current: step, nav: nav ?? [], pager }
 
   return screenPage(c, seq, {
     node: current.node,
@@ -1637,26 +1671,14 @@ async function renderMemberScreen(
       ...personJsonLd(member, `${SITE.origin}/members/${member.slug}`, {
         ...(member.github ? { sameAs: [member.github] } : {}),
         // 1人のサイトなら器は無い。2人目が公開された日に戻る
-        ...(soloMember(members)
+        ...(solo
           ? {}
           : { worksFor: { '@type': 'Organization', name: SITE.name, url: SITE.origin } }),
       }),
     },
     theme,
-    sidebar: (
-      <div class="identity">
-        <Brand size="sm" />
-        <Avatar src={member.avatarUrl} name={member.name} size={72} />
-        {/*
-          名札は h1 ではない。どの画面にも同じ文字列で出るので、h1 にすると
-          5画面ぶんの見出しが全部同じになる。各画面の h1 は main の側にある
-        */}
-        <p class="identity__name">{member.name}</p>
-        {member.role ? <span class="identity__role">{member.role}</span> : null}
-        {member.location ? <span class="identity__place">{member.location}</span> : null}
-        <Socials github={member.github} email={member.email ?? SITE.email} />
-      </div>
-    ),
+    // 柱はサイトのもの。個人ページだけの柱に入れ替えると、別のサイトへ飛んだように見える
+    sidebar: <SiteIdentity solo={solo} />,
     adminPath: `/admin/members/${member.id}/edit`,
   })
 }

@@ -8,14 +8,16 @@ import { MarkIcon, PencilIcon } from './icons'
   ここに無い形をその場で書くと、同じものが少しずつ違う姿で増える。
 */
 
-export const Brand = ({ size = 'md' }: { size?: 'sm' | 'md' }) => (
-  /*
-    md は素の姿なので修飾子を足さない（.brand--md に当たる規則は app.css に無い）。
-    sm を名指しする書き方にはしないこと——3つ目の段を足したとき、CSS の
-    書き忘れを拾えなくなる。
-  */
-  <a class={size === 'md' ? 'brand' : `brand brand--${size}`} href="/">
-    <MarkIcon size={size === 'sm' ? 17 : 27} />
+/*
+  柱の頭のロゴ。大きさは1つだけ。
+
+  小さい段（sm）は個人ページの柱のためにあったが、個人ページもサイトの柱を
+  使うようになって出番が無くなった。段を足すときは、修飾子（.brand--xx）と
+  その規則を app.css に一緒に足すこと。
+*/
+export const Brand = () => (
+  <a class="brand" href="/">
+    <MarkIcon size={27} />
     <span class="brand__word">NOCTIFEX</span>
   </a>
 )
@@ -332,6 +334,38 @@ export const ItemCard = ({ item, showMember }: { item: ItemView; showMember?: bo
 }
 
 // 1〜2人のときは横長。4列のグリッドに1人だけ置くと、未完成の一覧に見える
+/*
+  個人ページの1枚目に置く名札。顔・名前・肩書きと所在地を、Team のカード
+  （MemberCardWide）と同じ並びで出す——カードを押した先で、同じ顔と名前に着く。
+
+  個人ページの柱はサイトの柱のまま（Team の続きとして読ませる）なので、
+  その人の顔と名前はここにしか出ない。heading は「名前がこの画面の見出しか」。
+  大見出し（headline）を書いていない人では名前が h1 になる——書いている人では
+  大見出しが h1 で、名前は添え。
+*/
+export const Nameplate = ({ member, heading }: { member: Member; heading?: boolean }) => (
+  <div class="nameplate">
+    <Avatar src={member.avatarUrl} name={member.name} size={56} />
+    <span class="nameplate__body">
+      {heading ? (
+        <h1 class="nameplate__name">{member.name}</h1>
+      ) : (
+        <strong class="nameplate__name">{member.name}</strong>
+      )}
+      {member.role || member.location ? (
+        <span class="nameplate__meta">
+          {[member.role, member.location].filter(Boolean).join(' · ')}
+        </span>
+      ) : null}
+    </span>
+  </div>
+)
+
+/*
+  Team のカード。押すと個人ページ（同じタブ、サイトの枠のまま）へ入る。
+  矢印は → にする。↗ はこのサイトでは「外へ出る・別タブ」の印（リンク集・
+  作品のリンク・サイトを見る ↗）で、同じサイトの中の続きには使わない。
+*/
 export const MemberCardWide = ({ member }: { member: Member }) => (
   <a class="member member--wide" href={`/members/${member.slug}`}>
     <Avatar src={member.avatarUrl} name={member.name} size={52} />
@@ -347,7 +381,7 @@ export const MemberCardWide = ({ member }: { member: Member }) => (
     </span>
     {/* 日本語のページに素で置いた英語。印を付けないと、読み上げがローマ字読みする */}
     <span class="member__go" lang="en">
-      Profile ↗
+      Profile →
     </span>
   </a>
 )
@@ -358,7 +392,7 @@ export const MemberCardCompact = ({ member }: { member: Member }) => (
     <strong>{member.name}</strong>
     <span class="member__role">{member.role}</span>
     <span class="member__go" lang="en">
-      Profile ↗
+      Profile →
     </span>
   </a>
 )

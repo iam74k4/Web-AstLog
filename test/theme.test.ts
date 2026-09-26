@@ -388,10 +388,9 @@ describe('画面に収める外枠', () => {
   })
 
   it('狭い画面では、柱だけでなく名札の中身も横帯にする', () => {
-    // 柱を横に寝かせるだけでは足りない。個人ページの名札は中身が多く
-    // （顔・名前・肩書き・所在地）、縦積みのままだと帯だけで 188.7px——
-    // トップの帯 30.1px の6倍——を取り、そのぶん本文の予算が消える
-    // （どちらも rail @390x844, Hiragino Sans, macOS Chromium）
+    // 柱を横に寝かせるだけでは足りない。名札の中身が縦積みのままだと帯が
+    // 何段にも伸び、そのぶん本文の予算が消える（個人ページ専用の名札だった
+    // ころは帯だけで 188.7px = rail @390x844, Hiragino Sans, macOS Chromium）
     const narrow = blockAt(
       blockAt(sheet, '@supports (height: 100svh)'),
       '@media (max-width: 899px)',
@@ -401,9 +400,9 @@ describe('画面に収める外枠', () => {
     const band = narrow.slice(narrow.indexOf('.identity {'))
     expect(band.slice(0, band.indexOf('}'))).toContain('flex-direction: row')
 
-    // 帯に入らないものは畳む。顔を残すと、それだけで帯が 72px になる
-    expect(narrow).toContain('.identity .avatar')
-    expect(narrow).toContain('.identity__place')
+    // 帯に入らないものは畳む（肩書き・ひとこと・柱の GitHub / Mail）
+    expect(narrow).toContain('.identity__role')
+    expect(narrow).toContain('.identity__tagline')
   })
 
   it('全体ページの body にだけ、外枠を外す印が付く', async () => {
@@ -691,7 +690,7 @@ describe('部品の作法', () => {
     expect(bodyOf(sheet, '.side-head {')).toContain('font-weight: 400')
   })
 
-  it('狭い画面で畳むのは柱の中だけ。名前は畳まない', () => {
+  it('狭い画面で畳むのは柱の中だけ', () => {
     /*
       畳んだぶんが「どこにも無くなる」ものを、この一覧に入れてはいけない。
       素の .socials を隠していたせいで、GitHub のプロフィールが 899 以下で
@@ -699,10 +698,9 @@ describe('部品の作法', () => {
       置いた同じ部品まで巻き添えで消えるので、柱の中（.identity の子）だけを
       名指しする。
 
-      名前（.identity__name）は入れない。いまそれを持つのは個人ページの名札
-      だけで、2枚目からは名前がほかのどこにも出ない（サイトの柱には名前を
-      置いていない。名乗るのは入口の Hero の h1）。肩書きは Team のカードと
-      <title> / meta description / JSON-LD に残るので畳んでよい。
+      柱に名前は置いていない（個人ページでも）。名乗るのは入口の Hero の h1 と
+      個人ページの1枚目の名札（本文の側なので幅では畳まれない）。肩書きは
+      Team のカードと <title> / meta description / JSON-LD に残るので畳んでよい。
     */
     const narrow = blockAt(
       blockAt(sheet, '@supports (height: 100svh)'),
@@ -714,7 +712,8 @@ describe('部品の作法', () => {
     // 柱の外に置いた .socials（Contact の画面）まで消さない
     expect(fold.selector).not.toContain('[data-whole])) .socials')
     expect(fold.selector).toContain('.identity__role')
-    expect(fold.selector).not.toContain('.identity__name')
+    // 本文の側の名札（個人ページの1枚目）は幅で畳まない。そこにしか顔と名前が無い
+    expect(fold.selector).not.toContain('nameplate')
   })
 
   it('読まれない値を :root に置かない', () => {
