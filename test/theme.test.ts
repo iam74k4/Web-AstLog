@@ -1,5 +1,6 @@
-import css from 'virtual:app-css'
 import { beforeEach, describe, expect, it } from 'vitest'
+import adminCss from '../public/admin.css'
+import css from '../public/app.css'
 import { blockType } from '../src/blocks'
 import * as schema from '../src/db/schema'
 import { ACCENTS, LAYOUTS, TYPEFACES } from '../src/theme'
@@ -109,12 +110,22 @@ const bare = (source: string) => source.replace(/\/\*[\s\S]*?\*\//g, '')
 const sheet = bare(css)
 
 /*
+  管理画面だけの規則（public/admin.css）。公開ページは読まないので、公開ページの
+  版面を見る検査は sheet だけを読む。段や書体の使い方のような「サイト全体の
+  決まり」は、両方を1つにした sheets を読む——片方だけ見ると、管理画面の側に
+  生の値や 11px の和文を足しても緑のままになる。
+*/
+const adminSheet = bare(adminCss)
+const sheets = `${sheet}\n${adminSheet}`
+
+/*
   選択肢は src/theme.ts が正だが、実際に姿を変えるのは app.css。
   片方だけ足すと、選べるのに何も変わらない選択肢ができる。
 */
 describe('プリセットと CSS', () => {
   it('CSS を読めている（読めていないと、以下の検査が素通りする）', () => {
     expect(css.length).toBeGreaterThan(1000)
+    expect(adminCss.length).toBeGreaterThan(1000)
   })
 
   it('骨格には body[data-layout] の指定がある', () => {
@@ -127,6 +138,60 @@ describe('プリセットと CSS', () => {
   it('アクセント色と書体には [data-accent] / [data-typeface] の指定がある', () => {
     for (const accent of ACCENTS) expect(sheet).toContain(`[data-accent='${accent.key}']`)
     for (const typeface of TYPEFACES) expect(sheet).toContain(`[data-typeface='${typeface.key}']`)
+  })
+})
+
+/*
+  PERF-2。管理画面の規則（約 17KB）は app.css の中にあり、公開ページの訪問者の全員に
+  配られていた。いまは public/admin.css に分け、公開ページは app.css だけを読む
+  （どの外枠が何を読むかは test/headers.test.ts の「スタイルシート」）。
+*/
+describe('スタイルシートの分け方', () => {
+  // 規則のセレクタに出てくるクラス名。括りの見出し（@media …）と keyframes の段は除く
+  const classesOf = (source: string) =>
+    new Set(
+      [...source.matchAll(/([^{}]+)\{/g)]
+        .map((found) => (found[1] ?? '').trim())
+        .filter((selector) => !selector.startsWith('@') && !/^(from|to|\d+%)$/.test(selector))
+        .flatMap((selector) => [...selector.matchAll(/\.([a-zA-Z][\w-]*)/g)].map((m) => m[1])),
+    )
+
+  it('管理画面の部品の規則は admin.css にだけあり、app.css には無い', () => {
+    const admin = classesOf(adminSheet)
+    const shared = [...classesOf(sheet)].filter((name) => admin.has(name))
+    expect(shared).toEqual([])
+    // 代表を名指しで（上の突き合わせは、admin.css が空になっても緑になる）
+    for (const name of [
+      'admin-shell',
+      'admin-nav',
+      'btn',
+      'field',
+      'toggle',
+      'row',
+      'login',
+      'preset',
+    ]) {
+      expect(admin.has(name), name).toBe(true)
+    }
+  })
+
+  it('admin.css は値を持たない。:root も生の色も app.css の段を読む', () => {
+    expect(adminSheet).not.toContain(':root')
+    expect(adminSheet).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
+    expect(adminSheet).not.toMatch(/\b(rgba?|hsla?)\(/)
+  })
+
+  it('admin.css のメディアクエリも 600 / 900 と入力手段だけ', () => {
+    const queries = [...new Set(adminSheet.match(/@media[^{]+/g)?.map((q) => q.trim()))].sort()
+    expect(queries).toEqual(
+      [
+        '@media (hover: hover)',
+        '@media (max-width: 899px)',
+        '@media (min-width: 600px)',
+        '@media (min-width: 900px)',
+        '@media (pointer: coarse)',
+      ].sort(),
+    )
   })
 })
 
@@ -715,12 +780,13 @@ describe('部品の作法', () => {
       列に :has を混ぜると、:has を知らないブラウザで列ごと捨てられ、ほかの
       部品の手触りまで消える
     */
-    // 手触りの列（.btn:active から始まる1本）。最初の scale: var(--press) は知らせの keyframes なので、頭で引く
-    const head = sheet.indexOf('.btn:active,')
+    // 手触りの列（.pill-cta:active から始まる1本）。管理画面の部品の列は admin.css に同じ形で
+    const head = sheet.indexOf('.pill-cta:active,')
     const list = sheet.slice(head, sheet.indexOf('{', head))
-    expect(bodyOf(sheet, '.btn:active,')).toContain('scale: var(--press)')
+    expect(bodyOf(sheet, '.pill-cta:active,')).toContain('scale: var(--press)')
     expect(list).toContain('.back:active')
     expect(list).not.toContain(':has(')
+    expect(bodyOf(adminSheet, '.btn:active,')).toContain('scale: var(--press)')
     expect(bodyOf(sheet, '.card:has(.card__link:active) {')).toContain('scale: var(--press)')
   })
 
@@ -742,7 +808,7 @@ describe('部品の作法', () => {
     expect(printed).toContain('.back')
     expect(printed).toContain('.more')
     // 押して縮み、ホバーで地が明るくなるのも同じ
-    const head = sheet.indexOf('.btn:active,')
+    const head = sheet.indexOf('.pill-cta:active,')
     expect(sheet.slice(head, sheet.indexOf('{', head))).toContain('.more:active')
     expect(
       ruleWith(
@@ -1149,7 +1215,9 @@ describe('文字の段', () => {
       「連動」でも実体は静的な 15px（= --fs-md）だった。--fs-lead と
       --fs-section も同じで、3つとも静的な段に畳んである。
     */
-    const steps = [...new Set(sheet.match(/--fs-[a-z-]+(?=:)/g) ?? [])].sort()
+    const steps = [...new Set(sheets.match(/--fs-[a-z-]+(?=:)/g) ?? [])].sort()
+    // 段を決めるのは app.css の :root だけ。admin.css は読むだけ
+    expect(adminSheet).not.toMatch(/--fs-[a-z-]+:/)
     expect(steps).toEqual(
       [
         '--fs-base',
@@ -1170,7 +1238,7 @@ describe('文字の段', () => {
     規則ひとつずつを「セレクタ → 本文」の組にする。括り（@media など）の中の規則も
     1つの規則として数える（括りの見出しはセレクタに入らない）
   */
-  const rules = [...sheet.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((found) => ({
+  const rules = [...sheets.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((found) => ({
     selector: (found[1] ?? '').trim().replace(/\s+/g, ' '),
     body: found[2] ?? '',
   }))
@@ -1268,7 +1336,7 @@ describe('文字の段', () => {
   it('セレクタに生の文字サイズを書かない', () => {
     // .hero__headline の clamp(24px, 3vw, 38px) と .metric__value の 26px は
     // 段に寄せた。1つ残すと「ここだけ特別」が増え、段がある意味が薄れる
-    const sizes = sheet.match(/font-size:\s*[^;{}]+;/g) ?? []
+    const sizes = sheets.match(/font-size:\s*[^;{}]+;/g) ?? []
     const raw = sizes.filter((d) => !d.includes('var(--fs-') && !d.includes('var(--avatar-size'))
     expect(raw).toEqual([])
   })

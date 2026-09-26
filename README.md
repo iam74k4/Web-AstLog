@@ -12,7 +12,8 @@
 | --- | --- | --- |
 | 実行環境 | Cloudflare Workers | 常時起動のサーバーを持たずに済む |
 | データ | D1（SQLite） | メンバーと Projects（個人開発 / 業務） |
-| 画像 | KV | アバター（`avatars/`）と作品のスクリーンショット（`items/`）だけ。R2 が未有効なので当面こちら。受けるのは中身で確かめた PNG・JPEG・WebP・AVIF・GIF だけ |
+| 画像 | KV | アバター（`avatars/`）と作品のスクリーンショット（`items/`）だけ。R2 が未有効なので当面こちら。受けるのは中身で確かめた PNG・JPEG・WebP・AVIF・GIF だけ。ほかに写しの版の1行（`site:version`）が同居している |
+| 公開ページの写し | Cache API ＋ KV の版 | 訪問者の画面は D1 に聞かずに返し、D1 が落ちても前の写しを出す（下の「公開ページの写し」） |
 | 管理画面のログイン | GitHub / Google の OAuth | パスワードを持たない。本人は提供元の ID で照合する |
 | 言語 | TypeScript | |
 | ルーティング・描画 | Hono（JSX でサーバーサイドレンダリング） | クライアント側のフレームワークを持たない |
@@ -25,6 +26,11 @@
 ランタイム依存は Hono と Drizzle だけ。**公開ページに JavaScript は無い**
 （読み込む `<script src>` は0本）。絞り込みもページめくりも URL とサーバーで
 成立する。管理画面も HTML フォームと 303 リダイレクトだけで動く。
+全部の応答に CSP（`script-src 'none'`・`frame-ancestors 'none'` ほか）と
+`X-Content-Type-Options: nosniff`・`Referrer-Policy: strict-origin-when-cross-origin`
+を付けるので、この「0本」はブラウザが守る。管理画面は `Cache-Control: no-store`。
+付けているのは `src/index.tsx` のミドルウェアと、Worker を通らない `public/` の
+ファイルには `public/_headers`（決まりは `CLAUDE.md` の「応答のヘッダ」）。
 
 公開ページは1画面に1つぶんを収め、ページそのものはスクロールしない。入りきらない
 ぶんは次の URL に送る。縦に伸びるのは全体ページ（`/all`）だけ。1画面 = 1ドキュメントで、
@@ -41,8 +47,8 @@
 
 ```bash
 npm install
-npm run db:migrate:local   # ローカル D1 にスキーマを作る
-npm run db:seed:local      # 初期データを入れる
+npm run db:migrate:local   # ローカル D1 にスキーマと選択肢（platforms）を作る
+npm run db:seed:local      # 初期データを入れる（ローカルの中身を全部入れ直す）
 npm run dev                # http://localhost:8787
 ```
 
@@ -175,17 +181,113 @@ npx wrangler d1 create noctifex          # 出力の database_id を wrangler.to
 npx wrangler kv namespace create MEDIA   # 出力の id を wrangler.toml へ
 ```
 
+2つの id は秘密ではないので、`wrangler.toml` に書いて**コミットする**。
+`TO_BE_CREATED` のままだと、本番に触れる入口（deploy ワークフロー・`npm run deploy`・
+`npm run db:migrate`・本番の seed）は `scripts/check-ids.mjs` が直し方を言って止める
+（`npm run check:ids` で先に確かめられる）。check の「ビルド」（`wrangler deploy --dry-run`）
+は id を見ないので、プレースホルダでも緑のまま。
+
 OAuth のクライアントの secret も入れる（上の「管理画面に入る」）。
 
-以降は、
+空の D1 に、スキーマと最初の中身を入れる（一度きり）。
 
 ```bash
-npm run db:migrate   # スキーマを変えたときだけ
-npm run deploy
+npm run db:migrate                       # スキーマとプラットフォームの選択肢
+npm run db:seed:remote:destroys-prod     # 移行前の index.html の中身
 ```
 
-`npm run db:seed` は本番では最初の一度だけ。中の `DELETE` が全部消すので、
-運用が始まったら流さないこと。
+`seed.sql` は作品・メンバー・構成を**全部消してから**入れ直す。本番向けの名前が長いのは
+わざとで、中身の `scripts/seed-remote.mjs` は本番の件数を数え、作品・メンバー・構成の
+どれかが1行でもあれば流さずに止まる。運用が始まった D1 に seed の出番は無い
+（中身は管理画面から変える）。ローカルは `npm run db:seed:local`。
+
+### 出す
+
+ふだんは Actions の **deploy** ワークフロー（手動実行）から出す。やることは決まっていて、
+選ぶものは無い。
+
+1. main から実行しているか、`wrangler.toml` の id が入っているかを見る（違えば止まる）
+2. check と同じ門を通す（型・lint・テスト・ビルド・`check:fit`・`check:contrast`。
+   `check.yml` をそのまま呼ぶ）
+3. 本番 D1 の写し（`wrangler d1 export`）と Time Travel の栞（bookmark）を取り、
+   artifact `d1-backup-<run id>` に残す（30日）
+4. **マイグレーションを流す**（`wrangler d1 migrations apply --remote`。当てた移行は D1 に
+   記録されていて、未適用のものだけが当たる。何も無ければ何もしない）
+5. `wrangler deploy`
+
+マイグレーションは「スキーマを変えたときだけ」ではなく**毎回**流す。`drizzle/` に
+ファイルが増えていれば必ず当たる。流さずに出すと、列を足した移行（`0005` など）の
+あとでは作品の画面が「no such column」で 500 になる——drizzle は列を名指しで読むので、
+前の D1 のままでは今のコードが動かない（`test/deploy.test.ts` がこの事実を確かめている）。
+
+使う前に、リポジトリの設定で2つ用意する。
+
+- secret の `CLOUDFLARE_API_TOKEN`（D1 の編集・Workers のデプロイができるトークン）
+- Settings → Environments に `production` を作り、承認者（Required reviewers）を付ける。
+  deploy の最後の job はこの environment で動くので、承認するまで本番に触れない。
+  secret は environment の側に置いてもよい
+
+続けて2回押しても並んでは走らない（2本目は1本目が終わるまで待つ）。
+
+手元から出すなら `npm run db:migrate && npm run deploy`（どちらも先に id の番兵を通る）。
+門は通らないので、先に `npm run typecheck` `npm run lint` `npm test`
+`npm run check:fit` `npm run check:contrast` を自分で通すこと。写しも自分で取る
+（下の `d1 export`）。
+
+### 公開ページの写し
+
+訪問者（管理画面にログインしていない人）の公開ページは、そのデータセンターの Cache API に
+写しを置き、次からは D1 に聞かずに返す（`src/lib/page-cache.ts`）。D1 が落ちている間も、
+写しのある画面は前の姿で出る（写しの無い画面は 500）。
+
+- **管理画面で保存すると、写しは外れる。** 保存が KV の `site:version` を新しくし、写しは
+  置いたときの版と違えば使われない。ただし版の読みは KV のエッジのキャッシュ（60秒）を
+  通すので、**保存から最大 60 秒ほど**、ほかの場所の訪問者には前の画面が出る。
+  ログインしている自分にはすぐ見える
+- **デプロイすると、写しは全部外れる**（鍵に Worker の版が入っている）
+- **D1 を管理画面の外から変えたら、版を自分で上げる。** D1 を手で直した・Time Travel で
+  戻した、のあとに
+
+  ```bash
+  npm run site:touch   # 本番の site:version を新しくする（id の番兵を通る）
+  ```
+
+  上げ忘れても、写しは1時間で引き直される。seed（`db:seed:local` と本番の
+  `db:seed:remote:destroys-prod`）は最後に自分で上げる
+- 写しを通ったかは応答の `x-noctifex-cache`（`hit` / `miss` / `stale`）で分かる
+
+### 戻す
+
+コードは `npx wrangler rollback`（前の版の Worker に戻す）。D1 は戻らないので、
+移行が中身を書き換えていたら、D1 も移行の前へ戻す。
+
+```bash
+# deploy が残した artifact の bookmark.json の "bookmark" を使う
+npx wrangler d1 time-travel restore noctifex --bookmark=<bookmark>
+# 栞が無ければ時刻で（30日以内）
+npx wrangler d1 time-travel restore noctifex --timestamp=2026-09-27T09:00:00Z
+```
+
+Time Travel は D1 に最初から入っていて、過去30日の任意の時点に戻せる（戻すこと自体も
+取り消せる——restore は戻す直前の bookmark を出す）。30日より前へ戻すなら、artifact の
+`noctifex-<sha>.sql`（`d1 export` の写し）を新しい D1 に流し込む。
+
+```bash
+npx wrangler d1 create noctifex-restore
+npx wrangler d1 execute noctifex-restore --remote --file=noctifex-<sha>.sql
+# 中身を確かめてから、wrangler.toml の database_id をこちらへ差し替えて出す
+```
+
+手元で写しを取るのは `npx wrangler d1 export noctifex --remote --output=backup.sql`。
+写しにはメンバーの連絡先とログインの紐づけ（セッションの id は D1 にもハッシュでしか
+無い）が入るので、置き場所に気をつけること。
+
+**前の版の Worker へ戻すときの注意。** 構成の行の書き換え（`0004_merge_apps_works`。
+Apps と Works を Projects に畳む）を流したあとの D1 は、Projects を知らない版（それより
+前のコード）では作品の一覧が出ない。その版まで戻すなら D1 も上の手順で 0004 の前へ
+戻す。D1 を戻したら `npm run site:touch`（公開ページの写しの版を上げる。上の「公開ページの写し」）。いまのコードは逆向き——0004 を流す前の D1（`apps` / `works` の行）——も Projects
+として読めるので、移行が途中で止まっても一覧は消えない。この先、データを書き換える
+移行は2回のリリースに分ける（先に読む側を広げ、次に書き換える。`CLAUDE.md`）。
 
 `items.slug`（作品の恒久リンク `/apps/item/<slug>`）だけは、マイグレーションでは
 埋まらない。SQLite の `ALTER TABLE ADD COLUMN` は `NOT NULL` に定数の既定値を
@@ -242,8 +344,17 @@ SVG と HEIC は弾く。この検査より前に上げた SVG / HEIC が KV に
 前に入れた `SETUP_TOKEN` はもう使わないので `npx wrangler secret delete SETUP_TOKEN`
 で消してよい。
 
-Actions の deploy ワークフロー（手動実行）でも同じことができる。使うなら
-`CLOUDFLARE_API_TOKEN` をリポジトリの secret に入れる。
+プラットフォームの選択肢（`platforms`）は `0011_platforms_reference` が入れる
+（`INSERT OR IGNORE`。前に seed で入った行・運用で直した表示名や並び順は書き換えない）。
+`seed.sql` はもう platforms に触らない。
+
+`0012_item_indexes` は索引だけを張り替える（行には触らない）。公開の一覧の3つの
+引き方（全部・区分・担当）に、公開の並び（`year_from` の新しい順 → 並び順 → id）の
+順の索引を1本ずつと、タグ・リンクの作品ごとの索引。Projects の1画面（カード2枚）が、
+公開中の全件を並べ直してその子まで全部読む形から、その画面の2件と子だけを読む形に
+なる（200 件で約 1,200 行 → 24 行）。並び（`src/db/queries.ts` の `itemOrder`）を
+変えるときは、この索引も一緒に変えること（`test/queries.test.ts` の「索引」が
+EXPLAIN QUERY PLAN で並べ直しが無いことを見ている）。
 
 ## 画面
 
@@ -256,7 +367,7 @@ Actions の deploy ワークフロー（手動実行）でも同じことがで�
 
 ```
 src/
-  index.tsx          入口。ルートを束ねて 404 / 500 を出す
+  index.tsx          入口。応答のヘッダ（CSP など）を全部に付け、ルートを束ねて 404 / 500 を出す
   site.ts            サイト全体の文言と宛先（管理画面からは変えない）
   theme.ts           見た目のプリセット。選べる値はここが正
   blocks.ts          置けるブロックの種類と、1画面あたりの件数。ここが正
@@ -269,6 +380,7 @@ src/
     auth.ts          セッション（D1 にはハッシュで置く）と、通してよいアカウントの判定
     oauth.ts         GitHub / Google との約束（認可 URL・トークンの交換・id_token の検査）
     format.ts        テキストの解釈とフォーム値の受け取り
+    page-cache.ts    公開ページの写し（Cache API）と、その版（KV の site:version）の上げ方
     paginate.ts      一覧を1画面ぶんずつに割る（chunk / screenCount）
     sequence.ts      画面の連なり。前後・目次・通し番号・canonical をここで組む
                      目次のまとめ単位（tocKey）は節（navKey）より大きくてよい
@@ -287,6 +399,12 @@ public/
   app.css            全画面のスタイル。値は :root のトークンだけで決める
                      骨格・色・書体のプリセットもここ（[data-layout] など）
                      末尾の「画面に収める外枠」が no-scroll を作る
+  admin.css          管理画面だけの規則。管理画面は app.css のあとにこれを読み、
+                     公開ページは読まない（:root は持たず、app.css の段を読む）
+  _headers           静的なファイルに付けるヘッダ（Worker を通らないので、ここで付ける）
+                     Workers Static Assets が読む規則で、ファイルとしては配られない
+                     2枚の CSS は 1年・immutable（HTML が中身の版つきの URL
+                     /app.css?v=… で読むので、変えてデプロイすれば URL が変わる）
   assets/            ロゴ・アバター・入口の月（moon.avif / moon.webp）
                      ※ ここに robots.txt や sitemap.xml を置かないこと。
                        public/ は Worker より先に配られるので、置くと
@@ -294,14 +412,21 @@ public/
 scripts/
   check-fit.mjs      npm run check:fit の中身。ブラウザで寸法を測る
   check-contrast.mjs npm run check:contrast の中身。月の上の文字を画素で測る
+  check-ids.mjs      本番に触れる前の番兵。wrangler.toml の id がプレースホルダなら止める
+  seed-remote.mjs    npm run db:seed:remote:destroys-prod の中身。本番が空のときだけ流す
+  touch-site.mjs     公開ページの写しの版を上げる（npm run site:touch / db:seed:local の最後）
   moon/              入口の月。render.py が Blender で焼き、pack.py が配信用に詰める
                      配るのは無彩色の三日月だけ。光暈は app.css が --accent から描く
   lib/               上の2本の共通部分。dev サーバの立て方（dev-server.mjs）と
                      src/theme.ts の読み方（theme.mjs）。写しを2本持たない
+                     wrangler.toml の id の読み方（wrangler-ids.mjs）も
+.github/workflows/
+  check.yml          push と PR ごとの門。deploy からも同じものを呼ぶ（workflow_call）
+  deploy.yml         本番へ出す道（main だけ・門 → 写し → 移行 → deploy）
 drizzle/             生成されたマイグレーション（手で書かない）
 test/                workerd 上で動くテスト
 docs/                画面一覧と画面遷移図
-seed.sql             移行前の index.html の内容
+seed.sql             移行前の index.html の内容（全部消してから入れ直す。本番は空のときだけ）
 ```
 
 書き方の約束は `CLAUDE.md` に置いてある。

@@ -6,7 +6,8 @@
 ## 決まりごと
 
 **値は `public/app.css` の `:root` だけで決める。** 各セレクタに生の色やサイズを
-書かない。余白は7段。文字は**静的6段**（`--fs-label` 11 / `--fs-meta` 12 /
+書かない（管理画面の規則を分けた `public/admin.css` も `:root` を持たず、向こうの段を
+読むだけ——下の「スタイルシートは2枚」）。余白は7段。文字は**静的6段**（`--fs-label` 11 / `--fs-meta` 12 /
 `--fs-sm` 13 / `--fs-base` 14 / `--fs-md` 15 / `--fs-lg` 18）と、画面に連動する
 **4段**（`--fs-display-xl` > `--fs-display` > `--fs-display-sm` > `--fs-display-xs`）の
 計10段。連動する4段は大きさ順の1本のはしごで、部品の名前を持たない（`--fs-contact`
@@ -57,10 +58,38 @@
 **部品は `src/ui/components.tsx` に置いてから使う。** その場で新しい見た目を書くと、
 同じものが少しずつ違う姿で増える。
 
+**スタイルシートは2枚。公開ページは `app.css` だけ、管理画面は `app.css` のあとに
+`admin.css`。** 管理画面の部品（`.admin-*`・`.btn`・`.field`・`.row`・`.toggle`・
+見た目の見本 …）の規則は `public/admin.css` にだけ書き、`app.css` には書かない。
+1枚だったころは、訪問者の全員が管理画面の規則（約 17KB）を毎回受け取っていた。
+公開ページに出す部品を admin.css に置くと、公開ページでは素の姿で出るので、出したく
+なったら規則ごと app.css へ移す。`admin.css` の並びも app.css と同じ（素の規則 →
+600 以上 → 900 以上 → 手触り → 入力手段）。どの外枠が何を読むかは `components.tsx` の
+`Stylesheets` 1本で決まる（`test/headers.test.ts` の「スタイルシート」と
+`test/theme.test.ts` の「スタイルシートの分け方」が見ている）。
+
+**CSS は版つきの URL で、1年・immutable で配る。** `Stylesheets` が CSS の中身から
+版を作って `/app.css?v=…` と書き、`public/_headers` が2枚に
+`Cache-Control: public, max-age=31536000, immutable` を付ける。CSS を1字でも変えて
+デプロイすれば URL が変わるので、古い写しは引かれない。既定（`max-age=0,
+must-revalidate`）のままだったころは、画面を1枚めくるたびに描画を止めて条件付き GET を
+1往復していた（画面の移動は普通のフルページ遷移なので）。版は Worker に同梱した
+CSS の文字列から作る（`wrangler.toml` の `[[rules]]` が `*.css` を Text として同梱し、
+テストでは `vitest.config.ts` の `cssTextPlugin` が同じ形で渡す）。Worker の
+version id にしないのは、CSS を変えないデプロイで全員に取り直させないためと、
+`wrangler dev` で CSS を直した瞬間に URL が変わる（開発中に immutable の写しを掴まない）
+ため。**`<link rel="stylesheet">` を直に書かない**——版の無い URL は immutable の写しを
+1年掴む。版を持たない素材（ロゴ・月の絵）には長い `Cache-Control` を付けない
+（差し替えた絵が1年届かなくなる。テストが immutable の付くパスを2つに縛っている）。
+
 **公開ページに JavaScript は置かない。** いまは0本で、そこから増やさない。
 絞り込みもページめくりもリンクと query（`?kind=` `?member=`）でやる。管理画面は
 HTML フォームと 303 リダイレクトで動かす。JSON API も SPA も持たない。
 「動きを付けたい」は、たいてい画面を1枚増やすほうで足りる。
+この決まりは散文だけでなく、全部の応答に付く CSP の `script-src 'none'` が
+ブラウザに守らせている（下の「応答のヘッダ」）。`<script>` を足しても走らない。
+置いてよい `<script>` は JSON-LD（`type="application/ld+json"`。データの塊で、実行
+されないので CSP に止められない）だけで、`test/headers.test.ts` がそれを数えている。
 
 **押せるように見えるものは、面ごと押せるようにする。** Projects のカードは題の
 リンク（`.card__link`）の `::after` をカードいっぱいに被せて、面のどこを押しても作品の
@@ -133,6 +162,8 @@ URL は恒久リンクの続きの `/apps/item/<slug>/story`（`itemStoryHref`�
 カードからほぼ読めなかった。
 
 **画像の置き場は KV の2つだけ。** メンバーの顔は `avatars/`、作品の画像は `items/`。
+KV にはほかに、公開ページの写しの版の1行（`site:version`。下の「気をつける場所」）だけが
+同居している。これは置き場ではなく、`/images/*` からは読めない（`IMAGE_KEY`）。
 キーは `<置き場>/<slug>-<乱数8桁>.<拡張子>` で、付けるのは `src/routes/admin.tsx` の
 `putImage` だけ。取り込みの検査は `pickImage` の1本で、どちらの置き場も同じ。
 **画像があるのに代替テキストが空なら、公開として保存させない**（公開の関門 `publishErrors`）。
@@ -370,7 +401,10 @@ GitHub / メールを出さない（本文にボタンがあり、同じ行き�
 （「1 member」は、複数いる前提の器に1人しか入っていないことを自分で告知していた）。
 
 **選択肢は表で持つ。** プラットフォームは `platforms` テーブルが正。自由入力に
-すると表記ゆれでカードの札が揃わなくなる。
+すると表記ゆれでカードの札が揃わなくなる。行を入れるのは移行
+（`drizzle/0011_platforms_reference` の `INSERT OR IGNORE`）で、`seed.sql` ではない——
+参照データが破壊的な seed の中にしか無かったころは、新しい環境を用意するのにも
+本番の中身を全部消す seed を流すしかなかった。
 
 **個人開発と業務は、公開ページでは1つの一覧（Projects）。** データの区分
 （`items.type` = `app` / `work`）と管理画面の入力欄は分かれたまま（個人開発は
@@ -384,7 +418,11 @@ GitHub / メールを出さない（本文にボタンがあり、同じ行き�
 4桁でない年は null で最後に回り、管理画面が年の欄の下で「並びに使われません」と
 知らせる（同じ規則の写しが `src/lib/format.ts` の `yearFrom`。規則を変えるなら2つ一緒に。
 テストが2つの答えを突き合わせている）。アプリが保存のたびに埋める列にしなかったのは、
-アプリを通らずに入る行（seed.sql・テスト・D1 を手で直した行）で year とずれるため。見分けるのはカードの札と
+アプリを通らずに入る行（seed.sql・テスト・D1 を手で直した行）で year とずれるため。
+**並び（`itemOrder`）と items の索引3本（`idx_items_public` / `_kind` / `_member`）は
+セット**——索引が並びの順になっているので、1画面ぶんの LIMIT が索引の上で効き、
+2件とその子だけを読む。並びだけ変えると、公開中の全件とその子を読んで並べ直す形に
+黙って戻る（`test/queries.test.ts` の「索引」が EXPLAIN QUERY PLAN で見ている）。見分けるのはカードの札と
 絞り込みのピル（すべて / 個人開発 / 業務）。区分のピルは両方の区分に項目がある
 ときだけ並ぶ。呼び名は `src/ui/components.tsx` の `KIND_LABEL` が正で、帯の件数
 （「個人開発 5 · 業務 2」）と管理画面のタブも同じ言葉を使う。以前の `/apps` `/works`
@@ -493,8 +531,11 @@ GitHub / メールを出さない（本文にボタンがあり、同じ行き�
 本文・画像・代替テキストも同じフォームから（画像は作品のページの1枚目に、本文は次の
 画面 Story にだけ出る。本文が空なら Story の画面は作らない）。
 
-**プラットフォームの種類を増やす** → `platforms` に1行足す。個人開発のカードの札と
-管理画面の選択肢に出る（絞り込みの軸ではない）。
+**プラットフォームの種類を増やす** → `npx drizzle-kit generate --custom --name <名前>` で
+空の移行を作り、`INSERT OR IGNORE INTO platforms …` を1行書く（0011 に倣う。既にある
+行は書き換えない）。deploy がどの環境にも流す。個人開発のカードの札と管理画面の
+選択肢に出る（絞り込みの軸ではない）。本番へ `d1 execute --remote` で手打ちしない——
+リポジトリに残らず、作り直した環境から消える。
 
 **メンバーの項目（列）を増やす** → `src/db/schema.ts` に足す →
 `npm run db:generate` → `src/routes/admin.tsx` のフォームと
@@ -616,6 +657,7 @@ slug を変える保存は、前の slug を転送表（`item_slug_redirects` / 
 ほかの行の前の slug はいまの slug として使わせない（貼られた前の URL が黙って別の
 作品を指すのは 404 より悪い）。自分の前の slug へ戻すのは通り、転送の行は消える。
 **D1 を手で直して slug を変えないこと**——転送表に残らないので、前の URL が 404 になる。
+（D1 をほかの理由で手で直したら、`npm run site:touch` で公開ページの写しの版を上げる。）
 管理画面は保存の知らせで「前の URL は、新しい URL へ転送します」と言う。
 
 **サイト全体の文言を変える** → `src/site.ts`。管理画面からは変えられない。
@@ -687,7 +729,9 @@ D1 の `user_identities` の行（外すときは行を消す）。手順は REA
 - 直した不具合には、同じ形のテストを1つ足す（`test/` の既存のものに倣う）。CSS の
   不変条件は `test/theme.test.ts` の `ruleWith` / `blockAt` / `bodyOf` で、
   **必ずコメントを落とした写し（`sheet`）を読む**——app.css は WHY を厚く書く決まりで、
-  規則をそのまま引用したコメントに当たって永久に緑になったことが実際に3件ある
+  規則をそのまま引用したコメントに当たって永久に緑になったことが実際に3件ある。
+  管理画面の規則は `adminSheet`（admin.css の写し）、段や書体のようなサイト全体の
+  決まりは2枚を合わせた `sheets` を読む（「文字の段」の許可リストは2枚を数える）
 - 型検査と lint の守備範囲は `src/` だけではない。`tsconfig.json` は `test/**` も
   見る（テストが `perScreen` や `LAYOUTS` を直接読む規律は、型が効いていて初めて
   意味を持つ）。Biome は `public/**` と `scripts/**` も見る
@@ -702,7 +746,7 @@ D1 の `user_identities` の行（外すときは行を消す）。手順は REA
   二重に書かなくてよい。**手で書いてよいのは、スキーマの変わらないデータの書き換え
   だけ**（0004 の構成の行・0007 の平文のセッションの消去・0009 の固定のブロックの
   重複の片付け——0010 が張る一意索引は、重複を残した D1 では作れずに移行ごと止まる
-  ので、その前に置く）。`npx drizzle-kit generate --custom --name <名前>` で空の
+  ので、その前に置く——・0011 の参照データ（プラットフォームの選択肢）の投入）。`npx drizzle-kit generate --custom --name <名前>` で空の
   ファイルを作り、頭に理由を書く。**ほかの列から決まる値は生成列にする**
   （`items.year_from`）——アプリが埋める列にすると、アプリを通らない行でずれ、
   既にある行を埋め直す移行も要る
@@ -714,6 +758,34 @@ D1 の `user_identities` の行（外すときは行を消す）。手順は REA
   変更は `--custom` で D1 に合う形に書き直す。既存の行を持った D1 に当てたときの
   形は `test/oauth.test.ts` の「移行」のように、空の `MIGRATION_DB` に前の移行まで
   流して行を入れ、そのあとで新しい移行を当てて確かめる
+- **移行は deploy がいつも流す。** `.github/workflows/deploy.yml` は、main か・
+  wrangler.toml の id が入っているか（`scripts/check-ids.mjs`）を見て、`check.yml` と
+  同じ門（`workflow_call` で同じファイルを呼ぶ）を通り、本番 D1 の写し（`d1 export`）と
+  Time Travel の栞を artifact に残してから、`d1 migrations apply --remote`（未適用の
+  ものだけ）→ `wrangler deploy` の順に進む。以前は移行が既定 false の選択肢で、README は
+  「スキーマを変えたときだけ」と書き、流すのは型とテストだけ、どのブランチからでも
+  出せた。**列を足す移行は流さないと 500 になる**（drizzle は列を名指しで SELECT する。
+  `test/deploy.test.ts` が、列を足す最後の移行を当てない D1 で確かめている）ので、
+  移行を選択肢に戻さないこと。門を2か所に書き写さないこと
+- **データを書き換える移行は、expand → contract の2リリースで出す。** 移行は
+  deploy より先に流れるので、書き換えた瞬間から新しいコードが出るまでのあいだ
+  （と、失敗・`wrangler rollback` のあと）は「新しい DB ＋ 前のコード」になる。
+  逆に移行を流し忘れた本番は「前の DB ＋ 新しいコード」。どちらでも黙って消えない
+  ように、(1) 先のリリースで読む側を広げ、前の形も新しい形も同じに描けるようにして
+  出す、(2) 本番にそれが出てから、次のリリースで書き換えの移行を足す。0004
+  （Apps / Works を Projects に畳む）は書き換えと読む側の変更を同じリリースに入れて
+  いて、流し忘れると作品の一覧・入口の帯・`/apps` の 301 先が 404 で黙って消えた。
+  いまは読む側が前の名前を読み替える（`src/blocks.ts` の `LEGACY_BLOCK_KEYS`。構成を
+  読む口は `src/db/queries.ts` の `listBlocks` / `findBlock` の2つだけ）。広げた読む側は
+  `test/deploy.test.ts` の「前の DB ＋ 今のコード」のように、書き換えを当てない
+  `MIGRATION_DB` で今のコードを動かし、当てたあとと**同じ HTML** になることを確かめる。
+  前の名前を表から外してよいのは、どの環境の D1 にも書き換えが当たったあと
+- **`seed.sql` は中身を全部消す。本番には空の D1 に一度きり。** ふだん打つのは
+  `npm run db:seed:local` だけ。本番向けは `npm run db:seed:remote:destroys-prod`
+  （`scripts/seed-remote.mjs`）で、作品・メンバー・構成が1行でもあれば流さずに止まる。
+  以前は `npm run db:seed` がそのまま `--remote` で流れ、`:local` を付け忘れた1語が
+  本番の全消去だった。短い名前の本番向けの seed を戻さないこと（テストが package.json
+  を見ている）。消えたときの戻し方は README の「本番に出す」
 - `compatibility_date` はテスト側の workerd が対応する日付に揃える。片方だけ
   上げると、本番の挙動をテストで確かめられなくなる
 
@@ -726,6 +798,11 @@ D1 の `user_identities` の行（外すときは行を消す）。手順は REA
   吸われて、**そのページだけが静かに 404 になる**。`docs/screens.md` の URL 表は
   この登録順のまま並べてあるので、並べて読み合わせること。この決まりは散文だけでなく
   `test/public.test.ts` の「URL の登録順」が `publicRoutes.routes` を読んで守っている
+  - catch-all は1語目が**画面の名前の形**（`SCREEN_NAME`: 決まった中身の種類
+    `FIXED_BLOCK_KEYS` か `block-<id>`）のときだけ D1 に聞く。ほかは聞かずに 404——
+    `/wp-login.php` や `/.env` を探し回る要求が、1本ごとに D1 を4本引いていた。
+    画面の名前の付け方（`renderBlock` の `id`）を変えるなら、ここも一緒に変えること。
+    変え忘れると、その画面だけが静かに 404 になる
 - **`<html>` を直に書かない。** 外枠（`Layout` / `AdminLayout` / `AdminBare` /
   `src/index.tsx` の `ErrorPage`）はどれも `src/ui/components.tsx` の
   `HtmlDocument` で `<html>` を開き、そこが `<!DOCTYPE html>` を出す。JSX は
@@ -737,15 +814,84 @@ D1 の `user_identities` の行（外すときは行を消す）。手順は REA
   の「文書の外枠」が公開・管理・404 の本文の先頭を見ている
 - **`public/` に置いたファイルは Worker より先に配られる。** `wrangler.toml` の
   `[assets]` がそうなっているので、`public/robots.txt` や `public/sitemap.xml` を
-  置いた瞬間に静的なほうが勝ち、Worker が組み立てているほうは静かに届かなくなる
+  置いた瞬間に静的なほうが勝ち、Worker が組み立てているほうは静かに届かなくなる。
+  例外は `public/_headers` だけで、これは Workers Static Assets が読むヘッダの規則で
+  あってファイルとしては配られない（`wrangler dev` で `/_headers` が 404 になることを
+  確かめてある）
+- **応答のヘッダは `src/index.tsx` のミドルウェア1本が、全部の応答に掛ける**（公開・
+  管理画面・404・500・リダイレクト・robots・sitemap）。ルートごとに書くと、足した
+  ルートだけが素のまま出る。
+  - CSP は `default-src 'self'; script-src 'none'; object-src 'none'; base-uri 'none';
+    form-action 'self'; frame-ancestors 'none'; img-src 'self' data:;
+    style-src 'self' 'unsafe-inline'`。`script-src 'none'` が「JavaScript 0本」の壁で、
+    注入口（受け入れる前に上がった SVG・`javascript:` の href）が1つ見つかっても
+    走らない。style に `'unsafe-inline'` が要るのは、列の数（`style="--cols:2"`）と
+    アバターの寸法を style 属性で渡しているため。img の `data:` はファビコン。
+    外のサイトの画像・書体・スクリプトを1つでも読み込むなら、ここを一緒に直すこと
+    （直さないと、その1つだけが黙って読み込まれない）
+  - `Referrer-Policy` は `strict-origin-when-cross-origin`。**`no-referrer` にしない**——
+    Chromium はそのページから出た同じオリジンのフォームの POST に `Origin: null` を
+    付け、`sameOrigin` が 403 で弾くので、管理画面の保存がすべて止まる
+  - `X-Content-Type-Options: nosniff` はどの応答にも
+  - `/admin/*` は `Cache-Control: no-store`（共用の端末でログアウトしたあと「戻る」で
+    下書きが出てこないように）。公開ページはログイン中だけ `private, no-store`
+    （`adminHref`）で、ミドルウェアはそれを上書きしない
+  - **ルートが自分の CSP を持っていたら、ミドルウェアは上書きしない。** いま持って
+    いるのは `/images/*`（`default-src 'none'; sandbox`。ページのものより狭い）
+  - `public/` の静的なファイルは Worker を通らないので、このミドルウェアは届かない。
+    あちらは `public/_headers`（nosniff・Referrer-Policy と、`/images/*` と同じ
+    `default-src 'none'; sandbox`）。規則は `/*` と、スタイルシート2枚の
+    `Cache-Control`（上の「CSS は版つきの URL で」）の3本で、上限は 100 本
+  - どの画面でも CSP の違反がコンソールに出ないことは、全公開 URL とログインした
+    管理画面の主な画面を Chromium で開いて確かめた（JSON-LD も妨げられない）。
+    CSP を変えたら同じことを確かめること——`npm test` は workerd の中で動き、
+    ブラウザの CSP を持たない
 - **公開ページの「管理画面」の入口はログイン中だけ出る。** 判定は
   `src/routes/public.tsx` の `adminHref`（クッキーが無ければ D1 に聞かない）で、
   出したページは `cache-control: private, no-store`。外すと、共有のキャッシュに
-  置かれた「入口つきのページ」が次の訪問者に出る。行き先は同じファイルの
+  置かれた「入口つきのページ」が次の訪問者に出る（下の写しも、セッションのクッキーを
+  持つ要求と `cache-control` を持つ応答を通さないことで同じ約束を守っている）。行き先は同じファイルの
   `blockAdminPath`。`check:fit` は訪問者の姿しか測らないので、柱に手を入れたら
   ログインした状態でも収まりを見ること
-- **`/images/*`** は KV をそのまま読む。いまの KV には画像しか無い（ログイン試行の
-  記録はパスワードのログインと一緒に無くなった）が、キーの形の検査
+- **公開ページの HTML は写し（Cache API）から出す。** `src/lib/page-cache.ts` の
+  `pageCache`（`src/index.tsx` でヘッダの1本の内側に掛ける）が、訪問者の GET の応答を
+  そのデータセンターの `caches.default` に置き、次からは D1 に聞かずに返す。めくる
+  たびに単一リージョンの D1 へ1〜3往復し、D1 が落ちると入口まで 500 になっていた
+  - **写しが正しいかは「内容の版」で決める。** 版は KV（MEDIA）の `site:version` の
+    1行で、**管理画面の書き込みが上げる**（`touchSiteOnWrite`。認証の壁の内側に
+    掛けてあり、ログインした POST だけが上げる。4xx の保存は何も書いていないので
+    上げない。例外で終わった保存は上げる）。写しは置いたときの版を持ち、いまの版と
+    違えば使わない。**管理画面の外に書く口を足したら**（新しい種類の POST を壁の外に
+    置く・cron で D1 を書く、など）、そこでも `touchSite` を呼ぶこと。呼ばないと
+    訪問者には最大1時間、前の画面が出る
+  - **反映の遅れ。** 版の読みは KV のエッジのキャッシュ（`cacheTtl` 60秒）を通すので、
+    保存してから**最大 60 秒ほど**、ほかのデータセンターの訪問者には前の画面が出る。
+    ログインしている本人はクッキーで写しを通らないので、すぐ見える
+  - **管理画面を通らない書き換えは、自分で版を上げる。** D1 を手で直したら
+    `npm run site:touch`（本番）。`npm run db:seed:local` と
+    `npm run db:seed:remote:destroys-prod` は最後に自分で上げる。上げ忘れても写しは
+    1時間（`FRESH_MS`）で引き直される。テストも同じで、D1 を直に書いたあとに
+    同じ URL を見るなら `touch()`（`test/helpers.ts`。`resetDb` と `seed…` は自分で上げる）
+  - **デプロイで写しは全部外れる。** 鍵に Worker の版（`[version_metadata]` の
+    `CF_VERSION_METADATA.id`）が入っているので、マークアップや `src/site.ts` の文言を
+    変えたコードは前の写しを見ない（`wrangler dev` も起動のたびに新しい版になる）
+  - **D1 が例外を投げたら、古い写しを返す**（stale-if-error。版が変わった写しも、
+    7日（`KEEP_SECONDS`）までは残してある）。写しが無ければ今までどおり 500。
+    別の DB で描き比べるテスト（`test/deploy.test.ts`）は、写しに当たらないよう
+    `uncachedEnv()` で動かす
+  - **写しを通らないもの**: セッションのクッキーを持つ要求（有効かどうかは見ない。
+    ここで D1 に聞かないため）、GET 以外、`/admin`、`/images/*`（自分の
+    `cache-control` を持つ）、`/robots.txt`（D1 を引かない）、最後の語に「.」を含む
+    URL（`/sitemap.xml` を除く。探し回る要求のために KV を読まない）。置くのは
+    200・301・302・404 だけで、`cache-control` か `set-cookie` を持つ応答は置かない
+    ——**ログイン中の応答（`private, no-store`）を写しに置かない約束はこれが守っている**。
+    公開ページの応答に `cache-control` を付けるなら、この条件も一緒に直すこと
+    （付けたとたんに写しに置かれなくなる）
+  - 応答の `x-noctifex-cache`（`hit` / `miss` / `stale`）で、写しをどう使ったかが分かる。
+    写しの印（版・置いた時刻・Cache API の期限）は訪問者には出さない
+- **`/images/*`** は KV をそのまま読む。いまの KV には画像と、上の写しの版の1行
+  （`site:version`）しか無い（ログイン試行の記録はパスワードのログインと一緒に
+  無くなった）。版の行が外から読めないのも、キーの形の検査のおかげで、その検査
   （`src/routes/public.tsx` の `IMAGE_KEY`: `avatars/` か `items/` の下の、英数字で
   始まり英数字と `. _ -` だけの名前）は外さない・緩めないこと。この URL は KV の
   キーを外に開く口で、あとから同じ KV に何かを置いた日に、それが黙って読めるように
@@ -758,6 +904,8 @@ D1 の `user_identities` の行（外すときは行を消す）。手順は REA
     それ以外（受け入れを絞る前に入った SVG・HEIC）は `application/octet-stream` の
     添付で返す。受け入れの検査があるから外してよい、ではない——KV には検査より前の
     ものが残っている
+    全体のミドルウェアはこの CSP を見て、ページの CSP で上書きしない。上書きすると、
+    画像のふりをした文書が同じオリジンの画像や CSS を読める文書として開く
 - **`sameOrigin`** は認証の壁より外側に掛けてある。内側だけにすると、壁の外の POST
   （ログアウト）が素通りになる。見る順は Origin → Sec-Fetch-Site → Referer で、
   origin（scheme・host・port）ごと比べる。`Origin: null` は 403（以前は
@@ -792,7 +940,8 @@ D1 の `user_identities` の行（外すときは行を消す）。手順は REA
     nonce は必ず見る。id_token をブラウザ経由で受ける形に変えるなら、JWKS で署名を
     確かめること
   - 入口はフォームではなく GET のリンク。POST から外へリダイレクトさせると、CSP の
-    `form-action 'self'` を入れた日にログインごと止まる
+    `form-action 'self'`（上の「応答のヘッダ」）に止められてログインできなくなる
+    （form-action はフォームの送信のあとのリダイレクトの行き先にも掛かる）
   - **`wrangler dev` の中では `c.req.url` が本番の顔をしている。** `routes` があると
     Worker に見せる URL が `http://noctifex.dev/…` に書き換わる（Origin も同じく
     書き換わるので `sameOrigin` は食い違わない）。提供元に渡すコールバックだけは

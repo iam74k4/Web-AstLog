@@ -8,7 +8,7 @@ import { publicRoutes } from '../src/routes/public'
 import { SITE } from '../src/site'
 import { LinkList, LinkRow, splitPhrases } from '../src/ui/components'
 import { MARK_POINTS } from '../src/ui/icons'
-import { db, form, get, resetDb, seedItem, seedMember, signIn } from './helpers'
+import { db, form, get, resetDb, seedItem, seedMember, signIn, touch } from './helpers'
 
 beforeEach(resetDb)
 
@@ -681,6 +681,7 @@ describe('画面ごとの見出し', () => {
 
     // 区分が1つ: ピルが並ばないので、何の一覧かを言うのは添えだけ
     await db().delete(schema.items).where(eq(schema.items.type, 'work'))
+    await touch()
     const only = await (await get('/projects')).text()
     expect(only).toContain(
       '<div class="head"><h1>Projects</h1><span class="note">個人開発</span></div>',
@@ -1190,6 +1191,7 @@ describe('作品1件の恒久リンク', () => {
 
     // 並べ替える（管理画面の「並び順」を変えたのと同じこと）
     await db().update(schema.items).set({ sortOrder: 5 }).where(eq(schema.items.slug, 'san'))
+    await touch()
 
     // 一覧の URL は 200 のまま、別の作品を指すようになった
     expect(mainOf(await (await get('/projects/2')).text())).not.toContain('三番目')
@@ -3170,6 +3172,7 @@ describe('前の URL', () => {
     expect((await get('/works/item/appmixer')).headers.get('location')).toBe('/apps/item/app-mixer')
     // 下書きにしたら、送る先ごと無い
     await db().update(schema.items).set({ published: 0 })
+    await touch()
     expect((await get('/apps/item/appmixer')).status).toBe(404)
   })
 

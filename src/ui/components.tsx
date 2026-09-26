@@ -1,5 +1,7 @@
 import { raw } from 'hono/html'
 import type { Child } from 'hono/jsx'
+import adminCss from '../../public/admin.css'
+import appCss from '../../public/app.css'
 import type { Item, Member } from '../db/schema'
 import { initials, isSafeUrl, type SkillGroup, skillRows } from '../lib/format'
 import { MarkIcon, PencilIcon } from './icons'
@@ -48,6 +50,48 @@ export const HtmlDocument = ({ children }: { children: Child }) => (
   <>
     {raw('<!DOCTYPE html>')}
     <html lang="ja">{children}</html>
+  </>
+)
+
+/*
+  スタイルシートの <link>。公開ページ（Layout）と 404（ErrorPage）は app.css だけ、
+  管理画面（AdminLayout / AdminBare）は app.css のあとに admin.css を読む
+  （管理画面の部品の規則は admin.css にしか無い。公開ページの訪問者に配らない）。
+
+  URL には中身から作った版（?v=…）を付け、public/_headers が2つの CSS を
+  1年・immutable で配る。ブラウザは同じ版のあいだ一度も取り直さず、CSS を
+  1字でも変えてデプロイすれば URL が変わるので、新しい HTML は新しい CSS を読む。
+  既定（max-age=0, must-revalidate）のままだったころは、ページャを押すたびに
+  描画を止めて CSS を条件付き GET で取り直していた（画面の移動は普通の
+  フルページ遷移なので、1画面ごとに1往復）。
+
+  版は Worker に同梱した CSS の文字列から、読み込みのときに1度だけ作る
+  （wrangler.toml の [[rules]] が *.css を文字列として同梱する。テストでは
+  vitest.config.ts の cssTextPlugin が同じ形で渡す）。デプロイの版（Worker の
+  version id）にしないのは、CSS を変えていないデプロイで全員に取り直させない
+  ためと、wrangler dev で CSS を直した瞬間に URL が変わる（開発中に immutable の
+  古い写しを掴まない）ため。静的なファイルの配り手は query を見ずにパスで
+  返すので、?v= は URL を分けるためだけのもの。
+*/
+const cssVersion = (text: string) => {
+  // FNV-1a（32bit）。改ざんを見る値ではなく、変わったかどうかの印
+  let hash = 0x811c9dc5
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(36)
+}
+
+export const STYLESHEETS = {
+  app: `/app.css?v=${cssVersion(appCss)}`,
+  admin: `/admin.css?v=${cssVersion(adminCss)}`,
+} as const
+
+export const Stylesheets = ({ admin = false }: { admin?: boolean }) => (
+  <>
+    <link rel="stylesheet" href={STYLESHEETS.app} />
+    {admin ? <link rel="stylesheet" href={STYLESHEETS.admin} /> : null}
   </>
 )
 

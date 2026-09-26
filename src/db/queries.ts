@@ -1,6 +1,6 @@
 import { and, asc, count, eq, sql } from 'drizzle-orm'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
-import { blockType, DEFAULT_BLOCKS } from '../blocks'
+import { blockType, DEFAULT_BLOCKS, LEGACY_BLOCK_KEYS } from '../blocks'
 import { normalizeTheme, THEME_KEYS, type Theme, type ThemeKey } from '../theme'
 import type { ItemKind, ItemView } from '../ui/components'
 import * as schema from './schema'
@@ -20,6 +20,11 @@ export type Db = DrizzleD1Database<typeof schema>
   以前は year の頭の4文字を文字列のまま比べていた。数字で始まらない年
   （「令和6」「〜2023」「FY2024」）が文字の大小で 2026 より上に来て、一覧の
   先頭に出ていた。
+
+  公開の一覧はこの並びのまま索引を読む（src/db/schema.ts の idx_items_public /
+  idx_items_kind / idx_items_member）。並びを変えるときは索引も一緒に変えること。
+  変えないと、1画面ぶん（2件）を出すために公開中の全件と、その子を全部読む
+  並べ直しに戻る（test/queries.test.ts の「索引」）。
 
   公開ページの一覧・作品のページのページャ（listPublishedItemKeys）・管理画面の
   一覧が、どれもこの1本を読む。別の並びで数えると、「次」で着く作品が一覧の隣の
@@ -67,13 +72,8 @@ const itemsWhere = (scope: ItemScope) =>
     scope.memberId ? eq(schema.items.memberId, scope.memberId) : undefined,
   )
 
-/*
-  画面に出すぶんだけを引く。範囲を渡さなければ全件（全体ページ /all はこちら）。
-
-  条件は idx_items_public（type, published, sort_order）と
-  idx_items_member（member_id）にそのまま乗る。
-*/
-// カード1枚ぶんに要る子（タグ・リンク・担当・プラットフォーム）を一緒に引く形
+// カード1枚ぶんに要る子（タグ・リンク・担当・プラットフォーム）を一緒に引く形。
+// タグとリンクは idx_item_tags_item / idx_item_links_item を作品ごとに並びのまま読む
 const itemWith = {
   tags: { orderBy: [asc(schema.itemTags.sortOrder)] },
   links: { orderBy: [asc(schema.itemLinks.sortOrder)] },
@@ -108,15 +108,26 @@ function toItemView(row: ItemRow): ItemView {
   }
 }
 
-export async function listPublishedItems(db: Db, slice: ItemSlice = {}): Promise<ItemView[]> {
-  const rows = await db.query.items.findMany({
+/*
+  画面に出すぶんだけを引く問い合わせ。範囲を渡さなければ全件（全体ページ /all）。
+
+  絞り込みの3つの形（全部・区分・担当）は、どれも公開の並びの順に並んだ索引に
+  乗り、LIMIT が索引の上で効く（src/db/schema.ts の items の索引）。await せずに
+  返すのは、テストが同じ問い合わせの SQL を EXPLAIN QUERY PLAN で見るため
+  （test/queries.test.ts の「索引」）。
+*/
+export function publishedItemsQuery(db: Db, slice: ItemSlice = {}) {
+  return db.query.items.findMany({
     where: itemsWhere(slice),
     orderBy: itemOrder,
     limit: slice.limit,
     offset: slice.offset,
     with: itemWith,
   })
+}
 
+export async function listPublishedItems(db: Db, slice: ItemSlice = {}): Promise<ItemView[]> {
+  const rows = await publishedItemsQuery(db, slice)
   return rows.map(toItemView)
 }
 
@@ -165,7 +176,8 @@ export async function findPublishedItem(db: Db, slug: string): Promise<ItemView 
 }
 
 /*
-  公開中の作品の並びだけ（id・区分・slug・題・本文）。作品1件のページの行き来に
+  公開中の作品の並びだけ（id・区分・slug・題・本文）。sitemap.xml（恒久リンクと
+  本文の画面の URL を数え上げる）と、作品1件のページの行き来に
   使う——前後の作品へめくるページャと、「← 一覧に戻る」がその作品の載っている
   Projects の何画面目かを数えるのに。本文を引くのは、その作品が本文の画面
   （Story）を持つかを決めるため（src/blocks.ts の itemStory）。ページャは
@@ -256,10 +268,51 @@ export async function saveTheme(db: Db, theme: Theme) {
 
 /* ------------------------------------------------------------- 構成 */
 
-export function listBlocks(db: Db) {
-  return db.query.blocks.findMany({
+/*
+  構成の行を読む口はこの2つ（listBlocks / findBlock）だけで、どちらも前の版の種類の
+  名前をいまの名前に読み替える（src/blocks.ts の LEGACY_BLOCK_KEYS）。公開ページも
+  管理画面もここを通るので、書き換えの移行（0004）を流していない D1 でも、Projects が
+  描かれ、構成の一覧に Projects の行として並ぶ。
+*/
+export async function listBlocks(db: Db): Promise<schema.Block[]> {
+  const rows = await db.query.blocks.findMany({
     orderBy: [asc(schema.blocks.sortOrder), asc(schema.blocks.id)],
   })
+  return readLegacyBlocks(rows)
+}
+
+export async function findBlock(db: Db, id: number): Promise<schema.Block | undefined> {
+  const row = await db.query.blocks.findFirst({ where: eq(schema.blocks.id, id) })
+  if (!row) return undefined
+  const key = LEGACY_BLOCK_KEYS[row.type]
+  return key ? { ...row, type: key } : row
+}
+
+/*
+  並び順に読んだ行の、前の名前をいまの名前にする。同じ名前に読み替わる前の行が
+  2つ（apps と works）あれば、0004 が作るのと同じ1行に畳む——先に並んでいたほうの
+  位置と id で、どちらかが公開中なら公開。畳まれたほうの行は見えなくなるが、DB には
+  残り、0004 がそのとき消す。
+*/
+export function readLegacyBlocks(rows: schema.Block[]): schema.Block[] {
+  const merged = new Map<string, schema.Block>()
+  const out: schema.Block[] = []
+  for (const row of rows) {
+    const key = LEGACY_BLOCK_KEYS[row.type]
+    if (!key) {
+      out.push(row)
+      continue
+    }
+    const first = merged.get(key)
+    if (first) {
+      first.published = Math.max(first.published, row.published)
+      continue
+    }
+    const renamed = { ...row, type: key }
+    merged.set(key, renamed)
+    out.push(renamed)
+  }
+  return out
 }
 
 // 何も置いていないときの並び。id は 0 で、DB には無い

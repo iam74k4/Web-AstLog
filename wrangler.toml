@@ -13,10 +13,25 @@ routes = [{ pattern = "noctifex.dev", custom_domain = true }]
 [assets]
 directory = "./public"
 
-# --- 作成してから id を入れること --------------------------------------
+# CSS を文字列として Worker に同梱する（src/ui/components.tsx の Stylesheets が
+# 中身から URL の版 ?v=… を作る。配るのは上の [assets] のほうで、ここは版を数えるためだけ）。
+# テストでは vitest.config.ts の cssTextPlugin が同じ形で渡す
+[[rules]]
+type = "Text"
+globs = ["**/*.css"]
+fallthrough = true
+
+# いま動いている Worker の版。公開ページの写し（src/lib/page-cache.ts）の鍵に入れて、
+# デプロイした日に前のコードで描いた写しを出さない
+[version_metadata]
+binding = "CF_VERSION_METADATA"
+
+# --- 作成してから id を入れ、コミットすること -----------------------------
 #   wrangler d1 create noctifex
 #   wrangler kv namespace create MEDIA
-# ローカル（wrangler dev）は id を見ないので、この値のままでも動く。
+# ローカル（wrangler dev・テスト）は id を見ないので、この値のままでも動く。
+# id は秘密ではない。TO_BE_CREATED のままだと、本番に触れる入口（deploy ワークフロー・
+# npm run deploy / db:migrate / db:seed:remote:destroys-prod）が scripts/check-ids.mjs で止まる。
 [[d1_databases]]
 binding = "DB"
 database_name = "noctifex"
@@ -24,7 +39,7 @@ database_id = "TO_BE_CREATED"
 migrations_dir = "drizzle"
 
 [[kv_namespaces]]
-# アバター（avatars/）と作品の画像（items/）だけ
+# アバター（avatars/）と作品の画像（items/）と、公開ページの写しの版（site:version）の1行
 binding = "MEDIA"
 id = "TO_BE_CREATED"
 

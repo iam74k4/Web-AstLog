@@ -8,24 +8,35 @@ import { defineConfig } from 'vitest/config'
 const migrations = await readD1Migrations('./drizzle')
 
 /*
-  app.css をテストから読めるようにする。
+  public/ の CSS（app.css・admin.css）を、中身の文字列として import できるようにする。
+  読むのは2か所——src/ui/components.tsx の Stylesheets（中身から URL の版を作る）と、
+  test/theme.test.ts（規則そのものを見る）。本番と wrangler dev では wrangler.toml の
+  [[rules]]（Text）が同じ形で渡すので、ここはその写し。
 
-  静的ファイル（public/）はテストでは配られず、CSS の import も workerd 側では
-  中身が消える。そこで仮想モジュールにして渡す。
+  vite の既定のままだと .css の import は CSS として処理され、workerd 側では中身が
+  消える。そこで vite の解決より先（enforce: 'pre'）に拾い、末尾が .css でない
+  仮の id（… .js）に付け替える——.css のままだと vite の CSS の変換が、ここで作った
+  JS を CSS として読み直す。
 
   読み込み時に1度だけ文字列にするのではなく load() の中で読むのは、watch の
   ためでもある。addWatchFile で依存に入れておけば、CSS だけを直したときにも
   読み直される（設定ファイルは読み直されないので、ここで固めると古いまま残る）。
 */
-const APP_CSS = 'virtual:app-css'
+const CSS_TEXT = '\0noctifex-css:'
+const CSS_FILES = new Set(['app.css', 'admin.css'])
 
-const appCssPlugin = (): Plugin => ({
-  name: 'noctifex:app-css',
-  resolveId: (id) => (id === APP_CSS ? `\0${APP_CSS}` : null),
+const cssTextPlugin = (): Plugin => ({
+  name: 'noctifex:css-text',
+  enforce: 'pre',
+  resolveId(id) {
+    const name = id.match(/(?:^|\/)public\/([^/]+\.css)$/)?.[1]
+    return name && CSS_FILES.has(name) ? `${CSS_TEXT}${name}.js` : null
+  },
   load(id) {
-    if (id !== `\0${APP_CSS}`) return null
-    this.addWatchFile('./public/app.css')
-    return `export default ${JSON.stringify(readFileSync('./public/app.css', 'utf8'))}`
+    if (!id.startsWith(CSS_TEXT)) return null
+    const file = `./public/${id.slice(CSS_TEXT.length, -'.js'.length)}`
+    this.addWatchFile(file)
+    return `export default ${JSON.stringify(readFileSync(file, 'utf8'))}`
   },
 })
 
@@ -50,10 +61,41 @@ const assetPlugin = (): Plugin => ({
   },
 })
 
+/*
+  リポジトリの設定ファイル（.github/workflows/*.yml・package.json）を、テストから
+  中身として読む。本番へ出す道（門・順序・seed の名前）は YAML と package.json に
+  しか無く、workerd の中からはファイルを読めない。読めるのはこの一覧だけ
+  （テストが何でも読めるようにはしない）。
+*/
+const REPO = 'virtual:repo:'
+const REPO_FILES = new Set([
+  '.github/workflows/check.yml',
+  '.github/workflows/deploy.yml',
+  'package.json',
+  'public/_headers',
+  'scripts/touch-site.mjs',
+  'seed.sql',
+])
+
+// 解決した id の末尾に .js を付ける。package.json のまま渡すと、vite の JSON の
+// 変換が（ここで作った JS を）JSON として読み直して落ちる
+const repoPlugin = (): Plugin => ({
+  name: 'noctifex:repo',
+  resolveId: (id) => (id.startsWith(REPO) ? `\0${id}.js` : null),
+  load(id) {
+    if (!id.startsWith(`\0${REPO}`) || !id.endsWith('.js')) return null
+    const file = id.slice(`\0${REPO}`.length, -'.js'.length)
+    if (!REPO_FILES.has(file)) throw new Error(`${file} は virtual:repo: の一覧に無い`)
+    this.addWatchFile(`./${file}`)
+    return `export default ${JSON.stringify(readFileSync(`./${file}`, 'utf8'))}`
+  },
+})
+
 export default defineConfig({
   plugins: [
-    appCssPlugin(),
+    cssTextPlugin(),
     assetPlugin(),
+    repoPlugin(),
     cloudflareTest({
       singleWorker: true,
       wrangler: { configPath: './wrangler.toml' },

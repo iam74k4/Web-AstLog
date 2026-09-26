@@ -2,18 +2,58 @@ name: deploy
 
 # 自動では動かさない。Actions の画面から手で実行する。
 # push のたびに本番が入れ替わるのは、まだ望んでいないため。
-# 自動デプロイに切り替えるなら on: push: branches: [main] を足す。
+# 自動デプロイに切り替えるなら on: push: branches: [main] を足す（門と順序はこのまま）。
+#
+# 本番へ出す道はこれ1本で、順序はこう決めてある。
+#   1. main か・id が入っているか（guard）——どちらも満たさなければ何もせず止まる
+#   2. check.yml と同じ門（型・lint・テスト・ビルド・fit・contrast）
+#   3. 本番 D1 の写しと Time Travel の栞を artifact に残す
+#   4. マイグレーションを流す（いつも。未適用のものだけが当たる）
+#   5. Worker を出す
+#
+# 以前は migrate が既定 false の選択肢で、README も「スキーマを変えたときだけ」と
+# 書いていた。データを書き換える移行（0004）を飛ばすと作品の一覧が 404 で黙って消え、
+# 列を足す移行（0005 など）を飛ばすと作品の画面が 500 になる（test/deploy.test.ts）。
+# `d1 migrations apply` は当てた移行を D1 の d1_migrations に記録していて、未適用の
+# ものだけを当てる——何も無ければ何もしないので、毎回流して困ることは無い。
 on:
   workflow_dispatch:
-    inputs:
-      migrate:
-        description: 'D1 のマイグレーションも流す'
-        type: boolean
-        default: false
+
+# 続けて2回押しても、移行と出す作業が並んで走らない。後から押したほうは待つ
+# （取り消さない——途中まで流した移行を止めると、どこまで当たったか追えなくなる）
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  guard:
     runs-on: ubuntu-latest
+    steps:
+      # Actions の画面ではどのブランチからでも実行できる。本番に出すのは main だけ
+      - name: main から実行しているか
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::本番へ出せるのは main だけです（いまは ${GITHUB_REF}）"
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      # TO_BE_CREATED のままでは、移行も deploy も API に拒まれる。そうなる前に、
+      # 何を直せばいいかを言って止まる（check の dry-run は id を見ないので緑のまま）
+      - name: wrangler.toml の id が入っているか
+        run: node scripts/check-ids.mjs
+
+  check:
+    needs: guard
+    uses: ./.github/workflows/check.yml
+
+  deploy:
+    needs: check
+    runs-on: ubuntu-latest
+    # 承認者はリポジトリの Settings → Environments → production で付ける（README）
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -24,17 +64,34 @@ jobs:
 
       - run: npm ci
 
-      # 壊れたものを本番に出さない
-      - run: npm run typecheck
-      - run: npm test
+      - name: API トークンがあるか
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::secret の CLOUDFLARE_API_TOKEN がありません（README の「本番に出す」）"
+            exit 1
+          fi
 
-      - name: マイグレーション
-        if: inputs.migrate
+      # 移行を当てる前の本番を、戻せる形で残す。
+      # - export は D1 まるごとの SQL（別の D1 に流し込めば、その時点の中身が再現できる）
+      # - 栞（bookmark）は Time Travel でこの時点へ戻すための印（30日まで）
+      # どちらも取れなければ、移行を流さずに止まる
+      - name: 本番 D1 の写しを取る
+        run: |
+          mkdir -p backup
+          npx wrangler d1 time-travel info noctifex --json > backup/bookmark.json
+          npx wrangler d1 export noctifex --remote --output="backup/noctifex-${GITHUB_SHA}.sql"
+
+      # 中身はメンバーの連絡先・ログインの紐づけ（セッションは D1 にもハッシュでしか無い）を
+      # 含む。リポジトリを読める人は誰でも落とせるので、置いておくのは短く
+      - uses: actions/upload-artifact@v4
+        with:
+          name: d1-backup-${{ github.run_id }}
+          path: backup/
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: マイグレーション（未適用のものだけ）
         run: npx wrangler d1 migrations apply noctifex --remote
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
       - name: デプロイ
         run: npx wrangler deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

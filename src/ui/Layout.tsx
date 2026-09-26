@@ -2,7 +2,7 @@ import type { Child } from 'hono/jsx'
 import { yearInJapan } from '../lib/format'
 import { SITE } from '../site'
 import type { Theme } from '../theme'
-import { AdminLink, HtmlDocument } from './components'
+import { AdminLink, HtmlDocument, Stylesheets } from './components'
 import { MARK_POINTS } from './icons'
 
 export type NavItem = { href: string; label: string; active?: boolean }
@@ -133,7 +133,7 @@ export const Layout = (props: {
         rel="icon"
         href={`data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%230c0c0e'/%3E%3Cpolygon points='${MARK_POINTS}' fill='%23f2f2f4'/%3E%3C/svg%3E`}
       />
-      <link rel="stylesheet" href="/app.css" />
+      <Stylesheets />
       {props.jsonLd ? (
         <script
           type="application/ld+json"

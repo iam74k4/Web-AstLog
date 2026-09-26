@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import * as schema from '../src/db/schema'
 import { createSession, SESSION_COOKIE } from '../src/lib/auth'
+import { touchSite } from '../src/lib/page-cache'
 
 export const db = () => drizzle(env.DB, { schema })
 
@@ -26,7 +27,26 @@ export async function resetDb() {
     { key: 'web', label: 'Web', sortOrder: 10 },
     { key: 'cli', label: 'CLI', sortOrder: 20 },
   ])
+  await touchSite(env.MEDIA)
 }
+
+/*
+  D1 を直に書いたあとで、公開ページの写し（src/lib/page-cache.ts）の版を上げる。
+  管理画面を通らない書き換えは版を上げないので、本番で D1 を手で直したときと同じく
+  上げてから見る（本番では npm run site:touch）。resetDb と seed… は自分で上げる。
+*/
+export const touch = () => touchSite(env.MEDIA)
+
+/*
+  写しを持たない env。Worker の版（写しの鍵に入る）を呼ぶたびに新しくするので、
+  前のテストが置いた写しに当たらない。app.fetch に別の DB を渡して描き比べる
+  テスト（写しではなく、その DB で描いた結果を見たいもの）が使う
+*/
+export const uncachedEnv = (overrides: Partial<Cloudflare.Env> = {}): Cloudflare.Env => ({
+  ...env,
+  CF_VERSION_METADATA: { id: crypto.randomUUID(), tag: '', timestamp: new Date().toISOString() },
+  ...overrides,
+})
 
 export async function seedMember(overrides: Partial<typeof schema.members.$inferInsert> = {}) {
   const [member] = await db()
@@ -41,6 +61,7 @@ export async function seedMember(overrides: Partial<typeof schema.members.$infer
     })
     .returning()
   if (!member) throw new Error('member を作れなかった')
+  await touchSite(env.MEDIA)
   return member
 }
 
@@ -50,6 +71,7 @@ export async function seedItem(overrides: Partial<typeof schema.items.$inferInse
     .values({ type: 'app', title: 'AppMixer', published: 1, sortOrder: 10, ...overrides })
     .returning()
   if (!item) throw new Error('item を作れなかった')
+  await touchSite(env.MEDIA)
   return item
 }
 

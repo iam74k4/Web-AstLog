@@ -1,12 +1,72 @@
 import { Hono } from 'hono'
 import type { AppEnv } from './env'
+import { pageCache } from './lib/page-cache'
 import { adminRoutes } from './routes/admin'
 import { publicRoutes } from './routes/public'
 import { SITE } from './site'
-import { HtmlDocument } from './ui/components'
+import { HtmlDocument, Stylesheets } from './ui/components'
 import { MarkIcon } from './ui/icons'
 
 const app = new Hono<AppEnv>()
+
+/*
+  応答のヘッダは、ここの1本が全部の応答に掛ける（公開・管理画面・404・500・
+  リダイレクト）。個々のルートに書くと、足したルートだけが素のまま出る。
+
+  CSP は「公開ページに JavaScript を置かない」をブラウザに守らせる最後の壁。
+  注入口（受け入れる前に上がった SVG・javascript: の href・本文の抜け）が
+  1つ見つかっても、ここがあればスクリプトは走らない。
+  - script-src 'none'——JSON-LD（type="application/ld+json"）はデータの塊で
+    実行されないので、これで止まらない（ブラウザで確かめてある）
+  - style-src に 'unsafe-inline'——列の数（style="--cols:2"）とアバターの
+    寸法（--avatar-size）を style 属性で渡している。スクリプトではない
+  - img-src に data:——ファビコンは data: の SVG（src/ui/Layout.tsx）
+  - form-action 'self'——管理画面のフォームはどれも同じオリジンへ送る。
+    OAuth の入口はフォームではなく GET のリンクなので、ここに掛からない
+  - frame-ancestors 'none'——どのページもほかのサイトの枠に入れさせない
+
+  /images/* は自分の CSP（default-src 'none'; sandbox）を持っている。画像の
+  ふりをした文書を開かせないための、こちらより狭い約束なので**上書きしない**
+  （ルートが CSP を付けていたら、ここは触らない）。
+
+  Referrer-Policy は strict-origin-when-cross-origin。no-referrer にしては
+  いけない——Chromium は no-referrer のページから出た同じオリジンのフォームの
+  POST に Origin: null を付け、sameOrigin（src/routes/admin.tsx）がそれを
+  403 で弾くので、ログインしたあとの保存がすべて止まる。
+
+  管理画面（/admin/*）は no-store。共用の端末でログアウトしたあと「戻る」で、
+  下書きの中身が履歴のキャッシュから出てこないようにする。
+
+  public/ の静的なファイルは Worker を通らない（[assets] が先に配る）。
+  あちらのヘッダは public/_headers が持つ。
+*/
+const PAGE_CSP = [
+  "default-src 'self'",
+  "script-src 'none'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  "img-src 'self' data:",
+  "style-src 'self' 'unsafe-inline'",
+].join('; ')
+
+app.use(async (c, next) => {
+  await next()
+  const headers = c.res.headers
+  if (!headers.has('content-security-policy')) headers.set('content-security-policy', PAGE_CSP)
+  headers.set('x-content-type-options', 'nosniff')
+  headers.set('referrer-policy', 'strict-origin-when-cross-origin')
+  if (c.req.path === '/admin' || c.req.path.startsWith('/admin/')) {
+    headers.set('cache-control', 'no-store')
+  }
+})
+
+/*
+  公開ページの写し（src/lib/page-cache.ts）。上のヘッダの1本より内側に置く——
+  写しにはヘッダを焼き込まず、出すたびに上の1本が同じものを付ける
+*/
+app.use(pageCache)
 
 app.route('/admin', adminRoutes)
 app.route('/', publicRoutes)
@@ -20,7 +80,7 @@ const ErrorPage = ({ code, title, detail }: { code: string; title: string; detai
       <title>
         {code} — {SITE.name}
       </title>
-      <link rel="stylesheet" href="/app.css" />
+      <Stylesheets />
     </head>
     <body>
       <div class="oops">

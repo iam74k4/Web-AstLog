@@ -1,6 +1,12 @@
 -- 移行前の index.html に載っていた内容を、そのまま D1 に入れる。
--- 何度流しても同じ状態になるよう、先に消してから入れている。
--- 本番に流すのは最初の一度だけ（npm run db:seed）。
+-- 何度流しても同じ状態になるよう、先に消してから入れている——**中身を全部消す**。
+--
+-- ふだん流すのはローカルだけ（npm run db:seed:local）。本番に流すのは空の D1 に
+-- 一度きりで、npm run db:seed:remote:destroys-prod（scripts/seed-remote.mjs）が
+-- 作品・メンバー・構成が1行でもあれば止める。
+--
+-- プラットフォームの選択肢（platforms）は参照データなので、ここではなく移行
+-- （drizzle/0011_platforms_reference）が入れる。先に移行を流してから流すこと。
 
 DELETE FROM item_slug_redirects;
 DELETE FROM member_slug_redirects;
@@ -8,7 +14,6 @@ DELETE FROM item_links;
 DELETE FROM item_tags;
 DELETE FROM items;
 DELETE FROM members;
-DELETE FROM platforms;
 DELETE FROM blocks;
 
 -- トップの並び（src/blocks.ts の DEFAULT_BLOCKS と揃える）。
@@ -18,13 +23,6 @@ INSERT INTO blocks (type, published, sort_order) VALUES
   ('projects', 1, 20),
   ('team',     1, 30),
   ('contact',  1, 40);
-
-INSERT INTO platforms (key, label, sort_order) VALUES
-  ('macos',  'macOS',  10),
-  ('ios',    'iOS',    20),
-  ('cli',    'CLI',    30),
-  ('server', 'Server', 40),
-  ('web',    'Web',    50);
 
 INSERT INTO members (id, slug, name, role, location, headline, bio, skills_text, career_text, avatar_url, github, email, published, sort_order)
 VALUES (

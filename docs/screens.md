@@ -4,6 +4,25 @@
 機械に読ませる2本・画像）で、画面の数は構成しだいに変わる。管理が 12 画面。ルートの実体は
 `src/routes/public.tsx` と `src/routes/admin.tsx`。
 
+どの応答にも（公開・管理・404・500・リダイレクト）`src/index.tsx` のミドルウェアが
+CSP（`default-src 'self'; script-src 'none'; object-src 'none'; base-uri 'none';
+form-action 'self'; frame-ancestors 'none'; img-src 'self' data:;
+style-src 'self' 'unsafe-inline'`）・`X-Content-Type-Options: nosniff`・
+`Referrer-Policy: strict-origin-when-cross-origin` を付ける。自分の CSP を持つ
+`/images/*` はそのまま（上書きしない）。`/admin/*` はさらに `Cache-Control: no-store`。
+Worker を通らない `public/` のファイル（`/app.css`・`/admin.css`・`/assets/…`）には
+`public/_headers` が nosniff・Referrer-Policy・`default-src 'none'; sandbox` を付ける。
+2枚の CSS にはさらに `Cache-Control: public, max-age=31536000, immutable`（HTML が
+中身から作った版つきの URL `/app.css?v=…` で読む。`src/ui/components.tsx` の `Stylesheets`）。
+
+訪問者の GET（セッションのクッキーを持たない）は、公開ページの写し（Cache API。
+`src/lib/page-cache.ts`）を通る。置くのは 200・301・302・404 で、管理画面の保存が
+内容の版（KV の `site:version`）を上げると外れる（ほかの場所の訪問者に届くまで
+最大 60 秒ほど）。デプロイでも全部外れる。D1 が例外を投げたら、古い写しがあれば
+それを返す。通らないのは `/admin`・`/images/*`・`/robots.txt`・最後の語に「.」を
+含む URL（`/sitemap.xml` を除く）と、`cache-control` か `set-cookie` を持つ応答
+（ログイン中の `private, no-store`）。応答の `x-noctifex-cache` が `hit` / `miss` / `stale`。
+
 ## 公開側
 
 誰でも見られる。出すのは `published = 1` の行だけ。骨格・色・書体は、管理の
@@ -11,7 +30,8 @@
 
 公開ページは**1画面に1つぶんだけを収め、ページそのものはスクロールしない**。
 入りきらないぶんは次の URL に送る。移動は普通のフルページ遷移で、JavaScript は
-1バイトも持たない。縦に伸びてよいのは `/all` だけ。
+1バイトも持たない（CSP の `script-src 'none'` で、置いても走らない）。縦に伸びて
+よいのは `/all` だけ。
 
 表は `src/routes/public.tsx` の**登録順そのまま**。`/:screen` と `/:screen/:page`
 は1語・2語の URL を何でも拾う catch-all なので、固定の URL は必ずその前に並ぶ。
@@ -31,8 +51,8 @@
 | クローラへの指示 | `GET /robots.txt` | `text/plain`。`/admin/` だけ外す | — |
 | URL の一覧 | `GET /sitemap.xml` | `application/xml`。公開中の画面を数え上げる | — |
 | 画像 | `GET /images/avatars/…`<br>`GET /images/items/…` | KV に入れたアバターと作品の画像。キーの形（置き場 / 英数字で始まり英数字と `. _ -` だけの名前）に合わないものは読みに行かない（KV のキーを外に開く口なので、置き場の外は読ませない）。どの応答にも `X-Content-Type-Options: nosniff` と `Content-Security-Policy: default-src 'none'; sandbox`（同じオリジンで配るので、画像のふりをした文書が直に開かれても走らせない）。content-type は KV に入れた型が5種類（PNG・JPEG・WebP・AVIF・GIF）のどれかならそのまま、それ以外（以前の SVG・HEIC）は `application/octet-stream` の添付（`Content-Disposition: attachment`） | 該当なし・形が合わないものは 404 |
-| 画面 | `GET /:screen` | そのブロックの1画面目（`/projects` `/team` …）。1人のサイトの `/team` はプロフィールの1枚目へ 301 | 無い画面名は 404 |
-| 画面の続き | `GET /:screen/:page` | 2画面目から（`/projects/2`）。1人のサイトの `/team/:page` もプロフィールの1枚目へ 301 | 範囲の外は 404。`/projects/1` は `/projects` へ 303 |
+| 画面 | `GET /:screen` | そのブロックの1画面目（`/projects` `/team` …）。1人のサイトの `/team` はプロフィールの1枚目へ 301 | 無い画面名は 404。画面の名前の形（`hero` `projects` `team` `contact` か `block-<id>`）でなければ D1 に聞かずに 404 |
+| 画面の続き | `GET /:screen/:page` | 2画面目から（`/projects/2`）。1人のサイトの `/team/:page` もプロフィールの1枚目へ 301 | 範囲の外は 404。`/projects/1` は `/projects` へ 303。名前の形は `/:screen` と同じ |
 
 作品の恒久リンクが3語なのは、catch-all（1語・2語）と取り合わないようにするため。
 2語（`/apps/<slug>`）にすると、めくる先の番号と作品の名前が同じ位置で取り合い、
@@ -127,6 +147,8 @@ Contact は画面に出ている誘いの1文（`src/site.ts` の `contactLead`�
 トップの画面（`siteSteps` の canonical。1人のサイトではプロフィールの画面もここに入り、
 `/team` は入らない）／全体ページ `/all`／個人ページ（`memberScreens`。割った2画面目も
 出る）／作品の恒久リンクと、本文のある作品の本文の画面（`itemHref` / `itemStoryHref`）の4つ。
+作品は URL を組むぶん（区分・slug・本文）だけを引く（`listPublishedItemKeys`。カードの
+タグ・リンク・担当は全件ぶん読まない）。
 入口 `/` は、連なりの先頭がプロフィールの
 構成（そこへ 302 で送るだけ）でだけ載せない。
 載らないのは下書き・0件で消えた節・絞り込み付きの URL・`/admin`。同じ URL は1度だけ。
@@ -427,6 +449,8 @@ Team を置いていないサイトでは、差し込む先が無いので、こ
 `/admin/*`。ログインが要る。ログインは GitHub / Google の OAuth だけで、パスワードは
 無い。書き込み（POST）は送り元も確かめる——Origin → Sec-Fetch-Site → Referer の順に
 見て、origin が違えば 403（`Origin: null` も 403）。壁の外のログアウトも対象。
+管理画面の応答はどれも `Cache-Control: no-store`（ログアウトしたあと「戻る」で中身を
+出さない）。
 
 公開ページからは、**ログインしているあいだだけ**柱に「管理画面」が出て、いま見ている
 画面を直す場所へ同じタブで送る（行き先の表は [flow.md](./flow.md#公開側)）。訪問者には
@@ -594,7 +618,8 @@ Worker より先に配られる（`public/`）。
 
 | パス | 中身 |
 | --- | --- |
-| `/app.css` | 全画面のスタイル |
+| `/app.css` | 全画面のスタイル。公開ページ・404 はこれだけを読む（`?v=` は中身の版。配り手は見ない） |
+| `/admin.css` | 管理画面だけの規則。管理画面は `/app.css` のあとにこれを読む |
 | `/assets/…` | ロゴ、アバターの初期画像、サイトの `og:image`（作品のページで画像がある作品は、その作品の画像） |
 
 **ここに `robots.txt` や `sitemap.xml` を置かないこと。** どちらも Worker が

@@ -2,7 +2,11 @@ import type { User } from './db/schema'
 
 export type Env = {
   DB: D1Database
-  // アバターと作品の画像だけ（avatars/ と items/）。R2 が未有効なので当面ここ
+  /*
+    アバターと作品の画像（avatars/ と items/）。R2 が未有効なので当面ここ。
+    ほかに1行だけ、公開ページの写しの内容の版（site:version。src/lib/page-cache.ts）。
+    /images/* は IMAGE_KEY で2つの置き場しか開かないので、この行は外から読めない
+  */
   MEDIA: KVNamespace
   /*
     最初に owner へ紐づけてよいアカウント（wrangler.toml の [vars]。公開してよい値）。
@@ -25,6 +29,12 @@ export type Env = {
     noctifex.dev に書き換えるので、リクエストからは組めない（src/lib/oauth.ts の callbackUrl）
   */
   OAUTH_REDIRECT_ORIGIN?: string
+  /*
+    いま動いている Worker の版（wrangler.toml の [version_metadata]）。公開ページの
+    写しの鍵に入れて、デプロイした日に前のコードの写しを出さない
+    （src/lib/page-cache.ts）。無ければ 'local' として扱う
+  */
+  CF_VERSION_METADATA?: WorkerVersionMetadata
 }
 
 export type AppEnv = {

@@ -10,6 +10,7 @@ import {
   blockTexts,
   blockType,
   blockVisibleParts,
+  FIXED_BLOCK_KEYS,
   itemStory,
   MEMBER_PER_SCREEN,
   memberUnits,
@@ -434,6 +435,8 @@ const SiteIdentity = ({
   クッキーが無ければ D1 には聞きに行かない。訪問者のリクエストは1本も
   増えない。ログインしている人に返すページは、共有のキャッシュに置かせない
   （private）。置かれると、次に来た訪問者に管理画面への入口が出る。
+  公開ページの写し（src/lib/page-cache.ts）も、セッションのクッキーを持つ要求と
+  cache-control を持つ応答を通さない——この約束をそちらでも守っている。
 */
 async function adminHref(c: Context<AppEnv>, to: string): Promise<string | undefined> {
   const sessionId = getCookie(c, SESSION_COOKIE)
@@ -2354,10 +2357,12 @@ const xmlText = (text: string) =>
 
 publicRoutes.get('/sitemap.xml', async (c) => {
   const db = drizzle(c.env.DB, { schema })
+  // 作品は URL を組むぶん（区分・slug・本文の有無）だけ。カードの子（タグ・リンク・
+  // 担当・プラットフォーム）は要らないので、全件ぶんを引かない
   const [members, blocks, items] = await Promise.all([
     listPublishedMembers(db),
     publishedBlocks(db),
-    listPublishedItems(db),
+    listPublishedItemKeys(db),
   ])
 
   // 絞り込みを付けない素のサイト。?kind= 付きの URL は正ではないので載せない
@@ -2417,8 +2422,9 @@ publicRoutes.get('/sitemap.xml', async (c) => {
 /*
   管理画面からアップロードした画像。KV から出す。
 
-  いまの KV には画像しか無い（ログイン試行の記録は、パスワードのログインと
-  一緒に無くなった）。それでもキーの形は縛る。この URL は KV のキーを
+  いまの KV には画像と、公開ページの写しの版の1行（site:version。
+  src/lib/page-cache.ts）しか無い（ログイン試行の記録は、パスワードのログインと
+  一緒に無くなった）。版の行もここから読めないのは、キーの形を縛っているから。この URL は KV のキーを
   そのまま外に開く口で、縛らないと、あとから同じ KV に何かを置いた日に
   それが黙って読み出せるようになる（実際、以前は login:<メールアドレス> が
   同居していた）。
@@ -2464,13 +2470,29 @@ publicRoutes.get('/images/*', async (c) => {
 })
 
 /*
+  画面の名前の形。画面の URL の1語目はコードが付ける名前だけ——決まった中身の
+  ブロックの種類（/projects …）か、打ち込むブロックの block-<id>（renderBlock の id）。
+
+  catch-all は1語・2語の URL を何でも拾うので、形を見ないと /wp-login.php や
+  /.env を探し回る要求が、1本ごとに D1 を4本引いてから 404 を返していた。
+  形の合わない名前は D1 に聞く前に 404 にする（どの画面の名前にもならないので、
+  答えは聞いても同じ）。名前の付け方を変えたら、ここも一緒に変えること。
+*/
+const SCREEN_NAME = new RegExp(`^(?:${FIXED_BLOCK_KEYS.join('|')}|block-[1-9][0-9]*)$`)
+
+/*
   画面ごとの URL。上の「登録順の決まり」のとおり、固定の URL を全部登録した
   あとの、いちばん最後に置く。ここから下に固定ルートを足してはいけない。
 */
-publicRoutes.get('/:screen', (c) => renderScreen(c, { slug: c.req.param('screen'), page: 1 }))
+publicRoutes.get('/:screen', (c) => {
+  const screen = c.req.param('screen')
+  if (!SCREEN_NAME.test(screen)) return c.notFound()
+  return renderScreen(c, { slug: screen, page: 1 })
+})
 
 publicRoutes.get('/:screen/:page', (c) => {
   const screen = c.req.param('screen')
+  if (!SCREEN_NAME.test(screen)) return c.notFound()
   // ページ数の読み方は個人ページと同じ（readPage）。文法を2つ持たない
   const want = readPage(c.req.param('page'), c.req.url, `/${screen}`)
   if (!want) return c.notFound()

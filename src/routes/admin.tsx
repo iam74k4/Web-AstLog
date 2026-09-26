@@ -23,6 +23,7 @@ import {
   countPublishedItems,
   defaultBlocks,
   ensureBlocks,
+  findBlock,
   initBlocks,
   itemOrder,
   listBlocks,
@@ -71,6 +72,7 @@ import {
   type ProviderKey,
   pkcePair,
 } from '../lib/oauth'
+import { touchSiteOnWrite } from '../lib/page-cache'
 import { chunk, screenCount } from '../lib/paginate'
 import {
   isThemeValue,
@@ -101,7 +103,9 @@ const db = (c: { env: { DB: D1Database } }) => drizzle(c.env.DB, { schema })
 
   - Origin: null は拒む（403）。Referrer-Policy: no-referrer のページや
     サンドボックスの iframe から来ると null になり、どこから来たか分からない。
-    以前は new URL('null') が例外を投げて 500 になっていた
+    以前は new URL('null') が例外を投げて 500 になっていた。このサイトのページは
+    Referrer-Policy: strict-origin-when-cross-origin（src/index.tsx）なので、自分の
+    フォームからの POST が null になることは無い——no-referrer に変えると、全部ここで止まる
   - 3つとも無いときは通す。今のブラウザは POST に Origin も Sec-Fetch-Site も
     付けるので、どちらも無いのはブラウザ以外（curl など）で、それはそもそも
     ほかの人のクッキーを持てない。しかも管理画面の POST はどれもセッションの
@@ -708,6 +712,8 @@ const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
 
 const app = new Hono<AppEnv>()
 app.use('*', requireAuth)
+// 書き込みのたびに公開ページの写しの版を上げる（壁の内側なので、ログインした POST だけ）
+app.use('*', touchSiteOnWrite)
 
 app.get('/', (c) => c.redirect('/admin/members', 303))
 
@@ -2790,7 +2796,7 @@ const PUBLISH_BLOCKED = '公開できませんでした。下の理由を直し�
 app.get('/blocks/:id/edit', async (c) => {
   const id = parseId(c.req.param('id'))
   if (!id) return c.notFound()
-  const block = await db(c).query.blocks.findFirst({ where: eq(schema.blocks.id, id) })
+  const block = await findBlock(db(c), id)
   const type = block ? blockType(block.type) : undefined
   if (!block || !type) return c.notFound()
   const blocked =
@@ -2960,7 +2966,7 @@ app.post('/blocks/init', async (c) => {
 app.post('/blocks/:id', async (c) => {
   const id = parseId(c.req.param('id'))
   if (!id) return c.notFound()
-  const block = await db(c).query.blocks.findFirst({ where: eq(schema.blocks.id, id) })
+  const block = await findBlock(db(c), id)
   const type = block ? blockType(block.type) : undefined
   if (!block || !type) return c.notFound()
 
@@ -3024,7 +3030,7 @@ app.post('/blocks/:id', async (c) => {
 app.post('/blocks/:id/publish', async (c) => {
   const id = parseId(c.req.param('id'))
   if (!id) return c.notFound()
-  const block = await db(c).query.blocks.findFirst({ where: eq(schema.blocks.id, id) })
+  const block = await findBlock(db(c), id)
   if (!block) return c.notFound()
 
   const form = await c.req.formData()
@@ -3089,7 +3095,7 @@ app.post('/blocks/:id/move', async (c) => {
 app.get('/blocks/:id/delete', async (c) => {
   const id = parseId(c.req.param('id'))
   if (!id) return c.notFound()
-  const block = await db(c).query.blocks.findFirst({ where: eq(schema.blocks.id, id) })
+  const block = await findBlock(db(c), id)
   if (!block) return c.notFound()
   const type = blockType(block.type)
 
@@ -3118,7 +3124,7 @@ app.get('/blocks/:id/delete', async (c) => {
 app.post('/blocks/:id/delete', async (c) => {
   const id = parseId(c.req.param('id'))
   if (!id) return c.notFound()
-  const block = await db(c).query.blocks.findFirst({ where: eq(schema.blocks.id, id) })
+  const block = await findBlock(db(c), id)
   if (!block) return c.notFound()
 
   await db(c).delete(schema.blocks).where(eq(schema.blocks.id, id))

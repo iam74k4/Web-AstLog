@@ -240,6 +240,29 @@ export function blockType(key: string): BlockType | undefined {
   return BLOCK_TYPES.find((type) => type.key === key)
 }
 
+/*
+  前の版の種類の名前（読む側だけが知っている別名）。
+
+  Apps と Works を Projects に畳んだとき、行の書き換え（drizzle/0004_merge_apps_works）
+  と読む側の変更を同じリリースに入れていた。書き換えを流さずに出す（手元の
+  npm run deploy・移行の失敗・移行より先に出た版）と、apps / works の行は「知らない
+  種類」として落ち、作品の一覧・入口の帯・/apps と /works の 301 先がどれも 404 に
+  なって、500 ではないので誰も気づかない。
+
+  だから読む側を先に広げる（expand）。構成の行を読むところ（src/db/queries.ts の
+  listBlocks と findBlock）が、この表で前の名前をいまの名前に読み替え、apps と works
+  の2行は 0004 と同じ形の1行に畳む（先に並んでいたほうの位置、どちらかが公開中なら
+  公開）。書き換え（contract）が済んだ D1 でも済んでいない D1 でも、同じ画面になる
+  （test/deploy.test.ts が2つを描き比べている）。
+
+  書く側（「置く」・isBlockKey）はこの名前を受け取らない。新しい行はいつもいまの名前で
+  入る。ここから外してよいのは、どの環境の D1 にも 0004 が当たったあと。
+*/
+export const LEGACY_BLOCK_KEYS: Readonly<Record<string, BlockKey>> = {
+  apps: 'projects',
+  works: 'projects',
+}
+
 export function isBlockKey(key: string): key is BlockKey {
   return blockType(key) !== undefined
 }

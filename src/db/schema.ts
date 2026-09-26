@@ -178,9 +178,37 @@ export const items = sqliteTable(
     createdAt: text('created_at').notNull().default(now),
     updatedAt: text('updated_at').notNull().default(now),
   },
+  /*
+    公開の一覧の3つの引き方（全部・区分で絞る・担当で絞る）に1本ずつ。どれも
+    公開の並び（src/db/queries.ts の itemOrder: year_from の新しい順 → sort_order → id）の
+    順に索引が並んでいるので、LIMIT が索引の上で効き、1画面ぶん（カード2枚）の行と
+    その子だけを読む。id は索引の末尾に暗に入っている rowid が受ける。
+
+    year_from は desc で持つ。itemOrder の「desc nulls last」は SQLite の desc の
+    既定の並び（NULL は最小）なので、この索引をそのまま前から読める。asc で持つと、
+    後ろから読んだときに sort_order と id まで逆になり、並べ直し（TEMP B-TREE）に戻る。
+
+    並びを変えるときは、ここの3本も一緒に。test/queries.test.ts の「索引」が
+    EXPLAIN QUERY PLAN で並べ直しが無いことを見ている。
+  */
   (t) => [
-    index('idx_items_public').on(t.type, t.published, t.sortOrder),
-    index('idx_items_member').on(t.memberId),
+    index('idx_items_public').on(
+      t.published,
+      sql`${sql.identifier('year_from')} desc`,
+      t.sortOrder,
+    ),
+    index('idx_items_kind').on(
+      t.type,
+      t.published,
+      sql`${sql.identifier('year_from')} desc`,
+      t.sortOrder,
+    ),
+    index('idx_items_member').on(
+      t.memberId,
+      t.published,
+      sql`${sql.identifier('year_from')} desc`,
+      t.sortOrder,
+    ),
   ],
 )
 
@@ -193,18 +221,30 @@ export const itemTags = sqliteTable(
     tag: text('tag').notNull(),
     sortOrder: integer('sort_order').notNull().default(0),
   },
-  (t) => [primaryKey({ columns: [t.itemId, t.tag] })],
+  /*
+    子の行は作品ごとに sort_order の順で引く（カードのタグ・行き先）。主キー
+    （item_id, tag）でも作品では引けるが、並べ直しが1件ごとに走る。item_links には
+    item_id の索引そのものが無く、作品1件のたびに表を丸ごと読んでいた
+  */
+  (t) => [
+    primaryKey({ columns: [t.itemId, t.tag] }),
+    index('idx_item_tags_item').on(t.itemId, t.sortOrder),
+  ],
 )
 
-export const itemLinks = sqliteTable('item_links', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  itemId: integer('item_id')
-    .notNull()
-    .references(() => items.id, { onDelete: 'cascade' }),
-  label: text('label').notNull(),
-  url: text('url').notNull(),
-  sortOrder: integer('sort_order').notNull().default(0),
-})
+export const itemLinks = sqliteTable(
+  'item_links',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    label: text('label').notNull(),
+    url: text('url').notNull(),
+    sortOrder: integer('sort_order').notNull().default(0),
+  },
+  (t) => [index('idx_item_links_item').on(t.itemId, t.sortOrder)],
+)
 
 /*
   前の slug から、いまの行への転送表。作品とメンバーで1つずつ。

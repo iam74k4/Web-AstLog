@@ -4,10 +4,17 @@ on:
   push:
     branches: ['**']
   pull_request:
+  # deploy.yml が本番へ出す前に、これと同じ門（型・lint・テスト・ビルド・fit・contrast）を
+  # そのまま呼ぶ。門を2か所に書き写すと、片方だけ弱くなる（以前の deploy は型とテストしか
+  # 通していなかった）
+  workflow_call:
 
-# 同じブランチに続けて push したら、前の実行は捨てる
+# 同じブランチに続けて push したら、前の実行は捨てる。
+# 名前に event_name を入れるのは、deploy から呼ばれた実行（workflow_dispatch）を
+# 同じ main への push の実行と同じ組にしないため——組が同じだと、push が deploy の
+# 門を取り消してしまう
 concurrency:
-  group: check-${{ github.ref }}
+  group: check-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

@@ -78,6 +78,20 @@
       "when": 1790429067419,
       "tag": "0010_permalinks_and_order",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1790439730177,
+      "tag": "0011_platforms_reference",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1790441497947,
+      "tag": "0012_item_indexes",
+      "breakpoints": true
     }
   ]
 }
