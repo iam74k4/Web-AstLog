@@ -44,6 +44,7 @@ import {
 } from '../lib/auth'
 import {
   bool,
+  isHttpsUrl,
   isSafeUrl,
   num,
   paragraphs,
@@ -53,6 +54,7 @@ import {
   timeInJapan,
   toSlug,
 } from '../lib/format'
+import { IMAGE_ACCEPT, IMAGE_LABELS, type SniffedImage, sniffImage } from '../lib/image'
 import {
   authorizeUrl,
   callbackUrl,
@@ -785,11 +787,18 @@ const MemberForm = (props: {
             個人ページは柱も Contact もサイトのものを使う。この人の行き先が出るのは、
             サイトの行き先と違うときの1枚目だけ（同じ行き先を2つ置かない）
           */}
+          {/*
+            https:// で始まる URL だけを受ける（memberErrors）。type=url でも
+            ブラウザは javascript: や http: を通すので、決めるのはサーバー側
+          */}
           <Field
             label="GitHub URL"
             name="github"
+            type="url"
             value={value('github')}
-            hint="サイトの GitHub と違うときだけ、個人ページの1枚目に出る"
+            placeholder="https://github.com/…"
+            error={props.errors?.github}
+            hint="https:// から。サイトの GitHub と違うときだけ、個人ページの1枚目に出る"
           />
           <Field
             label="Email"
@@ -832,12 +841,17 @@ const MemberForm = (props: {
           />
           <label class="field">
             <span class="field__label">アバター画像</span>
-            <input class="input input--file" type="file" name="avatar" accept="image/*" />
+            <input
+              class={props.errors?.avatar ? 'input input--file input--error' : 'input input--file'}
+              type="file"
+              name="avatar"
+              accept={IMAGE_ACCEPT}
+            />
             {props.errors?.avatar ? <span class="field__error">{props.errors.avatar}</span> : null}
             <span class="field__hint">
               {member?.avatarUrl
-                ? '選ぶと差し替わる。空なら今のまま'
-                : '1MB まで。未設定なら頭文字を出す'}
+                ? `選ぶと差し替わる。空なら今のまま · ${IMAGE_LABELS}（1MB まで）`
+                : `${IMAGE_LABELS}（1MB まで）。未設定なら頭文字を出す`}
             </span>
           </label>
         </div>
@@ -896,6 +910,11 @@ const IMAGE_MAX_BYTES = 1_000_000
   置き場は2つ——メンバーの顔（avatars/）と作品のスクリーンショット（items/）。
   取り込みの経路と検査（種類と大きさ）は1本で、置き場の名前だけが違う。
 
+  種類は中身の先頭のバイトで決める（src/lib/image.ts の sniffImage）。ブラウザが
+  名乗る file.type は見ない——image/png を名乗った SVG を名乗りのまま保存して
+  配ると、開いた人のブラウザがこのサイトのオリジンでスクリプトを走らせる。
+  通すのは PNG・JPEG・WebP・AVIF・GIF だけで、SVG と HEIC は理由を添えて弾く。
+
   検査（pickImage）と書き込み（putImage）を分けてあるのは、作品のフォームが
   「画像があるか」を知ってから保存してよいかを決めるため（代替テキストの
   要否）。検査に通っただけの画像は、まだどこにも書いていない——弾かれた
@@ -905,37 +924,34 @@ const IMAGE_MAX_BYTES = 1_000_000
   大きすぎる画像を選んだ人に「保存しました」と出てしまう。
 */
 type ImageFolder = 'avatars' | 'items'
-type PickedImage = { file: File | null; error?: string }
+type PickedImage = SniffedImage & { bytes: ArrayBuffer }
+type Picked = { image: PickedImage | null; error?: string }
 
-function pickImage(form: FormData, field: string): PickedImage {
+const IMAGE_TYPE_ERROR = `${IMAGE_LABELS} の画像を選んでください（SVG と HEIC は受け付けません。iPhone の写真は JPEG で書き出してください）`
+
+async function pickImage(form: FormData, field: string): Promise<Picked> {
   const file = form.get(field)
-  if (!(file instanceof File) || file.size === 0) return { file: null }
-  if (!file.type.startsWith('image/')) return { file: null, error: '画像ファイルを選んでください' }
+  if (!(file instanceof File) || file.size === 0) return { image: null }
   if (file.size > IMAGE_MAX_BYTES) {
-    return { file: null, error: '画像は 1MB までです。小さくしてから選び直してください' }
+    return { image: null, error: '画像は 1MB までです。小さくしてから選び直してください' }
   }
-  return { file }
+  const bytes = await file.arrayBuffer()
+  const sniffed = sniffImage(new Uint8Array(bytes))
+  if (!sniffed) return { image: null, error: IMAGE_TYPE_ERROR }
+  return { image: { ...sniffed, bytes } }
 }
 
 /*
   キーは /images/ 側の検査（src/routes/public.tsx の IMAGE_KEY——置き場の
   名前 / 英数字で始まり英数字と . _ - だけ）を必ず通る形にする。name は
   slug から作るので toSlug を通す（空なら置き場ごとの控えの名前）。
+  拡張子と content-type は判定の結果から付ける（名乗りを KV に入れない）。
 */
-async function putImage(kv: KVNamespace, file: File, folder: ImageFolder, name: string) {
-  const extension = file.type.split('/')[1]?.replace(/[^a-z0-9]/g, '') || 'bin'
+async function putImage(kv: KVNamespace, image: PickedImage, folder: ImageFolder, name: string) {
   const fallback = folder === 'avatars' ? 'member' : 'item'
-  const key = `${folder}/${toSlug(name) || fallback}-${newToken(4)}.${extension}`
-  await kv.put(key, await file.arrayBuffer(), { metadata: { contentType: file.type } })
+  const key = `${folder}/${toSlug(name) || fallback}-${newToken(4)}.${image.extension}`
+  await kv.put(key, image.bytes, { metadata: { contentType: image.type } })
   return `/images/${key}`
-}
-
-type AvatarResult = { url: string | null; error?: string }
-
-async function saveAvatar(kv: KVNamespace, form: FormData, slug: string): Promise<AvatarResult> {
-  const picked = pickImage(form, 'avatar')
-  if (picked.error) return { url: null, error: picked.error }
-  return { url: picked.file ? await putImage(kv, picked.file, 'avatars', slug) : null }
 }
 
 /*
@@ -951,27 +967,78 @@ async function removeImage(kv: KVNamespace, url: string | null | undefined) {
 }
 
 /*
+  KV と D1 は1つのトランザクションにできない。だから順序で守る。
+
+  1. 新しい画像を KV に置く（putImage）
+  2. D1 を書く（write）。ここで落ちたら、1 で置いた画像を消してから投げ直す
+     ——どの行からも指されない画像を KV に残さない
+  3. D1 が通ってから、使われなくなった前の画像を消す（呼ぶ側。removeImage）
+
+  逆（D1 を先に書いて、あとで KV に置く）にすると、KV で落ちたときに D1 が
+  無い画像を指したまま残り、公開ページに壊れた画像が出る。前の画像を D1 より
+  先に消しても同じことが起きる。
+
+  片付けの失敗は元の失敗を隠さない（記録だけ残して、元の例外を投げる）。
+*/
+async function commitWithImage<T>(
+  kv: KVNamespace,
+  placed: string | null,
+  write: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await write()
+  } catch (error) {
+    if (placed) await removeImage(kv, placed).catch((cleanup) => console.error(cleanup))
+    throw error
+  }
+}
+
+/*
+  選んだ画像を受け取らずに戻すときの知らせ。ブラウザはファイルの欄を描き直せ
+  ないので、何も言わないと「選んだ画像も保存された」と読める。保存を止めた
+  ときは KV にも書いていない（putImage は検査が全部通ってから）。
+  アバターと作品の画像で同じ（field が欄の名前）。
+*/
+const imageNotKept = (form: FormData, field: string, errors: Record<string, string>) => {
+  const file = form.get(field)
+  if (errors[field] || !(file instanceof File) || file.size === 0) return errors
+  return {
+    ...errors,
+    [field]: '画像はまだ保存していません。直したあとで、もう一度選んでください',
+  }
+}
+
+/*
   紹介文の長さ。個人ページの About は1枚で、割る先が無い。
 
   段落の数も見るのは、同じ字数でも空行を増やすと高くなるため（実測: 3段落なら
   405 字まで弁が閉じたまま、6段落に割ると 315 字まで下がる @rail 390x844 指,
   Hiragino Sans, macOS Chromium）。上限と測り方は src/blocks.ts の MAX_CHARS。
 */
-function memberErrors(values: { name: string; bio: string }): Record<string, string> | null {
+function memberErrors(values: {
+  name: string
+  bio: string
+  github: string | null
+}): Record<string, string> | null {
   if (!values.name) return { name: '氏名は必須です' }
+  const errors: Record<string, string> = {}
   const total = chars(values.bio)
-  if (total > MAX_CHARS.memberBio) {
-    return {
-      bio: `1画面に収まりません。紹介文は ${MAX_CHARS.memberBio} 字までです（いま ${total} 字）`,
-    }
-  }
   const parts = paragraphs(values.bio).length
-  if (parts > MAX_CHARS.memberBioParagraphs) {
-    return {
-      bio: `1画面に収まりません。段落は ${MAX_CHARS.memberBioParagraphs} つまでです（いま ${parts} つ）`,
-    }
+  if (total > MAX_CHARS.memberBio) {
+    errors.bio = `1画面に収まりません。紹介文は ${MAX_CHARS.memberBio} 字までです（いま ${total} 字）`
+  } else if (parts > MAX_CHARS.memberBioParagraphs) {
+    errors.bio = `1画面に収まりません。段落は ${MAX_CHARS.memberBioParagraphs} つまでです（いま ${parts} つ）`
   }
-  return null
+  /*
+    GitHub は https:// で始まる絶対 URL だけ。公開ページも同じ検査（isHttpsUrl）で
+    落とすので、ここで通さないと「保存できたのにサイトに出ない」になる。
+    「github.com/…」のように頭を省くと相対 URL になって 404、javascript: は
+    公開ページの href に載る。下書きでも見る——長さではなく、受け取れない値
+  */
+  if (values.github && !isHttpsUrl(values.github)) {
+    errors.github = 'https:// で始まる URL を入れてください（例: https://github.com/…）'
+  }
+  return Object.keys(errors).length ? errors : null
 }
 
 // 入力エラーで描き直すとき、打った内容をそのまま返すための変換
@@ -987,20 +1054,24 @@ app.post('/members', async (c) => {
   const back = (errors: Record<string, string>) =>
     c.html(<MemberForm account={account} errors={errors} values={asValues(values)} />, 400)
 
-  const invalid = memberErrors(values)
-  if (invalid) return back(invalid)
+  const picked = await pickImage(form, 'avatar')
+  const errors =
+    (picked.error ? { avatar: picked.error } : null) ??
+    memberErrors(values) ??
+    ((await db(c).query.members.findFirst({ where: eq(schema.members.slug, values.slug) }))
+      ? { slug: 'この slug は既に使われています' }
+      : null)
+  if (errors) return back(imageNotKept(form, 'avatar', errors))
 
-  const duplicate = await db(c).query.members.findFirst({
-    where: eq(schema.members.slug, values.slug),
-  })
-  if (duplicate) return back({ slug: 'この slug は既に使われています' })
-
-  const avatar = await saveAvatar(c.env.MEDIA, form, values.slug)
-  if (avatar.error) return back({ avatar: avatar.error })
-
-  await db(c)
-    .insert(schema.members)
-    .values({ ...values, avatarUrl: avatar.url })
+  // 検査が全部通ってから KV に置き、D1 が落ちたら置いた画像を消す（commitWithImage）
+  const avatarUrl = picked.image
+    ? await putImage(c.env.MEDIA, picked.image, 'avatars', values.slug)
+    : null
+  await commitWithImage(c.env.MEDIA, avatarUrl, () =>
+    db(c)
+      .insert(schema.members)
+      .values({ ...values, avatarUrl }),
+  )
   return c.redirect(`/admin/members?saved=${savedParam(values.published)}`, 303)
 })
 
@@ -1018,22 +1089,28 @@ app.post('/members/:id', async (c) => {
       400,
     )
 
-  const invalid = memberErrors(values)
-  if (invalid) return back(invalid)
+  const picked = await pickImage(form, 'avatar')
+  const errors =
+    (picked.error ? { avatar: picked.error } : null) ??
+    memberErrors(values) ??
+    ((await db(c).query.members.findFirst({
+      where: and(eq(schema.members.slug, values.slug), ne(schema.members.id, id)),
+    }))
+      ? { slug: 'この slug は既に使われています' }
+      : null)
+  if (errors) return back(imageNotKept(form, 'avatar', errors))
 
-  const duplicate = await db(c).query.members.findFirst({
-    where: and(eq(schema.members.slug, values.slug), ne(schema.members.id, id)),
-  })
-  if (duplicate) return back({ slug: 'この slug は既に使われています' })
-
-  const avatar = await saveAvatar(c.env.MEDIA, form, values.slug)
-  if (avatar.error) return back({ avatar: avatar.error })
-
-  await db(c)
-    .update(schema.members)
-    .set({ ...values, ...(avatar.url ? { avatarUrl: avatar.url } : {}) })
-    .where(eq(schema.members.id, id))
-  if (avatar.url) await removeImage(c.env.MEDIA, member.avatarUrl)
+  // 新しい画像を置く → D1 → 通ってから前の画像を消す（commitWithImage の順序）
+  const avatarUrl = picked.image
+    ? await putImage(c.env.MEDIA, picked.image, 'avatars', values.slug)
+    : null
+  await commitWithImage(c.env.MEDIA, avatarUrl, () =>
+    db(c)
+      .update(schema.members)
+      .set({ ...values, ...(avatarUrl ? { avatarUrl } : {}) })
+      .where(eq(schema.members.id, id)),
+  )
+  if (avatarUrl) await removeImage(c.env.MEDIA, member.avatarUrl)
   return c.redirect(`/admin/members?saved=${savedParam(values.published)}`, 303)
 })
 
@@ -1386,13 +1463,13 @@ const ItemForm = (props: ItemFormData) => {
               class={props.errors?.image ? 'input input--file input--error' : 'input input--file'}
               type="file"
               name="image"
-              accept="image/*"
+              accept={IMAGE_ACCEPT}
             />
             {props.errors?.image ? <span class="field__error">{props.errors.image}</span> : null}
             <span class="field__hint">
               {item?.imageUrl
-                ? '選ぶと差し替わる。空なら今のまま · 1MB まで'
-                : 'スクリーンショット。1MB まで · 作品のページと、600px 以上の一覧のカードに出る'}
+                ? `選ぶと差し替わる。空なら今のまま · ${IMAGE_LABELS}（1MB まで）`
+                : `スクリーンショット。${IMAGE_LABELS}（1MB まで） · 作品のページと、600px 以上の一覧のカードに出る。横長なら共有カードも大きく出る`}
             </span>
           </label>
           {/*
@@ -1421,26 +1498,38 @@ const ItemForm = (props: ItemFormData) => {
           <Field label="タグ" name="tags" value={d.tags} hint="カンマ区切り" />
           <Field label="並び順" name="sortOrder" value={d.sortOrder} hint="小さいほど先。10刻み" />
 
+          {/*
+            行ごとの検査は readLinks。知らせは何行目かで言うので、行の順は
+            送った順のまま描き直す（submittedItem）
+          */}
           <fieldset class="field field--wide fieldset">
             <legend class="field__label">リンク</legend>
-            {links.map((link, index) => (
-              <div class="link-row" key={index}>
-                <input
-                  class="input"
-                  type="text"
-                  name="linkLabel"
-                  value={link.label}
-                  placeholder="Repository"
-                />
-                <input
-                  class="input"
-                  type="url"
-                  name="linkUrl"
-                  value={link.url}
-                  placeholder="https://"
-                />
-              </div>
-            ))}
+            {links.map((link, index) => {
+              // 弾いたあとの描き直しでだけ、通らなかった行に印を付ける
+              const bad = props.errors?.links ? linkProblem(link.label, link.url) : null
+              return (
+                <div class="link-row" key={index}>
+                  <input
+                    class={bad ? 'input input--error' : 'input'}
+                    type="text"
+                    name="linkLabel"
+                    value={link.label}
+                    placeholder="Repository"
+                  />
+                  <input
+                    class={bad ? 'input input--error' : 'input'}
+                    type="url"
+                    name="linkUrl"
+                    value={link.url}
+                    placeholder="https://"
+                  />
+                </div>
+              )
+            })}
+            {props.errors?.links ? <span class="field__error">{props.errors.links}</span> : null}
+            <span class="field__hint">
+              ラベルと URL は両方入れる。URL は https:// か mailto: か / から
+            </span>
           </fieldset>
 
           {props.type === 'work' ? (
@@ -1612,17 +1701,6 @@ function itemErrors(
 }
 
 /*
-  選んだ画像を受け取らずに戻すときの知らせ。ブラウザはファイルの欄を描き直せ
-  ないので、何も言わないと「選んだ画像も保存された」と読める。保存を止めた
-  ときは KV にも書いていない（putImage は検査が全部通ってから）。
-*/
-const imageNotKept = (form: FormData, errors: Record<string, string>) => {
-  const file = form.get('image')
-  if (errors.image || !(file instanceof File) || file.size === 0) return errors
-  return { ...errors, image: '画像はまだ保存していません。直したあとで、もう一度選んでください' }
-}
-
-/*
   slug が重なったら弾く。メンバーの slug と同じ扱い。
 
   黙って番号を足して通さないのは、そうすると「保存した順」で URL が決まって
@@ -1667,11 +1745,62 @@ function submittedItem(form: FormData): Record<string, string> {
   }
 }
 
-// タグとリンクは総入れ替えにする。差分を取るより、消して入れ直すほうが読める
-async function replaceChildren(database: ReturnType<typeof db>, itemId: number, form: FormData) {
-  const tags = parseTags(str(form.get('tags')))
+/*
+  作品のリンク（行き先）。フォームはラベルと URL の欄を行ごとに並べて送る。
+
+  1行ずつ見て、通らない行は保存させない（400 で何行目かを示す）。黙って落とすと、
+  「保存しました」と出たのにサイトにリンクが無い、になる（CLAUDE.md「公開ページで
+  落とす中身は、管理画面でも保存させない」）。
+
+  - URL は isSafeUrl（https:// か http:// か mailto: か / で始まる）。公開ページの
+    LinkRow も同じ検査で落とす。javascript: は同じオリジンの href に載り、
+    頭を省いた「github.com/…」は相対 URL になって 404 になる
+  - ラベルと URL は両方要る。片方だけの行は、以前は知らせなしに捨てていた
+  - 両方空の行（フォームが用意した空き）は数えない
+
+  下書きでも見る。長さではなく、受け取れない値なので（画像の種類と同じ）。
+*/
+type ItemLink = { label: string; url: string }
+
+// 1行の検査。通らなければ「N 行目」に続ける言葉を返す（フォームも行の印に同じものを使う）
+function linkProblem(label: string, url: string): string | null {
+  if (!label && !url) return null
+  if (!label || !url) return 'はラベルと URL の両方を入れてください'
+  if (!isSafeUrl(url)) return 'の URL は https:// か mailto: か / で始めてください'
+  return null
+}
+
+function readLinks(form: FormData): { links: ItemLink[]; error?: string } {
   const labels = form.getAll('linkLabel').map((value) => str(value))
   const urls = form.getAll('linkUrl').map((value) => str(value))
+  const links: ItemLink[] = []
+  const problems: string[] = []
+  for (let index = 0; index < Math.max(labels.length, urls.length); index += 1) {
+    const label = labels[index] ?? ''
+    const url = urls[index] ?? ''
+    const problem = linkProblem(label, url)
+    if (problem) problems.push(`${index + 1} 行目${problem}`)
+    else if (label && url) links.push({ label, url })
+  }
+  return problems.length ? { links, error: `${problems.join('。')}。` } : { links }
+}
+
+// 検査の結果を1つにまとめる。止める理由は全部返す（1つずつ返すと、直すたびに次が出る）
+function mergeErrors(
+  ...sets: (Record<string, string> | null | undefined)[]
+): Record<string, string> | null {
+  const all: Record<string, string> = Object.assign({}, ...sets.filter(Boolean))
+  return Object.keys(all).length ? all : null
+}
+
+// タグとリンクは総入れ替えにする。差分を取るより、消して入れ直すほうが読める
+async function replaceChildren(
+  database: ReturnType<typeof db>,
+  itemId: number,
+  form: FormData,
+  links: ItemLink[],
+) {
+  const tags = parseTags(str(form.get('tags')))
 
   await database.delete(schema.itemTags).where(eq(schema.itemTags.itemId, itemId))
   await database.delete(schema.itemLinks).where(eq(schema.itemLinks.itemId, itemId))
@@ -1682,9 +1811,6 @@ async function replaceChildren(database: ReturnType<typeof db>, itemId: number, 
       .values(tags.map((tag, index) => ({ itemId, tag, sortOrder: index })))
   }
 
-  const links = labels
-    .map((label, index) => ({ label, url: urls[index] ?? '' }))
-    .filter((link) => link.label && link.url)
   if (links.length) {
     await database
       .insert(schema.itemLinks)
@@ -1692,15 +1818,25 @@ async function replaceChildren(database: ReturnType<typeof db>, itemId: number, 
   }
 }
 
+// 画像の列（URL と寸法）。寸法は読めたときだけ（src/db/schema.ts の imageWidth）
+const imageColumns = (url: string | null, image: PickedImage | null) => ({
+  imageUrl: url,
+  imageWidth: image?.width ?? null,
+  imageHeight: image?.height ?? null,
+})
+
 app.post('/items', async (c) => {
   const form = await c.req.formData()
   const values = await readItemForm(form)
-  // 画像の種類と大きさは下書きでも見る。長さの話ではなく、受け取れない画像
-  const picked = pickImage(form, 'image')
-  const errors =
-    (picked.error ? { image: picked.error } : null) ??
-    itemErrors(values, picked.file !== null) ??
-    (await slugTaken(db(c), values.slug, null))
+  // 画像の種類と大きさ、リンクの形は下書きでも見る。長さの話ではなく、受け取れない値
+  const picked = await pickImage(form, 'image')
+  const links = readLinks(form)
+  const errors = mergeErrors(
+    picked.error ? { image: picked.error } : null,
+    links.error ? { links: links.error } : null,
+    itemErrors(values, picked.image !== null),
+    await slugTaken(db(c), values.slug, null),
+  )
   if (errors) {
     const { members, platforms } = await formContext(c)
     return c.html(
@@ -1710,22 +1846,24 @@ app.post('/items', async (c) => {
         members={members}
         platforms={platforms}
         submitted={submittedItem(form)}
-        errors={imageNotKept(form, errors)}
+        errors={imageNotKept(form, 'image', errors)}
       />,
       400,
     )
   }
 
-  // 検査が全部通ってから KV に書く。止めた保存で孤児の画像を残さない
-  const imageUrl = picked.file
-    ? await putImage(c.env.MEDIA, picked.file, 'items', values.slug)
+  // 検査が全部通ってから KV に置き、D1 が落ちたら置いた画像を消す（commitWithImage）
+  const imageUrl = picked.image
+    ? await putImage(c.env.MEDIA, picked.image, 'items', values.slug)
     : null
-  const inserted = await db(c)
-    .insert(schema.items)
-    .values({ ...values, imageUrl })
-    .returning({ id: schema.items.id })
+  const inserted = await commitWithImage(c.env.MEDIA, imageUrl, () =>
+    db(c)
+      .insert(schema.items)
+      .values({ ...values, ...imageColumns(imageUrl, picked.image) })
+      .returning({ id: schema.items.id }),
+  )
   const id = inserted[0]?.id
-  if (id) await replaceChildren(db(c), id, form)
+  if (id) await replaceChildren(db(c), id, form, links.links)
   return c.redirect(`/admin/items?type=${values.type}&saved=${savedParam(values.published)}`, 303)
 })
 
@@ -1739,7 +1877,8 @@ app.post('/items/:id', async (c) => {
 
   const form = await c.req.formData()
   const values = await readItemForm(form)
-  const picked = pickImage(form, 'image')
+  const picked = await pickImage(form, 'image')
+  const links = readLinks(form)
   /*
     保存したあとの画像。新しく選んだならそれ（差し替え）、「画像を外す」なら
     無し、どちらでもなければいまのまま。選んだうえで外すにも印を付けたときは、
@@ -1747,10 +1886,12 @@ app.post('/items/:id', async (c) => {
   */
   const removing = bool(form.get('removeImage')) === 1
   const keeps = !removing && existing.imageUrl !== null
-  const errors =
-    (picked.error ? { image: picked.error } : null) ??
-    itemErrors(values, picked.file !== null || keeps) ??
-    (await slugTaken(db(c), values.slug, id))
+  const errors = mergeErrors(
+    picked.error ? { image: picked.error } : null,
+    links.error ? { links: links.error } : null,
+    itemErrors(values, picked.image !== null || keeps),
+    await slugTaken(db(c), values.slug, id),
+  )
   if (errors) {
     const { members, platforms } = await formContext(c)
     return c.html(
@@ -1761,24 +1902,26 @@ app.post('/items/:id', async (c) => {
         platforms={platforms}
         item={{ ...existing, tags: [], links: [] }}
         submitted={submittedItem(form)}
-        errors={imageNotKept(form, errors)}
+        errors={imageNotKept(form, 'image', errors)}
       />,
       400,
     )
   }
 
-  const imageUrl = picked.file
-    ? await putImage(c.env.MEDIA, picked.file, 'items', values.slug)
-    : keeps
-      ? existing.imageUrl
-      : null
-  await db(c)
-    .update(schema.items)
-    .set({ ...values, imageUrl })
-    .where(eq(schema.items.id, id))
+  // 新しい画像を置く → D1 → 通ってから前の画像を消す（commitWithImage の順序）
+  const placed = picked.image
+    ? await putImage(c.env.MEDIA, picked.image, 'items', values.slug)
+    : null
+  const image = placed ? imageColumns(placed, picked.image) : keeps ? {} : imageColumns(null, null)
+  await commitWithImage(c.env.MEDIA, placed, () =>
+    db(c)
+      .update(schema.items)
+      .set({ ...values, ...image })
+      .where(eq(schema.items.id, id)),
+  )
   // 差し替えた・外した画像は KV から消す（removeImage の注記）
-  if (imageUrl !== existing.imageUrl) await removeImage(c.env.MEDIA, existing.imageUrl)
-  await replaceChildren(db(c), id, form)
+  if (placed || !keeps) await removeImage(c.env.MEDIA, existing.imageUrl)
+  await replaceChildren(db(c), id, form, links.links)
   return c.redirect(`/admin/items?type=${values.type}&saved=${savedParam(values.published)}`, 303)
 })
 

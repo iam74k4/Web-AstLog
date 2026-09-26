@@ -1,7 +1,7 @@
 import { raw } from 'hono/html'
 import type { Child } from 'hono/jsx'
 import type { Item, Member } from '../db/schema'
-import { initials, paragraphs, type SkillGroup, skillRows } from '../lib/format'
+import { initials, isSafeUrl, paragraphs, type SkillGroup, skillRows } from '../lib/format'
 import { MarkIcon, PencilIcon } from './icons'
 
 /*
@@ -508,11 +508,17 @@ export const Metric = ({
   作品のページの「担当」）は →（app.css の .links a）。別タブで開くか（target）
   と rel も同じ1つの条件で決める（LinkList と同じ決まり。↗ は「外へ出る・
   別タブで開く」の印で、同じタブで開くサイトの中の続きには付けない）。
+
+  URL の形はこの部品が自分で見る（isSafeUrl）。通らない行は描かない。保存でも
+  弾いている（admin.tsx の readLinks）が、その検査より前に入った行を呼ぶ側の
+  検査に頼らずに落とす。javascript: が同じオリジンの href に載るのを、
+  target="_blank" の副作用で止まっているだけにしない。
 */
-export const LinkRow = ({ links }: { links: { label: string; url: string }[] }) =>
-  links.length ? (
+export const LinkRow = ({ links }: { links: { label: string; url: string }[] }) => {
+  const safe = links.filter((link) => link.label && isSafeUrl(link.url))
+  return safe.length ? (
     <div class="links">
-      {links.map((link) => {
+      {safe.map((link) => {
         const inside = link.url.startsWith('/')
         return (
           <a
@@ -527,6 +533,7 @@ export const LinkRow = ({ links }: { links: { label: string; url: string }[] }) 
       })}
     </div>
   ) : null
+}
 
 /*
   作品のスクリーンショット。作品1件のページの figure。
@@ -536,8 +543,9 @@ export const LinkRow = ({ links }: { links: { label: string; url: string }[] }) 
   見た目を伝える唯一の手段で、カードのサムネイル（飾り）とは役目が違う。
 
   枠の高さは CSS が決め（:root の --shot-h。900 以上では文の列と同じ高さ）、
-  絵はその中に object-fit: contain で縮めて収める（切らない）。寸法を DB に
-  持っていないので、絵に合わせて枠を伸び縮みさせると、読み込んだ瞬間に下の
+  絵はその中に object-fit: contain で縮めて収める（切らない）。寸法は共有カードの
+  ためにだけ持っていて（items.image_width / image_height。この列より前の画像には
+  無い）、枠には使わない。絵に合わせて枠を伸び縮みさせると、読み込んだ瞬間に下の
   本文が押し下げられ、1画面に収まるかどうかが絵の縦横比しだいになる。枠を
   決めておけば、どんな絵でも高さは同じで、本文の上限（src/blocks.ts の
   MAX_CHARS.itemBody）を1つの数で決められる。
@@ -1077,8 +1085,10 @@ export const Numbers = ({ rows }: { rows: string[][] }) => (
 )
 
 /*
-  行き先を並べる列。トップのリンク集で使う。URL の形は呼ぶ側（blockLines）で
-  isSafeUrl を通してある。作品1件のページの行き先は、カードと同じ1行の
+  行き先を並べる列。トップのリンク集で使う。URL の形はこの部品でも見る
+  （isSafeUrl。通らない行は描かない）。呼ぶ側（blockLines）も同じ検査で
+  落としていて、画面の数はそちらの行数で決まる——ここで落とすのは、呼ぶ側が
+  掛け忘れたときの最後の受け。作品1件のページの行き先は、カードと同じ1行の
   LinkRow に移した（1画面に本文と画像を入れる高さのため。ItemDetail を見ること）。
 
   矢印は行き先で変える。↗ はこのサイトでは「外へ出る・別タブで開く」の印
@@ -1091,7 +1101,8 @@ export const Numbers = ({ rows }: { rows: string[][] }) => (
 export const LinkList = ({ rows }: { rows: string[][] }) => (
   <ul class="linklist">
     {rows.map(([label, url, note]) => {
-      const inside = url?.startsWith('/') ?? false
+      if (!isSafeUrl(url)) return null
+      const inside = url.startsWith('/')
       return (
         <li key={url}>
           <a

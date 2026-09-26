@@ -28,7 +28,8 @@ import {
 import * as schema from '../db/schema'
 import type { AppEnv } from '../env'
 import { getSessionUser, SESSION_COOKIE } from '../lib/auth'
-import { isSafeRedirect } from '../lib/format'
+import { isHttpsUrl, isSafeRedirect } from '../lib/format'
+import { IMAGE_FORMATS, imageTypeOfPath, isImageType } from '../lib/image'
 import { chunk, screenCount } from '../lib/paginate'
 import { type Sequence, type Step, sequence, stepAt } from '../lib/sequence'
 import { SITE } from '../site'
@@ -70,13 +71,18 @@ import {
   WholeLink,
 } from '../ui/components'
 import { GithubIcon, MailIcon } from '../ui/icons'
-import { Layout, type NavItem } from '../ui/Layout'
+import { Layout, type NavItem, type OgImage } from '../ui/Layout'
 
 export const publicRoutes = new Hono<AppEnv>()
 
+/*
+  GitHub は https:// の絶対 URL だけを描く（isHttpsUrl。保存でも同じ検査で弾いて
+  いる——admin.tsx の memberErrors）。部品の側でも見るのは、その検査より前に
+  保存された行を呼ぶ側の検査に頼らずに落とすため。
+*/
 const Socials = ({ github, email }: { github?: string | null; email?: string | null }) => (
   <div class="socials">
-    {github ? (
+    {isHttpsUrl(github) ? (
       <a href={github} rel="me noreferrer" target="_blank">
         <GithubIcon /> GitHub
       </a>
@@ -94,7 +100,7 @@ const Socials = ({ github, email }: { github?: string | null; email?: string | n
   2つ置かない）。個人ページの1枚目と、全体ページ（/all）のプロフィールの節で使う。
 */
 const OwnSocials = ({ member }: { member: schema.Member }) => {
-  const github = member.github && member.github !== SITE.github ? member.github : null
+  const github = isHttpsUrl(member.github) && member.github !== SITE.github ? member.github : null
   const email = member.email && member.email !== SITE.email ? member.email : null
   return github || email ? <Socials github={github} email={email} /> : null
 }
@@ -244,7 +250,8 @@ const siteJsonLd = (members: schema.Member[]) => {
       '@context': 'https://schema.org',
       ...personJsonLd(solo, SITE.origin, {
         description: SITE.heroLead,
-        sameAs: [solo.github ?? SITE.github],
+        // 通らない GitHub（相対 URL・javascript:）は名乗らず、サイトのものに戻す
+        sameAs: [isHttpsUrl(solo.github) ? solo.github : SITE.github],
       }),
     }
   }
@@ -1144,6 +1151,8 @@ async function screenPage(
     adminPath: string
     // ページャが数える単位（ScreenPager の unit）。作品同士をめくるときだけ「件」
     unit?: '画面' | '件'
+    // 共有カードの画像。渡さなければサイトの1枚（src/ui/Layout.tsx の OgImage）
+    image?: OgImage
   },
 ) {
   return c.html(
@@ -1156,6 +1165,7 @@ async function screenPage(
       theme={page.theme}
       sidebar={page.sidebar}
       admin={await adminHref(c, page.adminPath)}
+      image={page.image}
     >
       {/* 1画面しか無いなら、めくる先が無いのでページャは出さない */}
       {seq.pager ? (
@@ -1183,6 +1193,32 @@ const firstOnly = (seq: Sequence, jsonLd: unknown) => (seq.index === 0 ? jsonLd 
   既に絶対のもの（手で DB に入れた外の URL）はそのまま通す。
 */
 const absoluteUrl = (path: string) => (path.startsWith('/') ? `${SITE.origin}${path}` : path)
+
+/*
+  作品のページの共有カードの画像（src/ui/Layout.tsx の OgImage）。
+
+  使うのは、こちらが上げた画像（/images/items/…）で、種類が貼り先に読まれる
+  もの（AVIF 以外の4種類）だけ。種類は拡張子から（putImage が判定の結果から
+  付けたもの）、寸法は上げたときに読んだもの。どちらも分からなければ名乗らない。
+  使えなければ undefined を返し、サイトの1枚に戻る。
+*/
+const SHARE_TYPES = new Set(
+  IMAGE_FORMATS.map((format) => format.type).filter((type) => type !== 'image/avif'),
+)
+
+function itemOgImage(item: ItemView): OgImage | undefined {
+  if (!item.imageUrl?.startsWith('/images/items/')) return undefined
+  const type = imageTypeOfPath(item.imageUrl)
+  if (!type || !SHARE_TYPES.has(type)) return undefined
+  return {
+    url: absoluteUrl(item.imageUrl),
+    alt: item.imageAlt || item.title,
+    type,
+    ...(item.imageWidth && item.imageHeight
+      ? { width: item.imageWidth, height: item.imageHeight }
+      : {}),
+  }
+}
 
 /*
   サイトの画面の列と、それを組むのに使った数。
@@ -1580,6 +1616,8 @@ async function renderItem(c: Context<AppEnv>, type: 'app' | 'work', slug: string
     adminPath: `/admin/items/${item.id}/edit`,
     // 1枚が作品1件。読み上げは「Projects の 7 件のうち 3 件目」
     unit: '件',
+    // 貼られたときの札は、この作品の画像（あれば）
+    image: itemOgImage(item),
   })
 }
 
@@ -1953,7 +1991,8 @@ async function renderMemberScreen(
     jsonLd: firstOnly(seq, {
       '@context': 'https://schema.org',
       ...personJsonLd(member, `${SITE.origin}/members/${member.slug}`, {
-        ...(member.github ? { sameAs: [member.github] } : {}),
+        // sameAs はこの文書の外で読まれる。相対の URL や javascript: は載せない
+        ...(isHttpsUrl(member.github) ? { sameAs: [member.github] } : {}),
         // 1人のサイトなら器は無い。2人目が公開された日に戻る
         ...(solo
           ? {}
@@ -2147,12 +2186,23 @@ publicRoutes.get('/sitemap.xml', async (c) => {
   それが黙って読み出せるようになる（実際、以前は login:<メールアドレス> が
   同居していた）。
   通すのは、こちらが付けた名前の2つの置き場だけ——avatars/（メンバーの顔）と
-  items/（作品のスクリーンショット）。名前は src/routes/admin.tsx の saveImage が
+  items/（作品のスクリーンショット）。名前は src/routes/admin.tsx の putImage が
   付ける形（英数字で始まり、英数字と . _ - だけ）。
 
   置き場を足すときは、ここの ( | ) に1語足すだけにすること。形の検査
   （名前の文字の種類と、/ を1つしか含まないこと）を緩めて通すと、
   置き場の外のキーや、../ で置き場の外を指すキーが届くようになる。
+
+  **この URL はサイトと同じオリジンで配る。** だから中身が画像のふりをした
+  文書（SVG の <script>、HTML）だったときに、開いた人のブラウザで走らせない
+  ことをここで決める。受け入れは先頭のバイトで5種類に絞ってある
+  （src/lib/image.ts）が、それより前に上げたものが KV に残っている。
+
+  - X-Content-Type-Options: nosniff——中身を嗅いで型を読み替えさせない
+  - Content-Security-Policy: default-src 'none'; sandbox——直に開かれても
+    スクリプトも読み込みも走らない（<img> で埋め込む分には効かず、邪魔もしない）
+  - 5種類に無い content-type（以前の image/svg+xml や image/heic）は
+    application/octet-stream の添付として返す。画像としては描かせない
 */
 const IMAGE_KEY = /^(?:avatars|items)\/[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/
 
@@ -2163,9 +2213,14 @@ publicRoutes.get('/images/*', async (c) => {
   const object = await c.env.MEDIA.getWithMetadata<{ contentType?: string }>(key, 'arrayBuffer')
   if (!object.value) return c.notFound()
 
+  const type = object.metadata?.contentType
   return new Response(object.value, {
     headers: {
-      'content-type': object.metadata?.contentType ?? 'application/octet-stream',
+      ...(isImageType(type)
+        ? { 'content-type': type }
+        : { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment' }),
+      'x-content-type-options': 'nosniff',
+      'content-security-policy': "default-src 'none'; sandbox",
       'cache-control': 'public, max-age=31536000, immutable',
     },
   })

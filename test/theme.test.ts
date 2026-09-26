@@ -983,9 +983,9 @@ describe('部品の作法', () => {
 
   it('作品の画像は枠の高さを :root の段で決め、絵は切らずに枠へ貼る', () => {
     /*
-      寸法を DB に持たないので、絵に合わせて枠を伸ばすと、読み込んだ瞬間に本文が
-      押し下げられ、1画面に収まるかが絵しだいになる。本文の上限（MAX_CHARS.itemBody）は
-      この枠の高さで測ってある
+      寸法は共有カードのためにだけ持つ（古い画像には無い）。絵に合わせて枠を
+      伸ばすと、読み込んだ瞬間に本文が押し下げられ、1画面に収まるかが絵しだいに
+      なる。本文の上限（MAX_CHARS.itemBody）はこの枠の高さで測ってある
     */
     expect(bodyOf(sheet, ':root {')).toContain('--shot-h:')
     expect(bodyOf(sheet, '.shot {')).toContain('height: var(--shot-h)')

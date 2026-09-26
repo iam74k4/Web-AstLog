@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isHttpsUrl,
   isSafeUrl,
   num,
   paragraphs,
@@ -102,6 +103,26 @@ describe('isSafeUrl', () => {
     // 同じタブのまま外へ連れて行かれる
     expect(isSafeUrl('//evil.example')).toBe(false)
     expect(isSafeUrl('/\\evil.example')).toBe(false)
+  })
+
+  it('タブや改行を含む URL は通さない（ブラウザが取り除いたあとで外のサイトになる）', () => {
+    // 「/<タブ>/evil.example」は頭の検査を通るが、ブラウザは //evil.example と読む
+    expect(isSafeUrl('/\t/evil.example')).toBe(false)
+    expect(isSafeUrl('/\n/evil.example')).toBe(false)
+    expect(isSafeUrl('https://example.com/\r\nx')).toBe(false)
+  })
+})
+
+describe('isHttpsUrl', () => {
+  it('https:// の絶対 URL だけを通す（メンバーの GitHub と sameAs）', () => {
+    expect(isHttpsUrl('https://github.com/iam74k4')).toBe(true)
+    expect(isHttpsUrl('http://github.com/iam74k4')).toBe(false)
+    expect(isHttpsUrl('github.com/iam74k4')).toBe(false)
+    expect(isHttpsUrl('javascript:alert(1)')).toBe(false)
+    expect(isHttpsUrl('/members/okazaki')).toBe(false)
+    expect(isHttpsUrl('mailto:a@example.com')).toBe(false)
+    expect(isHttpsUrl('https://')).toBe(false)
+    expect(isHttpsUrl(null)).toBe(false)
   })
 })
 

@@ -103,6 +103,18 @@ export const items = sqliteTable(
     */
     imageUrl: text('image_url'),
     imageAlt: text('image_alt').notNull().default(''),
+    /*
+      画像の寸法（px）。上げたときに中身の頭から読んだもの（src/lib/image.ts の
+      sniffImage）。使うのは共有カードだけ——og:image:width / height と、
+      twitter:card を大きい札にするかどうか（src/ui/Layout.tsx の OgImage）。
+      画面の枠には使わない（枠の形は CSS が先に決める。CLAUDE.md「画像の枠は
+      絵に合わせない」）。
+
+      null は「分からない」。この列より前に上げた画像と、寸法を読めなかった
+      画像がそう。分からないときは寸法を名乗らない。画像を外せば両方 null に戻す。
+    */
+    imageWidth: integer('image_width'),
+    imageHeight: integer('image_height'),
     // 実績値。1項目に1つだけ。無い項目のほうが多い
     metricValue: text('metric_value'),
     metricUnit: text('metric_unit'),

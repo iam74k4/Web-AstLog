@@ -1,9 +1,11 @@
 import { env } from 'cloudflare:test'
+import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { type BlockKey, blockType, MAX_CHARS } from '../src/blocks'
 import * as schema from '../src/db/schema'
 import { chunk } from '../src/lib/paginate'
 import { db, form, get, resetDb, seedItem, seedMember, signIn } from './helpers'
+import { avif, file, gif, heic, jpeg, png, svg, webp } from './images'
 
 beforeEach(resetDb)
 
@@ -232,10 +234,11 @@ describe('Items', () => {
   縛っている（test/public.test.ts の /images）。
 */
 describe('Items — 本文と画像', () => {
-  const png = (bytes = 64) => new File([new Uint8Array(bytes)], 'shot.png', { type: 'image/png' })
-  const withImage = (values: Record<string, string>, file = png()) => {
+  // 中身の頭が本物の PNG（受け入れは先頭のバイトで種類を決める。test/images.ts）
+  const shot = () => file(png(), 'shot.png', 'image/png')
+  const withImage = (values: Record<string, string>, image = shot()) => {
     const body = form(values)
-    body.append('image', file)
+    body.append('image', image)
     return body
   }
   const itemKeys = async () => (await env.MEDIA.list({ prefix: 'items/' })).keys.map((k) => k.name)
@@ -399,7 +402,10 @@ describe('Items — 本文と画像', () => {
     const signed = await signIn()
     const response = await signed('/admin/items', {
       method: 'POST',
-      body: withImage({ type: 'app', title: '大きい画像' }, png(1_200_000)),
+      body: withImage(
+        { type: 'app', title: '大きい画像' },
+        file(new Uint8Array(1_200_000), 'big.png', 'image/png'),
+      ),
     })
     expect(response.status).toBe(400)
     expect(await response.text()).toContain('1MB まで')
@@ -479,6 +485,407 @@ describe('Items — 本文と画像', () => {
     expect(html).toContain('name="imageAlt"')
     // 外す画像が無い作品には「画像を外す」を出さない
     expect(html).not.toContain('画像を外す')
+  })
+})
+
+/*
+  画像の受け入れ（SEC-2 / ADM-4）。アバターと作品の画像は同じ1本の検査
+  （src/routes/admin.tsx の pickImage → src/lib/image.ts の sniffImage）を通る。
+
+  種類は中身の先頭のバイトで決め、ブラウザの名乗り（file.type）は見ない。
+  以前は file.type が image/ で始まれば何でも受け、その名乗りのまま KV に
+  入れて同じオリジンから配っていた——SVG の <script> がサイトのオリジンで走り、
+  HEIC は Chrome と Firefox で壊れて見えた。
+*/
+describe('画像の受け入れ', () => {
+  const keys = async (prefix: string) =>
+    (await env.MEDIA.list({ prefix })).keys.map((key) => key.name)
+  // KV は resetDb が触らない。前のテストが置いた画像を数えないよう、置き場を空にする
+  beforeEach(async () => {
+    for (const key of [...(await keys('avatars/')), ...(await keys('items/'))]) {
+      await env.MEDIA.delete(key)
+    }
+  })
+
+  const withAvatar = (values: Record<string, string>, avatar: File) => {
+    const body = form(values)
+    body.append('avatar', avatar)
+    return body
+  }
+  const withImage = (values: Record<string, string>, image: File) => {
+    const body = form(values)
+    body.append('image', image)
+    return body
+  }
+
+  it('SVG のアバターは 400 で弾き、理由を出す。KV にも D1 にも書かない', async () => {
+    const signed = await signIn()
+    const response = await signed('/admin/members', {
+      method: 'POST',
+      body: withAvatar({ name: 'Eve', slug: 'eve' }, file(svg(), 'logo.svg', 'image/svg+xml')),
+    })
+    expect(response.status).toBe(400)
+    const html = await response.text()
+    expect(html).toContain('SVG と HEIC は受け付けません')
+    // 欄に印が付く（どの欄の話かを色だけでなく位置でも示す）
+    expect(html).toContain('input input--file input--error')
+    expect(await keys('avatars/')).toEqual([])
+    expect(await db().select().from(schema.members)).toHaveLength(0)
+  })
+
+  it('image/png を名乗る SVG も弾く（名乗りと中身が違う）。HEIC も弾く', async () => {
+    const signed = await signIn()
+    for (const [image, what] of [
+      [file(svg(), 'shot.png', 'image/png'), '名乗りは PNG の SVG'],
+      [file(heic(), 'IMG_0001.HEIC', 'image/heic'), 'HEIC'],
+      [file(heic(), 'IMG_0001.jpg', 'image/jpeg'), '名乗りは JPEG の HEIC'],
+    ] as const) {
+      const response = await signed('/admin/items', {
+        method: 'POST',
+        body: withImage({ type: 'app', title: '画像テスト' }, image),
+      })
+      expect(response.status, what).toBe(400)
+      expect(await response.text(), what).toContain('SVG と HEIC は受け付けません')
+    }
+    const avatar = await signed('/admin/members', {
+      method: 'POST',
+      body: withAvatar({ name: 'Eve', slug: 'eve' }, file(svg(), 'eve.png', 'image/png')),
+    })
+    expect(avatar.status).toBe(400)
+    expect(await keys('items/')).toEqual([])
+    expect(await keys('avatars/')).toEqual([])
+    expect(await db().select().from(schema.items)).toHaveLength(0)
+  })
+
+  it('5種類は通る。拡張子・content-type・寸法は中身から付け、名乗りは使わない', async () => {
+    const signed = await signIn()
+    const cases = [
+      { content: png(1200, 630), type: 'image/png', extension: 'png', size: [1200, 630] },
+      { content: jpeg(800, 600), type: 'image/jpeg', extension: 'jpg', size: [800, 600] },
+      { content: webp(1024, 512), type: 'image/webp', extension: 'webp', size: [1024, 512] },
+      { content: avif(1600, 900), type: 'image/avif', extension: 'avif', size: [1600, 900] },
+      { content: gif(320, 200), type: 'image/gif', extension: 'gif', size: [320, 200] },
+    ]
+    for (const [index, one] of cases.entries()) {
+      // わざと違う名前と違う名乗りで送る。保存されるのは中身の判定の結果だけ
+      const response = await signed('/admin/items', {
+        method: 'POST',
+        body: withImage(
+          { type: 'app', title: `画像 ${index}`, slug: `shot-${index}` },
+          file(one.content, 'upload.bin', 'application/octet-stream'),
+        ),
+      })
+      expect(response.status, one.type).toBe(303)
+
+      const row = await db().query.items.findFirst({
+        where: eq(schema.items.slug, `shot-${index}`),
+      })
+      expect(row?.imageUrl, one.type).toMatch(
+        new RegExp(`^/images/items/shot-${index}-[0-9a-f]{8}\\.${one.extension}$`),
+      )
+      expect([row?.imageWidth, row?.imageHeight], one.type).toEqual(one.size)
+      const stored = await env.MEDIA.getWithMetadata<{ contentType: string }>(
+        (row?.imageUrl ?? '').replace('/images/', ''),
+      )
+      expect(stored.metadata?.contentType, one.type).toBe(one.type)
+    }
+
+    // アバターも同じ1本
+    const member = await signed('/admin/members', {
+      method: 'POST',
+      body: withAvatar({ name: 'Eve', slug: 'eve' }, file(webp(), 'eve', '')),
+    })
+    expect(member.status).toBe(303)
+    const [eve] = await db().select().from(schema.members)
+    expect(eve?.avatarUrl).toMatch(/^\/images\/avatars\/eve-[0-9a-f]{8}\.webp$/)
+  })
+
+  it('選ぶ画面でも5種類に絞る（accept）', async () => {
+    const signed = await signIn()
+    const accept = 'accept="image/png,image/jpeg,image/webp,image/avif,image/gif"'
+    expect(await (await signed('/admin/members/new')).text()).toContain(accept)
+    expect(await (await signed('/admin/items/new?type=app')).text()).toContain(accept)
+  })
+
+  it('画像の URL はフォームから受け取らない。サーバーが付けた /images/… だけ', async () => {
+    const signed = await signIn()
+    await signed('/admin/items', {
+      method: 'POST',
+      body: form({
+        type: 'app',
+        title: '画像なし',
+        slug: 'no-shot',
+        imageUrl: 'javascript:alert(1)',
+        imageWidth: '1200',
+      }),
+    })
+    await signed('/admin/members', {
+      method: 'POST',
+      body: form({ name: 'Eve', slug: 'eve', avatarUrl: 'https://evil.example/x.svg' }),
+    })
+    const [item] = await db().select().from(schema.items)
+    expect(item?.imageUrl).toBeNull()
+    expect(item?.imageWidth).toBeNull()
+    const [member] = await db().select().from(schema.members)
+    expect(member?.avatarUrl).toBeNull()
+  })
+
+  /*
+    KV と D1 は1つのトランザクションにできない。新しい画像を KV に置いてから
+    D1 を書き、D1 で落ちたら置いた画像を消す（commitWithImage）。D1 を落とすのは
+    テストの中だけの trigger——どの行を書いても RAISE で止まる
+  */
+  describe('KV と D1 の順序', () => {
+    const failing = async (table: 'items' | 'members', event: 'INSERT' | 'UPDATE') => {
+      await env.DB.prepare(
+        `CREATE TRIGGER IF NOT EXISTS fail_${table}_${event} BEFORE ${event} ON ${table} BEGIN SELECT RAISE(ABORT, 'D1 を落とす'); END`,
+      ).run()
+      return () => env.DB.prepare(`DROP TRIGGER IF EXISTS fail_${table}_${event}`).run()
+    }
+
+    it('作品の追加で D1 が落ちたら、置いた画像は KV に残らない', async () => {
+      const signed = await signIn()
+      const restore = await failing('items', 'INSERT')
+      try {
+        const response = await signed('/admin/items', {
+          method: 'POST',
+          body: withImage({ type: 'app', title: '落ちる' }, file(png(), 'a.png', 'image/png')),
+        })
+        expect(response.status).toBe(500)
+      } finally {
+        await restore()
+      }
+      expect(await keys('items/')).toEqual([])
+    })
+
+    it('作品の差し替えで D1 が落ちたら、新しい画像は消え、前の画像と行はそのまま', async () => {
+      await env.MEDIA.put('items/old-aaaa.png', 'bytes', { metadata: { contentType: 'image/png' } })
+      const item = await seedItem({
+        slug: 'old',
+        imageUrl: '/images/items/old-aaaa.png',
+        imageAlt: '前の画像',
+      })
+      const signed = await signIn()
+      const restore = await failing('items', 'UPDATE')
+      try {
+        const response = await signed(`/admin/items/${item.id}`, {
+          method: 'POST',
+          body: withImage(
+            { type: 'app', title: 'AppMixer', slug: 'old', imageAlt: '新しい画像' },
+            file(png(), 'b.png', 'image/png'),
+          ),
+        })
+        expect(response.status).toBe(500)
+      } finally {
+        await restore()
+      }
+      expect(await keys('items/')).toEqual(['items/old-aaaa.png'])
+      const [row] = await db().select().from(schema.items)
+      expect(row?.imageUrl).toBe('/images/items/old-aaaa.png')
+    })
+
+    it('メンバーの追加・差し替えで D1 が落ちても、アバターは KV に残らない', async () => {
+      const signed = await signIn()
+      const restoreInsert = await failing('members', 'INSERT')
+      try {
+        const response = await signed('/admin/members', {
+          method: 'POST',
+          body: withAvatar({ name: 'Eve', slug: 'eve' }, file(png(), 'eve.png', 'image/png')),
+        })
+        expect(response.status).toBe(500)
+      } finally {
+        await restoreInsert()
+      }
+      expect(await keys('avatars/')).toEqual([])
+
+      await env.MEDIA.put('avatars/okazaki-aaaa.png', 'bytes')
+      const member = await seedMember({ avatarUrl: '/images/avatars/okazaki-aaaa.png' })
+      const restoreUpdate = await failing('members', 'UPDATE')
+      try {
+        const response = await signed(`/admin/members/${member.id}`, {
+          method: 'POST',
+          body: withAvatar(
+            { name: member.name, slug: 'okazaki' },
+            file(png(), 'o.png', 'image/png'),
+          ),
+        })
+        expect(response.status).toBe(500)
+      } finally {
+        await restoreUpdate()
+      }
+      expect(await keys('avatars/')).toEqual(['avatars/okazaki-aaaa.png'])
+    })
+
+    it('メンバーを消すと、アバターも KV から消える', async () => {
+      await env.MEDIA.put('avatars/okazaki-bbbb.png', 'bytes')
+      const member = await seedMember({ avatarUrl: '/images/avatars/okazaki-bbbb.png' })
+      const signed = await signIn()
+      await signed(`/admin/members/${member.id}/delete`, { method: 'POST' })
+      expect(await keys('avatars/')).toEqual([])
+    })
+  })
+
+  it('寸法の列を足しても既にある行はそのまま（前の移行まで当てた D1 に行を入れてから当てる）', async () => {
+    // drizzle-kit が生成した SQL（drizzle/0008_item_image_size.sql）。手で書いていない
+    const found = env.TEST_MIGRATIONS.find((one) => one.name.includes('item_image_size'))
+    expect(found, '0008_item_image_size の移行が無い').toBeDefined()
+    const sql = found?.queries.join('\n') ?? ''
+    expect(sql).toContain('ALTER TABLE `items` ADD `image_width` integer')
+    expect(sql).toContain('ALTER TABLE `items` ADD `image_height` integer')
+
+    const d1 = env.MIGRATION_DB
+    const { results } = await d1
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY rowid DESC",
+      )
+      .all<{ name: string }>()
+    for (const { name } of results) await d1.prepare(`DROP TABLE \`${name}\``).run()
+    const run = async (names: (name: string) => boolean) => {
+      for (const migration of env.TEST_MIGRATIONS.filter((one) => names(one.name))) {
+        for (const query of migration.queries) await d1.prepare(query).run()
+      }
+    }
+
+    await run((name) => name < '0008')
+    await d1
+      .prepare(
+        "INSERT INTO items (id, type, title, slug, image_url, image_alt, published) VALUES (5, 'app', 'AppMixer', 'appmixer', '/images/items/appmixer-aaaa.png', '画面', 1)",
+      )
+      .run()
+    await run((name) => name >= '0008')
+
+    const row = await d1.prepare('SELECT * FROM items WHERE id = 5').first()
+    expect(row).toMatchObject({
+      title: 'AppMixer',
+      image_url: '/images/items/appmixer-aaaa.png',
+      image_alt: '画面',
+      image_width: null,
+      image_height: null,
+    })
+  })
+})
+
+/*
+  作品のリンクとメンバーの GitHub（ADM-3 / PUB-5 / SEC-4）。
+
+  URL の検査は保存と描画の2か所。ここは保存の側で、公開ページで落とすものは
+  管理画面でも保存させない。以前は javascript: も頭を省いた「github.com/…」も
+  303 で保存され、公開ページの href と JSON-LD に出ていた。ラベルを忘れた行は
+  知らせなしに捨てていた。描画の側は test/public.test.ts の「URL の検査」。
+*/
+describe('URL の検査（保存）', () => {
+  const links = (rows: [string, string][]) => ({
+    linkLabel: rows.map(([label]) => label),
+    linkUrl: rows.map(([, url]) => url),
+  })
+
+  it('作品のリンクの javascript: と相対 URL は、何行目かを示して 400。下書きでも止める', async () => {
+    const signed = await signIn()
+    const response = await signed('/admin/items', {
+      method: 'POST',
+      body: form({
+        type: 'app',
+        title: '残ってほしい題',
+        ...links([
+          ['Repository', 'https://example.test/r'],
+          ['XSS', 'javascript:alert(document.domain)'],
+          ['GitHub', 'github.com/iam74k4'],
+        ]),
+      }),
+    })
+    expect(response.status).toBe(400)
+    const html = await response.text()
+    expect(html).toContain('2 行目の URL は https:// か mailto: か / で始めてください')
+    expect(html).toContain('3 行目の URL は https:// か mailto: か / で始めてください')
+    expect(html).not.toContain('1 行目')
+    // 打った内容は残す（直して保存し直せる）
+    expect(html).toContain('残ってほしい題')
+    expect(html).toContain('value="github.com/iam74k4"')
+    expect(await db().select().from(schema.items)).toHaveLength(0)
+    expect(await db().select().from(schema.itemLinks)).toHaveLength(0)
+  })
+
+  it('ラベルか URL の片方しか無い行は、黙って捨てずに 400', async () => {
+    const item = await seedItem({ slug: 'appmixer' })
+    const signed = await signIn()
+    const response = await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: form({
+        type: 'app',
+        title: 'AppMixer',
+        slug: 'appmixer',
+        published: '1',
+        ...links([
+          ['', 'https://only-url.example'],
+          ['ラベルだけ', ''],
+          ['', ''],
+        ]),
+      }),
+    })
+    expect(response.status).toBe(400)
+    const html = await response.text()
+    expect(html).toContain('1 行目はラベルと URL の両方を入れてください')
+    expect(html).toContain('2 行目はラベルと URL の両方を入れてください')
+    // 両方空の行（フォームが用意した空き）は数えない
+    expect(html).not.toContain('3 行目')
+  })
+
+  it('通る行は並べた順に保存する。空の行は数えない', async () => {
+    const signed = await signIn()
+    const response = await signed('/admin/items', {
+      method: 'POST',
+      body: form({
+        type: 'app',
+        title: 'AppMixer',
+        slug: 'appmixer',
+        ...links([
+          ['Repository', 'https://example.test/r'],
+          ['', ''],
+          ['Mail', 'mailto:a@example.test'],
+        ]),
+      }),
+    })
+    expect(response.status).toBe(303)
+    const rows = await db().select().from(schema.itemLinks)
+    expect(rows.map((row) => [row.label, row.url, row.sortOrder])).toEqual([
+      ['Repository', 'https://example.test/r', 0],
+      ['Mail', 'mailto:a@example.test', 1],
+    ])
+  })
+
+  it('メンバーの GitHub は https:// の絶対 URL だけ。欄も type=url', async () => {
+    const signed = await signIn()
+    for (const github of [
+      'javascript:alert(1)',
+      'github.com/iam74k4',
+      'http://github.com/iam74k4',
+    ]) {
+      const response = await signed('/admin/members', {
+        method: 'POST',
+        body: form({ name: 'Eve', slug: 'eve', github }),
+      })
+      expect(response.status, github).toBe(400)
+      expect(await response.text(), github).toContain('https:// で始まる URL を入れてください')
+    }
+    expect(await db().select().from(schema.members)).toHaveLength(0)
+
+    const ok = await signed('/admin/members', {
+      method: 'POST',
+      body: form({ name: 'Eve', slug: 'eve', github: 'https://github.com/eve' }),
+    })
+    expect(ok.status).toBe(303)
+
+    const html = await (await signed('/admin/members/new')).text()
+    expect(html).toMatch(/<input class="input" type="url" name="github"/)
+  })
+
+  it('アバターを選んで別の欄で弾かれたら、画像はまだ保存していないと添える', async () => {
+    const signed = await signIn()
+    const body = form({ name: 'Eve', slug: 'eve', github: 'github.com/eve' })
+    body.append('avatar', file(png(), 'eve.png', 'image/png'))
+    const response = await signed('/admin/members', { method: 'POST', body })
+    expect(response.status).toBe(400)
+    expect(await response.text()).toContain('画像はまだ保存していません')
   })
 })
 

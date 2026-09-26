@@ -6,7 +6,7 @@ import { blockPerScreen, MEMBER_PER_SCREEN } from '../src/blocks'
 import * as schema from '../src/db/schema'
 import { publicRoutes } from '../src/routes/public'
 import { SITE } from '../src/site'
-import { splitPhrases } from '../src/ui/components'
+import { LinkList, LinkRow, splitPhrases } from '../src/ui/components'
 import { MARK_POINTS } from '../src/ui/icons'
 import { db, get, resetDb, seedItem, seedMember, signIn } from './helpers'
 
@@ -2185,6 +2185,140 @@ describe('/images', () => {
       expect((await get(path)).status, path).toBe(404)
     }
   })
+
+  /*
+    SEC-2 / ADM-4。/images/* はサイトと同じオリジンで配る。画像のふりをした
+    文書（SVG の <script>）が直に開かれても走らないよう、嗅ぎ分けを止め、
+    スクリプトも読み込みも持たない sandbox の文書として返す
+  */
+  it('nosniff と sandbox の CSP を付けて返す', async () => {
+    await env.MEDIA.put('items/shot-cd34.png', 'image-bytes', {
+      metadata: { contentType: 'image/png' },
+    })
+    const response = await get('/images/items/shot-cd34.png')
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toBe('image/png')
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff')
+    expect(response.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox")
+    expect(response.headers.get('content-disposition')).toBeNull()
+  })
+
+  it('5種類に無い型で残っている画像（以前の SVG・HEIC）は、画像としてではなく添付で返す', async () => {
+    for (const [key, type] of [
+      ['avatars/eve-9cf5750a.svgxml', 'image/svg+xml'],
+      ['avatars/eve-1234abcd.heic', 'image/heic'],
+      ['items/old-1234abcd.bin', undefined],
+    ] as const) {
+      await env.MEDIA.put(
+        key,
+        '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+        type ? { metadata: { contentType: type } } : {},
+      )
+      const response = await get(`/images/${key}`)
+      expect(response.status, key).toBe(200)
+      expect(response.headers.get('content-type'), key).toBe('application/octet-stream')
+      expect(response.headers.get('content-disposition'), key).toBe('attachment')
+      expect(response.headers.get('x-content-type-options'), key).toBe('nosniff')
+      expect(response.headers.get('content-security-policy'), key).toBe(
+        "default-src 'none'; sandbox",
+      )
+    }
+  })
+})
+
+/*
+  URL の検査の描画の側（ADM-3 / PUB-5 / SEC-4）。保存の側は test/admin.test.ts の
+  「URL の検査（保存）」。こちらは、その検査より前に入った行（や手で DB に入れた行）
+  が公開ページで落ちることを見る。以前は作品のリンクもメンバーの GitHub も、
+  javascript: のまま href と JSON-LD に出ていた。
+*/
+describe('URL の検査（描画）', () => {
+  const jsonLdOf = (html: string) =>
+    JSON.parse(html.match(/<script type="application\/ld\+json">(.*?)<\/script>/)?.[1] ?? 'null')
+
+  it('作品のリンクの javascript: と相対 URL は、カードにも作品のページにも全体ページにも出さない', async () => {
+    const item = await seedItem({ title: 'AppMixer', slug: 'appmixer' })
+    await db()
+      .insert(schema.itemLinks)
+      .values([
+        { itemId: item.id, label: 'XSS', url: 'javascript:alert(document.domain)', sortOrder: 0 },
+        { itemId: item.id, label: '相対', url: 'github.com/iam74k4', sortOrder: 1 },
+        { itemId: item.id, label: 'タブ', url: '/\t/evil.example', sortOrder: 2 },
+        { itemId: item.id, label: 'Repository', url: 'https://example.test/r', sortOrder: 3 },
+      ])
+
+    for (const path of ['/projects', '/apps/item/appmixer', '/all']) {
+      const main = mainOf(await (await get(path)).text())
+      expect(main, path).not.toContain('javascript:')
+      expect(main, path).not.toContain('href="github.com')
+      expect(main, path).not.toContain('evil.example')
+      // 通る行はそのまま残る
+      expect(main, path).toContain('href="https://example.test/r"')
+    }
+  })
+
+  it('リンクが全部落ちたら、行き先の行ごと出さない', async () => {
+    const item = await seedItem({ title: 'AppMixer', slug: 'appmixer' })
+    await db()
+      .insert(schema.itemLinks)
+      .values({ itemId: item.id, label: 'XSS', url: 'javascript:alert(1)', sortOrder: 0 })
+    expect(mainOf(await (await get('/apps/item/appmixer')).text())).not.toContain(
+      '<div class="links">',
+    )
+  })
+
+  it('メンバーの GitHub の javascript: と相対 URL は、個人ページにも JSON-LD にも出さない', async () => {
+    for (const github of ['javascript:alert(document.cookie)', 'github.com/okazaki']) {
+      await resetDb()
+      await seedMember({ github })
+
+      // 1人のサイト。個人ページの1枚目にも全体ページにも出さず、名乗りはサイトの GitHub に戻す
+      expect(await (await get('/members/okazaki')).text(), github).not.toContain(`href="${github}"`)
+      expect(await (await get('/all')).text(), github).not.toContain(`href="${github}"`)
+      const top = await (await get('/')).text()
+      expect(top, github).not.toContain(github)
+      expect(jsonLdOf(top).sameAs, github).toEqual([SITE.github])
+
+      // 2人のサイトでは個人ページが自分の名乗り（Person）を持つ。そこにも載せない
+      await seedMember({ slug: 'hoshino', name: '星野', sortOrder: 20 })
+      const personal = await (await get('/members/okazaki')).text()
+      expect(personal, github).not.toContain(github)
+      expect(jsonLdOf(personal), github).toMatchObject({ '@type': 'Person' })
+      expect(jsonLdOf(personal), github).not.toHaveProperty('sameAs')
+    }
+  })
+
+  it('https:// の GitHub はそのまま出る', async () => {
+    await seedMember({ github: 'https://github.com/okazaki' })
+    await seedMember({ slug: 'hoshino', name: '星野', sortOrder: 20 })
+    const personal = await (await get('/members/okazaki')).text()
+    expect(mainOf(personal)).toContain('href="https://github.com/okazaki"')
+    expect(jsonLdOf(personal).sameAs).toEqual(['https://github.com/okazaki'])
+  })
+
+  it('部品が自分で落とす（呼ぶ側の検査に頼らない）', () => {
+    const row = String(
+      LinkRow({
+        links: [
+          { label: 'XSS', url: 'javascript:alert(1)' },
+          { label: 'OK', url: 'https://example.test' },
+        ],
+      }),
+    )
+    expect(row).not.toContain('javascript:')
+    expect(row).toContain('href="https://example.test"')
+
+    const list = String(
+      LinkList({
+        rows: [
+          ['XSS', 'javascript:alert(1)'],
+          ['OK', '/projects'],
+        ],
+      }),
+    )
+    expect(list).not.toContain('javascript:')
+    expect(list).toContain('href="/projects"')
+  })
 })
 
 /*
@@ -2378,6 +2512,87 @@ describe('共有カードと画面ごとの説明文', () => {
     expect(html).toContain('<meta property="og:image:width" content="144"/>')
     expect(html).toContain('<meta name="twitter:card" content="summary"/>')
     expect(html).toContain('<meta property="og:image:alt"')
+  })
+
+  /*
+    作品のページは、画像があればその作品の画像を共有カードに出す。種類は経路の
+    拡張子から、寸法は上げたときに読んだもの（items.image_width / image_height）。
+    分からないものは名乗らない。twitter:card は横長で 300x157 以上なら大きい札
+  */
+  it('画像のある作品のページは、その作品の画像を og:image にする（絶対 URL・種類・寸法）', async () => {
+    await seedItem({
+      title: 'AppMixer',
+      slug: 'appmixer',
+      imageUrl: '/images/items/appmixer-ab12cd34.png',
+      imageAlt: '音量ミキサーの画面',
+      imageWidth: 1200,
+      imageHeight: 630,
+    })
+    const html = await (await get('/apps/item/appmixer')).text()
+    expect(html).toContain(
+      `<meta property="og:image" content="${SITE.origin}/images/items/appmixer-ab12cd34.png"/>`,
+    )
+    expect(html).toContain('<meta property="og:image:type" content="image/png"/>')
+    expect(html).toContain('<meta property="og:image:width" content="1200"/>')
+    expect(html).toContain('<meta property="og:image:height" content="630"/>')
+    expect(html).toContain('<meta property="og:image:alt" content="音量ミキサーの画面"/>')
+    expect(html).toContain('<meta name="twitter:card" content="summary_large_image"/>')
+    // サイトの1枚は出さない（og:image は1つ）
+    expect(html).not.toContain('/assets/avatar.png"/>')
+    expect(html.match(/property="og:image"/g) ?? []).toHaveLength(1)
+  })
+
+  it('寸法が分からない・縦長・AVIF なら、名乗り方と札を変える', async () => {
+    // この列より前に上げた画像。寸法は名乗らず、札は小さいまま
+    await seedItem({
+      title: '古い画像',
+      slug: 'old',
+      imageUrl: '/images/items/old-ab12cd34.jpeg',
+      imageAlt: '古い画面',
+    })
+    const old = await (await get('/apps/item/old')).text()
+    expect(old).toContain(`content="${SITE.origin}/images/items/old-ab12cd34.jpeg"`)
+    expect(old).toContain('<meta property="og:image:type" content="image/jpeg"/>')
+    expect(old).not.toContain('og:image:width')
+    expect(old).toContain('<meta name="twitter:card" content="summary"/>')
+
+    // 縦長のスクリーンショット。大きい札は横長に切り抜くので、小さい札のまま
+    await seedItem({
+      title: '縦長',
+      slug: 'tall',
+      imageUrl: '/images/items/tall-ab12cd34.png',
+      imageAlt: '縦長の画面',
+      imageWidth: 1170,
+      imageHeight: 2532,
+    })
+    const tall = await (await get('/apps/item/tall')).text()
+    expect(tall).toContain('<meta property="og:image:width" content="1170"/>')
+    expect(tall).toContain('<meta name="twitter:card" content="summary"/>')
+
+    // AVIF は貼り先が読まないので、サイトの1枚に戻す
+    await seedItem({
+      title: 'AVIF',
+      slug: 'avif',
+      imageUrl: '/images/items/avif-ab12cd34.avif',
+      imageAlt: 'AVIF の画面',
+      imageWidth: 1600,
+      imageHeight: 900,
+    })
+    const avifPage = await (await get('/apps/item/avif')).text()
+    expect(avifPage).toContain(
+      `<meta property="og:image" content="${SITE.origin}/assets/avatar.png"/>`,
+    )
+  })
+
+  it('画像の無い作品のページと、ほかの画面はサイトの1枚のまま', async () => {
+    await seedItem({ title: 'AppMixer', slug: 'appmixer' })
+    for (const path of ['/apps/item/appmixer', '/projects', '/all']) {
+      const html = await (await get(path)).text()
+      expect(html, path).toContain(
+        `<meta property="og:image" content="${SITE.origin}/assets/avatar.png"/>`,
+      )
+      expect(html, path).toContain('<meta name="twitter:card" content="summary"/>')
+    }
   })
 
   it('画面ごとに違う説明文を出す。同じ1文を配らない', async () => {

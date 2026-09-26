@@ -8,29 +8,76 @@ import { MARK_POINTS } from './icons'
 export type NavItem = { href: string; label: string; active?: boolean }
 
 /*
-  共有カードの画像。サイトに1枚だけ持つ。
+  共有カードの画像（og:image）。サイトの1枚と、作品のページではその作品の画像。
 
   このサイトへの流入は、貼られたリンク（Slack / DM / 職務経歴書）から来る。
   og:image が無いと、貼った先は灰色の箱か文字だけの行になり、画面が7つに
   分かれたいまはどの画面を貼っても同じ無地のカードになっていた。
 
-  素材はリポジトリにある public/assets/avatar.png。og:image に出せる raster は
-  これ1枚——ロゴ（noctifex-mark.svg / noctifex-wordmark.svg）は SVG で、貼り先の
-  どれも og:image の SVG を読まない（Slack / LinkedIn / X）。入口の月
+  **作品のページは、画像があればその作品の画像を出す**（src/routes/public.tsx の
+  itemOgImage）。作品を1件名指しして貼る URL なので、サイトの札より作品の
+  スクリーンショットのほうが「何のリンクか」を伝える。種類は経路の拡張子から
+  （こちらが判定して付けたもの）、寸法は上げたときに読んだもの（items の
+  image_width / image_height）。分からないものは名乗らない——間違った寸法を
+  名乗るくらいなら、貼り先に取りに行かせたほうがよい。AVIF は使わず、サイトの
+  1枚に戻す（X が og:image に読むのは JPEG / PNG / WebP / GIF だけ）。
+
+  **それ以外の画面はサイトの1枚**（SITE_IMAGE）。素材はリポジトリにある
+  public/assets/avatar.png。og:image に出せる raster はこれ1枚——ロゴ
+  （noctifex-mark.svg / noctifex-wordmark.svg）は SVG で、貼り先のどれも
+  og:image の SVG を読まない（Slack / LinkedIn / X）。入口の月
   （moon.avif / moon.webp）は raster だが、無彩色の三日月を CSS の
   mask-image で抜くための素材なので、そのまま貼ると絵にならない。
-  144x144 は og:image の推奨（1200x630）に届かないので、出るのは大きな
-  カードではなく小さな正方形のサムネイル。だから twitter:card は summary
-  のままにしてある（summary_large_image にすると、横長の枠に 144px の絵を
-  引き伸ばした札になる）。1200x630 の PNG を1枚足す日が来たら、
-  差し替えるのはここの3行と twitter:card の1語だけ。
 
-  width と height を添えるのは、取りに行く前に「小さい」と分かるようにするため。
+  twitter:card は画像の寸法で決める（cardOf）。横長で X の大きい札の下限
+  （300x157）以上なら summary_large_image、それ以外は summary。サイトの1枚は
+  144x144 で推奨（1200x630）に届かないので、小さな正方形のサムネイルの
+  summary のまま（summary_large_image にすると、横長の枠に 144px の絵を
+  引き伸ばした札になる）。縦長のスクリーンショットも summary——大きい札は
+  横長に切り抜くので、縦長の絵は真ん中の帯しか残らない。寸法が分からない
+  画像も summary に倒す。
+
+  width と height を添えるのは、取りに行く前に大きさが分かるようにするため。
 
   twitter:image は置かない。X は twitter:* が無ければ og:* に落ちるので、
   同じ URL を2か所に持つと、片方だけ古くなる形が1つ増えるだけになる。
 */
-const OG_IMAGE = { path: '/assets/avatar.png', type: 'image/png', width: 144, height: 144 }
+export type OgImage = {
+  // 絶対 URL（貼り先はこの文書の外で読むので、相対では何も指さない）
+  url: string
+  alt: string
+  type?: string
+  width?: number
+  height?: number
+}
+
+const SITE_IMAGE: OgImage = {
+  url: `${SITE.origin}/assets/avatar.png`,
+  alt: `${SITE.name} のアイコン`,
+  type: 'image/png',
+  width: 144,
+  height: 144,
+}
+
+const cardOf = ({ width, height }: OgImage) =>
+  width && height && width > height && width >= 300 && height >= 157
+    ? 'summary_large_image'
+    : 'summary'
+
+const ShareImage = ({ image }: { image: OgImage }) => (
+  <>
+    <meta property="og:image" content={image.url} />
+    {image.type ? <meta property="og:image:type" content={image.type} /> : null}
+    {image.width && image.height ? (
+      <>
+        <meta property="og:image:width" content={String(image.width)} />
+        <meta property="og:image:height" content={String(image.height)} />
+      </>
+    ) : null}
+    <meta property="og:image:alt" content={image.alt} />
+    <meta name="twitter:card" content={cardOf(image)} />
+  </>
+)
 
 /*
   公開ページの外枠。head と骨格（名札 + 本文）はここだけで決める。
@@ -61,6 +108,8 @@ export const Layout = (props: {
     undefined が渡り、柱は今までと同じ姿のまま。
   */
   admin?: string
+  // 共有カードの画像。渡さなければサイトの1枚（SITE_IMAGE）
+  image?: OgImage
   children?: Child
 }) => (
   <HtmlDocument>
@@ -78,12 +127,7 @@ export const Layout = (props: {
       <meta property="og:description" content={props.description} />
       <meta property="og:url" content={props.canonical} />
       <meta property="og:locale" content="ja_JP" />
-      <meta property="og:image" content={`${SITE.origin}${OG_IMAGE.path}`} />
-      <meta property="og:image:type" content={OG_IMAGE.type} />
-      <meta property="og:image:width" content={String(OG_IMAGE.width)} />
-      <meta property="og:image:height" content={String(OG_IMAGE.height)} />
-      <meta property="og:image:alt" content={`${SITE.name} のアイコン`} />
-      <meta name="twitter:card" content="summary" />
+      <ShareImage image={props.image ?? SITE_IMAGE} />
 
       <link
         rel="icon"

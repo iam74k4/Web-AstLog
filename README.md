@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | 実行環境 | Cloudflare Workers | 常時起動のサーバーを持たずに済む |
 | データ | D1（SQLite） | メンバーと Projects（個人開発 / 業務） |
-| 画像 | KV | アバター（`avatars/`）と作品のスクリーンショット（`items/`）だけ。R2 が未有効なので当面こちら |
+| 画像 | KV | アバター（`avatars/`）と作品のスクリーンショット（`items/`）だけ。R2 が未有効なので当面こちら。受けるのは中身で確かめた PNG・JPEG・WebP・AVIF・GIF だけ |
 | 管理画面のログイン | GitHub / Google の OAuth | パスワードを持たない。本人は提供元の ID で照合する |
 | 言語 | TypeScript | |
 | ルーティング・描画 | Hono（JSX でサーバーサイドレンダリング） | クライアント側のフレームワークを持たない |
@@ -201,6 +201,17 @@ npm run deploy
 出ないだけ。`seed.sql` も書かない（本人の作品の中身を作り話で埋めない）。管理画面の
 作品のフォームから書く。画像は KV の `items/` に置かれ、`/images/items/…` から出る。
 画像を公開するときは代替テキストが要る。
+
+`items.image_width` / `image_height`（画像の寸法。共有カードの `og:image:width` /
+`height` と `twitter:card` の大きさにだけ使う）は `0008_item_image_size` で入る。
+既にある画像は寸法が `null` のまま——作品のページの共有カードは寸法を名乗らず、
+小さい札（`summary`）になるだけ。画像を選び直して保存すれば読み取って入る。
+
+受け取る画像は中身の先頭のバイトで決めた PNG・JPEG・WebP・AVIF・GIF だけで、
+SVG と HEIC は弾く。この検査より前に上げた SVG / HEIC が KV に残っていても、
+`/images/*` は画像としてではなく添付（`application/octet-stream`）で返すので、
+そのアバター・作品の画像は壊れて見える。管理画面から画像を選び直せば直る
+（前の画像はそのとき KV から消える）。
 
 パスワードのログインから OAuth へ移す移行（`0006_oauth_identities` と
 `0007_hash_sessions`）を当てると、`users` からメールアドレスとパスワードの
