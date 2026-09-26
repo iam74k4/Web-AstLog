@@ -36,6 +36,13 @@
       "when": 1790413357673,
       "tag": "0004_merge_apps_works",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1790418453967,
+      "tag": "0005_item_body_image",
+      "breakpoints": true
     }
   ]
 }

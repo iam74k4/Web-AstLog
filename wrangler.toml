@@ -24,7 +24,7 @@ database_id = "TO_BE_CREATED"
 migrations_dir = "drizzle"
 
 [[kv_namespaces]]
-# アバター画像と、ログイン試行回数
+# アバター（avatars/）と作品の画像（items/）と、ログイン試行回数（login:<メール>）
 binding = "MEDIA"
 id = "TO_BE_CREATED"
 

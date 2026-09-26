@@ -77,10 +77,31 @@ export const items = sqliteTable(
       互いに別物として扱うので、埋まっていない行が何行あっても通る。
     */
     slug: text('slug').unique(),
-    // "2026" や "2024 —" を入れるので文字列
+    // "2026" や "2024 — 現在"（続いているもの。経歴の期間と同じ書き方）を入れるので文字列
     year: text('year').notNull().default(''),
-    // 「何であるか。何をしたか。」の2文
+    // 「何であるか。何をしたか。」の2文。常体（目録の文。本文 body は「です・ます」）
     summary: text('summary').notNull().default(''),
+    /*
+      作品ページの本文。背景・やったこと・結果を段落で（段落の数の上限は
+      MAX_CHARS.itemBodyParagraphs。いまは1段落）。
+      カードには出さない——カードの説明（summary）は行数で切られる要約で、
+      中身を読みに来た人が着く先は作品のページ（/apps/item/<slug>）。
+      長さの上限は src/blocks.ts の MAX_CHARS（1画面に収まる実測）。
+
+      既にある行は '' のまま（NOT NULL に定数の既定値なので ALTER で入る）。
+      本人の作品の中身をこちらで書いて埋めない。
+    */
+    body: text('body').notNull().default(''),
+    /*
+      スクリーンショット。/images/items/<…>（管理画面から KV に上げたもの）か、
+      /assets/…（同梱）。null なら画像なし——作品ページに figure を出さず、
+      カードにもサムネイルを出さない。
+
+      代替テキストは別の列で持つ（画像そのものに焼き込めない）。空のまま
+      公開させない検査は src/routes/admin.tsx の itemErrors。
+    */
+    imageUrl: text('image_url'),
+    imageAlt: text('image_alt').notNull().default(''),
     // 実績値。1項目に1つだけ。無い項目のほうが多い
     metricValue: text('metric_value'),
     metricUnit: text('metric_unit'),

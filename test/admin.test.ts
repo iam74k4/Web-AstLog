@@ -1,3 +1,4 @@
+import { env } from 'cloudflare:test'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { type BlockKey, blockType, MAX_CHARS } from '../src/blocks'
 import * as schema from '../src/db/schema'
@@ -209,6 +210,265 @@ describe('Items', () => {
 })
 
 /*
+  作品の本文と画像。本文と画像は作品のページにだけ出る（カードには出さない。
+  カードのサムネイルは同じ画像の飾り）。
+
+  画像はアバターと同じ経路（種類と大きさの検査 → KV）で、置き場だけが items/。
+  同じ KV にログイン試行の記録があるので、公開側の /images/* はキーの形で
+  縛っている（test/public.test.ts の /images）。
+*/
+describe('Items — 本文と画像', () => {
+  const png = (bytes = 64) => new File([new Uint8Array(bytes)], 'shot.png', { type: 'image/png' })
+  const withImage = (values: Record<string, string>, file = png()) => {
+    const body = form(values)
+    body.append('image', file)
+    return body
+  }
+  const itemKeys = async () => (await env.MEDIA.list({ prefix: 'items/' })).keys.map((k) => k.name)
+
+  // KV は resetDb が触らない（D1 だけ）。前のテストが置いた画像を数えないよう、置き場を空にする
+  beforeEach(async () => {
+    for (const key of await itemKeys()) await env.MEDIA.delete(key)
+  })
+
+  it('列を足しても既にある行はそのまま（本文と代替テキストは空、画像は無し）', async () => {
+    // drizzle-kit が生成した SQL（drizzle/0005_item_body_image.sql）。手で書いていない
+    const found = env.TEST_MIGRATIONS.find((one) => one.name.includes('item_body_image'))
+    expect(found, '0005_item_body_image の移行が無い').toBeDefined()
+    const sql = found?.queries.join('\n') ?? ''
+    expect(sql).toContain("ALTER TABLE `items` ADD `body` text DEFAULT '' NOT NULL")
+    expect(sql).toContain('ALTER TABLE `items` ADD `image_url` text')
+    expect(sql).toContain("ALTER TABLE `items` ADD `image_alt` text DEFAULT '' NOT NULL")
+
+    // 列を知らない書き方（seed.sql の INSERT がそう）でも入り、空のまま残る
+    await env.DB.prepare(
+      "INSERT INTO items (type, title, published, sort_order) VALUES ('app', '古い行', 1, 10)",
+    ).run()
+    const [row] = await db().select().from(schema.items)
+    expect(row?.body).toBe('')
+    expect(row?.imageUrl).toBeNull()
+    expect(row?.imageAlt).toBe('')
+  })
+
+  it('画像は KV の items/ に置き、作品のページに代替テキストつきで出る。本文は説明に続く段落で出る', async () => {
+    const signed = await signIn()
+    const response = await signed('/admin/items', {
+      method: 'POST',
+      body: withImage({
+        type: 'app',
+        title: 'AppMixer',
+        slug: 'appmixer',
+        imageAlt: '音量ミキサーの画面',
+        summary: '音量を分ける常駐アプリ。',
+        body: '背景と結果の段落です。',
+        published: '1',
+      }),
+    })
+    expect(response.status).toBe(303)
+
+    const [row] = await db().select().from(schema.items)
+    // キーの形は /images/* の検査を必ず通る形（置き場/slug-乱数.拡張子）
+    expect(row?.imageUrl).toMatch(/^\/images\/items\/appmixer-[0-9a-f]{8}\.png$/)
+    const url = row?.imageUrl ?? ''
+    expect(await itemKeys()).toEqual([url.replace('/images/', '')])
+
+    const image = await get(url)
+    expect(image.status).toBe(200)
+    expect(image.headers.get('content-type')).toBe('image/png')
+
+    const html = await (await get('/apps/item/appmixer')).text()
+    expect(html).toContain(
+      `<figure class="shot"><img src="${url}" alt="音量ミキサーの画面" decoding="async"/></figure>`,
+    )
+    // 説明が頭の1段落、本文がそのあとに続く1つの段落の列（ItemDetail の Note）
+    expect(html).toContain('<p>音量を分ける常駐アプリ。</p><p>背景と結果の段落です。</p>')
+  })
+
+  it('画像があるのに代替テキストが空なら、公開では止める。打った内容は残し、画像は書かない', async () => {
+    const signed = await signIn()
+    const response = await signed('/admin/items', {
+      method: 'POST',
+      body: withImage({
+        type: 'app',
+        title: 'AppMixer',
+        body: '残ってほしい本文',
+        published: '1',
+      }),
+    })
+    expect(response.status).toBe(400)
+
+    const html = await response.text()
+    expect(html).toContain('代替テキストが要ります')
+    expect(html).toContain('残ってほしい本文')
+    // ファイルの欄は描き直せない。選んだ画像も保存された、と読ませない
+    expect(html).toContain('画像はまだ保存していません')
+    // 止めた保存で KV に孤児の画像を残さない
+    expect(await itemKeys()).toEqual([])
+    expect(await db().select().from(schema.items)).toHaveLength(0)
+  })
+
+  it('いまの画像を残したまま代替テキストを消して公開しようとしても止める。外すなら通る', async () => {
+    await env.MEDIA.put('items/kept-aaaa.png', 'bytes')
+    const item = await seedItem({
+      slug: 'kept',
+      imageUrl: '/images/items/kept-aaaa.png',
+      imageAlt: '前の説明',
+    })
+    const signed = await signIn()
+
+    const kept = await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: form({ type: 'app', title: 'AppMixer', slug: 'kept', imageAlt: '', published: '1' }),
+    })
+    expect(kept.status).toBe(400)
+    expect(await kept.text()).toContain('代替テキストが要ります')
+
+    const removed = await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: form({
+        type: 'app',
+        title: 'AppMixer',
+        slug: 'kept',
+        imageAlt: '',
+        removeImage: '1',
+        published: '1',
+      }),
+    })
+    expect(removed.status).toBe(303)
+  })
+
+  it('下書きの保存では、代替テキストの不足も本文の長さも見ない', async () => {
+    const signed = await signIn()
+    const long = 'あ'.repeat(MAX_CHARS.itemBody + 10)
+    const response = await signed('/admin/items', {
+      method: 'POST',
+      body: withImage({ type: 'app', title: '下書き', body: long }),
+    })
+    expect(response.status).toBe(303)
+
+    const [row] = await db().select().from(schema.items)
+    expect(row?.published).toBe(0)
+    expect(row?.body).toBe(long)
+    expect(row?.imageUrl).toMatch(/^\/images\/items\//)
+  })
+
+  it('本文は、公開するときに字数と段落の数の両方で止める', async () => {
+    const signed = await signIn()
+    const long = await signed('/admin/items', {
+      method: 'POST',
+      body: form({
+        type: 'app',
+        title: '長い本文',
+        body: 'あ'.repeat(MAX_CHARS.itemBody + 1),
+        published: '1',
+      }),
+    })
+    expect(long.status).toBe(400)
+    expect(await long.text()).toContain(`本文は ${MAX_CHARS.itemBody} 字までです`)
+
+    // 字数が足りていても、段落を増やせば空行のぶんだけ高くなる
+    const many = await signed('/admin/items', {
+      method: 'POST',
+      body: form({
+        type: 'app',
+        title: '段落の多い本文',
+        body: Array.from({ length: MAX_CHARS.itemBodyParagraphs + 1 }, () => 'あ').join('\n\n'),
+        published: '1',
+      }),
+    })
+    expect(many.status).toBe(400)
+    expect(await many.text()).toContain(`段落は ${MAX_CHARS.itemBodyParagraphs} つまでです`)
+    expect(await db().select().from(schema.items)).toHaveLength(0)
+  })
+
+  it('大きすぎる画像は、下書きでも止める（長さではなく受け取れない画像）', async () => {
+    const signed = await signIn()
+    const response = await signed('/admin/items', {
+      method: 'POST',
+      body: withImage({ type: 'app', title: '大きい画像' }, png(1_200_000)),
+    })
+    expect(response.status).toBe(400)
+    expect(await response.text()).toContain('1MB まで')
+    expect(await itemKeys()).toEqual([])
+    expect(await db().select().from(schema.items)).toHaveLength(0)
+  })
+
+  it('「画像を外す」と作品のページから消え、KV からも消える', async () => {
+    await env.MEDIA.put('items/gone-aaaa.png', 'bytes')
+    const item = await seedItem({
+      slug: 'gone',
+      imageUrl: '/images/items/gone-aaaa.png',
+      imageAlt: '消える画像',
+    })
+    const signed = await signIn()
+    expect(await (await signed(`/admin/items/${item.id}/edit`)).text()).toContain('画像を外す')
+
+    const response = await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: form({
+        type: 'app',
+        title: 'AppMixer',
+        slug: 'gone',
+        removeImage: '1',
+        published: '1',
+      }),
+    })
+    expect(response.status).toBe(303)
+    const [row] = await db().select().from(schema.items)
+    expect(row?.imageUrl).toBeNull()
+    expect(await itemKeys()).toEqual([])
+    expect(await (await get('/apps/item/gone')).text()).not.toContain('<figure')
+  })
+
+  it('差し替えると、前の画像は KV から消える', async () => {
+    await env.MEDIA.put('items/swap-aaaa.png', 'bytes')
+    const item = await seedItem({
+      slug: 'swap',
+      imageUrl: '/images/items/swap-aaaa.png',
+      imageAlt: '前の画像',
+    })
+    const signed = await signIn()
+
+    const response = await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: withImage({
+        type: 'app',
+        title: 'AppMixer',
+        slug: 'swap',
+        imageAlt: '新しい画像',
+        published: '1',
+      }),
+    })
+    expect(response.status).toBe(303)
+    const [row] = await db().select().from(schema.items)
+    expect(row?.imageUrl).not.toBe('/images/items/swap-aaaa.png')
+    expect(await itemKeys()).toEqual([(row?.imageUrl ?? '').replace('/images/', '')])
+  })
+
+  it('作品を削除すると、画像も KV から消える', async () => {
+    await env.MEDIA.put('items/del-aaaa.png', 'bytes')
+    const item = await seedItem({ imageUrl: '/images/items/del-aaaa.png', imageAlt: '消える' })
+    const signed = await signIn()
+    expect(await (await signed(`/admin/items/${item.id}/delete`)).text()).toContain('、画像も')
+
+    await signed(`/admin/items/${item.id}/delete`, { method: 'POST' })
+    expect(await itemKeys()).toEqual([])
+  })
+
+  it('本文の上限と画像の欄は書く前に見える。フォームは画像を送れる形', async () => {
+    const signed = await signIn()
+    const html = await (await signed('/admin/items/new?type=app')).text()
+    expect(html).toContain('enctype="multipart/form-data"')
+    expect(html).toContain(`maxlength="${MAX_CHARS.itemBody}"`)
+    expect(html).toContain(`${MAX_CHARS.itemBody} 字・${MAX_CHARS.itemBodyParagraphs} 段落まで`)
+    expect(html).toContain('name="image"')
+    expect(html).toContain('name="imageAlt"')
+    // 外す画像が無い作品には「画像を外す」を出さない
+    expect(html).not.toContain('画像を外す')
+  })
+})
+
+/*
   作品1件の恒久リンク（slug）を、書く側から見る。
 
   公開側（test/public.test.ts）が押さえているのは「slug で名指しした URL は
@@ -398,6 +658,38 @@ describe('構成 — 何画面になるかを見せる', () => {
     expect(html).toContain('全体を1ページで見る ↗')
     // 入口への1本も残す。読む人が着くのはこちら
     expect(html).toContain('href="/"')
+  })
+
+  it('1人のサイトの Team の行は、プロフィールの画面を数え、置き換わると言う', async () => {
+    /*
+      公開中が1人なら、公開ページの Team の位置にはその人のプロフィール
+      （1枚目・About・Skills・Career）が並ぶ。行が「Team 1 画面」のままだと、
+      合計が公開ページの画面数とずれ、Team が見当たらない理由も分からない
+    */
+    await seedMember({ skillsText: 'C# | 3年以上', careerText: '2024.03 | 入社 | ある会社' })
+    const signed = await signIn()
+    await signed('/admin/blocks/init', { method: 'POST' })
+
+    const html = await (await signed('/admin/blocks')).text()
+    // hero・projects(0件)・team（プロフィール 4 画面）・contact
+    expect(screenBadges(html)).toEqual([1, 0, 4, 1])
+    expect(html).toContain('合計 6 画面')
+    expect(html).toContain('公開中が1人のあいだは、その人のプロフィール（4 画面）に置き換わる')
+
+    // 公開ページ側と突き合わせる。/ から「次」を辿った数がそのまま合計になる
+    let visited = 0
+    for (let path: string | null = '/'; path && visited < 20; visited += 1) {
+      const page = await (await get(path)).text()
+      path =
+        page.match(/<a class="pager__go pager__go--next" href="([^"]+)" rel="next">/)?.[1] ?? null
+    }
+    expect(visited).toBe(6)
+
+    // 2人目を公開すると Team の画面に戻る。知らせも消える
+    await seedMember({ slug: 'hoshino', name: '星野' })
+    const two = await (await signed('/admin/blocks')).text()
+    expect(screenBadges(two)).toEqual([1, 0, 1, 1])
+    expect(two).not.toContain('置き換わる')
   })
 
   it('下書きのブロックは 0 画面と出る', async () => {
@@ -727,7 +1019,7 @@ describe('構成 — 上限に引っかかる行でも、引っ込められる',
   ブロックではない「書く場所」。どちらも1画面に全部出るので、割る先が無い。
 */
 describe('項目とメンバー — 書く場所の上限', () => {
-  it('長すぎる説明文は止め、打った内容は残す', async () => {
+  it('長すぎる説明文は、公開するときに止め、打った内容は残す', async () => {
     const signed = await signIn()
     const response = await signed('/admin/items', {
       method: 'POST',
@@ -736,6 +1028,7 @@ describe('項目とメンバー — 書く場所の上限', () => {
         title: '長い説明',
         summary: 'あ'.repeat(MAX_CHARS.itemSummary + 1),
         tags: 'KeepMe',
+        published: '1',
       }),
     })
     expect(response.status).toBe(400)
@@ -746,13 +1039,51 @@ describe('項目とメンバー — 書く場所の上限', () => {
     expect(await db().select().from(schema.items)).toHaveLength(0)
   })
 
+  it('上限より前に保存された長い説明文の作品も、下書きに戻せる（行き止まりにしない）', async () => {
+    /*
+      説明文の長さだけは下書きの保存でも見ていた。編集フォームは DB の中身で
+      初期化されるので、上限より長い説明文を持つ作品は「公開する」を外して
+      保存しても同じ 400 で戻り、引っ込める手が削除しか無かった
+    */
+    const long = 'あ'.repeat(MAX_CHARS.itemSummary + 20)
+    const item = await seedItem({ title: '古い作品', slug: 'old', summary: long })
+    const signed = await signIn()
+
+    const response = await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: form({ type: 'app', title: '古い作品', slug: 'old', summary: long }),
+    })
+    expect(response.status).toBe(303)
+    const [row] = await db().select().from(schema.items)
+    expect(row?.published).toBe(0)
+    expect(row?.summary).toBe(long)
+  })
+
   it('説明文の上限は書く前に見える', async () => {
     const signed = await signIn()
     const html = await (await signed('/admin/items/new?type=app')).text()
     expect(html).toContain(`maxlength="${MAX_CHARS.itemSummary}"`)
     expect(html).toContain(`${MAX_CHARS.itemSummary} 字まで`)
-    // カードは2行で切る。上限まで書けば全部読まれる、とは書かない
+    // 電話の幅のカードは2行で切る。上限まで書けばどこでも全部読まれる、とは書かない
     expect(html).toContain(`${MAX_CHARS.itemSummaryVisible} 字までしか出ません`)
+    // 説明は目録の文なので常体、本文は「です・ます」。同じ作品のページに続けて出る
+    expect(html).toContain('2文を常体で')
+    expect(html).toContain('「です・ます」で')
+  })
+
+  it('年と実績値の添えは、書き方を書く前に見せる', async () => {
+    /*
+      年の「2024 —」はダッシュの先が空いて書きかけに見え、実績値の添えの
+      「見込み 40人日 → 実績」は → が値の前を指して逆に読めた。どちらもデータの
+      書き方の問題なので、書く場所で例を見せる
+    */
+    const signed = await signIn()
+    const html = await (await signed('/admin/items/new?type=work')).text()
+    expect(html).toContain('placeholder="2026 / 2024 — 現在"')
+    expect(html).toContain('続いているものは「2024 — 現在」')
+    expect(html).toContain('placeholder="見込み 40人日から半減"')
+    expect(html).toContain('添えは値と単位のあとに続けて読まれる')
+    expect(html).not.toContain('→ 実績')
   })
 
   it('紹介文は字数と段落の数の両方で止める', async () => {

@@ -7,8 +7,9 @@
   （何を画面にするか）は連なりごとに違うが、連ね方は同じで、2本あると片方だけ
   直した日に「トップではめくれるのに個人ページでは番号がずれる」が起きる。
 
-  列の作り方だけを呼ぶ側に残し、連ね方はここ1本にする。3本目の連なり（作品の
-  恒久リンクのような）を足すときも、列を1つ用意すればページャと目次が付いてくる。
+  列の作り方だけを呼ぶ側に残し、連ね方はここ1本にする。3本目の連なり——作品1件の
+  ページ同士をめくる列（src/routes/public.tsx の renderItem）——も、列を1つ用意した
+  だけでページャと目次が付いてきた。
 
   DOM も env も見ない純関数。src/lib/paginate.ts と同じ理由で、ブラウザ無しに
   確かめられる場所に置く。
@@ -17,12 +18,28 @@
 /*
   連なりの1枚。
 
-  navKey は目次の印を付ける単位。ブロックの2画面目（/projects/2）でも Projects の見出しに
-  印が残るよう、URL ではなくこちらで揃える。目次に並ぶのは同じ navKey のうち
-  最初の1枚だけで、行き先はその画面の URL（＝そのブロックの1画面目）。
+  navKey は節の単位。ページャはこれで「節の中の何枚目か」を数え、節をまたぐ手だけが
+  行き先の nav を名乗る。ブロックの2画面目（/projects/2）も同じ navKey なので、
+  Projects の 2 / 2 と数えられる。
+
+  tocKey は目次の単位で、既定は navKey。目次に並ぶのは同じ tocKey のうち最初の
+  1枚だけで、行き先はその画面の URL、印はいまの画面と tocKey が一致する行に付く。
+
+  2つを分けてあるのは、節より大きなまとまりを目次の1行にしたいときがあるため。
+  1人のサイトのプロフィールがそれで、1枚目・About・Skills・Career の4つの節は
+  ページャではそれぞれ名乗る（「About →」「Contact →」）が、目次では
+  「Profile」の1行にまとまり、どの画面でもその行に印が付く。目次に節を
+  そのまま並べると、柱の目次が 3行から 6行に伸び、899 以下の帯に入らない。
 */
 export type Step = {
   navKey: string
+  /*
+    目次のまとめ単位。省けば navKey。tocLabel はその行の名前で、省けば nav。
+    null を渡すと目次に出さない（nav とは別に消せる——個人ページの画面は
+    ページャでは名乗るが、2人以上のサイトでは目次に行を持たない）。
+  */
+  tocKey?: string
+  tocLabel?: string | null
   // この画面自身の URL。絞り込み（?kind= / ?member=）はここに含める
   href: string
   /*
@@ -85,27 +102,43 @@ export function stepAt(steps: Step[], href: string | null): number {
   return href === null ? 0 : steps.findIndex((step) => step.href === href)
 }
 
+// 目次のまとめ単位と名前。省いたものは節（navKey / nav）と同じ
+const tocKeyOf = (step: Step) => step.tocKey ?? step.navKey
+// null は「目次に出さない」なので ?? では書けない（null も既定へ落ちてしまう）
+const tocLabelOf = (step: Step) => (step.tocLabel === undefined ? step.nav : step.tocLabel)
+
 /*
   index 枚目を出すための一式。範囲の外（-1 を含む）なら null を返す。
 
   2つの連なりをつなぐ（個人ページを Team の続きに差し込む）ときは、呼ぶ側が
   列を継ぎ合わせてからここへ渡す。目次とページャを別の列から取りたいときも
-  同じで、2回呼んで要るほうを取る（src/routes/public.tsx の renderMemberScreen）。
+  同じで、2回呼んで要るほうを取る（src/routes/public.tsx の renderMemberScreen と
+  renderItem。作品のページは、目次をサイトの列と継いだ列から、ページャを作品の列
+  だけから取る）。
+  1人のサイトのプロフィールは継ぎ合わせではなく、サイトの列そのものに入っている
+  （Team の画面の代わり。同じ renderMemberScreen）。
 */
 export function sequence(steps: Step[], index: number): Sequence | null {
   const current = steps[index]
   if (!current) return null
 
   /*
-    目次は navKey ごとに1行。2画面目以降を並べると、同じ見出しが数だけ増える
-    （Projects · Projects · Projects）。行き先は最初の1枚＝そのブロックの1画面目。
+    目次は tocKey ごとに1行。2画面目以降を並べると、同じ見出しが数だけ増える
+    （Projects · Projects · Projects）。行き先は最初の1枚＝そのまとまりの1画面目。
+
+    名前の無い画面（Hero・ひとこと・目次に出さない個人ページ）は飛ばすが、
+    その tocKey を「見た」ことにはしない。名前のある仲間が後ろに居れば、
+    そちらが行になる。
   */
   const seen = new Set<string>()
   const nav: NavLink[] = []
+  const here = tocKeyOf(current)
   for (const step of steps) {
-    if (step.nav === null || seen.has(step.navKey)) continue
-    seen.add(step.navKey)
-    nav.push({ href: step.href, label: step.nav, active: step.navKey === current.navKey })
+    const label = tocLabelOf(step)
+    const key = tocKeyOf(step)
+    if (label === null || seen.has(key)) continue
+    seen.add(key)
+    nav.push({ href: step.href, label, active: key === here })
   }
 
   /*

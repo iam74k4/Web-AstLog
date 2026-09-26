@@ -9,7 +9,7 @@ export type Db = DrizzleD1Database<typeof schema>
 
 /*
   公開ページの並び。新しい順で、個人開発と業務を混ぜて並べる（Projects は
-  1つの一覧）。年は頭の4桁で比べる——「2024 —」（2024年から続いている）は
+  1つの一覧）。年は頭の4桁で比べる——「2024 — 現在」（2024年から続いている）は
   2024。年を書いていない行は最後に回る（空文字は数字より小さい）。
   同じ年の中は管理画面で決めた並び（sort_order）。区分ごとに別々に振った
   数なので、同じ数どうしは先に作ったほう（id）が前に来る。
@@ -125,6 +125,30 @@ export async function findPublishedItem(db: Db, slug: string): Promise<ItemView 
     with: itemWith,
   })
   return row ? toItemView(row) : null
+}
+
+/*
+  公開中の作品の並びだけ（id・区分・slug・題）。作品1件のページの行き来に使う
+  ——前後の作品へめくるページャと、「← 一覧に戻る」がその作品の載っている
+  Projects の何画面目かを数えるのに。
+
+  並びは一覧と同じ publicOrder。別の並びで数えると、「次」で着く作品が一覧の
+  隣のカードと食い違い、戻った画面にその作品が居ない。
+
+  カードの中身（タグ・リンク・担当）は引かない。要るのは並びの中の位置だけで、
+  7件なら7件ぶんの子を毎回引くことになる。
+*/
+export function listPublishedItemKeys(db: Db) {
+  return db
+    .select({
+      id: schema.items.id,
+      type: schema.items.type,
+      slug: schema.items.slug,
+      title: schema.items.title,
+    })
+    .from(schema.items)
+    .where(itemsWhere({}))
+    .orderBy(...publicOrder)
 }
 
 /*

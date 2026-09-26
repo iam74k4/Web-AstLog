@@ -115,6 +115,78 @@ describe('画面の連なり', () => {
   })
 })
 
+/*
+  目次のまとめ単位（tocKey）は、節（navKey）より大きくてよい。
+
+  1人のサイトでは Team の代わりにその人の画面（1枚目・About・Skills・Career）が
+  サイトの列に入る。ページャは節ごとに名乗る（「About →」）が、目次は「Profile」の
+  1行にまとめる——節をそのまま並べると柱の目次が倍に伸び、899 以下の帯に入らない。
+*/
+describe('目次のまとめ単位', () => {
+  const profile = (navKey: string, href: string, nav: string): Step => ({
+    ...step(navKey, href, nav),
+    tocKey: 'profile',
+    tocLabel: 'Profile',
+  })
+  const SOLO: Step[] = [
+    step('hero', '/', null),
+    step('projects', '/projects', 'Projects'),
+    profile('member:', '/members/okazaki', '岡崎 昂功'),
+    profile('member:about', '/members/okazaki/about', 'About'),
+    profile('member:career', '/members/okazaki/career', 'Career'),
+    profile('member:career', '/members/okazaki/career/2', 'Career'),
+    step('contact', '/contact', 'Contact'),
+  ]
+
+  it('tocKey ごとに1行。名前は tocLabel、行き先はそのまとまりの最初の1枚', () => {
+    expect(sequence(SOLO, 0)?.nav).toEqual([
+      { href: '/projects', label: 'Projects', active: false },
+      { href: '/members/okazaki', label: 'Profile', active: false },
+      { href: '/contact', label: 'Contact', active: false },
+    ])
+  })
+
+  it('まとまりのどの画面でも、その行に印が付く', () => {
+    for (const index of [2, 3, 4, 5]) {
+      const marked = sequence(SOLO, index)?.nav.filter((item) => item.active)
+      expect(marked, SOLO[index]?.href).toEqual([
+        { href: '/members/okazaki', label: 'Profile', active: true },
+      ])
+    }
+  })
+
+  it('ページャの数え方と名乗りは節（navKey / nav）のまま', () => {
+    // Projects の最後の「次」は、プロフィールの1枚目を名前で名乗る
+    expect(sequence(SOLO, 1)?.pager?.nextSection).toBe('岡崎 昂功')
+    // 1枚目の次は About。同じ Profile の中でも節が違えば名乗る
+    expect(sequence(SOLO, 2)?.pager?.nextSection).toBe('About')
+    // Career は2画面で 1 / 2、2 / 2。Profile 全体（4枚）では数えない
+    expect(sequence(SOLO, 4)?.pager).toMatchObject({ section: 'Career', index: 1, total: 2 })
+    expect(sequence(SOLO, 5)?.pager).toMatchObject({ index: 2, total: 2, nextSection: 'Contact' })
+  })
+
+  it('tocLabel が null の画面は目次に出ない。印は同じ tocKey の行に付く', () => {
+    // 2人以上のサイトの個人ページ。ページャでは名乗るが、目次の行は持たず Team に印
+    const spliced: Step[] = [
+      step('team', '/team', 'Team'),
+      { ...step('member:', '/members/okazaki', '岡崎 昂功'), tocKey: 'team', tocLabel: null },
+      step('contact', '/contact', 'Contact'),
+    ]
+    const seq = sequence(spliced, 1)
+    expect(seq?.nav.map((item) => item.label)).toEqual(['Team', 'Contact'])
+    expect(seq?.nav.find((item) => item.active)?.label).toBe('Team')
+    expect(seq?.pager?.prevSection).toBe('Team')
+  })
+
+  it('名前の無い1枚が先に居ても、まとまりの行は後ろの名前のある1枚から作る', () => {
+    const late: Step[] = [
+      { ...step('a', '/a', null), tocKey: 'group' },
+      { ...step('b', '/b', 'B'), tocKey: 'group', tocLabel: 'Group' },
+    ]
+    expect(sequence(late, 0)?.nav).toEqual([{ href: '/b', label: 'Group', active: true }])
+  })
+})
+
 describe('URL から画面を引く', () => {
   it('名指しが無ければ先頭。どちらの連なりも入口は1枚目', () => {
     expect(stepAt(STEPS, null)).toBe(0)

@@ -6,7 +6,9 @@ import {
   parseLines,
   parseSkills,
   parseTags,
+  skillRows,
   toSlug,
+  yearInJapan,
 } from '../src/lib/format'
 
 describe('parseSkills', () => {
@@ -30,6 +32,36 @@ describe('parseSkills', () => {
 
   it('空文字なら空配列', () => {
     expect(parseSkills('')).toEqual([])
+  })
+})
+
+describe('skillRows', () => {
+  it('添えごとの行にまとめる。添えは行に1度だけ、添えの無い項目は最後の行', () => {
+    /*
+      項目ごとに添えを出していたころは、同じ「3年以上」が画面に11回並んでいた。
+      行の順は添えが最初に現れた順。添えの無い項目は、途中に書いてあっても
+      最後の1行にまとめる
+    */
+    const [group] = parseSkills(
+      'LANGUAGES:\nC# | 3年以上\nSQL | 3年以上\nPython | 1年以上\nTypeScript\nJavaScript | 3年以上\nSwift',
+    )
+    expect(skillRows(group?.skills ?? [])).toEqual([
+      { note: '3年以上', labels: ['C#', 'SQL', 'JavaScript'] },
+      { note: '1年以上', labels: ['Python'] },
+      { note: '', labels: ['TypeScript', 'Swift'] },
+    ])
+  })
+
+  it('添えの無い項目が先に来ても、行の順は添えの現れた順のまま', () => {
+    const [group] = parseSkills('PRACTICE:\n生成AI\n設計 | 3年以上\nGit')
+    expect(skillRows(group?.skills ?? [])).toEqual([
+      { note: '3年以上', labels: ['設計'] },
+      { note: '', labels: ['生成AI', 'Git'] },
+    ])
+  })
+
+  it('空なら行も無い', () => {
+    expect(skillRows([])).toEqual([])
   })
 })
 
@@ -110,5 +142,12 @@ describe('num', () => {
 
   it('0 は 0 のまま', () => {
     expect(num('0', 10)).toBe(0)
+  })
+})
+
+describe('yearInJapan', () => {
+  it('日本時間で年を数える。UTC の大晦日 15 時は、日本ではもう元日', () => {
+    expect(yearInJapan(new Date('2026-12-31T14:59:59Z'))).toBe(2026)
+    expect(yearInJapan(new Date('2026-12-31T15:00:00Z'))).toBe(2027)
   })
 })

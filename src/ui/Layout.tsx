@@ -1,7 +1,8 @@
 import type { Child } from 'hono/jsx'
+import { yearInJapan } from '../lib/format'
 import { SITE } from '../site'
 import type { Theme } from '../theme'
-import { AdminLink } from './components'
+import { AdminLink, HtmlDocument } from './components'
 import { MARK_POINTS } from './icons'
 
 export type NavItem = { href: string; label: string; active?: boolean }
@@ -62,7 +63,7 @@ export const Layout = (props: {
   admin?: string
   children?: Child
 }) => (
-  <html lang="ja">
+  <HtmlDocument>
     <head>
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -144,24 +145,36 @@ export const Layout = (props: {
             公開側にも管理画面にも /all への href が1本も無かった。@media print は
             「紙の上では『次の画面へ』は押せない。全体ページを刷ること」と書いて
             いるのに、そこへ行く手段が URL を手で打つことしか無い。カードの説明が
-            2行で切られない唯一の姿も、Ctrl-F もブラウザ翻訳も、同じ1本が無いために
+            行数で切られない唯一の姿も、Ctrl-F もブラウザ翻訳も、同じ1本が無いために
             届かなかった。
 
             全体ページ自身には出さない（自分への行き先）。
 
             899 以下ではこの足元ごと畳まれる（.rail__footer は帯に入らない6つの
-            うちの1つ）。畳んで「どこにも無くなる」ものは無い——一覧は画面ごとの
-            URL で読めるし、切られた説明の全文はカードの題からたどる作品1件の
-            ページにある。sitemap.xml にも載るので、検索からも届く。
+            うちの1つ）。畳んでも全体ページへの道は消えない——入口の Hero の帯の
+            下に「すべてを1ページで読む →」（components.tsx の WholeLink）を置いて
+            あり、そちらは幅で畳まない。一覧は画面ごとの URL で読めるし、切られた
+            説明の全文はカードを押した先の作品1件のページにある。sitemap.xml にも
+            載るので、検索からも届く。
+          */}
+          {/*
+            著作権表示（と、あとに続く「 · 」）は .rail__copy に包む。中央寄せの骨格は
+            900 以上で柱が上の帯になり、そこでは著作権表示を出さずに全体ページへの
+            1本だけを目次の行に残す（app.css の「骨格: 中央寄せ」）。素の字のままだと
+            CSS から字だけを選べない。区切りの「 · 」も同じ箱に入れるのは、表示を
+            畳んだときに区切りだけが行の頭に残らないようにするため
           */}
           <footer class="rail__footer">
-            © 2026 {SITE.name}
-            {props.whole ? null : (
-              <>
-                {' · '}
-                <a href="/all">全体を1ページで見る ↗</a>
-              </>
-            )}
+            <span class="rail__copy">
+              © {yearInJapan()} {SITE.name}
+              {props.whole ? null : ' · '}
+            </span>
+            {/*
+              矢印は →。同じタブで開くサイトの中の行き先なので、「外へ出る・
+              別タブ」の印（↗）は付けない（components.tsx の LinkList を見ること）。
+              管理画面の同じ1本は別タブで開くので、あちらは ↗ のまま
+            */}
+            {props.whole ? null : <a href="/all">全体を1ページで見る →</a>}
           </footer>
         </aside>
         {/*
@@ -175,5 +188,5 @@ export const Layout = (props: {
         </main>
       </div>
     </body>
-  </html>
+  </HtmlDocument>
 )

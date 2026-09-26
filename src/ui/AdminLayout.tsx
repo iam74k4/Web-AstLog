@@ -1,4 +1,5 @@
 import type { Child } from 'hono/jsx'
+import { HtmlDocument } from './components'
 import { MarkIcon } from './icons'
 
 /*
@@ -34,7 +35,7 @@ export const AdminLayout = (props: {
   flash?: string | null
   children?: Child
 }) => (
-  <html lang="ja">
+  <HtmlDocument>
     <AdminHead title={props.title} />
     <body>
       <div class="admin-shell">
@@ -79,12 +80,12 @@ export const AdminLayout = (props: {
         </main>
       </div>
     </body>
-  </html>
+  </HtmlDocument>
 )
 
 export const AdminBare = (props: { title: string; children?: Child }) => (
-  <html lang="ja">
+  <HtmlDocument>
     <AdminHead title={props.title} />
     <body class="admin--bare">{props.children}</body>
-  </html>
+  </HtmlDocument>
 )

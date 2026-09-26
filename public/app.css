@@ -18,13 +18,31 @@
 :root {
   --font-sans:
     'Helvetica Neue', 'Hiragino Sans', 'Noto Sans JP', system-ui, -apple-system, sans-serif;
+  /*
+    等幅は英数字の札だけ（ページャの数・実績値の数・タグ・英大文字の小見出し・
+    ワードマーク・メールのアドレス）。和文が入りうる所には使わない——等幅の書体は
+    和文の字を持たず、字は結局ほかの書体に落ちる。残るのは等幅のための字間
+    （letter-spacing）と小ささだけで、和文には読みにくさしか渡さない。
+    打ち込んだ文字が入る札（タグ・肩書き・技術の小見出し）は、日本語を1字も
+    含まないときだけ lang="en" が付き（components.tsx の langOf）、等幅はその
+    :lang(en) にだけ掛ける。年と期間は「2024 — 現在」と和文を含む書き方に
+    決めた（CLAUDE.md「文言」）ので、等幅にせず数字の幅だけそろえる（tabular-nums）。
+  */
   --font-mono: ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, monospace;
   --font-serif: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', Georgia, serif;
 
   /* 見出しの書体。本文は読みやすさを優先して常に --font-sans */
   --font-display: var(--font-sans);
 
-  /* 文字の段（静的）。6つだけ。中間値を足さない */
+  /*
+    文字の段（静的）。6つだけ。中間値を足さない。
+
+    和文の最小は --fs-meta（12px）。--fs-label（11px）は英大文字の小見出し
+    （Skills の LANGUAGES・管理画面の ADMIN・404 の番号）だけに使う。11px の
+    和文は画数の多い字が潰れる——以前は業界名・帯の件数・節の添え・経歴の
+    期間・柱の足元が 11px（しかも等幅）で、和文の札がいちばん読みにくかった。
+    どこに使ってよいかは test/theme.test.ts の「文字の段」が名指しで数えている。
+  */
   --fs-label: 11px;
   --fs-meta: 12px;
   --fs-sm: 13px;
@@ -80,8 +98,68 @@
   */
   --screen-h: calc(100svh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
 
-  /* カードの説明を止める行数。幅が変わっても高さが変わらないようにする */
+  /*
+    カードの説明を止める行数。幅が変わっても高さが変わらないようにする。
+    600 以上と 900 以上は、下の @media の :root で差し替える（理由と実測は
+    「600px 以上」の :root）。600 未満はカードが1列に2枚積まれ、行を足す高さが
+    無い（3行にすると指の 390x844 で Projects が 30px 溢れる）。
+
+    --card-lines-shot は、サムネイルの枠を持つカード（行のどれかに画像がある。
+    components.tsx の ItemCard の framed）の行数。枠が説明の行の高さを
+    食うので、背の低い 1440x900 ではこちらを少なくする。素では同じ数
+    （var() で追う。:root の中だけで閉じた参照なので、[data-accent] の罠は無い）。
+  */
   --card-lines: 2;
+  --card-lines-shot: var(--card-lines);
+
+  /*
+    段落（.bio p。紹介文・メモ・作品の説明と本文）の1行の長さ。約40字で止める。
+
+    和文の本文は1行 35〜40字あたりを超えると、行末から次の行頭へ目を戻すときに
+    行を取り違えやすくなる。止めていなかったころは、1440 の About が1行約65字
+    で流れていた（本文の列 869px ÷ 13px = rail @1440x900, Hiragino Sans,
+    macOS Chromium）。em で書くのは、和文の1字がちょうど 1em の幅だから
+    （本文には palt を掛けていない）——段落の字の大きさを変えても、字数のまま
+    ついてくる。390 の電話では画面のほうが狭い（1行 23字前後）ので効かない。
+  */
+  --measure: 40em;
+
+  /*
+    作品の画像の枠。どちらも「絵に合わせて伸び縮みさせない」ための段で、
+    寸法を DB に持たない画像でも、読み込む前から高さが決まっている。
+
+    --thumb-ratio はカードのサムネイル（600 以上でだけ出る）の縦横比。
+    横長に寄せてあるのは、1画面に1行ぶん（2枚）のカードを収めるため。
+    いちばん幅の広いカードは雑誌風の 1440（1枚 655px）で、そこで 16:9 に
+    すると枠だけで 368px になり、行が画面の外へ出る。測ったのは全カードに
+    画像を置き、行の片方を実績値つき・行き先3本にした姿（いちばん高い行）。
+    決めた日（説明 13px・2行止め・節の見出し 18px）の数:
+      3:1  閉じる。空き 16px = center @1440x900 / 21px = magazine @1440x900,
+           Hiragino Sans, macOS Chromium（書体3つとも同じ数）
+      5:2  開く。+6px = center @1440x900 / +23px = magazine @1440x900, 同条件
+           （この2つは見積もり。5:2 で seed のカードのまま測った空き 42 / 26px
+           から、いちばん高い行が足す 48 / 49px を引いた数）
+    いま（説明 14px・画像の行は 900 以上で3行・節の見出しは連動の段）は、
+    2枚とも説明 100 字・実績値・行き先3本の行で 空き 19px = center 3:1 /
+    26px = magazine 4:1（下の --thumb-ratio-wide）@1440x900, 同条件。
+    768x1024 と rail はどれも 130px 以上空く。600 未満は枠ごと出ない。
+
+    --shot-h は作品ページの画像の枠の高さ。絵はこの中に縮めて収める
+    （object-fit: contain。切らない）。可変部は幅と高さの小さいほうで、
+    背の低い窓ほど小さくなる——この画面は説明・本文・実績値・タグ・行き先と
+    一緒に1画面に収まらなければならず、高さの予算を奪い合う相手がいちばん
+    多い。作品の本文の上限（src/blocks.ts の MAX_CHARS.itemBody）は、この
+    高さの画像を置いた姿で測ってある。動かしたら測り直すこと。
+  */
+  --thumb-ratio: 3 / 1;
+  /*
+    雑誌風のサムネイル（骨格: 雑誌風 が --thumb-ratio をこれに差し替える）。
+    雑誌風は箱の余白を持たず、1440 のカードは 655px——ほかの骨格の倍近い幅で、
+    3:1 の枠だけで 218px になる。節の見出しを1段上げた（--fs-display-sm）日に、
+    いちばん高い行（上の測り方）が 1440x900 で 4px 溢れた。4:1 なら 164px。
+  */
+  --thumb-ratio-wide: 4 / 1;
+  --shot-h: clamp(120px, min(30vw, 20svh), 280px);
 
   /*
     横帯（狭い画面の目次と絞り込み）の右端のぼかし。切れていることを見せる。
@@ -111,9 +189,11 @@
     リード文は避ける**——オーナーが選んだ「見出しがその手前を横切る」構図は
     そのまま、下だけを切る。
 
-    いまは字（肩書き・名前・リード文・帯）を画面の下に寄せてあるので、三日月の
-    下端（10% + 45% ＝ 55%）と字の上端は縦に 29〜137px 離れる（rail と、
-    390 / 768 の全骨格）。中央寄せと雑誌風の 1024 以上だけは字の塊が 55% より
+    いまは字（肩書き・名前・リード文・帯・全体ページへの1本）を画面の下に寄せて
+    あるので、三日月の下端（10% + 45% ＝ 55%）と字の上端は縦に 14〜123px 離れる
+    （rail の4寸法と、390 / 768 の全骨格 = 既定書体, macOS Chromium。入口に
+    ページャを出さなくなってパネルが伸び、そのぶん月も大きくなって、前の
+    29〜137px から詰まった）。中央寄せと雑誌風の 1024 以上だけは字の塊が 55% より
     上から始まるが、そこでは字が左（中央）・月が右で横に分かれていて重ならない。
     上の 10% は光暈の上への広がり（0.20丈 ＝ パネルの 9%）から決めている——
     これより上に置くと、光暈がパネルの上端で断ち切られる。
@@ -138,11 +218,12 @@
     締めの画面（Contact）の月の丈。入口の --moon-h より小さい。
 
     締めは入口より一段静かに置く。入口の月が画面の主役なのに対して、ここの
-    主役は下のボタン2つで、月は「最初の画面と対になっている」ことを示せれば
-    足りる。字を置いていたころは字の塊との間隔でも縛られていた（入口と同じ
-    45% では 390 で三日月の下端が字の上端に触れた）が、いまはボタンだけなので
-    その縛りは緩い。
-    **動かしたら npm run check:contrast。** 締めの画面のボタンも測っている。
+    主役は下の誘いの1文とボタン2つで、月は「最初の画面と対になっている」ことを
+    示せれば足りる。見出し・リード文・アドレスの塊を置いていたころは、字の塊との
+    間隔でも縛られていた（入口と同じ 45% では 390 で三日月の下端が字の上端に
+    触れた）。いまは1文とボタンだけで、三日月の下端と1文の上端は縦に 143〜325px
+    離れる（4寸法 × 3骨格 = 既定書体, macOS Chromium）。
+    **動かしたら npm run check:contrast。** 締めの画面の1文とボタンも測っている。
   */
   --moon-closing-h: 34%;
 
@@ -321,6 +402,16 @@
   --switch-knob-on: var(--bg);
 
   --tap: 40px;
+
+  /*
+    フォーカスの輪郭の太さと、要素からの離し方。素の :focus-visible と、
+    輪郭を自分で描く3か所（カードの面・スイッチ・見た目の見本）が同じ段を
+    読む。カードの面（.card__link::after）は輪郭をリンクではなくカードに
+    描くので、素の規則をそのまま受けられず、値を写すことになる——写した値は
+    いつか食い違うので、ここで1つにしておく。
+  */
+  --focus-ring: 2px;
+  --focus-offset: 3px;
 }
 
 /*
@@ -422,6 +513,8 @@ h4,
 p,
 ul,
 ol,
+dl,
+dd,
 figure,
 fieldset {
   margin: 0;
@@ -450,9 +543,24 @@ img {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
+  outline: var(--focus-ring) solid var(--accent);
+  outline-offset: var(--focus-offset);
   border-radius: var(--radius-sm);
+}
+
+/*
+  割られた画面の節（components.tsx の Screen / Hero。弁のために tabindex="0" が
+  付く）のフォーカスは、節の縁の**内側**に描く。
+
+  節は外枠の中いっぱいに敷いてあり、上は柱の帯（899 以下）か画面の上端、下は
+  ページャの罫線まで 16px しか無い。素の :focus-visible のように外へ 3px 離すと、
+  輪郭がその狭い余白に入り、帯の下端やページャの罫線と数 px の間で平行に並んで、
+  どれが輪郭でどれが罫線か見分けにくかった。内側なら、節の中身をちょうど囲む
+  1本になる（カードの輪郭を縁の内側に描くのと同じ扱い）。太さと色は素の規則の
+  まま——見えることは変えず、置き場所だけを内へ入れる。
+*/
+main > :is(.hero, section)[tabindex]:focus-visible {
+  outline-offset: calc(var(--focus-ring) * -1);
 }
 
 /*
@@ -549,6 +657,23 @@ main {
   font-size: var(--fs-sm);
 }
 
+/*
+  柱の名乗り（1人のサイトの、入口以外の画面。src/routes/public.tsx の SiteIdentity）。
+
+  入口の外の画面——検索や貼られたリンクから直接着く画面——には、誰のサイトかが
+  どこにも出ていなかった。名乗りは入口の Hero の h1 にしか無く、柱には置かない
+  と決めていたため。入口だけは今も置かない（Hero の h1 と2度並ぶ）。
+
+  職種（.identity__role）より1段上の字で、色も1段濃い。名前が主、職種が添え。
+  899 以下の帯では職種とワードマークを畳み、名前だけを残す（「画面に収める外枠」）。
+*/
+.identity__name {
+  color: var(--ink);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
 .avatar {
   position: relative;
   width: var(--avatar-size);
@@ -641,15 +766,18 @@ main {
     scale var(--dur-spring) var(--ease-spring);
 }
 
+/*
+  柱の足元（著作権表示と「全体を1ページで見る →」）。和文が入るので等幅にせず、
+  字も和文の最小の段（--fs-meta）。11px の等幅だったころは「全体を1ページで
+  見る」の和文が等幅の字間のまま 11px で組まれていた。
+*/
 .rail__footer {
   color: var(--ink-weak);
-  font-size: var(--fs-label);
-  font-family: var(--font-mono);
-  letter-spacing: 0.04em;
+  font-size: var(--fs-meta);
 }
 
 /*
-  足元の「全体を1ページで見る ↗」。素の a は color: inherit /
+  足元の「全体を1ページで見る →」。素の a は color: inherit /
   text-decoration: none なので、置くだけでは著作権表示と同じ姿になり、
   押せるものだと分からない（WCAG 1.4.1 は色に頼るなと言うが、ここは色の
   違いすら無い状態だった）。下線を引き、色も1段上げる
@@ -660,8 +788,9 @@ main {
   ——設計サイズで弁を開かせないために、ここは文の中のリンクのままにしてある
   （WCAG 2.5.8 の inline の例外。上の目次とは --sp-6 = 24px 空いている）。
   実測でも、この1行を足したあとの柱の高さは足す前と同じ——
-  「© 2026 Noctifex · 全体を1ページで見る ↗」が 264px（--nav-w）の柱に1行で
-  収まる（足元の高さ 19px = rail @1440x900, Hiragino Sans, macOS Chromium。
+  「© 2026 Noctifex · 全体を1ページで見る ↗」（足した日の字。いまの矢印は →）
+  が 264px（--nav-w）の柱に1行で収まる
+  （足元の高さ 19px = rail @1440x900, Hiragino Sans, macOS Chromium。
   柱ぜんぶで 377px も足す前と同値）。3骨格 × 5ビューポート × 12URL の 180通りで、
   ページの動きも弁の開きも足す前と1pxも変わっていない。
 */
@@ -902,6 +1031,31 @@ main {
   display: inline-block;
 }
 
+/*
+  見出し・カードの説明・段落の折り返し。語の途中で折らない。
+
+  和文は既定だとどの字の間でも折れるので、「プラットフォームを1 / つの」
+  「置いてお / く。」のように語の途中で行が変わる。word-break: auto-phrase は
+  ブラウザが文節を見て、文節の切れ目でだけ折る指定（lang="ja" の文書で効く）。
+  いまは Chromium にしか無く、知らないブラウザではこの1行だけが捨てられて、
+  今までどおり字の間で折れる（進歩的な強化。壊れる環境は無い）。
+  text-wrap: pretty は段落の最後の行に1〜2字だけ落ちるのを避ける。
+
+  打ち込む中身（見出し・説明・本文）は、Phrases のように句読点で塊に切って
+  おけない——段落の長い塊を inline-block にすると、行に入りきらない塊が丸ごと
+  次の行へ落ち、行末に大きな空きが残る。Phrases は短い一文（入口の大見出しと
+  リード文、締めの誘いの1文）の、どのブラウザでも同じ所で折りたい場所だけに使い、
+  ここは文節を知っているブラウザに任せる。入口の大見出しを入れてあるのは、
+  塊が1行より長くなった（背の低い窓で字が大きい）ときに、塊の中でも文節で折るため。
+
+  折れ方が変わると行の数も変わりうるので、1画面の字数の上限（src/blocks.ts の
+  maxChars / MAX_CHARS）はこの指定を入れた姿で測ってある。
+*/
+:is(.hero h1, .head :is(h1, h2, h3), .card__head h3, .statement__text, .card p, .bio p) {
+  word-break: auto-phrase;
+  text-wrap: pretty;
+}
+
 /* 素の .hero__headline は置かない。付く先は必ず .hero の直接の子の h1 で、
    こちら（0,1,1）が勝つ。クラスが要るのは下の1段小さくする規則のほうだけ */
 /*
@@ -939,7 +1093,10 @@ main {
 }
 
 /*
-  名前の上に添える肩書き。札なので名詞のまま、小さな等幅で置く。
+  名前の上に添える肩書き。札なので名詞のまま、小さく置く。英字だけの肩書き
+  （System Engineer）は等幅の札にし、和文の肩書きは本文の書体のまま
+  （lang="en" は public.tsx が langOf で付ける。等幅の決まりは :root の
+  --font-mono を見ること）。
 
   先頭の点はアクセント色。月と同じ色の粒を1つだけ字の側に置いて、右上の月と
   左下の名乗りを結ぶ。display: block + 点は inline-block にしてあるのは、
@@ -948,8 +1105,11 @@ main {
 */
 .hero .hero__role {
   color: var(--ink-mid);
-  font-family: var(--font-mono);
   font-size: var(--fs-meta);
+}
+
+.hero .hero__role:lang(en) {
+  font-family: var(--font-mono);
   letter-spacing: 0.08em;
 }
 
@@ -1040,11 +1200,12 @@ main {
 .hero h1 .phrase,
 .hero > p,
 .hero > .nameplate,
-.hero > .band {
+.hero > .band,
+.hero > .hero__whole {
   animation: rise-in var(--dur-spring) var(--ease-spring) backwards;
 }
 
-/* 肩書き（個人ページでは名札） → 見出しの塊 → リード文 → 帯の順 */
+/* 肩書き（個人ページでは名札） → 見出しの塊 → リード文 → 帯 → 全体ページへの1本の順 */
 .hero h1 .phrase {
   animation-delay: calc((var(--i, 0) + 1) * var(--stagger));
 }
@@ -1062,18 +1223,26 @@ main {
   animation-delay: calc(3 * var(--stagger));
 }
 
+.hero > .hero__whole {
+  animation-delay: calc(4 * var(--stagger));
+}
+
 /*
   見出しと添え（件数・年など）は1組。空いた幅ぶん引き離さない。
 
   space-between だと 1440 で2つが 782px 離れ、同じ組に見えなくなる。
-  中央寄せのプリセットは同じ2つを隣り合わせに置いている（justify-content:
-  center）ので、1組であることは骨格の側でも決まっている。素の並びを
-  flex-start にしておけば、中央寄せはその1行の上書きだけで済む。
+  並びは素の flex-start のまま、どの骨格でも上書きしない——中央寄せの骨格でも
+  見出しは本文の列と同じ左の軸に立てる（理由は「骨格: 中央寄せ」の .head の話）。
+
+  折り返したとき（狭い画面の作品のページ。「金融系基幹システム · 2024 — 現在」は
+  390 では見出しの隣に入らない）の行の間は --sp-2。横の間隔と同じ 16px を
+  空けると、添えが見出しから離れて次の段落の頭に見え、そのうえ1画面の予算を
+  いちばん使い切っている作品のページから 12px を取っていた。
 */
 .head {
   display: flex;
   align-items: baseline;
-  gap: var(--sp-5);
+  gap: var(--sp-2) var(--sp-5);
   flex-wrap: wrap;
   border-bottom: 1px solid var(--line);
   padding-bottom: var(--sp-4);
@@ -1083,20 +1252,64 @@ main {
 /*
   節の見出し。割られた画面（1画面 = 1ドキュメント）では h1、縦に積んだ
   全体ページ（/all）では h2。要素が変わっても字面は同じでなければならない
-  ——見出しの階層は読み上げと検索のためのもので、大きさの段ではない
+  ——見出しの階層は読み上げと検索のためのもので、大きさの段ではない。
+
+  大きさは画面に連動するはしごのいちばん下（--fs-display-xs。390 で 20px、
+  1440 で 30px）。入口の大見出し（--fs-display）より小さく、カードの題
+  （--fs-md）より2段以上大きい。以前は --fs-lg（18px）で、カードの題 15px と
+  3px しか違わず、1440 では本文の列の中に見出しが埋もれていた——節の h1 が
+  全部 18px で、画面の見出しなのかカードの題なのかを大きさで読めなかった。
+  雑誌風はもう1段上げる（骨格: 雑誌風）。
+
+  行の高さは入口の大見出しと同じ 1.3。本文の 1.7 を継いだままだと、30px の
+  見出しが 51px の行を取り、1行ぶんの空きが見出しの上下に余る。
 */
 .head :is(h1, h2) {
+  font-family: var(--font-display);
+  font-size: var(--fs-display-xs);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+}
+
+/* 添え（作品の「業界 · 年」、区分名）。和文が入るので本文の書体で、和文の最小の段 */
+.head .note {
+  color: var(--ink-weak);
+  font-size: var(--fs-meta);
+}
+
+/*
+  節の中の小節の見出し（h3。components.tsx の SectionHead の sub）。いまは全体
+  ページ（/all）の Profile の節の About / Skills / Career だけ。
+
+  節の見出し（h2 の --fs-display-xs）より小さく、静的な段のいちばん上
+  （--fs-lg）にし、下の線を引かない。線まで同じだと、Profile の中の About が
+  Projects や Contact と同じ格の節に見え、見出しの階層（h2 → h3）が字面から
+  読めなくなる。節の見出しが --fs-lg だったころは、ここが --fs-md だった
+  ——段の差（h2 > h3 > 本文）はそのまま、全体が1段ずつ上がった。
+*/
+.head--sub {
+  border-bottom: 0;
+  padding-bottom: 0;
+  margin-bottom: var(--sp-4);
+}
+
+.head--sub h3 {
   font-family: var(--font-display);
   font-size: var(--fs-lg);
   font-weight: 600;
   letter-spacing: 0.01em;
 }
 
-.head .note {
-  color: var(--ink-weak);
-  font-size: var(--fs-label);
-  font-family: var(--font-mono);
-  letter-spacing: 0.04em;
+/*
+  全体ページ（/all）の Profile の節（components.tsx の ProfileWhole）。名札・
+  大見出し・About・Skills・Career を縦に並べる間隔だけを持つ。中の部品は
+  割られた画面と同じもので、見た目はそちらの規則がそのまま効く。
+*/
+.profile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-7);
 }
 
 /* --- 画面の中身の2つの箱 --- */
@@ -1106,10 +1319,10 @@ main {
   ScreenSection）。見出し側には、めくっても動かないもの——見出しと Projects の
   絞り込みのピル——が入る。
 
-  ここに寸法は書かない。中身は自分の高さのまま、節の上下中央寄せに任せる。
-  画面に入りきらなくなったときに手を入れる先を、本文の箱ひとつに決めておく
-  ためだけの2つ。min-width だけは 0 にする（節は grid なので、既定の auto の
-  ままだと長い1語が箱を押し広げる）。
+  ここに寸法は書かない。中身は自分の高さのまま、節の上揃え（「画面に収める
+  外枠」）に任せる。画面に入りきらなくなったときに手を入れる先を、本文の箱
+  ひとつに決めておくためだけの2つ。min-width だけは 0 にする（節は grid なので、
+  既定の auto のままだと長い1語が箱を押し広げる）。
 */
 .screen-head,
 .screen-body {
@@ -1168,10 +1381,15 @@ main {
   min-height: var(--tap);
 }
 
+/*
+  真ん中の枡。節の名前（.pager__section）と位置（.pager__of）の2つ。
+
+  名前は本文の書体。Projects / About のような英語の名前だけでなく、打ち込む
+  ブロックの見出し（「数字で見る」）やメンバーの名前（1人のサイトの
+  プロフィールの1枚目）も入る。等幅は数（.pager__of）だけに掛ける。
+*/
 .pager__count {
-  font-family: var(--font-mono);
-  font-size: var(--fs-label);
-  letter-spacing: 0.08em;
+  font-size: var(--fs-meta);
   color: var(--ink-weak);
 }
 
@@ -1191,6 +1409,39 @@ main {
 
 .pager__of {
   margin-left: var(--sp-3);
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+}
+
+/*
+  作品1件のページの「← 一覧に戻る」（components.tsx の BackLink）。
+
+  ページャの手（.pager__go）と同じ丸い札。ページャは作品同士を横にめくる手、
+  こちらは一覧（1つ上の階層）へ上がる手なので、画面の底ではなく見出しの上に
+  置く。行き先はその作品が載っている Projects の画面で、1画面目とは限らない。
+
+  justify-self は必須。節は grid なので、子になった inline-flex は blockify
+  され、既定の stretch で節の幅いっぱいに伸びる（.pager__go と同じ罠）。
+  当たり判定は --tap（pointer: coarse では 44px）。
+*/
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  justify-self: start;
+  min-height: var(--tap);
+  margin-bottom: var(--sp-5);
+  padding: var(--sp-2) var(--sp-5);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--highlight);
+  color: var(--ink-mid);
+  font-size: var(--fs-sm);
+  transition:
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
 }
 
 /* --- 絞り込み --- */
@@ -1239,6 +1490,68 @@ main {
   text-align: center;
 }
 
+/* --- 作品1件のページ --- */
+
+/*
+  見出しの下（components.tsx の ItemDetail）。画像（.shot）と文の列
+  （.detail__text: 説明・本文・実績値・タグ・行き先）の2つ。
+
+  900 未満は縦に積む（画像が見出しのすぐ下）。900 以上で画像がある作品は、
+  文の列を左・画像を右に並べる（下の「900px 以上」の .detail--shot）。
+  横に並べると、画像の高さが文の列の高さに重なって消える——縦に積んだときの
+  「画像ぶんの高さ」が丸ごと本文に回る。背の低い 1440x900 の中央寄せ
+  （節の高さ 564px）で本文を置けるのは、この並べ方があるから。
+
+  間隔は gap で決める。節は grid で行の間を空けないので、子を節の直下に
+  並べていたころは、説明と実績値の箱がくっついていた。文の列の中（段落の
+  列・実績値・タグ・行き先）はカードと同じ --sp-4——カードを開いたものなので、
+  同じ詰め方で並ぶ。画像と文の列のあいだは1段広い --sp-5。
+
+  flex ではなく grid。高さの足りない箱に入った flex の子は中身より小さく
+  潰れる（「画面に収める外枠」の弁の注記）。grid の auto の行は潰れない。
+*/
+.detail,
+.detail__text {
+  display: grid;
+  gap: var(--sp-5);
+  min-width: 0;
+  align-content: start;
+}
+
+.detail__text {
+  gap: var(--sp-4);
+}
+
+/*
+  作品の画像（components.tsx の Shot）。枠の高さは --shot-h で決め、絵は
+  その中に object-fit: contain で縮めて収める。切らない——スクリーンショットの
+  端に大事なものが写っていることは多い。
+
+  絵は枠に絶対配置で貼る。流れの中に置くと、絵の寸法（大きなスクリーン
+  ショットなら 2000px）が枠の最小の高さとして効き、横に並べたときに行ごと
+  押し広げる。貼っておけば、枠の高さを決めるのはいつも CSS だけになる。
+
+  枠を絵に合わせない理由は :root の --shot-h を見ること。縦長の絵（電話の
+  スクリーンショット）は左右に、横長の絵は上下に地が残る。その地を面
+  （--surface）で塗って、枠が枠として見えるようにする。
+*/
+.shot {
+  position: relative;
+  height: var(--shot-h);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--highlight);
+  overflow: clip;
+}
+
+.shot img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 /* --- カード --- */
 
 .grid {
@@ -1247,11 +1560,31 @@ main {
   gap: var(--sp-5);
 }
 
+/*
+  カードは押せる面。位置の基準（position: relative）はカード自身で、題のリンクの
+  ::after（.card__link）がここを inset: 0 で覆う。基準を外すと ::after は
+  いちばん近い位置の基準——節か外枠——まで広がり、画面のどこを押しても
+  その作品へ飛ぶ。
+
+  内側の余白は 600 未満で1段詰める（--sp-5。600 以上は下で --sp-6）。電話では
+  カードが1列に2枚積まれ、1画面の高さの予算がいちばん少ない。説明を 14px に
+  上げ、目次を指の的（44px）にした日に、Projects の画面が指の 390x844 で
+  13px 溢れた（= rail / center @390x844 指, Hiragino Sans, macOS Chromium）。
+  カード2枚の上下の余白 32px を返して収める（seed の姿で空き 19px。同条件）。
+  16px は電話の外枠の余白（--gutter の下限）と同じ段。
+
+  **まだ閉じていない形がある。** 2枚とも いちばん重いカード（説明 100 字・
+  実績値・行き先3本）だと、390x844 で 28px（指なら 58px）溢れる（= rail /
+  center @390x844, Hiragino Sans, macOS Chromium）。この形は 13px の説明の
+  ころから 12px 溢れていた。字数や余白の調整では埋まらない差なので、電話の
+  カードに何を並べるか（実績値・行き先の置き方）を決め直すときに一緒に閉じること。
+*/
 .card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
-  padding: var(--sp-6);
+  padding: var(--sp-5);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
@@ -1259,11 +1592,51 @@ main {
   transition:
     background var(--dur-fast) var(--ease),
     border-color var(--dur-fast) var(--ease),
-    transform var(--dur) var(--ease);
+    transform var(--dur) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
 }
 
 .card[hidden] {
   display: none;
+}
+
+/*
+  カードのサムネイル（components.tsx の ItemCard）。**600 未満では出さない。**
+  そこではカードが1列に縦に積まれ、2枚ぶんの高さで1画面がほぼ埋まっている
+  （seed の姿で空きは 19px = rail @390x844 指, Hiragino Sans, macOS Chromium）。畳んでも
+  「どこにも無くなる」ものではない——同じ画像が作品のページ（.shot）に
+  代替テキストつきで出ている。出すのは下の「600px 以上」。
+
+  縦横比は :root の --thumb-ratio で固定し、絵は枠いっぱいに切り抜く（cover）。
+  カードは並べて見比べる場所なので、枠の形がそろっていることを優先する。
+  切り抜く位置は上寄せ——画面のスクリーンショットは上に題や道具の帯があり、
+  そこがいちばんその作品らしい。全体は作品のページで見られる。
+
+  同じ行で画像の有る無しが混ざったら、無いほうにも空の枠を置く（ItemCard の
+  framed。理由はそこに書いてある）。空の枠は面（--surface）だけで、字も印も
+  置かない。
+*/
+/*
+  min-height: 0 は必須。縦横比を持つ箱は、既定（auto）の最小の高さが「中身の
+  高さ」になる。読み込んだ絵が自分の寸法（300x300 の絵なら 300px）で箱を
+  押し広げ、縦横比が黙って外れる——読み込む前の 120px が、読み込んだ瞬間に
+  300px になっていた（= rail @768x1024, Hiragino Sans, macOS Chromium）。
+*/
+.card__thumb {
+  display: none;
+  aspect-ratio: var(--thumb-ratio);
+  min-height: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--highlight);
+  overflow: clip;
+}
+
+.card__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
 }
 
 .card__head {
@@ -1279,30 +1652,100 @@ main {
   letter-spacing: 0.01em;
 }
 
+/*
+  カードごと押せるようにする（stretched link）。題のリンクの ::after を、
+  位置の基準にしたカード（.card）いっぱいに被せる。
+
+  カードそのものを <a> にはできない——中に外へのリンク（.links a）と担当者名
+  （.card__member）があり、<a> は入れ子にできない。公開ページに JavaScript も
+  置かない。だから押せる面だけを広げて、リンクは題の1本のままにする。読み上げで
+  リンクの名前が作品名なのも、Tab で止まるのが1回なのも変わらない。
+
+  以前は題の字だけがリンクだった。その一方で .card:hover はカードごと浮いて
+  いたので、浮いたカードの説明を押しても何も起きなかった。
+
+  カーソルは書かない。::after は <a> の一部なので、リンクの指差しのカーソルが
+  カードの面にそのまま出る。
+
+  代わりに、カードの説明の字はなぞって選べなくなる（面を押すとリンクになる）。
+  承知のうえ——カードの説明は2行で切ってあり（--card-lines）、全文は押した先の
+  作品のページにある。そちらはふつうの本文なので選べる。
+*/
+.card__link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+}
+
+/*
+  フォーカスの輪郭はカード全体に描く。リンクそのもの（題の字）に描くと、
+  押せる面はカード全体なのに、輪郭だけが題の字幅に縮んで見える。
+  太さは素の :focus-visible と同じ段（--focus-ring）。
+
+  輪郭はカードの縁の**内側**に描く（離し方は太さぶんの負）。素の
+  :focus-visible のように外へ 3px 離すと、カードが節の幅いっぱいに並ぶ狭い
+  画面で、輪郭の左右が節の弁（overflow: auto）に切られて上下の2本しか残らない
+  （= rail @390x844, Hiragino Sans, macOS Chromium）。内側なら、どの幅でも
+  カードの縁と重なって一周する。
+*/
+.card__link:focus-visible {
+  outline: none;
+}
+
+.card__link:focus-visible::after {
+  outline: var(--focus-ring) solid var(--accent);
+  outline-offset: calc(var(--focus-ring) * -1);
+}
+
+/*
+  年（「2026」「2024 — 現在」）。和文を含む書き方なので等幅にせず、数字の幅
+  だけをそろえる（:root の --font-mono を見ること）。
+*/
 .card__head .year {
   flex-shrink: 0;
   color: var(--ink-weak);
-  font-size: var(--fs-label);
-  font-family: var(--font-mono);
-  letter-spacing: 0.04em;
+  font-size: var(--fs-meta);
+  font-variant-numeric: tabular-nums;
 }
 
+/*
+  カードの説明。本文の段（--fs-base = 14px）。
+
+  以前は --fs-sm（13px）で2行止めだった。「何であるか。何をしたか。」の2文の
+  うち、2文目（何をしたか）が2行目の末尾で切れて、カードからはほぼ読めなかった。
+  600 以上では行数を増やして 100 字が切れずに出るようにしてある（:root の
+  --card-lines）。
+*/
 .card p {
   color: var(--ink-mid);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-base);
   line-height: 1.75;
 }
 
+/*
+  カードの中の、題とは別の行き先（担当者名と、.links の外へのリンク）。
+  題のリンクの ::after（.card__link）がカードの面を覆っているので、重ねの順で
+  その上に出す。出さないと、担当者名を押しても Repository を押しても、
+  覆いの下で作品のページへ行く。
+*/
 .card__member {
+  position: relative;
+  z-index: 1;
   align-self: flex-start;
   color: var(--ink-weak);
-  font-size: var(--fs-label);
+  font-size: var(--fs-meta);
 }
 
 .card__member:hover {
   color: var(--accent);
 }
 
+/*
+  カードの札（プラットフォーム名 / 業界名）。業界名は「金融系基幹システム」の
+  ような和文なので、本文の書体で和文の最小の段。11px の等幅だったころは、
+  カードでいちばん目立つ色の札が、いちばん読みにくい字で組まれていた。
+*/
 .chip {
   display: inline-flex;
   align-self: flex-start;
@@ -1311,9 +1754,7 @@ main {
   box-shadow: var(--highlight);
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: var(--fs-label);
-  font-family: var(--font-mono);
-  letter-spacing: 0.06em;
+  font-size: var(--fs-meta);
   line-height: 1.9;
 }
 
@@ -1323,9 +1764,18 @@ main {
   gap: var(--sp-2);
 }
 
+/*
+  タグは打ち込んだ札。英字だけのもの（Swift・C#）にだけ lang="en" が付き
+  （components.tsx の Tags）、等幅になる。「生成AI」のような和文のタグは
+  本文の書体のまま。大きさはどちらも和文の最小の段にそろえる——同じ行の札が
+  1枚ごとに違う大きさだと、並びが波打つ。
+*/
 .tags li {
   color: var(--ink-weak);
-  font-size: var(--fs-label);
+  font-size: var(--fs-meta);
+}
+
+.tags li:lang(en) {
   font-family: var(--font-mono);
   letter-spacing: 0.04em;
 }
@@ -1356,6 +1806,9 @@ main {
   で AA を割るうえ、:root の段に無い生の値を1か所に書くことになる。
 */
 .links a {
+  /* 題のリンクの覆い（.card__link::after）より上に出す。.card__member を見ること */
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
@@ -1367,7 +1820,16 @@ main {
 
 .links a::after {
   content: '↗';
-  font-size: var(--fs-label);
+  font-size: var(--fs-meta);
+}
+
+/*
+  サイトの中へ行くもの（/ で始まる URL。作品のページの「担当」）は →。
+  ↗ は「外へ出る・別タブで開く」の印で、同じタブで開くサイトの中の続きには
+  付けない（components.tsx の LinkRow が target も同じ条件で決めている）
+*/
+.links a[href^='/']::after {
+  content: '→';
 }
 
 .metric {
@@ -1392,7 +1854,7 @@ main {
 
 .metric__note {
   color: var(--ink-weak);
-  font-size: var(--fs-label);
+  font-size: var(--fs-meta);
 }
 
 /* --- Team --- */
@@ -1421,7 +1883,7 @@ main {
     scale var(--dur-spring) var(--ease-spring);
 }
 
-/* 狭い画面では Profile → を下の行に落とし、名前と一言に幅を渡す */
+/* 狭い画面では「プロフィール →」を下の行に落とし、名前と一言に幅を渡す */
 .member--wide {
   display: flex;
   align-items: center;
@@ -1471,7 +1933,7 @@ main {
 
 .member__role {
   color: var(--ink-weak);
-  font-size: var(--fs-label);
+  font-size: var(--fs-meta);
 }
 
 .member__lead {
@@ -1485,7 +1947,7 @@ main {
 .member__go {
   flex-shrink: 0;
   color: var(--accent);
-  font-size: var(--fs-label);
+  font-size: var(--fs-meta);
 }
 
 /* --- About / Skills / Career --- */
@@ -1498,26 +1960,44 @@ main {
   gap: var(--sp-5);
 }
 
+/*
+  段落（紹介文・メモ・作品の説明と本文。components.tsx の Note）。
+
+  字は --fs-md（15px）、1行は約40字（:root の --measure）で止める。13px で
+  画面の幅いっぱいに流していたころは、1440 の About が1行約65字あり、小さい字の
+  長い行を読み進めることになっていた。字を上げると同じ字数でも背が伸びるので、
+  1画面に出せる字数（src/blocks.ts の MAX_CHARS.memberBio / itemBody と
+  メモの maxChars）はこの大きさで測り直してある。
+*/
 .bio p {
+  max-width: var(--measure);
   color: var(--ink-mid);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-md);
   line-height: 1.9;
 }
 
 /*
-  技術の3つの塊の小見出し。<h2 class="side-head">。
+  技術の3つの塊の小見出し。<h2 class="side-head">（/all では h4）。
 
   font-weight を素に戻してあるのは、見出し要素に上げたぶんを見た目に
   出さないため（ブラウザの既定は h2 = 太字）。ここで欲しかったのは
   読み上げでの移動と、塊と一覧の結び付きであって、太さではない。
+
+  英字だけの小見出し（LANGUAGES）は lang="en" が付き（SkillGroups の langOf）、
+  英大文字の小さな等幅にする——--fs-label（11px）を使ってよいのはこの形だけ。
+  「言語」と和文で書いた小見出しは本文の書体で和文の最小の段のまま。
 */
 .side-head {
   color: var(--ink-weak);
-  font-size: var(--fs-label);
-  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
   font-weight: 400;
-  letter-spacing: 0.1em;
   margin-bottom: var(--sp-4);
+}
+
+.side-head:lang(en) {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  letter-spacing: 0.1em;
 }
 
 .skills {
@@ -1527,27 +2007,62 @@ main {
   margin-top: var(--sp-3);
 }
 
-.skill-group ul {
+/*
+  塊の中は、経験の添えごとの行（components.tsx の SkillGroups）。添えのある行が
+  <dl> の組で、添えの無い行が最後の素の ul。どちらも同じ1本の行に見えるよう、
+  行と行の間隔は .skill-rows の gap と、その下の素の ul の margin-top で同じ段に
+  そろえる。
+*/
+.skill-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.skill-rows + .skill-list {
+  margin-top: var(--sp-3);
+}
+
+/*
+  1行 = 添え（dt）+ 項目の列（dd）。添えは縮めず、項目の列だけが折り返す。
+  ベースラインでそろえるのは、添えの小さな等幅の字と、1行目の札の字の下端を
+  同じ線に乗せるため（中心でそろえると、札の枠の分だけ添えが浮いて見える）。
+*/
+.skill-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+}
+
+.skill-row dd {
+  flex: 1;
+  min-width: 0;
+}
+
+/*
+  添え（「3年以上」）。和文なので本文の書体で、和文の最小の段。項目ごとに
+  付けていたころ（.exp）は 11px の等幅で、同じ和文が 11回並んでいた。
+*/
+.skill-row__note {
+  flex-shrink: 0;
+  color: var(--ink-weak);
+  font-size: var(--fs-meta);
+}
+
+.skill-list {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-2);
 }
 
-.skill-group li {
+.skill-list li {
   display: inline-flex;
   align-items: baseline;
-  gap: var(--sp-2);
   padding: var(--sp-1) var(--sp-3);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   font-size: var(--fs-sm);
   color: var(--ink-mid);
-}
-
-.skill-group .exp {
-  color: var(--ink-weak);
-  font-size: var(--fs-label);
-  font-family: var(--font-mono);
 }
 
 .career li {
@@ -1558,11 +2073,11 @@ main {
   padding-block: var(--sp-4);
 }
 
+/* 期間（「2024.03 — 現在」）。和文を含むので等幅にせず、数字の幅だけそろえる */
 .career .period {
   color: var(--ink-weak);
-  font-size: var(--fs-label);
-  font-family: var(--font-mono);
-  letter-spacing: 0.04em;
+  font-size: var(--fs-meta);
+  font-variant-numeric: tabular-nums;
 }
 
 .career .title {
@@ -1572,7 +2087,7 @@ main {
 
 .career .org {
   color: var(--ink-mid);
-  font-size: var(--fs-label);
+  font-size: var(--fs-meta);
 }
 
 /* --- 打ち込むブロック（ひとこと・いま・数字・リンク集） --- */
@@ -1614,10 +2129,10 @@ main {
   border-top: 1px solid var(--line);
 }
 
+/* 補足。打ち込んだ和文が入るので、本文の書体のまま */
 .now .exp {
   color: var(--ink-weak);
   font-size: var(--fs-meta);
-  font-family: var(--font-mono);
 }
 
 .numbers {
@@ -1675,8 +2190,9 @@ main {
 /* --- 一覧への帯（トップの入口と、個人ページの1枚目） --- */
 
 /*
-  大見出しの下に置く、丸い札。左に「何の一覧か」と件数、右端にアクセントで
-  塗った「一覧で見る →」。横いっぱいには伸ばさない——伸ばすと入力欄に見える。
+  大見出しの下に置く、丸い札。左に何が入っているか（「つくったもの」）と件数、
+  右端にアクセントで塗った「一覧で見る →」。横いっぱいには伸ばさない——伸ばすと
+  入力欄に見える。
 
   justify-self（Hero が grid のとき）と align-self（/all で flex のとき）の
   両方で左に寄せる。中央寄せの骨格は下で center に差し替える。
@@ -1715,12 +2231,14 @@ main {
 /*
   件数は --ink-mid。帯は入口の光暈の上に乗るので、--ink-weak では 390 の幅で
   3.80:1 まで落ちる（要 4.5:1。center mint 390x844, 既定書体, Chromium。
-  npm run check:contrast が帯の字も測っている）
+  npm run check:contrast が帯の字も測っている）。
+
+  字は本文の書体で和文の最小の段。件数は「個人開発 5 · 業務 2」と和文なので、
+  11px の等幅だったころは帯の中でいちばん読みにくかった。
 */
 .band__meta {
   color: var(--ink-mid);
-  font-size: var(--fs-label);
-  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
 }
 
 /* 「外に出る」操作子は --accent（.links a の説明を見ること）。ここは塗りで持つ */
@@ -1743,16 +2261,36 @@ main {
   transition: translate var(--dur-spring) var(--ease-spring);
 }
 
+/*
+  入口から全体ページ（/all）への控えめな1本（components.tsx の WholeLink）。
+  帯のすぐ下に、柱の足元（.rail__footer a）と同じ下線の文字リンクとして置く。
+  丸い札にしないのは、帯と札が2枚並ぶとどちらが本筋か分からなくなるため。
+
+  字は --ink-mid。月の光暈の上に乗る小さい字なので 4.5:1 が要る
+  （--ink-weak では帯の件数と同じく 390 の幅で足りない。npm run check:contrast が
+  この字も測っている）。justify-self と align-self は帯と同じ理由——Hero は
+  grid（画面に収める外枠）でも flex でも、子が行いっぱいに伸びて、下線の無い
+  右の空白まで押せる面になる。
+*/
+.hero__whole {
+  justify-self: start;
+  align-self: flex-start;
+  color: var(--ink-mid);
+  font-size: var(--fs-sm);
+  text-decoration: underline;
+  text-underline-offset: var(--sp-1);
+}
+
 /* --- Contact --- */
 
 /*
   連なりの最後の1枚。入口（.hero）と対になる締めで、同じ組み方をする——
-  月を右上に（.moon--closing）、ボタンを画面の下に（.moonlit）。
+  月を右上に（.moon--closing）、誘いの1文とボタンを画面の下に（.moonlit）。
 
-  画面に出すのは月とボタン2つだけで、字は置かない（見出しは読み上げ用の
-  .sr-only。理由は src/routes/public.tsx の Contact）。箱（枠・面・影）にも
-  入れない。箱だったころは、広い画面の真ん中に小さな枠が浮き、周りの大半が
-  空いたままだった（1440 でパネル 869x802 のうち枠が 869x281）。
+  画面に出すのは月と、誘いの1文（.contact__lead）と、ボタン2つ。見出しは
+  読み上げ用の .sr-only（理由は src/routes/public.tsx の Contact）。箱（枠・面・
+  影）には入れない。箱だったころは、広い画面の真ん中に小さな枠が浮き、周りの
+  大半が空いたままだった（1440 でパネル 869x802 のうち枠が 869x281）。
   下の余白は .hero と同じ。
 */
 .contact {
@@ -1761,6 +2299,18 @@ main {
   gap: var(--sp-5);
   align-items: flex-start;
   padding-block: var(--sp-3) var(--enter-shift);
+}
+
+/*
+  誘いの1文。入口のリード文（.hero p）と同じ字・同じ幅の上限で、入口と締めを
+  同じ声にそろえる。字は --ink-mid——締めの月の光暈の上に乗る小さい字なので
+  4.5:1 が要る（npm run check:contrast がこの1文も測っている）。
+*/
+.contact__lead {
+  max-width: 54ch;
+  color: var(--ink-mid);
+  font-size: var(--fs-md);
+  text-wrap: pretty;
 }
 
 /* メール（塗りのピル）と GitHub（柱と同じ .socials）を横に並べる。狭ければ折り返す */
@@ -1817,7 +2367,18 @@ main {
   text-align: center;
 }
 
+/*
+  display: flex は、ロゴの svg を行に載せないため。
+
+  この箱は .oops の列の中で block になり、中の svg は1行ぶんの行ボックスに
+  載る。標準モードの行ボックスは字が無くても書体の高さの支え（strut）を
+  持つので、svg がベースラインに座り、下に字の下がりぶんの隙間が付く——
+  28px のロゴの箱が 35.8px になる（= 404 @1440x900, 素の書体, Chromium）。
+  DOCTYPE が無かったころは互換モードで支えが無く、28px のままだった。
+  flex にすると svg は行ではなく flex の子になり、箱はロゴと同じ高さに戻る。
+*/
 .oops__mark {
+  display: flex;
   color: var(--line-strong);
 }
 
@@ -1904,7 +2465,7 @@ main {
 
 .admin-nav__email {
   color: var(--ink-weak);
-  font-size: var(--fs-label);
+  font-size: var(--fs-meta);
   max-width: 22ch;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1936,9 +2497,9 @@ main {
   gap: var(--sp-2);
 }
 
+/* 「Projects / 個人開発 / 編集」。和文が入るので本文の書体 */
 .crumbs {
-  font-family: var(--font-mono);
-  font-size: var(--fs-label);
+  font-size: var(--fs-meta);
   color: var(--ink-weak);
 }
 
@@ -2047,15 +2608,15 @@ main {
   font-weight: 600;
 }
 
+/* 担当者と恒久リンク、ブロックの種類。和文が入るので本文の書体 */
 .row__sub {
   color: var(--ink-weak);
-  font-size: var(--fs-label);
-  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
 }
 
 .row__col {
   color: var(--ink-weak);
-  font-size: var(--fs-label);
+  font-size: var(--fs-meta);
 }
 
 .row__col--num {
@@ -2113,7 +2674,7 @@ main {
   gap: var(--sp-2);
   padding: 0 var(--sp-3);
   border-radius: 999px;
-  font-size: var(--fs-label);
+  font-size: var(--fs-meta);
   line-height: 1.9;
 }
 
@@ -2185,18 +2746,18 @@ main {
 
 .field__label {
   color: var(--ink-weak);
-  font-size: var(--fs-label);
+  font-size: var(--fs-meta);
 }
 
 .field__hint {
   color: var(--ink-weak);
-  font-size: var(--fs-label);
+  font-size: var(--fs-meta);
   line-height: 1.5;
 }
 
 .field__error {
   color: var(--danger);
-  font-size: var(--fs-label);
+  font-size: var(--fs-meta);
 }
 
 .input {
@@ -2248,6 +2809,26 @@ main {
   display: flex;
   flex-direction: column;
   gap: var(--sp-5);
+}
+
+/*
+  保存したときに1回だけ起きる操作の印（作品の「画像を外す」）。公開する /
+  しない のスイッチ（.toggle）とは見た目を分ける——あちらは作品の状態で、
+  保存のあとも「公開」のまま残る。こちらを同じスイッチにすると、外した
+  状態が残る設定に見える。素の checkbox に色だけ合わせる。
+*/
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: var(--tap);
+  color: var(--ink-mid);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.check input {
+  accent-color: var(--accent);
 }
 
 .toggle {
@@ -2318,8 +2899,8 @@ main {
 }
 
 .toggle input:focus-visible + .toggle__track {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
+  outline: var(--focus-ring) solid var(--accent);
+  outline-offset: var(--focus-offset);
 }
 
 .toggle__text {
@@ -2330,7 +2911,7 @@ main {
 
 .toggle__hint {
   color: var(--ink-weak);
-  font-size: var(--fs-label);
+  font-size: var(--fs-meta);
 }
 
 .form-actions {
@@ -2450,7 +3031,7 @@ main {
 
 .login__note {
   color: var(--ink-weak);
-  font-size: var(--fs-label);
+  font-size: var(--fs-meta);
   text-align: center;
 }
 
@@ -2571,7 +3152,7 @@ main {
 
 .catalog__note {
   color: var(--ink-weak);
-  font-size: var(--fs-label);
+  font-size: var(--fs-meta);
   line-height: 1.5;
   flex: 1;
 }
@@ -2600,7 +3181,7 @@ main {
 
 .presets__note {
   color: var(--ink-weak);
-  font-size: var(--fs-label);
+  font-size: var(--fs-meta);
   font-weight: 400;
 }
 
@@ -2645,8 +3226,8 @@ main {
 }
 
 .preset input:focus-visible + .preset__box {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
+  outline: var(--focus-ring) solid var(--accent);
+  outline-offset: var(--focus-offset);
 }
 
 .preset__label {
@@ -2655,7 +3236,7 @@ main {
 
 .preset__note {
   color: var(--ink-weak);
-  font-size: var(--fs-label);
+  font-size: var(--fs-meta);
   line-height: 1.5;
 }
 
@@ -2728,6 +3309,30 @@ main {
 
 @media (min-width: 600px) {
   /*
+    カードの説明の行数（素の :root は 2）。600 以上は、説明の上限 100 字
+    （src/blocks.ts の MAX_CHARS.itemSummary）が設計サイズで切れずに出る行数にする。
+    2行で止めていたころは「何であるか。何をしたか。」の2文目がカードから
+    ほぼ読めなかった。
+
+    100 字が何行になるか（和文だけの 100 字 / 英字まじりの 100 字。
+    = @幅x高さ, 書体3つとも同じ, macOS Chromium。word-break: auto-phrase 込み）
+      768x1024   rail / center 6 / 4   magazine 5 / 4
+      1440x900   rail / center 5 / 3〜4   magazine 3 / 2
+    いちばん多い 6 にする。止めるのは上限であって、行が少ない説明はその高さのまま。
+
+    収まるかは、いちばん高い行（2枚とも 100 字の説明・実績値・行き先3本・画像の
+    枠）で測った。900 未満はどれも 180px 以上空く（6行 = rail @768x1024 指で
+    空き 187px）。900 以上で画像の枠を持つ行だけは、枠が 3〜4行ぶんを食う:
+      1440x900 center  3行 空き 19px / 4行 +6px 溢れる
+    だから画像のあるカードは 900 以上で 3行（--card-lines-shot）。画像の無い
+    行は 6行のまま（100 字は 5行に収まり、空き 93px = center @1440x900）。
+    数は npm run check:fit が seed の姿で、上の表は手で測った最悪の姿。
+  */
+  :root {
+    --card-lines: 6;
+  }
+
+  /*
     列の数は画面幅ではなく件数で決まる。--cols はサーバーが 1画面ぶんの件数
     （src/blocks.ts の perScreen）からそのまま渡すので、1画面ぶんが必ず1行に
     並ぶ。ここに数を書かない理由がそれで、件数を変えても CSS は触らない。
@@ -2741,6 +3346,16 @@ main {
   */
   .grid {
     grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  }
+
+  /* カードのサムネイル。600 未満で出さない理由は素の .card__thumb に */
+  .card__thumb {
+    display: block;
+  }
+
+  /* カードの内側の余白。600 未満で詰める理由は素の .card に */
+  .card {
+    padding: var(--sp-6);
   }
 
   .team-grid {
@@ -2840,9 +3455,42 @@ main {
 /* ============================================================ 900px 以上 */
 
 @media (min-width: 900px) {
+  /* 画像の枠を持つカードの行数。理由と実測は「600px 以上」の :root */
+  :root {
+    --card-lines-shot: 3;
+  }
+
   .shell {
     grid-template-columns: var(--nav-w) minmax(0, 1fr);
     gap: var(--gutter);
+  }
+
+  /*
+    作品のページで画像がある作品は、文の列を左・画像を右に並べる。
+    画像の枠は行の高さ（＝文の列の高さ）まで伸び、下限は --shot-h。本文が
+    長いほど画像も大きく出て、短ければ --shot-h の枠に収まる。どちらでも
+    画面の高さに効くのは「文の列と --shot-h の高いほう」だけで、画像が本文の
+    予算を食わない。
+
+    文の列を左にするのは、見出し（左寄せ）と文の頭を同じ縦の線にそろえるため。
+    画像は DOM では先（縦に積んだとき見出しのすぐ下に来るように）なので、
+    列の番号で置き場所を決める。
+  */
+  .detail--shot {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--sp-6);
+  }
+
+  .detail--shot > .shot {
+    grid-column: 2;
+    grid-row: 1;
+    height: auto;
+    min-height: var(--shot-h);
+  }
+
+  .detail--shot > .detail__text {
+    grid-column: 1;
+    grid-row: 1;
   }
 
   .rail {
@@ -3008,17 +3656,31 @@ body[data-layout='center'] .hero p {
   margin-inline: auto;
 }
 
-/* 帯と名札（個人ページ）は素の姿では左に寄せてある（justify-self / align-self）。ここで中央へ */
+/*
+  帯と名札（個人ページ）と入口の「すべてを1ページで読む →」は、素の姿では左に
+  寄せてある（justify-self / align-self）。どれも中央に組む Hero の中の子なので、
+  ここで中央へ。
+
+  「← 一覧に戻る」（.back）はここに入れない。すぐ下の節の見出し（.head）に付いて
+  寄る札で、見出しは中央寄せでも左に置く（下の .head の話）。
+*/
 body[data-layout='center'] .band,
-body[data-layout='center'] .nameplate {
+body[data-layout='center'] .nameplate,
+body[data-layout='center'] .hero__whole {
   justify-self: center;
   align-self: center;
   text-align: start;
 }
 
-body[data-layout='center'] .head {
-  justify-content: center;
-}
+/*
+  節の見出し（.head）は、中央寄せの骨格でも左に置く。
+
+  中央に置いていたころは、見出しだけが真ん中で、その下の本文（カード・紹介文・
+  経歴）は左から始まっていた——読む目は見出しの中心から本文の左端へ、行ごとに
+  斜めに飛ぶ。中央寄せの骨格が中央に組むのは入口・締め・ひとこと（Hero と
+  Contact と Statement）で、本文の列を持つ節ではない。見出しは本文の列と同じ
+  軸（左）に立てる。だからこの骨格には .head の規則を1本も書かない。
+*/
 
 body[data-layout='center'] .statement {
   align-items: center;
@@ -3031,6 +3693,8 @@ body[data-layout='center'] .statement {
 
 body[data-layout='magazine'] {
   --fs-display: var(--fs-display-xl);
+  /* サムネイルを横長に。理由は :root の --thumb-ratio-wide */
+  --thumb-ratio: var(--thumb-ratio-wide);
 }
 
 body[data-layout='magazine'] .shell {
@@ -3051,12 +3715,51 @@ body[data-layout='magazine'] .numbers__item {
   padding: var(--sp-5) 0 0;
 }
 
+/*
+  雑誌風のカードのフォーカスは、輪郭ではなく罫線で見せる。
+
+  このカードは箱を持たず、左右の余白も無い——字がカードの縁まで来る。輪郭を
+  一周させると、内側に描けば字の頭に掛かり、外側に描けば節の弁（overflow:
+  auto）に左右を切られる（どちらも = magazine @390x844, Hiragino Sans, macOS
+  Chromium）。だから段を区切る上の罫線を、アクセントの太線（--focus-ring）に
+  替える。ホバーで罫線をアクセントにするのと同じ場所で、同じ言葉を使う。
+
+  覆い（::after）は上へ罫線の太さ（1px）だけ伸ばして、太線がカードの罫線に
+  重なるようにする。伸ばさないと罫線の下に太線が付いて、灰と色の2段になる。
+  線は border で描く。box-shadow は強制色モード（forced-colors）で消える。
+*/
+body[data-layout='magazine'] .card__link::after {
+  inset: -1px 0 0;
+  border-radius: 0;
+}
+
+body[data-layout='magazine'] .card__link:focus-visible::after {
+  outline: none;
+  border-top: var(--focus-ring) solid var(--accent);
+}
+
 body[data-layout='magazine'] .grid {
   gap: var(--sp-6);
 }
 
+/* 画像の枠も角を立てる。箱を丸めない骨格の中で、画像だけが丸いと浮く */
+body[data-layout='magazine'] :is(.card__thumb, .shot) {
+  border-radius: 0;
+}
+
 body[data-layout='magazine'] .head {
   border-bottom-color: var(--line-strong);
+}
+
+/*
+  「見出しを大きく取り」（src/theme.ts のこの骨格の説明）。入口の大見出しを
+  はしごの最上段に上げる（上の --fs-display の差し替え）だけでは、見出しが
+  大きいのは入口の1枚だけで、奥の画面の節見出しはほかの骨格と同じ大きさ
+  だった。節の見出しも1段上げる（--fs-display-xs → --fs-display-sm）。
+  全体ページ（/all）の h2 も同じ規則。
+*/
+body[data-layout='magazine'] .head :is(h1, h2) {
+  font-size: var(--fs-display-sm);
 }
 
 @media (min-width: 600px) {
@@ -3100,15 +3803,60 @@ body[data-layout='magazine'] .head {
     margin-left: 0;
   }
 
-  /* 雑誌風の名札は、ページの上に渡す題字になる */
+  /*
+    雑誌風の名札は、ページの上に渡す題字になる。
+
+    帯の3つ（名札の行・目次・足元）は縦の中心でそろえる。下端（flex-end）で
+    そろえていたころは、高さの違う3つ——名札の行は GitHub / Mail の札で 40px、
+    目次の行き先は 28px、足元は 11px の字1行——の下端だけが同じ線に乗り、
+    字のほうは3段ばらばらの高さに座っていた（札の枠の下端と、字の下端は別物）。
+    中心でそろえれば、どれも帯の同じ高さを通る1本の行に読める。字の中心の高さ
+    （名前 / 目次 / 足元）は 68.5 / 73.4 / 78.8px → 68.5 / 68.4 / 68.1px
+    （= magazine @1440x900, 既定書体, macOS Chromium）。帯の高さは 57px のまま。
+    幅が足りずに折り返す（920 あたりで足元が2段目へ落ちる）ときも、1段目の
+    名札と目次は同じ規則で中心がそろう。
+  */
   body[data-layout='magazine'] .rail {
     flex-direction: row;
-    align-items: flex-end;
+    align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
     gap: var(--sp-5);
     border-bottom: 1px solid var(--line-strong);
     padding-bottom: var(--sp-5);
+  }
+
+  /*
+    中央寄せの柱も上の帯になる。帯は2段——1段目に名札、2段目に目次と
+    全体ページへの1本（足元の「全体を1ページで見る →」）を同じ行に並べる。
+
+    著作権表示はここでは出さない。柱が左に立つ骨格では足元（柱の底）の役を
+    持つが、上の帯になった柱には足元が無い——帯の真ん中に「© 2026 Noctifex」が
+    1行ぶんの段を取り、その下に本文が始まっていた。899 以下の帯で畳むのと同じ
+    扱いで、畳んでも失われるものは無い（サイトの名前は名札と <title> にある）。
+    全体ページ（/all）の足元は著作権表示しか持たない（自分への行き先は置かない）
+    ので、足元ごと出さない。
+
+    名札を 1段目いっぱい（flex-basis: 100%）にして、残りを2段目へ送る。名札の
+    中身は中央に寄せる（柱の align-items: center は縦の中心になるので、横は
+    justify-content で寄せ直す）。帯は3段から2段になり、その分が本文の予算に
+    戻る（帯の高さ 136.8 → 94.1px = center @1440x900, 既定書体, macOS Chromium）。
+  */
+  body[data-layout='center'] .rail {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+  }
+
+  body[data-layout='center'] .rail > .identity {
+    flex-basis: 100%;
+    justify-content: center;
+  }
+
+  body[data-layout='center'] .rail__copy,
+  body[data-layout='center'][data-whole] .rail__footer {
+    display: none;
   }
 
   /*
@@ -3154,7 +3902,18 @@ body[data-layout='magazine'] .head {
 .rail__admin:active,
 .preset:active .preset__box,
 .band:active,
-.member:active {
+.member:active,
+.back:active {
+  scale: var(--press);
+}
+
+/*
+  カードは面を押したとき（題のリンクの覆いが :active のとき）だけ縮む。
+  .card:active にすると、中の Repository や担当者名を押したときもカードごと
+  縮み、押したものと縮んだものが食い違う。上の列に並べないのは :has のため
+  ——知らないブラウザで、列ごと（ほかの部品の手触りまで）捨てられる。
+*/
+.card:has(.card__link:active) {
   scale: var(--press);
 }
 
@@ -3186,8 +3945,18 @@ body[data-layout='magazine'] .head {
 /* ============================================ 入力手段で分ける（幅ではなく） */
 
 @media (hover: hover) {
-  .card:hover,
-  .member:hover {
+  /*
+    浮かせるのは押せるものだけ。カードは題にリンク（.card__link）を持つもの
+    だけで、slug の無いカードは押してもどこへも行かないので浮かせない——
+    押せる合図だけ出して、押しても何も起きない面を作らない。
+
+    :has は :is() の中に入れる。.member と素の列（.card:has(…):hover,
+    .member:hover）で並べると、:has を知らないブラウザでは列ごと捨てられて
+    Team のカードまで浮かなくなる。:is() は読めない引数だけを落とすので、
+    そこでは .member だけが残る（リンクのあるカードも浮かなくなるが、押せば
+    行き先へは行く）。
+  */
+  :is(.card:has(.card__link), .member):hover {
     border-color: var(--line-strong);
     background: var(--surface-hover);
     transform: translateY(-2px);
@@ -3218,7 +3987,8 @@ body[data-layout='magazine'] .head {
   .btn--ghost:hover,
   .tabs a:not([aria-current='page']):hover,
   .filters a:not([aria-current]):hover,
-  .pager__go:hover {
+  .pager__go:hover,
+  .back:hover {
     background: var(--surface-hover);
     color: var(--ink);
   }
@@ -3232,9 +4002,12 @@ body[data-layout='magazine'] .head {
     text-underline-offset: var(--sp-1);
   }
 
-  /* 罫線だけの面は浮かせない。浮くと隣の段と行がずれて見える */
-  body[data-layout='magazine'] .card:hover,
-  body[data-layout='magazine'] .member:hover {
+  /*
+    罫線だけの面は浮かせない。浮くと隣の段と行がずれて見える。
+    代わりに上の罫線をアクセントにする。これも押せる面の合図なので、
+    カードは上と同じく題にリンクを持つものだけ
+  */
+  body[data-layout='magazine'] :is(.card:has(.card__link), .member):hover {
     transform: none;
     background: transparent;
     border-top-color: var(--accent);
@@ -3250,6 +4023,22 @@ body[data-layout='magazine'] .head {
 @media (pointer: coarse) {
   :root {
     --tap: 44px;
+  }
+
+  /*
+    目次の行き先と管理画面への入口も、ほかの押すもの（ページャ・絞り込み・
+    戻る道）と同じ的（--tap）にする。素の姿は字の高さ＋上下 4px の 30px で、
+    電話の帯ではいちばんよく押す手がいちばん小さかった。
+
+    指のときだけ。細いポインタでは目次を詰めたまま（柱の縦の並びも 899 以下の
+    帯も、30px の行で組んである）。帯が 30px → 44px に伸びるぶん本文の予算が
+    減るので、npm run check:fit は 390x844 と 768x1024 を指（hasTouch）で測る
+    ——どちらも設計上は電話と板で、実物は指で触る。
+  */
+  .toc a,
+  .rail__admin {
+    min-height: var(--tap);
+    align-items: center;
   }
 
   .row {
@@ -3360,31 +4149,49 @@ body[data-layout='magazine'] .head {
   }
 
   /*
-    画面の中身は、上から順に置いたひとかたまりを、画面の高さの中で上下中央に
-    寄せる。段の数は決めない——節の子は Projects の4つ（見出し・絞り込み・一覧・
-    空の知らせ）から Contact の1つまであり、決め打ちにすると 1fr が見出しや
+    画面の中身は、上から順に置いたひとかたまりを、画面の上端から置く（上揃え）。
+    段の数は決めない——節の子は Projects の4つ（見出し・絞り込み・一覧・
+    空の知らせ）から ひとこと の1つまであり、決め打ちにすると 1fr が見出しや
     絞り込みに載って、そこだけが間延びする。中身は自分の高さのままなので、
     カードが画面の高さに合わせて伸び縮みすることもない。
 
-    中央寄せには必ず safe を付ける。素の center は、中身が容器を超えた瞬間に
-    上端を容器の外へ押し出し、どこからも戻せなくする。safe なら溢れた時点で
-    start に戻るので、切れるとしても必ず下からになる。
+    **上揃えは見出しの錨。** めくっても見出し（節の h1）が同じ高さに居る。
+    以前は上下中央に寄せていたので、見出しの高さが中身の量で決まり、めくる
+    たびに跳ねていた——/projects 91px → /projects/2 124px → /projects/4 243px
+    （= rail @390x844, Hiragino Sans, macOS Chromium）。読む人は見出しを探し
+    直すことになり、同じ節の続きなのに別の画面に見える。空きは中身の下
+    （ページャの上）に集まる。npm run check:fit が、同じ骨格・寸法の中で
+    見出しの上端が 1px 以内でそろっていることを測っている。
 
-    ここは必ず :is(.hero, section) のクラス強度（0,1,2）で書く。main > *
-    （0,0,2）では .hero{display:flex}（0,1,0）に負けて、Hero だけ縦積みが残る。
+    上揃えにも safe を付ける。溢れたときは素の start と同じ（上端から）なので
+    効き目は同じだが、寄せ方を下の Hero と月の節で差し替えるとき、どの寄せ方でも
+    safe を外さない決まりを1つにしておく（素の center / end は、中身が容器を
+    超えた瞬間に上端を容器の外へ押し出し、どこからも戻せなくする）。
+
+    ここは必ず :is(.hero, section) のクラス強度（0,1,1）で書く。main > *
+    （0,0,1）では .hero{display:flex}（0,1,0）に負けて、Hero だけ縦積みが残る。
+    下の Hero と月の節の寄せ方も同じ（0,1,1）以上で、この規則より後ろに置く。
   */
   :where(body[data-layout]:not([data-whole])) main > :is(.hero, section) {
     display: grid;
-    align-content: safe center;
+    align-content: safe start;
     min-height: 0;
+  }
+
+  /*
+    Hero（入口と、個人ページの1枚目）は錨を持たない。見出しで始まる画面では
+    なく、名乗り1つだけの画面なので、めくって比べる相手が無い。月の無い Hero
+    （個人ページの1枚目）は上下中央——上に寄せると、名札の下に画面の大半が
+    何も無いまま残る。
+  */
+  :where(body[data-layout]:not([data-whole])) main > .hero {
+    align-content: safe center;
   }
 
   /*
     月のある入口だけは下に寄せる。上半分を月に明け渡し、名乗りと帯を画面の下に
     置く——月（右上）と字（左下）が対角に座り、字が月の下を通らなくなる。
-    月の無い Hero（個人ページの1枚目）は中央のまま——下に寄せると、上に何も
-    無い空白だけが残る。:has を知らない環境でも中央寄せに落ちるだけ。
-    safe は上の規則と同じ理由。
+    :has を知らない環境では上の中央寄せに落ちるだけ。safe は上と同じ理由。
   */
   :where(body[data-layout]:not([data-whole])) main > .hero:has(> .moon) {
     align-content: safe end;
@@ -3407,7 +4214,7 @@ body[data-layout='magazine'] .head {
 
     付け先は節そのもの——パネルまるごと。本文の箱（.screen-body）だけを動かす
     形にはできない。下段を 1fr で決め打つと、上の align-content が効かなくなって
-    上下中央寄せが消えるからで、そのうえ本文の箱を持つ節は今のところ Projects だけ
+    Hero と月の節の寄せ方（中央・下）が消えるからで、そのうえ本文の箱を持つ節は今のところ Projects だけ
     しかない。クラスを列挙すれば、これから足すブロックが必ず漏れる。漏れた節は
     「弁の無い節」になり、中身が静かに切り取られる。だからパネルごと動かす。
     頭（見出しと絞り込みのピル）も一緒に流れるが、読めなくなる中身は無い。
@@ -3460,7 +4267,8 @@ body[data-layout='magazine'] .head {
   /*
     説明文は行数で止める。幅が変わってもカードの高さが変わらなくなるので、
     1画面に何件置けるかをサーバー側で先に決められる。
-    幅ではなく部品の都合なので、ブレークポイントでは分けない。
+    何行で止めるかは :root の --card-lines が持つ（600 を境に差し替える。
+    理由と実測はそちら）。ここは止め方の5行だけで、数を持たない。
   */
   :where(body[data-layout]:not([data-whole])) .card p {
     display: -webkit-box;
@@ -3468,6 +4276,17 @@ body[data-layout='magazine'] .head {
     -webkit-line-clamp: var(--card-lines);
     line-clamp: var(--card-lines);
     overflow: hidden;
+  }
+
+  /*
+    サムネイルの枠を持つカードは、枠が食うぶん行を減らす（:root の
+    --card-lines-shot）。枠はカードの頭に置く（components.tsx の ItemCard）ので、
+    後ろの兄弟の説明を ~ で選べる。600 未満では枠が出ない（display: none）が、
+    そこでは2つの段が同じ数なので、当たっても何も変わらない。
+  */
+  :where(body[data-layout]:not([data-whole])) .card__thumb ~ p {
+    -webkit-line-clamp: var(--card-lines-shot);
+    line-clamp: var(--card-lines-shot);
   }
 
   @media (max-width: 899px) {
@@ -3495,7 +4314,7 @@ body[data-layout='magazine'] .head {
 
     /*
       帯に入らないものは畳む。畳むのは4つ——肩書き、ひとこと、柱の中の
-      GitHub / Mail、著作権表示。ロゴと目次に場所を譲る。900 以上の柱と、
+      GitHub / Mail、著作権表示。ロゴと名前と目次に場所を譲る。900 以上の柱と、
       縦に伸びる全体ページ（/all）では今までどおり出る。
 
       **畳んだぶんが「どこにも無くなる」ものを、この中に入れてはいけない。**
@@ -3504,24 +4323,66 @@ body[data-layout='magazine'] .head {
       Contact の画面に常設してあり、そちらは幅で消えない——だから .socials は
       柱の中（.identity の子）だけを名指しする。素の .socials を隠すと、
       Contact に置いたほうまで一緒に消える。
-      肩書きも同じ理由で畳んでよい: Team の画面のカード（.member__role）と、
-      入口の <title> / meta description / JSON-LD の jobTitle に残っている。
+      肩書きも同じ理由で畳んでよい: 入口の Hero の肩書き（.hero__role）、
+      個人ページの1枚目の名札（.nameplate__meta）、<title> / meta description /
+      JSON-LD の jobTitle に残っている。
 
-      柱に名前は置いていない（個人ページでも）。名乗るのは入口の Hero の h1 と、
-      個人ページの1枚目の名札（.nameplate、本文の側なので幅では畳まれない）。
+      名前（.identity__name）は畳まない。1人のサイトの入口以外の画面で、誰の
+      サイトかを言うのは帯ではここだけになる。代わりにワードマークを畳む（下）。
 
-      肩書きを畳むのは幅の勘定でもある。390 の帯は 358px しかなく、
-      名前と肩書きを両方出すと名札が 310px を取って目次が 36px になる
-      （必要 220px）。肩書きを畳むと名札 200px・目次 146px。
-      高さは1pxも動かない——設計サイズ3つ ×
-      3骨格 × 12URL で、ページの動きも弁の開きも畳む前と同じ0のまま
-      （146px = rail @390x844, Hiragino Sans, macOS Chromium）。
+      肩書きを畳むのは幅の勘定でもある。390 の帯は 358px しかない。
+      柱に名前を置いていた前の時期には、ワードマーク・名前・肩書きを並べると
+      名札が 310px を取って目次が 36px になり（必要 220px）、肩書きを畳んで
+      名札 200px・目次 146px だった（= rail @390x844, Hiragino Sans, macOS
+      Chromium）。いまはワードマークも畳むので、もう一段空く（下の2本）。
     */
     :where(body[data-layout]:not([data-whole])) .identity__role,
     :where(body[data-layout]:not([data-whole])) .identity__tagline,
     :where(body[data-layout]:not([data-whole])) .identity .socials,
     :where(body[data-layout]:not([data-whole])) .rail__footer {
       display: none;
+    }
+
+    /*
+      名乗る画面（1人のサイトの、入口以外）では、ワードマーク（NOCTIFEX）を
+      見た目だけ畳んで名前に場所を譲る。帯に残るのは ロゴの印・名前・目次。
+
+      display: none にしないのは、ロゴのリンクの名前がこの字だから。印の svg は
+      aria-hidden なので、字ごと消すと「名前の無いリンク」になる（WCAG 4.1.2）。
+      だから .sr-only と同じ手で、読み上げには残したまま版面から外す。
+      サイトの名前は <title> にも残るので、畳んで「どこにも無くなる」ものではない。
+
+      入口では畳まない（.identity--named が付かない）。入口の名乗りは Hero の
+      h1 で、帯にはロゴと目次しか無いので、ワードマークの入る幅がある。
+
+      幅の勘定: 390 の帯は 358px。名乗る画面では 名札 103.2px（ロゴの印 27px
+      + 間 12px + 名前 64.2px）+ 間 12px + 目次 242.8px で、目次は切れずに
+      収まる（scrollWidth = clientWidth）。入口では 名札 110.9px（ワードマーク
+      込み）+ 目次 235.1px。帯の高さはどちらも 30.1px で、名乗る前と同じ
+      （= 全骨格 @390x844, Hiragino Sans, macOS Chromium。目次は
+      Projects / Profile / Contact の3行）。指では目次の行き先が 44px の的に
+      なる（@media (pointer: coarse)）ので、帯も 44px（= 全骨格 @390x844 指,
+      同条件）。幅は変わらない。
+    */
+    :where(body[data-layout]:not([data-whole])) .identity--named .brand__word {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    /*
+      名前は1行のまま。帯が詰まったときに「岡崎 / 昂功」と2段に折れると、
+      そのぶん帯が伸びて本文の予算が消える。入りきらない長さなら末尾を省く
+      （読み上げには全部が残る）。
+    */
+    :where(body[data-layout]:not([data-whole])) .identity__name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     /*
@@ -3591,7 +4452,7 @@ body[data-layout='magazine'] .head {
   /*
     [hidden] の打ち消し。上で display を与えているので、このままだと hidden を
     付けた節が見えてしまう（.card[hidden]{display:none} と同じ罠）。
-    上の指定（0,1,2）に勝たせるため属性を足して（0,2,2）にし、必ず最後に置く。
+    上の指定（0,1,1）に勝たせるため属性を足して（0,2,1）にし、必ず最後に置く。
   */
   :where(body[data-layout]:not([data-whole])) main > :is(.hero, section)[hidden] {
     display: none;
@@ -3618,8 +4479,10 @@ body[data-layout='magazine'] .head {
   .rail,
   .filters,
   .pager,
+  .back,
   .skip,
   .band,
+  .hero__whole,
   .moon {
     display: none;
   }

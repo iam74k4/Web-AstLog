@@ -9,20 +9,35 @@
 
   だから測るほうを1つのコマンドにする。`npm run check:fit`。
 
-  測るのは2つ。
+  測るのは3つ。
     (1) ページそのものが動くか        document.scrollingElement の scrollHeight - clientHeight
     (2) 節の弁（overflow: auto）が開くか  節ごとの scrollHeight - clientHeight
-  どちらも設計サイズでは 0 でなければならない。弁が開くのは public/app.css が
-  名前を付けている3つの条件——拡大 200% 以上・画面高 400px 未満・書体差——の
-  ときだけで、設計サイズで開いたなら弁の出番ではなく perScreen の不具合。
+    (3) 見出しの錨がそろっているか    同じ骨格・寸法の中で、節の見出しの上端の y
+  (1)(2) はどちらも設計サイズでは 0 でなければならない。弁が開くのは
+  public/app.css が名前を付けている3つの条件——拡大 200% 以上・画面高 400px
+  未満・書体差——のときだけで、設計サイズで開いたなら弁の出番ではなく
+  perScreen の不具合。
+
+  (3) は「めくっても見出しが跳ねない」。割られた画面の節は上揃えで、見出しは
+  どの画面でも同じ高さから始まる（app.css の「画面に収める外枠」）。上下中央に
+  寄せていたころは、見出しの高さが中身の量で決まり、/projects 91px →
+  /projects/2 124px → /projects/4 243px と跳ねていた（= rail @390x844）。
+  比べないのは Hero（入口・個人ページの1枚目）と月の節（Contact）——どちらも
+  見出しで始まる画面ではなく、名乗り・誘いを中央や下に置く構図そのもの。
+  作品のページは「← 一覧に戻る」が見出しの上に立つので、その札の上端で比べる
+  （見出しより前に何かがある画面は、節の最初の子の上端が錨）。
 
   (1) は documentElement ではなく document.scrollingElement で測る。
-  このサイトの HTML には `<!DOCTYPE html>` が無く、ブラウザは互換モードで
-  組んでいる。互換モードでは scrollingElement が body になり、
+  以前このサイトの HTML には `<!DOCTYPE html>` が無く、ブラウザは互換モードで
+  組んでいた。互換モードでは scrollingElement が body になり、
   documentElement.clientHeight は画面の高さではなく中身の高さを返す——つまり
   documentElement で測ると、差はどのページでも必ず 0 になり、検査は永久に緑の
-  まま何も見ない（縦に 3275px ある /all でさえ 0 と出る。実測で確認した）。
-  scrollingElement なら、どちらのモードでも「動く箱」を指す。
+  まま何も見なかった（縦に 3275px ある /all でさえ 0 と出た。実測で確認した）。
+  いまは外枠がすべて src/ui/components.tsx の HtmlDocument を通って DOCTYPE を
+  出すので標準モードで、scrollingElement は html を指す。それでも
+  scrollingElement で測るのは、どちらのモードでも「動く箱」を指す正しい測り方
+  だから。外枠が1つ DOCTYPE を落としても、この検査はその画面を正しく測る
+  （落としたこと自体は test/public.test.ts の「文書の外枠」が捕まえる）。
 
   1px までは許す。連動する文字の段は clamp() で決まるので、幅しだいで端数が出る。
 
@@ -40,11 +55,18 @@ import { keysOf } from './lib/theme.mjs'
   電話・板・机。WCAG 1.4.10 の 320x256 はここに入れない——あの寸法にはカードが
   1枚も入らず、収めにいくと設計サイズの件数まで削ることになる。あちらは弁を開けて
   受け、そのかわりキーボードで操作できるようにしてある（節の tabindex）。
+
+  電話と板は指で測る（touch: hasTouch で pointer: coarse になる）。実物は指で
+  触る寸法で、指のときは押す手が --tap の 44px になり、目次の行き先も 44px の
+  的になって 899 以下の柱の帯が 30px → 44px に伸びる（app.css の
+  @media (pointer: coarse)）。細いポインタで測っていたころは、電話の実物より
+  14px 以上多い予算で合格を出していた。指の姿は細いポインタの姿より必ず高い
+  （足すだけで削る規則が無い）ので、指で閉じれば細いポインタでも閉じる。
 */
 const VIEWPORTS = [
-  { width: 390, height: 844 },
-  { width: 768, height: 1024 },
-  { width: 1440, height: 900 },
+  { width: 390, height: 844, touch: true },
+  { width: 768, height: 1024, touch: true },
+  { width: 1440, height: 900, touch: false },
 ]
 
 /*
@@ -56,6 +78,12 @@ const PANELS = 'main > :is(.hero, section)'
 
 // 端数の許し。連動する段は clamp() で決まるので、幅しだいで 0.x px が出る
 const SLACK = 1
+
+/*
+  見出しの錨を比べる相手。割られた画面の節のうち、Hero（header.hero）でも
+  月の節（.moonlit）でもないもの。app.css の上揃えの規則と同じ相手を選ぶ。
+*/
+const ANCHORED = 'main > section:not(.moonlit)'
 
 /*
   測る URL は sitemap.xml から引く。
@@ -116,12 +144,31 @@ async function screenPaths(base) {
   seed に居ない人でログインすることになる——測りたいのは版面であって、
   設定の保存経路ではない。
 */
-const measure = ([layout, panels, slack]) => {
+const measure = ([layout, panels, anchored, slack]) => {
   document.body.dataset.layout = layout
 
-  // 互換モード（このサイトには DOCTYPE が無い）では body、標準モードでは html
+  // 標準モード（いまのこのサイト）では html、互換モード（DOCTYPE が無い）では body
   const scroller = document.scrollingElement ?? document.documentElement
   const boxes = [...document.querySelectorAll(panels)]
+
+  /*
+    錨の y。節の最初の h1 の上端——ただし h1 より前に別の子（作品のページの
+    「← 一覧に戻る」）が立つ画面では、その最初の子の上端。絶対配置の子
+    （月）と display: none の子は並びに数えない。
+  */
+  const panel = document.querySelector(anchored)
+  let anchor = null
+  if (panel) {
+    const kids = [...panel.children].filter((kid) => {
+      const style = getComputedStyle(kid)
+      return style.position !== 'absolute' && style.display !== 'none'
+    })
+    const heading = panel.querySelector('h1')
+    const first = kids[0]
+    const leader = first && heading && !first.contains(heading) ? first : (heading ?? first)
+    anchor = leader ? Math.round(leader.getBoundingClientRect().top * 10) / 10 : null
+  }
+
   return {
     page: Math.max(0, scroller.scrollHeight - scroller.clientHeight),
     open: boxes
@@ -131,6 +178,7 @@ const measure = ([layout, panels, slack]) => {
       }))
       .filter((box) => box.over > slack),
     panels: boxes.length,
+    anchor,
   }
 }
 
@@ -145,6 +193,9 @@ async function main() {
   let worstValve = 0
   let urlCount = 0
   let layoutCount = 0
+  // 骨格 × 寸法ごとの、見出しの錨の y（URL ごと）
+  const anchors = new Map()
+  let worstDrift = 0
 
   try {
     const layouts = keysOf('LAYOUTS')
@@ -156,10 +207,12 @@ async function main() {
     )
 
     for (const viewport of VIEWPORTS) {
-      const page = await browser.newPage({
+      const context = await browser.newContext({
         viewport: { width: viewport.width, height: viewport.height },
+        hasTouch: viewport.touch,
       })
-      const where = `${viewport.width}x${viewport.height}`
+      const page = await context.newPage()
+      const where = `${viewport.width}x${viewport.height}${viewport.touch ? ' 指' : ''}`
 
       for (const path of paths) {
         const response = await page.goto(base + path, { waitUntil: 'load' })
@@ -172,8 +225,13 @@ async function main() {
         await page.evaluate(() => document.fonts.ready.then(() => true))
 
         for (const layout of layouts) {
-          const found = await page.evaluate(measure, [layout, PANELS, SLACK])
+          const found = await page.evaluate(measure, [layout, PANELS, ANCHORED, SLACK])
           checked += 1
+          if (found.anchor !== null) {
+            const key = `${layout} ${where}`
+            if (!anchors.has(key)) anchors.set(key, [])
+            anchors.get(key).push({ path, y: found.anchor })
+          }
           worstPage = Math.max(worstPage, found.page)
           worstValve = Math.max(worstValve, ...found.open.map((box) => box.over), 0)
 
@@ -188,18 +246,43 @@ async function main() {
           }
         }
       }
-      await page.close()
+      await context.close()
     }
   } finally {
     await browser.close()
     stop()
   }
 
+  /*
+    見出しの錨。同じ骨格・寸法の中で、いちばん上といちばん下の差が SLACK を
+    超えたら、外れた画面を名指しする（多数派の y から離れているもの）。
+  */
+  for (const [key, list] of anchors) {
+    const ys = list.map((one) => one.y)
+    const drift = Math.max(...ys) - Math.min(...ys)
+    worstDrift = Math.max(worstDrift, drift)
+    if (drift <= SLACK) continue
+    const tally = new Map()
+    for (const y of ys) tally.set(y, (tally.get(y) ?? 0) + 1)
+    const usual = [...tally].sort((a, b) => b[1] - a[1])[0][0]
+    const strays = list.filter((one) => Math.abs(one.y - usual) > SLACK)
+    for (const one of strays) {
+      failures.push(
+        `${key} ${one.path} — 見出しの錨が ${one.y}px（ほかの画面は ${usual}px）。めくると見出しが跳ねる`,
+      )
+    }
+    // 多数派から 1px ずつずれて並んだ（どれも名指しできない）ときも、差そのもので落とす
+    if (strays.length === 0) {
+      failures.push(`${key} — 見出しの錨が ${Math.min(...ys)}〜${Math.max(...ys)}px に散っている`)
+    }
+  }
+
   if (failures.length > 0) {
     console.error(`\n✗ ${failures.length} 件（${checked} 通り中）`)
     for (const line of failures) console.error(`  ${line}`)
     console.error(
-      '\n設計サイズで弁が開いたら、それは弁の不具合ではなく src/blocks.ts の perScreen の不具合。まず件数を疑う。',
+      '\n設計サイズで弁が開いたら、それは弁の不具合ではなく src/blocks.ts の perScreen の不具合。まず件数を疑う。' +
+        '\n見出しの錨がずれたら、節の寄せ方（app.css の align-content: safe start）か、見出しより前に置いた子を疑う。',
     )
     process.exitCode = 1
     return
@@ -207,7 +290,8 @@ async function main() {
 
   console.log(
     `✓ ${checked} 通り（${urlCount} URL × ${layoutCount}骨格 × ${VIEWPORTS.length}寸法）。` +
-      `ページが動いた画面 0、弁が開いた節 0（いちばん惜しいところでページ ${worstPage}px・弁 ${worstValve}px）`,
+      `ページが動いた画面 0、弁が開いた節 0（いちばん惜しいところでページ ${worstPage}px・弁 ${worstValve}px）。` +
+      `見出しの錨のずれ 最大 ${Math.round(worstDrift * 10) / 10}px`,
   )
 }
 

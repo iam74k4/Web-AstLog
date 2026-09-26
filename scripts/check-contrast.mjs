@@ -2,8 +2,8 @@
   月の上で、文字が読めるか（WCAG 1.4.3）を実際にブラウザで測る。
 
   月が出るのはサイトの連なりの最初と最後——入口と、締めの Contact（入口の
-  三日月を左右に返して小さく置く。画面に出る字はボタン2つだけ）。どちらも
-  字の後ろに光暈が回る。
+  三日月を左右に返して小さく置く。画面に出る字は誘いの1文とボタン2つ）。
+  どちらも字の後ろに光暈が回る。
   測る画面と字の一覧は下の SCREENS。
 
   月は入口の画面の h1 とリード文の後ろを通る。粒子はいちばん明るい所が白
@@ -23,9 +23,11 @@
 
   名前の上の肩書き（小さい字なので 4.5:1 が要る）も同じく測る。
   帯（一覧への丸い札）も同じ Hero の中にあって光暈の上に乗るので、その字
-  （何の一覧か・件数）も測る。帯は半透明の面を持つので、隠すのは字だけで
+  （題・件数）も測る。帯の下の「すべてを1ページで読む →」（全体
+  ページへの控えめな1本）も同じ。帯は半透明の面を持つので、隠すのは字だけで
   面は残す——面ごと隠すと、実際より暗い地で測ることになる。締めの画面の
-  メールと GitHub のピルも同じで、字の色だけを抜いて面を残す。
+  メールと GitHub のピルも同じで、字の色だけを抜いて面を残す。締めの
+  誘いの1文（リード）は面を持たないので、入口のリード文と同じく丸ごと隠す。
 
   動きは止めて測る（reducedMotion）。入口の見出しは浮かび上がって出てくるので、
   止めないと、動いている途中の姿を測ることがある。そのうえで月の出（月が
@@ -86,9 +88,11 @@ const SCREENS = [
       { selector: ':scope > p:not(.hero__role)', name: 'リード文', required: true },
       { selector: '.band .band__body strong', name: '帯の題' },
       { selector: '.band .band__meta', name: '帯の件数' },
+      // 割られた入口には必ず出る（帯の有無に依らない）。出ていなければ落とす
+      { selector: ':scope > .hero__whole', name: '全体ページへの1本', required: true },
     ],
     // 帯は字の子だけを隠せば面が残る（面ごと隠すと実際より暗い地で測る）
-    hide: 'main > .hero > :is(h1, p), main > .hero > .band .band__body > *',
+    hide: 'main > .hero > :is(h1, p, .hero__whole), main > .hero > .band .band__body > *',
     ink: null,
     minPixels: 8000,
     motion: true,
@@ -97,12 +101,14 @@ const SCREENS = [
     name: '締め',
     path: '/contact',
     panel: 'main > .moonlit',
-    // 画面に出る字はボタン2つだけ（見出しは読み上げ用の .sr-only で、描かれない）
+    // 画面に出る字は誘いの1文とボタン2つ（見出しは読み上げ用の .sr-only で、描かれない）
     targets: [
+      { selector: '.contact__lead', name: 'リード文', required: true },
       { selector: '.contact__actions .socials a', name: 'GitHub のピル', required: true },
       { selector: '.contact__actions .pill-cta', name: 'メールのピル', required: true },
     ],
-    hide: null,
+    // リードは面を持たないので丸ごと隠す。ピルは面を残して字の色だけ抜く（ink）
+    hide: 'main > .moonlit .contact__lead',
     ink: 'main > .moonlit .contact__actions a',
     minPixels: 4500,
     motion: false,

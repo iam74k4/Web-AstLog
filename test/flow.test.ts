@@ -24,6 +24,8 @@ const bandOf = (html: string) => {
 describe('個人ページ → 一覧', () => {
   it('構成で Projects を外したら、一覧へは案内しない', async () => {
     const member = await seedMember()
+    // 2人のサイト。1人で Team を置くと、帯はもともと出ない（入口の帯と重なる）
+    await seedMember({ slug: 'hoshino', name: '星野' })
     await seedItem({ type: 'app', memberId: member.id })
     await seedItem({ type: 'work', title: '業務の実績', memberId: member.id })
     await place(['hero', 'team', 'contact'])
@@ -38,13 +40,22 @@ describe('個人ページ → 一覧', () => {
     const member = await seedMember()
     await seedItem({ type: 'app', memberId: member.id })
     await seedItem({ type: 'work', title: '業務の実績' })
-    await place(['hero', 'projects', 'team', 'contact'])
+    /*
+      Team を置かない1人のサイト（カードの担当者名から入る単独の連なり）。
+      Team を置くと個人ページはサイトの連なりに入り、帯は出さない
+    */
+    await place(['hero', 'projects', 'contact'])
 
     const band = bandOf(await (await get('/members/okazaki')).text())
     expect(band).toContain('href="/projects"')
     expect(band).toContain('個人開発 1')
     // 業務はほかの人のもの。その人の帯で「業務 1」と出すと、どこにも無い1件になる
     expect(band).not.toContain('業務')
+    /*
+      題は入口の帯（つくったもの）と同じ言葉で、誰のものかを足す。「このメンバーの
+      Projects」のころは、節の名前（英語）を札の題に使っていた
+    */
+    expect(band).toContain('<strong>このメンバーのつくったもの</strong>')
   })
 
   it('入口の帯は、個人開発と業務を別々に数えて1つの一覧へ送る', async () => {
@@ -62,6 +73,8 @@ describe('1人のサイトの ?member=', () => {
   it('帯は ?member= を付けずに一覧へ送る', async () => {
     const member = await seedMember()
     await seedItem({ memberId: member.id })
+    // 帯が出るのは Team を置かない1人のサイト（置くと帯は出さない。入口の帯と重なる）
+    await place(['hero', 'projects', 'contact'])
 
     const html = await (await get('/members/okazaki')).text()
     expect(bandOf(html)).toContain('href="/projects"')

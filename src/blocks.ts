@@ -1,4 +1,6 @@
-import { isSafeUrl, paragraphs, parseLines } from './lib/format'
+import type { Member } from './db/schema'
+import { isSafeUrl, paragraphs, parseLines, parseSkills } from './lib/format'
+import { screenCount } from './lib/paginate'
 
 /*
   トップページを組むブロックの一覧。
@@ -32,16 +34,24 @@ import { isSafeUrl, paragraphs, parseLines } from './lib/format'
   リンク集の URL も数えない——href であって、本文としては出ない。
 
   数は実測で決める。測り方は「節の弁（overflow: auto）が1pxも開かない」で、
-  骨格3 × 書体3 × 設計サイズ3（390x844 / 768x1024 / 1440x900）の27通り。
+  骨格3 × 書体3 × 設計サイズ3（390x844 指 / 768x1024 指 / 1440x900）の27通り。
+  390 と 768 は指（pointer: coarse）で測る——設計上は電話と板で、指では押す手が
+  44px になり、柱の帯もそのぶん伸びる（npm run check:fit と同じ条件）。
   同じ字数でも1行に寄せたほうが高くなるので、均等に割った形と1行に寄せた形の
-  両方で測り、通ったほうではなく厳しいほうを採った。
+  両方で測り、通ったほうではなく厳しいほうを採った。文は実際の文に近い和文
+  （英字まじり）で測る——段落は word-break: auto-phrase で文節の切れ目でだけ
+  折れるので、「あ」を並べた文より行末に空きが出て、行が増える。
   （実測 = 上限 / 最初に開く量 @プリセット, 書体, ブラウザ）
-    メモ     400 / 600 で +3px @rail 390x844, Hiragino Sans, macOS Chromium
-    いま     250 / 400 で +31px @rail 390x844, Hiragino Sans, macOS Chromium
-    数字     160 / 200 で +2px @center 1440x900, Hiragino Sans, macOS Chromium
-    リンク集 160 / 180 で +5px @center 1440x900, Hiragino Sans, macOS Chromium
-    できごと 250 / 400 で +12px @rail 390x844, Hiragino Sans, macOS Chromium
-    ひとこと 300 / 一文と添え書きの合計。362 字まで閉じているぶんを余白にした
+    メモ     400 / 406 で +23px @rail 390x844 指, Hiragino Sans, macOS Chromium
+             （3段落を1つに寄せた形。節の見出しあり）
+    いま     250 / 269 で +15px @rail 390x844 指, 同条件
+    数字     160 / 229 で +4px @rail 390x844 指, 同条件
+    リンク集 160 / 164 で +3px @magazine 390x844 指, 同条件
+    できごと 250 / 363 で +10px @rail 390x844 指, 同条件
+    ひとこと 300 / 563 で +3px @rail 390x844 指, 同条件（一文と添え書きの合計）
+  段落の字を 15px に、節の見出しを連動の段に上げた日に測り直した（app.css の
+  .bio p と .head）。メモは 400 のまま 5 字しか余らない——字の段や段落の間隔を
+  動かしたら、まずメモを測り直すこと。
 
   ここを上げるときは、CSS を触るのではなく、この27通りを測り直すこと。
   設計サイズで弁が開いたら、それは弁の不具合ではなく件数か字数の不具合。
@@ -68,7 +78,7 @@ export const BLOCK_TYPES = [
   {
     key: 'team',
     label: 'Team',
-    note: 'メンバー。1〜2人は横長、3人以上はグリッド',
+    note: 'メンバー。2人は横長、3人以上はグリッド。公開中が1人ならその人のプロフィールに置き換わる',
     kind: 'fixed',
     perScreen: 6,
   },
@@ -142,23 +152,52 @@ export const BLOCK_TYPES = [
   ブロックではない「書く場所」の上限。同じ実測の並びなので、ここに一緒に置く。
 
   itemSummary（作品カードの説明）だけは性質が違う。カードの高さは
-  --card-lines（2行）で止めてあるので、長く書いても画面からは溢れない——
+  --card-lines で止めてあるので、長く書いても画面からは溢れない——
   溢れる代わりに、書いたぶんが黙って切られる。だから上限は「溢れない長さ」
-  ではなく「どの画面でも誰にも届かない長さ」にした。いちばん広く出る
-  雑誌風でも2行は 100 字（= magazine @1440x900, Hiragino Sans, macOS Chromium）。
-  いちばん狭い設計サイズでは 46 字（= rail @768x1024 と @390x844、同条件）
-  までしか出ないので、書く側にはそれも添える。
+  ではなく「広い画面ならどこでも切れずに出る長さ」にした。600 以上は 100 字が
+  切れずに出る6行で止める（app.css の「600px 以上」の :root。画像のある行だけ
+  900 以上で3行）。600 未満はカードが2枚縦に積まれて2行しか置けず、
+  42 字（和文だけの文。= rail / center @390x844, Hiragino Sans, macOS Chromium）
+  までしか出ないので、書く側にはそれも添える（itemSummaryVisible）。
 
   memberBio（紹介文）は個人ページの About 1枚に全段落が出る。件数で割れない
-  ので、字数と段落の数の両方で止める。実測（27通り）: 450 字・6段落は弁が
-  1pxも開かないが、同じ 450 字でも8段落に割ると +83px @rail 390x844。
-  段落の区切りそのものが高さを取るため。
+  ので、字数と段落の数の両方で止める。段落の区切りそのものが高さを取るので、
+  同じ字数でも段落が多いほど高くつく。
+  （実測 = 段落の数ごとに閉じる字数 @プリセット, 書体, ブラウザ）
+    6段落 315 / 5段落 314 / 4段落 360 / 3段落 405（406 で +23px）
+    / 2段落 426 / 1段落 459  @rail 390x844 指, Hiragino Sans, macOS Chromium
+    （5段落だけ magazine。どれも1段落に寄せた形がいちばん厳しい）
+  3段落・400 字にした。6段落・315 字より書ける量が多く、「経歴・取り組み・
+  社外の活動」のように3つに分けて書ける。以前は 450 字・6段落（13px の段落で
+  測った数）で、段落を 15px に上げた日に 6段落 315 字まで下がった。
+
+  itemBody（作品の本文）は作品のページ1枚に全段落が出る。紹介文と同じく
+  字数と段落の数の両方で止める。同じ画面に戻る道・見出し・説明・画像・
+  実績値・タグ・行き先・ページャが並ぶので、残る高さは紹介文よりずっと少ない。
+  測った姿はいちばん重い作品——説明 100 字（上限）、画像あり（--shot-h）、
+  実績値、タグ3つ、行き先4本（リンク3本 + 複数人のサイトの「担当」）。
+  書体は見出しにしか効かないが、27通りを全部測った。
+  （実測 = 上限 / 最初に開く量 @プリセット, 書体, ブラウザ）
+    1段落 66 まで閉じる（67 で +24px @rail 390x844 指, Hiragino Sans, macOS Chromium）
+    2段落 26 まで（1つに寄せて 25 字 + 1 字。27 で +12px, 同条件）
+  1段落・60 字にした。2段落では2つ目の段落の空き（段落の間隔 + 1行）だけで
+  1行ぶんの字数を食う。縛っているのは 390x844 の指で、900 以上では画像を
+  文の列の横に並べる（app.css の .detail--shot）ので、1440x900 の中央寄せでも
+  1段落 120 字まで閉じる。
+  以前は 2段落・130 字（13px の段落で測った数）。段落を 15px に上げ、電話を指で
+  測るようにした日に、説明 100 字だけで 5行（142px）を取るようになって
+  ここまで下がった。作品のページの本文をもっと書けるようにするなら、字数を
+  上げる前に、電話の作品のページに何を並べるか（画像の枠 --shot-h・行き先の
+  4本目）を決め直すこと。
+  説明（summary）は数えない。別の欄で、上限（itemSummary）も別に持っている。
 */
 export const MAX_CHARS = {
   itemSummary: 100,
-  itemSummaryVisible: 46,
-  memberBio: 450,
-  memberBioParagraphs: 6,
+  itemSummaryVisible: 42,
+  itemBody: 60,
+  itemBodyParagraphs: 1,
+  memberBio: 400,
+  memberBioParagraphs: 3,
 } as const
 
 export type BlockType = (typeof BLOCK_TYPES)[number]
@@ -239,8 +278,8 @@ export function blockUnitCount(key: BlockKey, body: string): number {
   書き足したぶんだけ次の画面に回る。
 
     about   紹介文の段落。書く側の上限（MAX_CHARS.memberBioParagraphs）と
-            同じ数にしてある——あの 6 は「6段落なら弁が1pxも開かない」という
-            実測そのものなので、上限を上げた日に画面が割れて追いつく
+            同じ数にしてある——あの 3 は「3段落・400 字なら弁が1pxも開かない」
+            という実測そのものなので、上限を上げた日に画面が割れて追いつく
     skills  小見出しひとそろい（.skill-group）。塊は割らない。3 は app.css が
             「技術の3つの塊」と呼んでいる今日の姿で、27通りの実測はしていない
             保守的な数（割るほうへ外れても溢れない）
@@ -251,6 +290,38 @@ export const MEMBER_PER_SCREEN = {
   about: MAX_CHARS.memberBioParagraphs,
   skills: 3,
   career: blockPerScreen('timeline'),
+}
+
+/*
+  個人ページの中身を「画面に割る単位」の列に開く。ブロックの blockLines /
+  blockTexts と同じ役目で、公開ページ（src/routes/public.tsx の memberScreens）は
+  この列を描き、管理画面（構成の「N 画面」）は数えるだけ。
+
+  管理画面が数えるようになったのは、1人のサイトでは Team の行がその人の
+  プロフィールに置き換わるため（public.tsx の profileOf）。「Team 1 画面」と
+  出しているあいだに、公開ページでは4画面が並ぶ——数え方を2か所に書くと、
+  いちばん要るときに「N 画面」が嘘をつく。
+*/
+export function memberUnits(member: Pick<Member, 'bio' | 'skillsText' | 'careerText'>) {
+  return {
+    bio: paragraphs(member.bio),
+    skills: parseSkills(member.skillsText),
+    career: parseLines(member.careerText),
+  }
+}
+
+/*
+  個人ページが何画面になるか。1枚目（名札）＋ About（空でも1枚。「準備中です」を
+  出す）＋ Skills ＋ Career。書いていない Skills / Career は0画面。
+*/
+export function memberScreenCount(member: Pick<Member, 'bio' | 'skillsText' | 'careerText'>) {
+  const { bio, skills, career } = memberUnits(member)
+  return (
+    1 +
+    Math.max(1, screenCount(bio.length, MEMBER_PER_SCREEN.about)) +
+    screenCount(skills.length, MEMBER_PER_SCREEN.skills) +
+    screenCount(career.length, MEMBER_PER_SCREEN.career)
+  )
 }
 
 /*

@@ -11,6 +11,7 @@ import {
   blockType,
   blockVisibleParts,
   MEMBER_PER_SCREEN,
+  memberUnits,
 } from '../blocks'
 import {
   countPublishedByKind,
@@ -18,6 +19,7 @@ import {
   type Db,
   findPublishedItem,
   findPublishedMember,
+  listPublishedItemKeys,
   listPublishedItems,
   listPublishedMembers,
   loadTheme,
@@ -26,12 +28,13 @@ import {
 import * as schema from '../db/schema'
 import type { AppEnv } from '../env'
 import { getSessionUser, SESSION_COOKIE } from '../lib/auth'
-import { isSafeRedirect, paragraphs, parseLines, parseSkills } from '../lib/format'
+import { isSafeRedirect } from '../lib/format'
 import { chunk, screenCount } from '../lib/paginate'
 import { type Sequence, type Step, sequence, stepAt } from '../lib/sequence'
 import { SITE } from '../site'
 import type { Theme } from '../theme'
 import {
+  BackLink,
   Band,
   Brand,
   Empty,
@@ -39,12 +42,14 @@ import {
   filterQuery,
   Hero,
   ItemCard,
+  ItemDetail,
   type ItemFilter,
   type ItemKind,
   type ItemView,
   itemHref,
   KIND_LABEL,
   LinkList,
+  langOf,
   MemberCardCompact,
   MemberCardWide,
   MoonField,
@@ -53,13 +58,16 @@ import {
   NowList,
   Numbers,
   Phrases,
+  ProfileWhole,
   Screen,
   ScreenPager,
   ScreenSection,
   SectionHead,
+  SkillGroups,
   Statement,
-  Tags,
+  shotRow,
   Timeline,
+  WholeLink,
 } from '../ui/components'
 import { GithubIcon, MailIcon } from '../ui/icons'
 import { Layout, type NavItem } from '../ui/Layout'
@@ -82,18 +90,38 @@ const Socials = ({ github, email }: { github?: string | null; email?: string | n
 )
 
 /*
+  その人だけの連絡先。サイトと違う行き先を持つ人のぶんだけ出す（同じ行き先を
+  2つ置かない）。個人ページの1枚目と、全体ページ（/all）のプロフィールの節で使う。
+*/
+const OwnSocials = ({ member }: { member: schema.Member }) => {
+  const github = member.github && member.github !== SITE.github ? member.github : null
+  const email = member.email && member.email !== SITE.email ? member.email : null
+  return github || email ? <Socials github={github} email={email} /> : null
+}
+
+/*
   連絡先の画面。連なりの最後の1枚で、入口と対になる締め。
 
-  画面に出すのは月とボタン2つ（メール・GitHub）だけ。字は置かない——
-  見出しもリード文もアドレスも、この画面では月の下で言葉を重ねるだけだった。
-  月を右上に、ボタンを画面の下に寄せる（入口と同じ組み方）。月は入口の
+  画面に出すのは月と、誘う1文（SITE.contactLead）と、ボタン2つ（メール・GitHub）。
+  月を右上に、字とボタンを画面の下に寄せる（入口と同じ組み方）。月は入口の
   三日月を左右に返し、ひとまわり小さく置く（MoonField の closing）。
+
+  **1文だけは置く。** 字を1つも置かなかったころは、ボタンが2つあるだけで、
+  何の相談なら送ってよいのか・送ってほしいのかを言う言葉が画面のどこにも
+  無かった（その1文は description にしか無く、検索結果でしか読めなかった）。
+  連なりを最後までめくってきた人に最後に掛ける言葉なので、これが要る。
+  見出しを目に見える形で置かないのは今までどおり——「Contact」と大きく書いても
+  ボタンの言葉（メールを送る）と同じことを言うだけで、誘いにはならない。
+
+  リードの字は --ink-mid。締めの月の光暈の上に乗る小さい字なので 4.5:1 が要り、
+  npm run check:contrast がこの1文も測っている。
 
   **見出しは読み上げのためにだけ置く**（.sr-only の h1「Contact」）。割られた
   画面はどれも h1 をちょうど1つ持つ決まり（WCAG 1.3.1）で、見出しの無い画面は
   見出しで移動する人にとって「何も無い」画面になる。全体ページ（/all）では
   ほかの節と同じ見出し（SectionHead）を目に見える形で置き、アドレスも字で
-  残す——あそこは印刷の宛先で、紙の上ではボタンの行き先が読めない。
+  残す——あそこは印刷の宛先で、紙の上ではボタンの行き先が読めない。リードは
+  どちらにも置く（同じ誘いの1文）。
 
   メールは「送る」操作なので塗りのピル、GitHub は外へ出る脇の道なので柱と
   同じ .socials。同じ行き先を2つ置かない。
@@ -101,7 +129,8 @@ const Socials = ({ github, email }: { github?: string | null; email?: string | n
   GitHub のプロフィールはここに常設する。柱の .socials は 899 以下で畳んで
   あり（横帯に入らない）、プロフィールへの道はそこ1本しか無かった——つまり
   スマホで開いた人には、このサイトの一次動線が外枠の都合で消えていた
-  （WCAG 1.4.10 の「機能の損失」）。
+  （WCAG 1.4.10 の「機能の損失」）。逆にこの画面では、柱の GitHub / Mail を
+  出さない（SiteIdentity の contact）。同じ行き先が柱と本文に2組並ぶため。
 
   split は「割られた画面（1画面 = 1ドキュメント）か」。見出しが h1 に上がるのも、
   弁のための tabindex が付くのも同じ条件なので、2つの旗を持たせない。
@@ -131,6 +160,10 @@ const Contact = ({
     {split ? null : <SectionHead title="Contact" />}
     <div class="contact">
       {split ? <h1 class="sr-only">Contact</h1> : null}
+      {/* 句読点までの塊で折る（入口のリード文と同じ Phrases）。語の途中で折らない */}
+      <p class="contact__lead">
+        <Phrases text={SITE.contactLead} />
+      </p>
       <div class="contact__actions">
         <a class="pill-cta" href={`mailto:${email}`}>
           <MailIcon /> メールを送る →
@@ -150,6 +183,24 @@ const Contact = ({
   （文言 src/site.ts だけは手で複数形に書き直す）。
 */
 const soloMember = (members: schema.Member[]) => (members.length === 1 ? members[0] : undefined)
+
+/*
+  1人のサイトで Team を置いているなら、その人。Team の画面の代わりに、
+  この人の画面（1枚目・About・Skills・Career）がサイトの連なりに入る。
+
+  1人のサイトの Team は、細いカードが1枚だけ置かれた画面だった——複数いる
+  前提の器に1人しか入っていないことを、画面1枚ぶん使って告知する形になる。
+  中身はカードを押した先の個人ページのほうにあるので、Team の位置に中身
+  そのものを置く。目次には「Profile」の1行で載り（src/lib/sequence.ts の
+  tocKey）、/ から「次」を押し続ければ 入口 → Projects → 1枚目 → About →
+  Skills → Career → Contact と一周できる。/team は1枚目へ 301。
+
+  2人目を公開した日に Team の画面へ戻る（soloMember が人数で決めているので、
+  ここでは何もしない）。Team を置いていない1人のサイトでは undefined——
+  個人ページは今までどおり、カードの担当者名から入る単独の連なり。
+*/
+const profileOf = (blocks: schema.Block[], members: schema.Member[]) =>
+  blocks.some((block) => block.type === 'team') ? soloMember(members) : undefined
 
 /*
   サイト全体の名乗り。1人なら Person、0人・2人以上なら器としての Organization。
@@ -260,7 +311,12 @@ const lineDigest = (key: BlockKey, rows: string[][]) =>
 /*
   カードの実績値（.metric）を説明文に畳む。値・単位・添えの順は、カードに
   出ている順そのもの。並べ替えると、書いた人の数字がこちらの都合で別の意味に
-  なる（「見込み 40人日 → 実績」は 20 の添えであって、20 の言い換えではない）。
+  なる（「見込み 40人日から半減」は 20 の添えであって、20 の言い換えではない）。
+
+  だから添えは「値のあとに続けて読んで意味が通る」ように書く決まり（管理画面の
+  実績値のヒント）。「20 人日 見込み 40人日 → 実績」と書いていたころは、添えの
+  → が値より前を指していて、「実績が見込みの 40人日」と逆に読めた。いまは
+  「20 人日 見込み 40人日から半減」——左から右へ1回読めば済む。
 */
 const metricDigest = (item: ItemView) =>
   item.metricValue
@@ -270,22 +326,48 @@ const metricDigest = (item: ItemView) =>
 /*
   サイトの柱（名札）。どの画面にも出るので、ここに載せたものは全画面に載る。
 
-  名前は載せない。名乗るのは入口の大見出し（Hero の h1）で、柱にも置くと
-  入口では同じ名前が上と下に2度並ぶ。899 以下では柱が上の帯に畳まれるので、
-  ロゴのすぐ隣に名前が来て、見出しの前置きのように重なっていた。
-  名前は入口の <title>・description と JSON-LD にも残る。
+  1人のサイトなら名前と職種を載せる。**ただし入口（Hero の画面）では載せない。**
+    - 入口は Hero の h1 が名乗り、肩書きもその上に添えてある。柱にも置くと
+      同じ名前が2度並ぶ。899 以下では柱が上の帯に畳まれるので、ロゴのすぐ隣に
+      名前が来て、見出しの前置きのように重なっていた
+    - 入口の外（Projects・個人ページ・作品・Contact・/all）には名乗りが無い。
+      柱に名前を置かないと決めていたころは、奥の画面——検索や貼られたリンク
+      から直接着く画面——を開いた人には、誰のサイトかがどこにも出ていなかった
+  entrance は「Hero の画面か」。連なりの何枚目かでは決めない——名乗っている
+  のは Hero の h1 なので、Hero を2枚目に置いた構成でも、そこでだけ外す。
 
-  職種は残す。.identity__role は個人ページの名札と同じ部品で、
-  新しい見た目は足していない。
+  899 以下の帯では名前を残し、ワードマーク（NOCTIFEX）を畳む（app.css の
+  .identity--named）。帯は 390 の電話で 358px しかなく、ロゴの印・名前・目次
+  （Projects / Profile / Contact）で埋まる。畳むのは見た目だけで、ロゴの
+  リンクの読み上げには「NOCTIFEX」が残る。職種は今までどおり帯では畳む。
+
+  2人以上のサイトでは名前を出さない。誰か1人の名前を柱に置くと、その人の
+  サイトに見える。
+
+  contact は「Contact の画面か」。本文にメールと GitHub のボタンがあるので、
+  柱の GitHub / Mail は出さない——同じ行き先が柱と本文に2組並んでいた。
+  全体ページ（/all）では出す（あそこの Contact は節の1つで、柱は全体の柱）。
 */
-const SiteIdentity = ({ solo }: { solo?: schema.Member }) => (
-  <div class="identity">
-    <Brand />
-    {solo?.role ? <span class="identity__role">{solo.role}</span> : null}
-    <span class="identity__tagline">{SITE.tagline}</span>
-    <Socials github={SITE.github} email={SITE.email} />
-  </div>
-)
+const SiteIdentity = ({
+  solo,
+  entrance,
+  contact,
+}: {
+  solo?: schema.Member
+  entrance?: boolean
+  contact?: boolean
+}) => {
+  const named = entrance ? undefined : solo
+  return (
+    <div class={named ? 'identity identity--named' : 'identity'}>
+      <Brand />
+      {named ? <span class="identity__name">{named.name}</span> : null}
+      {named?.role ? <span class="identity__role">{named.role}</span> : null}
+      <span class="identity__tagline">{SITE.tagline}</span>
+      {contact ? null : <Socials github={SITE.github} email={SITE.email} />}
+    </div>
+  )
+}
 
 /*
   管理画面への入口（柱の AdminLink）の行き先。ログインしている人にだけ返し、
@@ -394,6 +476,12 @@ type TopData = {
     （/all）では null——全部が同じ文書に並ぶので、送り出す先が無い。
   */
   band: { href: string; app: number; work: number } | null
+  /*
+    1人のサイトで Team を置いているなら、その人（profileOf）。Team のブロックは
+    画面を作らず、その位置にこの人の画面が並ぶ（screenList）。全体ページでは
+    Team のカードの代わりに、この人のプロフィールを1つの節として置く。
+  */
+  profile?: schema.Member
 }
 
 // 一覧を持つブロック（Projects）だけ、DB から行を引く
@@ -514,9 +602,14 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
                 いたころは、何も伝えないまま画面でいちばん大きな字になっていた。
                 採る側が探しに来るのは人の名前と職種なので、それをそのまま出す。
                 肩書きは名前の上に小さく添える札で、899 以下で柱から畳まれる
-                肩書きも、入口ではここで読める。
+                肩書きも、入口ではここで読める。英字だけの肩書きには lang="en" を
+                付ける（読み上げの発音と、等幅の札にする印。components.tsx の langOf）
               */}
-              {solo?.role ? <p class="hero__role">{solo.role}</p> : null}
+              {solo?.role ? (
+                <p class="hero__role" lang={langOf(solo.role)}>
+                  {solo.role}
+                </p>
+              ) : null}
               <h1>
                 <Phrases text={solo?.name ?? SITE.name} />
               </h1>
@@ -528,10 +621,20 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
                 置く——この画面には作品が1件も無いので、何件あるかを数で見せて
                 から送り出す。帯は id も名前も持たない（目次からもページャからも
                 指さないので、指すための名前が要らない）
+
+                題は「つくったもの」。「つくったものの一覧」と書いていたころは、
+                右端の「一覧で見る →」と「一覧」が1枚の札の中で2度出ていた。
+                題は何が入っているか、右端はどうするか、で言葉を分ける
               */}
               {band ? (
-                <Band href={band.href} label="つくったものの一覧" app={band.app} work={band.work} />
+                <Band href={band.href} label="つくったもの" app={band.app} work={band.work} />
               ) : null}
+              {/*
+                全体ページ（/all）への控えめな1本。柱の足元の同じ行き先は 899 以下で
+                畳まれるので、入口の本文にも置く（WholeLink）。全体ページの Hero
+                （split でない）には出さない——自分への行き先になる
+              */}
+              {split ? <WholeLink /> : null}
             </Hero>
           </>
         ),
@@ -548,6 +651,8 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
         ときは出す——ピルごと消えると、絞り込みを外す手が画面から無くなる
       */
       if (!projects.total) return null
+      // 公開中の項目がある区分が1つだけなら、その区分（見出しの添えになる）
+      const soleKind = kinds.length === 1 ? kinds[0] : undefined
       const pages = Math.max(1, screenCount(projects.matched, perScreen))
       if (page !== null && page > pages) return null
       return {
@@ -560,8 +665,8 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
           いまの画面に載っているカードの名前を並べる——ここが画面ごとに変わるので、
           /projects と /projects/2 が同じ説明にならない。
 
-          業務のカードは実績値まで入れる。このサイトでいちばん強い一文（見込み
-          40人日 → 実績 20人日）はカードの .metric にしか無く、検索結果にも
+          業務のカードは実績値まで入れる。このサイトでいちばん強い一文（20 人日
+          見込み 40人日から半減）はカードの .metric にしか無く、検索結果にも
           貼られたカードにも1文字も出ていなかった。並べる順はカードの並び順
           そのまま（値・単位・添え）——言い換えると、書いた人の数字がこちらの
           都合で別の意味になる。
@@ -580,9 +685,16 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
             whole={!split}
             head={
               <>
+                {/*
+                  添えは、区分のピルが無いときだけ。区分が2つあるサイトでは
+                  すぐ下のピル（すべて / 個人開発 / 業務）が同じ言葉を並べるので、
+                  見出しに「個人開発 · 業務」と添えると同じ語が2段続く。区分が
+                  1つのサイトではピルが並ばない（FilterLinks）ので、何の一覧かを
+                  言うのはこの添えだけになる
+                */}
                 <SectionHead
                   title="Projects"
-                  note={kinds.map((kind) => KIND_LABEL[kind]).join(' · ')}
+                  note={soleKind ? KIND_LABEL[soleKind] : undefined}
                   h1={split}
                 />
                 {/* 行き先はこのブロックの1画面目。いま何画面目に居ても同じ */}
@@ -602,9 +714,17 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
                 変えれば列も一緒に変わるので、件数と見た目が二重にならない
               */
               <div class="grid" style={`--cols:${perScreen}`}>
-                {projects.rows.map((item) => (
-                  <ItemCard key={item.id} item={item} showMember={showMember} />
-                ))}
+                {/*
+                  サムネイルの枠は行ごとに決める（ItemCard の framed）。行は
+                  perScreen 件ずつ——割られた画面では1画面がちょうど1行、
+                  全体ページ（/all）では同じ grid に perScreen 件ずつの行が並ぶ
+                */}
+                {chunk(projects.rows, perScreen).flatMap((row) => {
+                  const framed = shotRow(row)
+                  return row.map((item) => (
+                    <ItemCard key={item.id} item={item} showMember={showMember} framed={framed} />
+                  ))
+                })}
               </div>
             ) : (
               <p class="filter-empty">この条件に当てはまるものはまだありません</p>
@@ -616,6 +736,32 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
 
     case 'team': {
       if (!members.length) return null
+      /*
+        1人のサイトのプロフィール。割られた画面としては描かない——その位置には
+        この人の画面（/members/<slug> …）が並ぶ（screenList）。ここへ来るのは
+        全体ページ（/all）だけで、Team のカード1枚の代わりに、プロフィール
+        そのものを1つの節として置く。id も目次の名前も Profile にそろえる
+        （画面ごとの URL の目次と同じ名前で、同じ中身を指す）。
+      */
+      if (data.profile) {
+        if (split) return null
+        const person = data.profile
+        return {
+          id: 'profile',
+          slug: 'profile',
+          pages: 1,
+          nav: 'Profile',
+          description: describe(`${person.name}のプロフィール`),
+          node: (
+            <Screen id="profile" label="Profile" whole>
+              <SectionHead title="Profile" />
+              <ProfileWhole member={person} {...memberUnits(person)}>
+                <OwnSocials member={person} />
+              </ProfileWhole>
+            </Screen>
+          ),
+        }
+      }
       const screen = screenOf(members, perScreen, page)
       if (!screen) return null
       return {
@@ -635,13 +781,16 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
         node: (
           <Screen id={id} label="Team" whole={!split}>
             {/*
-              添えは分類の名詞ひとつ（個人開発 / 業務 / 紹介 …と同じ）。
-              「1 member」と人数を数えて出すのはやめた。複数いる前提の器に
-              1人しか入っていないことを、自分で数えて告知していた
+              添えは置かない。「メンバー」は Team の訳語でしかなく、見出しを
+              2つの言語で2度言うだけだった（About の「紹介」、Skills の「技術」、
+              Career の「経歴」も同じ理由で外した）。「1 member」と人数を数えて
+              出すのはもっと前にやめた——複数いる前提の器に1人しか入っていない
+              ことを、自分で数えて告知していた
             */}
-            <SectionHead title="Team" note="メンバー" h1={split} />
+            <SectionHead title="Team" h1={split} />
             {/*
-              1〜2人なら横長、3人以上でグリッド。人数で決める、画面幅では決めない。
+              2人なら横長、3人以上でグリッド。人数で決める、画面幅では決めない
+              （1人のときは上の data.profile に分かれていて、ここへは来ない）。
               数えるのは総人数で、この画面に載っている人数ではない——7人を2画面に
               割った2画面目が1人だからといって横長に化けると、めくるたびに形が変わる
             */}
@@ -793,6 +942,8 @@ async function renderWholePage(c: Context<AppEnv>) {
     projects: { total: items.length, matched: items.length, rows: items },
     // このページには一覧そのものがすぐ下に並ぶ。送り出す先が無いので帯は置かない
     band: null,
+    // 1人のサイトなら、Team の節の代わりにプロフィールを置く
+    profile: profileOf(blocks, members),
   }
 
   // 管理の「構成」で置いた順に描く。中身の無い節は落ちる。
@@ -835,6 +986,10 @@ async function renderWholePage(c: Context<AppEnv>) {
       theme={theme}
       // 縦に伸びてよい唯一の公開ページ。app.css の「画面に収める外枠」を外す印
       whole
+      /*
+        入口ではないので名乗る。Hero の h1 は同じページにあるが、印刷した紙の
+        2枚目から先、Ctrl-F で飛んだ先では柱だけが誰のサイトかを言う
+      */
       sidebar={<SiteIdentity solo={solo} />}
       // 全部の節が並ぶページなので、節の並び（構成）へ送る
       admin={await adminHref(c, '/admin/blocks')}
@@ -852,15 +1007,42 @@ async function renderWholePage(c: Context<AppEnv>) {
   載らない画面（Hero・ひとこと）も列には並ぶので、めくれば必ずたどり着ける。
 */
 type BlockScreen = {
+  kind: 'block'
   block: schema.Block
   slug: string
   nav: string | null
   page: number
 }
 
-function screenList(blocks: schema.Block[], data: TopData): BlockScreen[] {
-  const screens: BlockScreen[] = []
+/*
+  1人のサイトのプロフィールの1枚（profileOf）。Team のブロックの位置に、
+  その人の画面がそのまま並ぶ。URL は /members/<slug> …のままで、描くのも
+  個人ページの経路（renderMemberScreen）。サイトの列に入っているのは、
+  前後・目次・通し番号をサイトの連なりとして数えるため。
+
+  描くもの（node・説明文）は memberScreens が作ったものをそのまま持つ。
+  1枚目の帯（このメンバーのつくったもの）は付けない——入口の帯と同じ行き先・
+  同じ件数になり、同じ札が連なりに2度出る。
+*/
+type ProfileScreen = {
+  kind: 'profile'
+  member: schema.Member
+  screen: MemberScreen
+}
+
+type SiteScreen = BlockScreen | ProfileScreen
+
+function screenList(blocks: schema.Block[], data: TopData): SiteScreen[] {
+  const screens: SiteScreen[] = []
   for (const block of blocks) {
+    // 1人のサイトの Team は、その人の画面に置き換わる
+    const person = block.type === 'team' ? data.profile : undefined
+    if (person) {
+      for (const screen of memberScreens(person, null)) {
+        screens.push({ kind: 'profile', member: person, screen })
+      }
+      continue
+    }
     /*
       1画面目を描いて、そのブロックが何画面になるかを聞く。中身が無ければ
       null が返り、画面は1つも生まれない——未配置・下書き・0件のブロックに
@@ -870,7 +1052,7 @@ function screenList(blocks: schema.Block[], data: TopData): BlockScreen[] {
     const first = renderBlock(block, data, 1)
     if (!first) continue
     for (let page = 1; page <= first.pages; page += 1) {
-      screens.push({ block, slug: first.slug, nav: first.nav, page })
+      screens.push({ kind: 'block', block, slug: first.slug, nav: first.nav, page })
     }
   }
   return screens
@@ -945,11 +1127,23 @@ async function screenPage(
   page: {
     node: Child
     description: string
+    /*
+      この画面に載せる構造化データ。載せるかどうかは呼ぶ側が決めて、載せない
+      画面では渡さない。
+
+      名乗り（サイトの Person / Organization、個人ページの Person）は連なりに
+      1つあれば足りるので、呼ぶ側が先頭の画面（seq.index === 0）でだけ渡す。
+      作品1件のページの CreativeWork は名乗りではなく「この URL が何か」なので、
+      どの作品のページにも渡す——作品同士をめくる列ができたとき、ここで
+      index === 0 を見ていたせいで、先頭の作品にしか載らなくなるところだった。
+    */
     jsonLd?: unknown
     theme: Theme
     sidebar: Child
     // この画面の中身を直す管理画面（adminHref が、ログインしている人にだけ出す）
     adminPath: string
+    // ページャが数える単位（ScreenPager の unit）。作品同士をめくるときだけ「件」
+    unit?: '画面' | '件'
   },
 ) {
   return c.html(
@@ -957,8 +1151,7 @@ async function screenPage(
       title={seq.current.title}
       description={page.description}
       canonical={`${SITE.origin}${seq.current.canonical}`}
-      // 名乗りはこの連なりに1つあれば足りる。入口（先頭の画面）にだけ載せる
-      jsonLd={seq.index === 0 ? page.jsonLd : undefined}
+      jsonLd={page.jsonLd}
       nav={seq.nav}
       theme={page.theme}
       sidebar={page.sidebar}
@@ -968,7 +1161,7 @@ async function screenPage(
       {seq.pager ? (
         <>
           {page.node}
-          <ScreenPager {...seq.pager} />
+          <ScreenPager {...seq.pager} unit={page.unit} />
         </>
       ) : (
         page.node
@@ -976,6 +1169,20 @@ async function screenPage(
     </Layout>,
   )
 }
+
+/*
+  名乗り（構造化データ）は連なりの先頭の画面にだけ載せる。めくった先で同じ
+  人・同じ器をもう一度名乗らない（CLAUDE.md「1画面 = 1ドキュメント」）。
+*/
+const firstOnly = (seq: Sequence, jsonLd: unknown) => (seq.index === 0 ? jsonLd : undefined)
+
+/*
+  サイトの中の経路（/images/items/… や /assets/…）を絶対 URL にする。
+  構造化データは貼られた先や検索エンジンがこの文書の外で読むので、相対の
+  ままでは何も指さない。管理画面から入る画像の URL はいつも / で始まるが、
+  既に絶対のもの（手で DB に入れた外の URL）はそのまま通す。
+*/
+const absoluteUrl = (path: string) => (path.startsWith('/') ? `${SITE.origin}${path}` : path)
 
 /*
   サイトの画面の列と、それを組むのに使った数。
@@ -996,7 +1203,7 @@ async function siteScreens(
   memberId: number | null,
   // 区分ごとの件数。呼ぶ側が絞り込みを読むのに先に引いていれば渡す（二度引かない）
   byKind?: KindCounts,
-): Promise<{ screens: BlockScreen[]; counted: TopData }> {
+): Promise<{ screens: SiteScreen[]; counted: TopData }> {
   const counts = byKind ?? (await countPublishedByKind(db))
   const total = counts.app + counts.work
   // 絞り込みが効いていないときは数え直さない（同じ数になる）
@@ -1010,28 +1217,12 @@ async function siteScreens(
     showMember: showMemberOf(blocks, members),
     projects: { total, matched, rows: [] },
     band: bandOf(blocks, counts),
+    profile: profileOf(blocks, members),
   }
 
   return { screens: screenList(blocks, counted), counted }
 }
 
-/*
-  ブロックをほどいた列を、連なりの1枚ずつに写す。
-
-  目次に並ぶのは slug ごとに1行（sequence が同じ navKey の最初の1枚だけを
-  採る）。だからブロックの2画面目以降でも、その見出しに印が残る。
-
-  canonical: 先頭の画面は / と /<slug> の2つの URL で開けるので、正は / の
-  ほうにそろえる（全体ページ /all と同じ扱い）。2つ目からは、その画面の URL
-  が正。絞り込みは付けない——同じ中身の取り出し方なので、ピルの組み合わせの
-  ぶんだけ URL が数えられると、どれが本体か分からなくなる。
-
-  href も先頭だけは / に寄せる。ここが /<slug>（＝/hero）だったころ、
-  ページャの「前」だけがそこを指していて、入口と**バイト単位で同一の URL** が
-  リンクを辿れる場所に1つ増えていた。/hero を直接開いた人のために
-  ルートは残してあるが（下の renderScreen で読み替える）、こちらから
-  案内はしない。
-*/
 /*
   その画面に**効く絞り込みだけ**を残す。
 
@@ -1050,17 +1241,43 @@ async function siteScreens(
 const stepQuery = (slug: string, filter: ItemFilter): string =>
   hasList(slug) ? filterQuery(filter) : ''
 
-const siteSteps = (screens: BlockScreen[], filter: ItemFilter, solo?: schema.Member): Step[] =>
-  screens.map((screen, position) => ({
-    navKey: screen.slug,
-    href:
-      position === 0
-        ? `/${stepQuery(screen.slug, filter)}`
-        : screenHref(screen, stepQuery(screen.slug, filter)),
-    canonical: position === 0 ? '/' : screenHref(screen),
-    nav: screen.nav,
-    title: screen.nav ? `${screen.nav} — ${SITE.name}` : siteTitle(solo),
-  }))
+/*
+  サイトの画面の列を、連なりの1枚ずつに写す。
+
+  目次に並ぶのは slug ごとに1行（sequence が同じ tocKey——省けば navKey——の
+  最初の1枚だけを採る）。だからブロックの2画面目以降でも、その見出しに印が残る。
+
+  canonical: 先頭の画面は / と /<slug> の2つの URL で開けるので、正は / の
+  ほうにそろえる（全体ページ /all と同じ扱い）。2つ目からは、その画面の URL
+  が正。絞り込みは付けない——同じ中身の取り出し方なので、ピルの組み合わせの
+  ぶんだけ URL が数えられると、どれが本体か分からなくなる。
+
+  href も先頭だけは / に寄せる。ここが /<slug>（＝/hero）だったころ、
+  ページャの「前」だけがそこを指していて、入口と**バイト単位で同一の URL** が
+  リンクを辿れる場所に1つ増えていた。/hero を直接開いた人のために
+  ルートは残してあるが（下の renderScreen で読み替える）、こちらから
+  案内はしない。
+
+  1人のサイトのプロフィールの画面（ProfileScreen）は、個人ページと同じ1枚
+  （memberStep）に写す。目次では「Profile」の1行にまとめ（PROFILE_TOC）、
+  ページャでは節ごとに名乗る。先頭に来ても / には寄せない——その1枚を描くのは
+  個人ページの経路で、/ は renderScreen がそこへ送る。
+*/
+const siteSteps = (screens: SiteScreen[], filter: ItemFilter, solo?: schema.Member): Step[] =>
+  screens.map((screen, position) =>
+    screen.kind === 'profile'
+      ? memberStep(screen.member, screen.screen, PROFILE_TOC)
+      : {
+          navKey: screen.slug,
+          href:
+            position === 0
+              ? `/${stepQuery(screen.slug, filter)}`
+              : screenHref(screen, stepQuery(screen.slug, filter)),
+          canonical: position === 0 ? '/' : screenHref(screen),
+          nav: screen.nav,
+          title: screen.nav ? `${screen.nav} — ${SITE.name}` : siteTitle(solo),
+        },
+  )
 
 /*
   画面1つぶんの描画。公開ページの本体。
@@ -1080,11 +1297,23 @@ async function renderScreen(c: Context<AppEnv>, want: { slug: string; page: numb
     publishedBlocks(db),
   ])
 
+  const solo = soloMember(members)
+  /*
+    1人のサイトで Team を置いているあいだ、Team の画面は無い——その位置には
+    その人のプロフィールが並ぶ（profileOf）。貼られた /team と /team/<n> は
+    死なせずにその人の1枚目へ寄せる。
+
+    2人目を公開した日に /team はまた 200 に戻る。301 はブラウザに覚えられる
+    ので、その日までに一度でも寄せられた人は、しばらくプロフィールへ運ばれ
+    続ける（行き先は生きているので行き止まりにはならない）。
+  */
+  const profile = profileOf(blocks, members)
+  if (want?.slug === 'team' && profile) {
+    return c.redirect(memberHref(profile.slug, ''), 301)
+  }
+
   const { filter, memberId } = readFilter(c, kindsOf(byKind), members)
   const { screens, counted } = await siteScreens(db, blocks, members, filter, memberId, byKind)
-
-  const solo = soloMember(members)
-  const sidebar = <SiteIdentity solo={solo} />
 
   /*
     出せる画面が1つも無いとき（置いたブロックが全部下書き、など）。
@@ -1100,7 +1329,7 @@ async function renderScreen(c: Context<AppEnv>, want: { slug: string; page: numb
         canonical={`${SITE.origin}/`}
         nav={[]}
         theme={theme}
-        sidebar={sidebar}
+        sidebar={<SiteIdentity solo={solo} />}
         // 何も出ていないのは、構成に公開中のブロックが無いから。直す場所はそこ
         admin={await adminHref(c, '/admin/blocks')}
       >
@@ -1117,16 +1346,24 @@ async function renderScreen(c: Context<AppEnv>, want: { slug: string; page: numb
   */
   const first = screens[0]
   /*
+    連なりの先頭がプロフィール（1人のサイトで Hero を外し、Team を先頭に
+    置いた構成）。その1枚は /members/<slug> にあり、描くのも個人ページの経路
+    なので、入口はそこへ送る。構成しだいで変わる行き先なので 302。
+  */
+  const head = steps[0]
+  if (!want && first?.kind === 'profile' && head) return c.redirect(head.href, 302)
+  /*
     引くときも stepQuery を通す。その画面に効かない絞り込みを付けて来た URL
-    （手で打った /team?kind=work など）は、余分なぶんを落として同じ1枚に
+    （手で打った /contact?kind=work など）は、余分なぶんを落として同じ1枚に
     当てる——列の href には付いていないので、素通しすると 404 になる。
     中身は絞り込み無しと同じで、canonical も素の URL を指す。
   */
   const asked = want ? screenHref(want, stepQuery(want.slug, filter)) : null
-  const entry = first && want && want.slug === first.slug && want.page === 1
+  const entry = first?.kind === 'block' && want && want.slug === first.slug && want.page === 1
   const seq = sequence(steps, stepAt(steps, entry ? `/${stepQuery(first.slug, filter)}` : asked))
   const current = seq && screens[seq.index]
-  if (!seq || !current) return c.notFound()
+  // プロフィールの画面は /members/<slug> …にしか無いので、ここでは当たらない
+  if (!seq || current?.kind !== 'block') return c.notFound()
 
   // ここで初めてカードを引く。出す画面に載らない行は、1件も取ってこない
   const rows = await screenRows(db, current, filter, memberId)
@@ -1136,19 +1373,49 @@ async function renderScreen(c: Context<AppEnv>, want: { slug: string; page: numb
   // screenList が数えた画面なので、ここで null は返らない
   if (!rendered) return c.notFound()
 
-  return screenPage(c, seq, {
-    node: rendered.node,
-    // 説明文はこの画面に出ているものから作る（renderBlock が持っている）
-    description: rendered.description,
-    jsonLd: siteJsonLd(members),
-    theme,
-    sidebar,
-    adminPath: blockAdminPath(current.block, solo),
-  })
+  /*
+    入口の帯（一覧へ送る丸い札）が、ページャの「次 →」と同じ行き先なら、
+    入口にはページャを出さない。既定の並び（入口 → Projects …）ではいつもそう
+    なり、同じ /projects へのリンクが画面の中ほどの札と画面の底の手に2つ並んで
+    いた。どちらを押せばよいかを読み手に選ばせるだけで、行き先は同じ。札のほうを
+    残すのは、件数（個人開発 5 · 業務 2）を添えて何があるかを先に見せるから。
+
+    落とすのは「前」が無いとき（入口が連なりの先頭）だけ。入口より前に画面を
+    置いた構成でページャごと落とすと、前へ戻る手まで消える。行き先が違うとき
+    （入口と Projects の間にひとことを置いた構成）は、ページャが次の画面へ、
+    帯が一覧へ、と別の道なので両方出す。
+  */
+  const band = current.block.type === 'hero' ? data.band : null
+  const pager =
+    seq.pager && band && seq.pager.prev === null && seq.pager.next === band.href ? null : seq.pager
+
+  return screenPage(
+    c,
+    { ...seq, pager },
+    {
+      node: rendered.node,
+      // 説明文はこの画面に出ているものから作る（renderBlock が持っている）
+      description: rendered.description,
+      jsonLd: firstOnly(seq, siteJsonLd(members)),
+      theme,
+      /*
+      入口（Hero）では柱に名乗らない（Hero の h1 が名乗る）。Contact では柱の
+      GitHub / Mail を出さない（本文にボタンがある）。理由は SiteIdentity
+    */
+      sidebar: (
+        <SiteIdentity
+          solo={solo}
+          entrance={current.block.type === 'hero'}
+          contact={current.block.type === 'contact'}
+        />
+      ),
+      adminPath: blockAdminPath(current.block, solo),
+    },
+  )
 }
 
 /*
-  作品1件のページ。連なりの外にある、1枚きりの画面。
+  作品1件のページ。作品同士を横にめくる、自分たちだけの連なり。
 
   一覧の URL（/apps/3）は「いまの並びの3枚目」でしかない。並べ替えても公開を
   切り替えても 200 のまま別の作品を指すので、貼られたリンクの中身が誰にも
@@ -1160,11 +1427,20 @@ async function renderScreen(c: Context<AppEnv>, want: { slug: string; page: numb
   日に、貼られた作品のリンクまで死んではいけない——それでは一覧の URL と
   同じ壊れ方を、名前を変えて持ち込むことになる。出る条件は「作品が公開中」の
   1つだけ。
+
+  行き来は2本。
+    - ページャ（画面の底）: 作品同士を一覧と同じ並びでめくる。「← 前」
+      「Projects 3 / 7」「次 →」。数えるのは恒久リンクを持つ作品だけ
+    - 「← 一覧に戻る」（本文の頭）: その作品が載っている Projects の画面へ
+  1枚きりの行き止まりだったころは、戻る道が目次しか無かった。目次の Projects は
+  一覧の1画面目へ行くので、4画面目のカードから入った人は最初からめくり直し、
+  隣の作品を見るにも一覧へ戻ってカードを探し直すしかなかった。
 */
 async function renderItem(c: Context<AppEnv>, type: 'app' | 'work', slug: string) {
   const db = drizzle(c.env.DB, { schema })
-  const [item, members, theme, blocks] = await Promise.all([
+  const [item, order, members, theme, blocks] = await Promise.all([
     findPublishedItem(db, slug),
+    listPublishedItemKeys(db),
     listPublishedMembers(db),
     loadTheme(db),
     publishedBlocks(db),
@@ -1183,66 +1459,113 @@ async function renderItem(c: Context<AppEnv>, type: 'app' | 'work', slug: string
   const { screens } = await siteScreens(db, blocks, members, { kind: null, member: null }, null)
   const steps = siteSteps(screens, { kind: null, member: null }, solo)
 
-  const step: Step = {
-    // 印は、この作品が載っている一覧に付く（この画面は目次に並ばない）
-    navKey: 'projects',
-    href,
-    canonical: href,
-    // 目次には出さない。めくって着く先ではないので、連なりの行として並べない
-    nav: null,
-    title: `${item.title} — ${SITE.name}`,
-  }
+  /*
+    作品の列。並びは一覧と同じ（listPublishedItemKeys が publicOrder で引く）で、
+    恒久リンクを持つ作品だけ——slug の無い作品にはめくって着く URL が無い。
+
+    navKey はどれも同じ 'item' なので、sequence は列ぜんぶを1つの節として
+    数え（3 / 7）、手は節をまたがないので行き先を名乗らず「← 前」「次 →」の
+    まま。節の名前（nav）は一覧の名前そのもので、ページャの真ん中に
+    「Projects」と出る。
+
+    目次の単位（tocKey）は一覧の 'projects'。目次に行は持たず（tocLabel: null）、
+    印だけがこの作品の載っている一覧（Projects）に付く——個人ページが Team に
+    印を付けるのと同じ借り方で、印を付ける手続きは sequence に任せる。
+  */
+  const own: Step[] = order.flatMap((row) => {
+    const at = itemHref(row)
+    return at
+      ? [
+          {
+            navKey: 'item',
+            tocKey: 'projects',
+            tocLabel: null,
+            href: at,
+            canonical: at,
+            nav: 'Projects',
+            title: `${row.title} — ${SITE.name}`,
+          },
+        ]
+      : []
+  })
+  const index = stepAt(own, href)
+  const step = own[index]
+  if (!step) return c.notFound()
 
   /*
-    この作品の連なりは1枚きり。めくる先が無いのでページャは出ない
-    （sequence が1枚のときに返すものと同じ形）。目次だけはサイトの画面の列から
-    借りる——ここから戻る道は目次しか無いので、トップと同じ行き先を同じ順で
-    並べる。自分の1枚を列の末尾に足して聞くのは、連ね方（目次の重複除けと
-    印の付け方）を src/lib/sequence.ts の1本に任せたままにするため。
+    目次とページャは別の列から取る（renderMemberScreen と同じ2回呼び）。
+    目次はサイトの画面の列に作品の列を継いで聞く——作品の行は目次に並ばない
+    ので、並ぶのはトップと同じ行き先で、印は Projects に付く。ページャは
+    作品の列だけで聞く。サイトの列と継いだままめくると、最初の作品の「←」が
+    Contact を指してしまう。
+
+    index は作品の列の中の位置。構造化データ（CreativeWork）はどの作品にも
+    載せるので、firstOnly は通さない。
   */
   const seq: Sequence = {
-    index: 0,
+    index,
     current: step,
-    nav: sequence([...steps, step], steps.length)?.nav ?? [],
-    pager: null,
+    nav: sequence([...steps, ...own], steps.length + index)?.nav ?? [],
+    pager: sequence(own, index)?.pager ?? null,
   }
 
   /*
-    新しい見た目は足さない。見出しと添え（SectionHead）、本文（Note = .bio）、
-    実績値（Numbers）、タグ（Tags）、行き先（LinkList）——どれもトップの
-    ブロックが使っている部品で、カードの中と同じものが切られずに1画面ぶんの
-    大きさで並ぶ。
+    「← 一覧に戻る」の行き先。この作品が一覧の何画面目に載っているかを、
+    一覧と同じ並び（order。slug の無い作品も一覧には載るので数に入れる）の
+    中の位置と perScreen から出す。1画面目なら /projects、ほかは /projects/N。
 
-    説明文にカードの <p> を使わないのは、あちらが2行で切られるため
-    （app.css の --card-lines）。この画面は作品1件のためだけにあるので、
-    書いたぶんが全部出る形にする。
+    URL は自分で組まず、サイトの画面の列から Projects の N 枚目を引く。
+    Projects を先頭に置いた構成では1枚目が / になり、Projects を置いて
+    いない構成ではそもそも一覧が無い（そのときは戻る道を出さない。
+    目次にも Projects は無い）。
+  */
+  const position = order.findIndex((row) => row.id === item.id)
+  const listPage = Math.floor(position / blockPerScreen('projects')) + 1
+  const listSteps = steps.filter((_, at) => {
+    const screen = screens[at]
+    return screen?.kind === 'block' && screen.block.type === 'projects'
+  })
+  const back = listSteps[listPage - 1]?.href ?? null
+
+  /*
+    見出しと添え（SectionHead）の下は ItemDetail——カードを開いたもの。説明
+    （Note = .bio）・実績値（Metric）・タグ（Tags）・行き先（LinkRow）はカードと
+    同じ部品で、足すのは画像（Shot）と本文（Note）だけ。なぜカードの部品かは
+    ItemDetail に書いてある（高さ）。足した見た目は「← 一覧に戻る」の札と、
+    画像の枠（.shot）と、列の組み方（.detail）。
+
+    説明文にカードの <p> を使わないのは、あちらが行数で切られるため
+    （app.css の --card-lines。電話の幅では2行）。この画面は作品1件のためだけにあるので、
+    書いたぶんが全部出る形にする。本文と画像はここにしか出ない（カードには
+    出さない。サムネイルは同じ画像の飾り）。
   */
   const note = [item.platformLabel ?? item.category, item.year].filter(Boolean).join(' · ')
-  const links: string[][] = [
-    ...item.links.map((link) => [link.label, link.url]),
-    // 担当を出す条件はカードと同じ（showMemberOf）
+  const links = [
+    ...item.links,
+    /*
+      担当を出す条件はカードと同じ（showMemberOf）。サイトの中の行き先なので、
+      矢印は →・同じタブ（LinkRow が URL の頭の / で決める）
+    */
     ...(showMemberOf(blocks, members) && item.memberName && item.memberSlug
-      ? [[item.memberName, `/members/${item.memberSlug}`, '担当']]
+      ? [{ label: `担当 ${item.memberName}`, url: `/members/${item.memberSlug}` }]
       : []),
   ]
 
   return screenPage(c, seq, {
     node: (
       <Screen id="item" label={item.title}>
+        {back ? <BackLink href={back} label="一覧に戻る" /> : null}
         <SectionHead title={item.title} note={note || undefined} h1 />
-        {item.summary ? <Note paragraphs={[item.summary]} /> : null}
-        {item.metricValue ? (
-          <Numbers rows={[[item.metricValue, item.metricUnit ?? '', item.metricNote ?? '']]} />
-        ) : null}
-        <Tags tags={item.tags} />
-        {links.length ? <LinkList rows={links} /> : null}
+        <ItemDetail item={item} links={links} />
       </Screen>
     ),
+    // 説明文は要約（summary）のまま。本文は長く、検索結果の1行には畳めない
     description: item.summary || siteDescription(solo),
     /*
       この URL が何を名指ししているかを、貼った先にも検索にも1つだけ置く。
       サイトの名乗り（Person / Organization）はトップが持っているので、
-      ここに載せるのは作品そのもの。
+      ここに載せるのは作品そのもの。画像は絶対 URL で（相対のままでは、
+      この文書の外で読む側が解決できない）。
     */
     jsonLd: {
       '@context': 'https://schema.org',
@@ -1250,10 +1573,13 @@ async function renderItem(c: Context<AppEnv>, type: 'app' | 'work', slug: string
       name: item.title,
       url: `${SITE.origin}${href}`,
       ...(item.summary ? { description: item.summary } : {}),
+      ...(item.imageUrl ? { image: absoluteUrl(item.imageUrl) } : {}),
     },
     theme,
     sidebar: <SiteIdentity solo={solo} />,
     adminPath: `/admin/items/${item.id}/edit`,
+    // 1枚が作品1件。読み上げは「Projects の 7 件のうち 3 件目」
+    unit: '件',
   })
 }
 
@@ -1283,14 +1609,29 @@ publicRoutes.get('/', (c) => renderScreen(c, null))
     /members/<slug>/skills   技術
     /members/<slug>/career   経歴
 
-  **個人ページはサイトの Team の続き。** 柱と目次はサイトのまま（目次は Team に
-  印）で、ページャはサイトの列の Team の直後にこの人の画面を差し込んだ列で
-  めくる——← Team → 1枚目 → About → Skills → Career → Contact →。
-  以前は柱（顔・名前・所在地）も目次（About / Skills / Career / Contact /
-  Apps · Works）も個人ページ専用のものに丸ごと入れ替わり、Team のカードを
-  押すと別のサイトへ飛んだように見えた。戻る道もロゴ（入口まで戻る）しか
-  無かった。連絡先はサイトの Contact に合流させた（/members/<slug>/contact は
-  そこへ 301 で寄せる）。
+  **個人ページはサイトの連なりの一部。** 柱と目次はサイトのままで、個人ページ
+  専用のものに入れ替えない。入れ替えていたころ（柱に顔・名前・所在地、目次に
+  About / Skills / Career / Contact / Apps · Works）は、Team のカードを押すと
+  別のサイトへ飛んだように見え、戻る道もロゴ（入口まで戻る）しか無かった。
+  どう連なるかは人数で2つに分かれる。
+
+    1人のサイト（Team を置いているとき。profileOf）
+      Team の画面は作らず、その位置にこの人の画面がそのまま並ぶ。サイトの
+      連なりそのものなので、/ から「次」を押し続けると
+      入口 → Projects … → 1枚目 → About → Skills → Career → Contact と一周する。
+      目次は「Profile」の1行（どの画面でもそこに印）。/team は1枚目へ 301。
+      1枚目の帯（このメンバーのつくったもの）は出さない——入口の帯と同じ行き先・
+      同じ件数の札が、連なりに2度出る。構造化データも載せない（連なりの途中）
+    2人以上のサイト
+      Team の続き。目次はサイトのもの（Team に印）で、ページャはサイトの列の
+      Team の直後にこの人の画面を差し込んだ列でめくる——
+      ← Team → 1枚目 → About → Skills → Career → Contact →。Team の画面自身の
+      「次」は Contact のまま（個人ページはカードから入る脇の道）
+
+  Team を置いていないサイトでは、差し込む先が無いので、この人の画面だけで
+  連ねる（カードの担当者名から入る単独の連なり）。
+
+  連絡先はサイトの Contact に合流させた（/members/<slug>/contact はそこへ 301）。
 
   中身の無い画面は作らない（Skills と Career）。トップの「中身が無ければ節ごと
   出さない」がそのまま伸びた形で、URL も目次もページャも一度に消える。
@@ -1317,24 +1658,41 @@ const memberHref = (slug: string, key: string, page = 1) =>
   `/members/${slug}${key ? `/${key}` : ''}${page === 1 ? '' : `/${page}`}`
 
 /*
-  日本語のページ（<html lang="ja">）に素で置いた英語の塊に印を付ける。
+  個人ページの1枚を、連なりの1枚（Step）に写す。1人のサイトのプロフィール
+  （siteSteps）も、2人以上のサイトの個人ページ（renderMemberScreen）も同じ形。
 
-  LANGUAGES や PRACTICE のような普通名詞は、印が無いと日本語の音声エンジンが
-  ローマ字読みするか読み飛ばす。ただし小見出しは打ち込んだ文字列なので、
-  日本語が1文字も混じっていないものだけを英語と見なす——「言語」と書いた人の
-  見出しに lang="en" を付けると、今度はそちらが読めなくなる。
+  navKey は画面ごと（割られた /career/2 も同じ節）。サイトの画面の navKey
+  （ブロックの slug）と取り合わないよう、頭に印を付ける。nav はページャが
+  名乗る名前で、1枚目は人の名前——About から戻る手が「← 前」ではなく
+  「← 岡崎 昂功」になり、Projects の最後の「次」は「岡崎 昂功 →」になる。
+
+  目次の単位（toc）だけが連なり方で変わる。1人のサイトでは「Profile」の1行に
+  まとまり、2人以上では行を持たずに Team に印（下の PROFILE_TOC / TEAM_TOC）。
 */
-const LATIN_ONLY = /^[ -~]+$/
-const langOf = (text: string) => (LATIN_ONLY.test(text) ? 'en' : undefined)
+const memberStep = (
+  member: schema.Member,
+  screen: MemberScreen,
+  toc: Pick<Step, 'tocKey' | 'tocLabel'>,
+): Step => ({
+  navKey: `member:${screen.key}`,
+  href: memberHref(member.slug, screen.key, screen.page),
+  // 個人ページに絞り込みは無いので、正の URL は開いた URL と同じ
+  canonical: memberHref(member.slug, screen.key, screen.page),
+  nav: screen.nav ?? member.name,
+  title: screen.nav
+    ? `${member.name} · ${screen.nav} — ${SITE.name}`
+    : `${member.name} — ${SITE.name}`,
+  ...toc,
+})
+
+// 1人のサイト。目次は「Profile」の1行で、行き先は1枚目
+const PROFILE_TOC = { tocKey: 'profile', tocLabel: 'Profile' }
+// 2人以上のサイト。目次に行を持たず、印は Team に付く（Team を置いていなければ無印）
+const TEAM_TOC = { tocKey: 'team', tocLabel: null }
 
 function memberScreens(member: schema.Member, band: Child): MemberScreen[] {
-  const bio = paragraphs(member.bio)
-  const skills = parseSkills(member.skillsText)
-  const career = parseLines(member.careerText)
-
-  // サイトの連絡先と違うときだけ、その人の行き先として1枚目に出す
-  const ownGithub = member.github && member.github !== SITE.github ? member.github : null
-  const ownEmail = member.email && member.email !== SITE.email ? member.email : null
+  // 開き方は src/blocks.ts の memberUnits が正（管理画面の「N 画面」も同じ式を数える）
+  const { bio, skills, career } = memberUnits(member)
 
   const screens: MemberScreen[] = [
     {
@@ -1349,8 +1707,8 @@ function memberScreens(member: schema.Member, band: Child): MemberScreen[] {
         <Hero>
           {/*
             名札（顔・名前・肩書きと所在地）。柱はサイトのままなので、その人の
-            顔と名前はここにしか出ない。Team のカードと同じ並びにして、カードを
-            押した先で同じ顔に着くようにする。
+            顔はここにしか出ない（1人のサイトなら名前と職種は柱にも出る）。
+            Team のカードと同じ並びにして、カードを押した先で同じ顔に着くようにする。
 
             見出し（h1）は大見出しがあればそれ、無ければ名札の名前。どちらでも
             この画面の中で完結する1つの h1 になる
@@ -1366,7 +1724,7 @@ function memberScreens(member: schema.Member, band: Child): MemberScreen[] {
             Contact に合流させたので、サイトと違う行き先を持つ人のぶんはここに
             置く。サイトと同じ行き先なら出さない（同じ行き先を2つ置かない）
           */}
-          {ownGithub || ownEmail ? <Socials github={ownGithub} email={ownEmail} /> : null}
+          <OwnSocials member={member} />
           {/*
             帯は id も名前も持たない。この画面に同居するだけで、目次からも
             ページャからも指さないので、指すための名前が要らない
@@ -1402,7 +1760,8 @@ function memberScreens(member: schema.Member, band: Child): MemberScreen[] {
       ),
       node: (
         <Screen id="about" label="About">
-          <SectionHead title="About" note="紹介" h1 />
+          {/* 添えは置かない。訳語（紹介）は見出しを2度言うだけ（Team を見ること） */}
+          <SectionHead title="About" h1 />
           <Note paragraphs={part}>{part.length ? null : <Empty>準備中です</Empty>}</Note>
         </Screen>
       ),
@@ -1432,32 +1791,9 @@ function memberScreens(member: schema.Member, band: Child): MemberScreen[] {
       ),
       node: (
         <Screen id="skills" label="Skills">
-          <SectionHead title="Skills" note="技術" h1 />
-          <div class="skills">
-            {part.map((group) => (
-              <div class="skill-group" key={group.heading}>
-                {/*
-                小見出しは段落ではなく見出し。見た目は mono の小見出しとして
-                組んであるのに要素が <p> だと、読み上げの見出し移動でこの
-                画面の3つの塊に降りられない（この画面は個人ページでいちばん
-                密度が高い）。節見出しが h1 なので、こちらは h2
-              */}
-                {group.heading ? (
-                  <h2 class="side-head" lang={langOf(group.heading)}>
-                    {group.heading}
-                  </h2>
-                ) : null}
-                <ul>
-                  {group.skills.map((skill) => (
-                    <li key={skill.label}>
-                      {skill.label}
-                      {skill.note ? <span class="exp">{skill.note}</span> : null}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
+          <SectionHead title="Skills" h1 />
+          {/* 節見出しが h1 なので、塊の小見出しは h2 */}
+          <SkillGroups groups={part} level={2} />
         </Screen>
       ),
     })),
@@ -1472,7 +1808,7 @@ function memberScreens(member: schema.Member, band: Child): MemberScreen[] {
       ),
       node: (
         <Screen id="career" label="Career">
-          <SectionHead title="Career" note="経歴" h1 />
+          <SectionHead title="Career" h1 />
           {/* トップの「できごと」と同じ部品。同じ形のものを2度書かない */}
           <Timeline rows={part} />
         </Screen>
@@ -1511,9 +1847,9 @@ async function renderMemberScreen(
   if (!member) return c.notFound()
 
   const solo = soloMember(members)
-  // サイトの画面の列。個人ページはこの列の Team の続きに差し込む（目次もここから借りる）
+  // サイトの画面の列。1人のサイトならこの人の画面はもう入っている（profileOf）
   const none: ItemFilter = { kind: null, member: null }
-  const [counts, { screens: site }] = await Promise.all([
+  const [counts, { screens: site, counted }] = await Promise.all([
     countPublishedByKind(db, member.id),
     siteScreens(db, blocks, members, none, null),
   ])
@@ -1527,6 +1863,37 @@ async function renderMemberScreen(
   if (want?.key === 'contact' && want.page === 1) {
     const contact = siteList.find((step) => step.navKey === 'contact')
     return contact ? c.redirect(contact.canonical, 301) : c.notFound()
+  }
+
+  /*
+    1枚目は /members/<slug> だけで開く。1枚目の key は空文字なので、名指し
+    （3語目。/members/<slug>/hero のような）では当たらない
+  */
+  const asked =
+    want === null ? memberHref(member.slug, '') : memberHref(member.slug, want.key, want.page)
+
+  /*
+    1人のサイトのプロフィール。この人の画面はサイトの列そのものに並んでいる
+    （screenList）ので、そこから引いてそのまま連ねる——前後も目次も通し番号も
+    サイトの連なりのもの。帯は付けない（ProfileScreen を見ること）。
+
+    構造化データは列の先頭にだけ載せる（firstOnly）。プロフィールは入口より
+    後ろに並ぶので、ふつうは載らない——サイトの名乗り（入口の Person）と同じ
+    人を、連なりの途中でもう一度名乗らない。
+  */
+  if (counted.profile) {
+    const at = stepAt(siteList, asked)
+    const seq = sequence(siteList, at)
+    const current = site[at]
+    if (!seq || current?.kind !== 'profile') return c.notFound()
+    return screenPage(c, seq, {
+      node: current.screen.node,
+      description: current.screen.description,
+      jsonLd: firstOnly(seq, siteJsonLd(members)),
+      theme,
+      sidebar: <SiteIdentity solo={solo} />,
+      adminPath: `/admin/members/${member.id}/edit`,
+    })
   }
 
   /*
@@ -1545,31 +1912,12 @@ async function renderMemberScreen(
   const screens = memberScreens(
     member,
     band ? (
-      <Band href={band.href} label="このメンバーの Projects" app={band.app} work={band.work} />
+      <Band href={band.href} label="このメンバーのつくったもの" app={band.app} work={band.work} />
     ) : null,
   )
+  const own = screens.map((screen) => memberStep(member, screen, TEAM_TOC))
 
-  const own: Step[] = screens.map((screen) => ({
-    /*
-      割られた画面（/career/2）も同じ節として数える。サイトの画面の navKey
-      （ブロックの slug）と取り合わないよう、頭に印を付ける
-    */
-    navKey: `member:${screen.key}`,
-    href: memberHref(member.slug, screen.key, screen.page),
-    // 個人ページに絞り込みは無いので、正の URL は開いた URL と同じ
-    canonical: memberHref(member.slug, screen.key, screen.page),
-    /*
-      ページャが名乗る名前。目次には出さない（目次はサイトのもの）。1枚目は
-      名前で呼ぶ——About から戻る手が「← 前」ではなく「← 岡崎 昂功」になる
-    */
-    nav: screen.nav ?? member.name,
-    title: screen.nav
-      ? `${member.name} · ${screen.nav} — ${SITE.name}`
-      : `${member.name} — ${SITE.name}`,
-  }))
-
-  // 1枚目は /members/<slug> だけで開く。名指し（3語目）では当たらない
-  const index = stepAt(own, want === null ? null : memberHref(member.slug, want.key, want.page))
+  const index = stepAt(own, asked)
   const step = own[index]
   const current = screens[index]
   if (!step || !current) return c.notFound()
@@ -1580,28 +1928,29 @@ async function renderMemberScreen(
     節（ふつうは Contact）へ出る。Team の画面自身の「次」は変えない——個人
     ページはカードから入る脇の道で、何人いても Team の次は Contact のまま。
 
-    Team を置いていないサイト（カードの担当者名から入る）では、差し込む先が
-    無いので、この人の画面だけで連ねる。
+    目次もこの列から取る。この人の画面は目次に行を持たず（TEAM_TOC）、印は
+    Team に付く——作品1件のページが「載っている一覧」に印を付けるのと同じ
+    借り方で、印を付ける手続きは sequence に任せる。
+
+    Team を置いていないサイト（カードの担当者名から入る）では差し込む先が
+    無いので、めくるのはこの人の画面だけ。目次はサイトのまま（印は無い）。
   */
   const teamEnd = siteList.map((one) => one.navKey).lastIndexOf('team')
   const around =
-    teamEnd < 0 ? own : [...siteList.slice(0, teamEnd + 1), ...own, ...siteList.slice(teamEnd + 1)]
-  const pager = sequence(around, (teamEnd < 0 ? 0 : teamEnd + 1) + index)?.pager ?? null
-
-  /*
-    目次はサイトの目次のまま。印は Team に付ける——作品1件のページが「載って
-    いる一覧」に印を付けるのと同じ借り方で、印を付ける手続きは sequence に任せる
-  */
-  const nav = sequence([...siteList, { ...step, navKey: 'team', nav: null }], siteList.length)?.nav
+    teamEnd < 0
+      ? [...siteList, ...own]
+      : [...siteList.slice(0, teamEnd + 1), ...own, ...siteList.slice(teamEnd + 1)]
+  const spliced = sequence(around, (teamEnd < 0 ? siteList.length : teamEnd + 1) + index)
+  const pager = teamEnd < 0 ? (sequence(own, index)?.pager ?? null) : (spliced?.pager ?? null)
 
   // index は個人ページの中での位置。0（1枚目）にだけ構造化データが載る
-  const seq: Sequence = { index, current: step, nav: nav ?? [], pager }
+  const seq: Sequence = { index, current: step, nav: spliced?.nav ?? [], pager }
 
   return screenPage(c, seq, {
     node: current.node,
     // 説明文もその画面のもの（memberScreens が画面ごとに持っている）
     description: current.description,
-    jsonLd: {
+    jsonLd: firstOnly(seq, {
       '@context': 'https://schema.org',
       ...personJsonLd(member, `${SITE.origin}/members/${member.slug}`, {
         ...(member.github ? { sameAs: [member.github] } : {}),
@@ -1610,7 +1959,7 @@ async function renderMemberScreen(
           ? {}
           : { worksFor: { '@type': 'Organization', name: SITE.name, url: SITE.origin } }),
       }),
-    },
+    }),
     theme,
     // 柱はサイトのもの。個人ページだけの柱に入れ替えると、別のサイトへ飛んだように見える
     sidebar: <SiteIdentity solo={solo} />,
@@ -1749,17 +2098,25 @@ publicRoutes.get('/sitemap.xml', async (c) => {
     /*
       入口。置いたものが全部下書きでも 200 で「まだ何も置いていません」を出す
       （オーナーが自分のサイトから締め出されないための分岐）ので、画面の列が
-      空でもここは在る。
+      空でもここは在る。例外は列の先頭がプロフィールのとき（1人のサイトで
+      Hero を外し Team を先頭に置いた構成）で、/ はその1枚目へ送るだけなので
+      載せない——送る元の URL を並べない（/apps や /team と同じ）。
     */
-    '/',
+    ...(screens[0]?.kind === 'profile' ? [] : ['/']),
     /*
       トップの画面。並べるのは href ではなく canonical——1枚目は / と /<slug> の
       2つの URL で開けるので、正の1つだけを出す（その1枚目の正は上の / と
-      同じ文字列になる。重なりは下で落とす）。
+      同じ文字列になる。重なりは下で落とす）。1人のサイトではプロフィールの
+      画面（/members/<slug> …）もここに入り、/team は入らない（301 で寄せる元）。
     */
     ...siteSteps(screens, { kind: null, member: null }).map((step) => step.canonical),
     // 縦に積んだ全体版。正が自分自身になったので、ここに並ぶ資格がある
     '/all',
+    /*
+      個人ページ。1人のサイトのプロフィールは上のサイトの画面と同じ URL に
+      なる（重なりは下で落とす）。Team を置いていないサイトや2人以上のサイトでは、
+      ここにしか出てこない
+    */
     ...members.flatMap((member) =>
       memberScreens(member, null).map((screen) => memberHref(member.slug, screen.key, screen.page)),
     ),
@@ -1786,13 +2143,19 @@ publicRoutes.get('/sitemap.xml', async (c) => {
 
   同じ KV にはログイン試行回数（login:<メールアドレス>）も入っている。
   ここでキーの形を縛らないと、そのまま読み出せてしまう。
-  avatars/ 配下の、こちらが付けた名前だけを通す。
+  通すのは、こちらが付けた名前の2つの置き場だけ——avatars/（メンバーの顔）と
+  items/（作品のスクリーンショット）。名前は src/routes/admin.tsx の saveImage が
+  付ける形（英数字で始まり、英数字と . _ - だけ）。
+
+  置き場を足すときは、ここの ( | ) に1語足すだけにすること。形の検査
+  （名前の文字の種類と、/ を1つしか含まないこと）を緩めて通すと、
+  login: の記録や、../ で置き場の外を指すキーが届くようになる。
 */
-const AVATAR_KEY = /^avatars\/[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/
+const IMAGE_KEY = /^(?:avatars|items)\/[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/
 
 publicRoutes.get('/images/*', async (c) => {
   const key = c.req.path.replace(/^\/images\//, '')
-  if (!AVATAR_KEY.test(key)) return c.notFound()
+  if (!IMAGE_KEY.test(key)) return c.notFound()
 
   const object = await c.env.MEDIA.getWithMetadata<{ contentType?: string }>(key, 'arrayBuffer')
   if (!object.value) return c.notFound()

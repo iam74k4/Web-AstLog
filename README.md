@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | 実行環境 | Cloudflare Workers | 常時起動のサーバーを持たずに済む |
 | データ | D1（SQLite） | メンバーと Projects（個人開発 / 業務） |
-| 画像 | KV | アバター。R2 が未有効なので当面こちら |
+| 画像 | KV | アバター（`avatars/`）と作品のスクリーンショット（`items/`）。R2 が未有効なので当面こちら |
 | 言語 | TypeScript | |
 | ルーティング・描画 | Hono（JSX でサーバーサイドレンダリング） | クライアント側のフレームワークを持たない |
 | DB | Drizzle ORM | スキーマは TypeScript が正、SQL は生成する |
@@ -30,6 +30,11 @@
 割られた画面はどれも `h1` をちょうど1つ持ち、題も説明文も canonical も画面ごとに違う。
 機械に読ませる口として `/robots.txt` と `/sitemap.xml` があり、どちらも
 （手で並べた表ではなく）公開ページと同じ式から数え上げている。
+
+公開中のメンバーが1人のあいだは、サイトはその人として名乗る。Team の画面の代わりに
+その人のプロフィール（`/members/<slug>` と About / Skills / Career）がサイトの連なりに
+入り、目次では「Profile」の1行になる。柱は入口（Hero が名乗る）以外のどの画面でも
+名前と職種を出す。2人目を公開すると Team と器の名乗りに戻る（決まりは `CLAUDE.md`）。
 
 ## 動かす
 
@@ -62,9 +67,10 @@ npm run check:contrast # 入口の月の上で文字が読めるか（ブラウ�
 `check:fit` と `check:contrast` の2つだけは毛色が違う。`npm test` は workerd の中で動くので版面を組む
 エンジンが居らず、このサイトの名前そのものである不変条件——**公開ページは
 スクロールしない**——を1行も測れない。そこで `wrangler dev` を自分で立て、
-3骨格 × 3ビューポート（390x844 / 768x1024 / 1440x900）× `/sitemap.xml` に載った
-全 URL を Chromium で開き、ページの動きと節の弁の開きを測る。`/all` だけは
-縦に伸びてよいので測らない。初回は実体のブラウザが要る。
+3骨格 × 3ビューポート（390x844 / 768x1024 / 1440x900。電話と板の2つは指＝
+`pointer: coarse` で）× `/sitemap.xml` に載った全 URL を Chromium で開き、ページの
+動きと節の弁の開き、それに**見出しの錨**（めくっても節の見出しが同じ高さに居るか）を
+測る。`/all` だけは縦に伸びてよいので測らない。初回は実体のブラウザが要る。
 
 `check:contrast` も同じ理由でブラウザが要る。入口と締め（Contact）の画面の背景には
 粒子で焼いた三日月があり、いちばん明るい所は白、見出しも `#f2f2f4` なので、置き方を間違えると
@@ -107,9 +113,17 @@ npm run deploy
 `items.slug`（作品の恒久リンク `/apps/item/<slug>`）だけは、マイグレーションでは
 埋まらない。SQLite の `ALTER TABLE ADD COLUMN` は `NOT NULL` に定数の既定値を
 要求し、その1つの値が既存行で重なって unique を張れないため、列は nullable で
-入る。既にある作品は `slug` が `null` のまま——サイトは壊れず、カードの題が
-リンクにならないだけ。管理画面から一度保存すれば埋まり、一覧には
+入る。既にある作品は `slug` が `null` のまま——サイトは壊れず、そのカードが
+押せる面にならない（題は素の字のまま、ホバーでも浮かない）うえ、作品同士を
+めくる列にも入らないだけ。管理画面から一度保存すれば埋まり、一覧には
 「恒久リンクなし（保存すると付く）」と出る。
+
+`items.body`（作品の本文）・`items.image_url`（スクリーンショット）・`items.image_alt`
+（その代替テキスト）はマイグレーションで入り、既にある作品は本文と代替テキストが
+空、画像は無しのまま——作品のページに `figure` も本文も出ず、カードにサムネイルも
+出ないだけ。`seed.sql` も書かない（本人の作品の中身を作り話で埋めない）。管理画面の
+作品のフォームから書く。画像は KV の `items/` に置かれ、`/images/items/…` から出る。
+画像を公開するときは代替テキストが要る。
 
 Actions の deploy ワークフロー（手動実行）でも同じことができる。使うなら
 `CLOUDFLARE_API_TOKEN` をリポジトリの secret に入れる。
@@ -129,6 +143,7 @@ src/
   site.ts            サイト全体の文言と宛先（管理画面からは変えない）
   theme.ts           見た目のプリセット。選べる値はここが正
   blocks.ts          置けるブロックの種類と、1画面あたりの件数。ここが正
+                     個人ページを画面に割る単位（memberUnits / memberScreenCount）も
   env.ts             バインディングの型
   db/
     schema.ts        テーブル定義。ここが正
@@ -138,6 +153,7 @@ src/
     format.ts        テキストの解釈とフォーム値の受け取り
     paginate.ts      一覧を1画面ぶんずつに割る（chunk / screenCount）
     sequence.ts      画面の連なり。前後・目次・通し番号・canonical をここで組む
+                     目次のまとめ単位（tocKey）は節（navKey）より大きくてよい
   routes/
     public.tsx       画面ごとの URL・/members/:slug の連なり・作品の恒久リンク
                      /all・/robots.txt・/sitemap.xml・/images/*
@@ -146,6 +162,7 @@ src/
     Layout.tsx       公開ページの外枠
     AdminLayout.tsx  管理画面の外枠
     components.tsx   画面を組む部品。main の直接の子は Screen / Hero だけが作る
+                     外枠はどれも HtmlDocument で <html> を開く（DOCTYPE を出す）
     icons.tsx        インライン SVG
 public/
   app.css            全画面のスタイル。値は :root のトークンだけで決める

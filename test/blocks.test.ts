@@ -45,8 +45,11 @@ describe('トップの構成', () => {
 
     const html = await (await get('/all')).text()
     expect(html).toContain('class="hero"')
-    // 個人開発と業務は Projects の1つの節に並ぶ
-    expect(sectionIds(html)).toEqual(['projects', 'team', 'contact'])
+    /*
+      個人開発と業務は Projects の1つの節に並ぶ。公開中が1人なので、Team の
+      位置にはその人のプロフィールが1つの節として入る（id も Profile）
+    */
+    expect(sectionIds(html)).toEqual(['projects', 'profile', 'contact'])
   })
 
   it('置いた順に出る', async () => {
@@ -54,11 +57,16 @@ describe('トップの構成', () => {
     await seedItem({ type: 'app' })
     await place([{ type: 'team' }, { type: 'contact' }, { type: 'projects' }])
 
+    expect(sectionIds(await (await get('/all')).text())).toEqual(['profile', 'contact', 'projects'])
+
+    // 2人目を公開すると、同じ位置が Team の節に戻る
+    await seedMember({ slug: 'hoshino', name: '星野' })
     expect(sectionIds(await (await get('/all')).text())).toEqual(['team', 'contact', 'projects'])
   })
 
   it('目次も置いた順に従う', async () => {
     await seedMember()
+    await seedMember({ slug: 'hoshino', name: '星野' })
     await place([{ type: 'contact' }, { type: 'team' }])
 
     const html = await (await get('/all')).text()
@@ -121,7 +129,12 @@ describe('トップの構成', () => {
 */
 describe('画面ごとの URL', () => {
   it('置いた順の先頭が / に出る', async () => {
+    /*
+      2人のサイト。1人だと Team はその人のプロフィールに置き換わる
+      （test/public.test.ts の「1人のサイトの連なり」）
+    */
     await seedMember()
+    await seedMember({ slug: 'hoshino', name: '星野' })
     await place([{ type: 'team' }, { type: 'contact' }])
 
     const html = await (await get('/')).text()
@@ -189,9 +202,10 @@ describe('管理の構成', () => {
     // 足したものは Contact の手前に入る
     const rows = await db().query.blocks.findMany({ orderBy: (t, { asc }) => [asc(t.sortOrder)] })
     expect(rows.map((row) => row.type)).toEqual(['hero', 'projects', 'team', 'note', 'contact'])
+    // 公開中が1人なので、Team の行はプロフィールの節として出る
     expect(sectionIds(await (await get('/all')).text())).toEqual([
       'projects',
-      'team',
+      'profile',
       `block-${rows[3]?.id}`,
       'contact',
     ])
