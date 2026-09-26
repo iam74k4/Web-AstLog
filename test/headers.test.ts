@@ -2,7 +2,7 @@ import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:
 import assetHeaders from 'virtual:repo:public/_headers'
 import { beforeEach, describe, expect, it } from 'vitest'
 import app from '../src/index'
-import { get, resetDb, seedItem, seedMember, signIn, uncachedEnv } from './helpers'
+import { get, okText, resetDb, seedItem, seedMember, signIn, uncachedEnv } from './helpers'
 
 beforeEach(resetDb)
 
@@ -84,7 +84,7 @@ describe('応答のヘッダ', () => {
     await seedMember()
     await seedItem({ slug: 'appmixer' })
     for (const path of ['/', '/apps/item/appmixer', '/all', '/members/okazaki']) {
-      const html = await (await get(path)).text()
+      const html = await okText(path)
       const scripts = html.match(/<script\b[^>]*>/g) ?? []
       for (const tag of scripts) expect(tag, path).toBe('<script type="application/ld+json">')
     }
@@ -189,9 +189,17 @@ describe('応答のヘッダ', () => {
     const sheets = (html: string) =>
       [...html.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map((found) => found[1])
 
-    // 公開ページと 404 は app.css だけ。管理画面の規則を訪問者に配らない
-    for (const path of ['/', '/projects', '/no-such-page']) {
-      const links = sheets(await (await get(path)).text())
+    // 公開ページと 404 は app.css だけ。管理画面の規則を訪問者に配らない。
+    // /projects は作品が無いと 404 になり、404 のページを公開ページとして読んでいた
+    await seedItem()
+    const missing = await get('/no-such-page')
+    expect(missing.status).toBe(404)
+    for (const [path, html] of [
+      ['/', await okText('/')],
+      ['/projects', await okText('/projects')],
+      ['/no-such-page', await missing.text()],
+    ] as const) {
+      const links = sheets(html)
       expect(links, path).toHaveLength(1)
       expect(links[0], path).toMatch(version)
       expect(links[0], path).toMatch(/^\/app\.css/)
@@ -200,7 +208,7 @@ describe('応答のヘッダ', () => {
     const signed = await signIn()
     for (const [label, html] of [
       ['壁の中', await (await signed('/admin/items')).text()],
-      ['ログイン', await (await get('/admin/login')).text()],
+      ['ログイン', await okText('/admin/login')],
     ] as const) {
       const links = sheets(html)
       expect(

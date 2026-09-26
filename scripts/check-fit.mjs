@@ -9,16 +9,31 @@
 
   だから測るほうを1つのコマンドにする。`npm run check:fit`。
 
-  測るのは3つ。
-    (1) ページそのものが動くか        document.scrollingElement の scrollHeight - clientHeight
-    (2) 節の弁（overflow: auto）が開くか  節ごとの scrollHeight - clientHeight
-    (3) 見出しの錨がそろっているか    同じ骨格・寸法の中で、節の見出しの上端の y
-  (1)(2) はどちらも設計サイズでは 0 でなければならない。弁が開くのは
-  public/app.css が名前を付けている3つの条件——拡大 200% 以上・画面高 400px
-  未満・書体差——のときだけで、設計サイズで開いたなら弁の出番ではなく
-  perScreen の不具合。
+  ## 何を測るか
 
-  (3) は「めくっても見出しが跳ねない」。割られた画面の節は上揃えで、見出しは
+  **幾何で測る。** 以前は「ページが動くか」を scrollingElement の
+  scrollHeight − clientHeight で見ていた。html と body は overflow: clip なので、
+  外枠（.shell の高さ）や弁（節の overflow: auto）が外れて中身が画面の下へ
+  はみ出しても、clip の下では scrollHeight が伸びないことがあり、切り取られた
+  ぶんを 0px と報告した（CSS を差し替えて再現した: 画面の外に 14px 出ていて 0）。
+  切り取られた中身はスクロールでもフォーカスでも届かない——CLAUDE.md がいちばん
+  恐れている壊れ方が、番人から見えなかった。いまは箱の位置そのものを見る。
+
+    (1) 外枠        .shell の下端 ≤ 画面の高さ、.shell の高さ = 画面の高さ
+    (2) 切り取り    main と柱（.rail）の見えている子孫の下端 ≤ 画面の高さ
+                    （弁が開いた節の中身は除く。そちらは (3) で数える）
+    (3) 弁          節ごとに scrollHeight ≤ clientHeight
+    (4) 効いているか 計算済みのスタイルで、html と body の overflow が clip、
+                    節の overflow-y が auto、柱が骨格どおりの場所（柱が左に立つ骨格は
+                    本文の左、ほかは本文の上）に居ること
+    (5) 見出しの錨   同じ骨格・書体・寸法・姿の中で、節の見出しの上端の y
+
+  (4) は test/theme.test.ts が CSS を文字列で読んで見ている決まりの、実際に効いた
+  姿。文字列の検査は「その規則が書いてあるか」しか見られず、後ろで別のセレクタに
+  上書きされても（外枠の @supports の末尾に `.shell { height: auto }` を足しても）
+  緑のままだった。ここはブラウザが解いた結果を見るので、書き方に左右されない。
+
+  (5) は「めくっても見出しが跳ねない」。割られた画面の節は上揃えで、見出しは
   どの画面でも同じ高さから始まる（app.css の「画面に収める外枠」）。上下中央に
   寄せていたころは、見出しの高さが中身の量で決まり、/projects 91px →
   /projects/2 124px → /projects/4 243px と跳ねていた（= rail @390x844）。
@@ -27,27 +42,53 @@
   作品のページ（1枚目と本文の画面 Story）は「← 一覧に戻る」が見出しの上に立つので、
   その札の上端で比べる（見出しより前に何かがある画面は、節の最初の子の上端が錨）。
 
-  (1) は documentElement ではなく document.scrollingElement で測る。
-  以前このサイトの HTML には `<!DOCTYPE html>` が無く、ブラウザは互換モードで
-  組んでいた。互換モードでは scrollingElement が body になり、
-  documentElement.clientHeight は画面の高さではなく中身の高さを返す——つまり
-  documentElement で測ると、差はどのページでも必ず 0 になり、検査は永久に緑の
-  まま何も見なかった（縦に 3275px ある /all でさえ 0 と出た。実測で確認した）。
-  いまは外枠がすべて src/ui/components.tsx の HtmlDocument を通って DOCTYPE を
-  出すので標準モードで、scrollingElement は html を指す。それでも
-  scrollingElement で測るのは、どちらのモードでも「動く箱」を指す正しい測り方
-  だから。外枠が1つ DOCTYPE を落としても、この検査はその画面を正しく測る
-  （落としたこと自体は test/public.test.ts の「文書の外枠」が捕まえる）。
-
   1px までは許す。連動する文字の段は clamp() で決まるので、幅しだいで端数が出る。
+
+  成功行の「いちばん惜しい」は、節の余り（中身を置ける高さ − 中身の高さ）の最小。
+  以前は「開いた弁のうち最大」を出していて、開いた弁は失敗なので、合格したときは
+  いつも 0px だった——余裕がどれだけ残っているかは一度も出なかった。
+
+  ## 何の中身で測るか
+
+  3つの中身を、それぞれ使い捨ての D1 に入れて測る（手元の D1 には触らない）。
+
+    seed               seed.sql。本人のサイトそのもの（1人・打ち込むブロック無し）
+    fixture（複数人）  scripts/lib/fit-fixture.mjs が src/blocks.ts の上限から作る、
+                       上限ちょうどの複数人のサイト（打ち込むブロック6種 × 2形・
+                       6人の Team・長い肩書き・上限の大見出し・紹介文・経歴・
+                       いちばん重いカードの行・本文の画面）
+    fixture（1人）     同じ中身で公開中のメンバーを1人にしたもの。Team の位置に
+                       プロフィールが入り、柱が名前と長い職種で名乗る姿
+
+  seed だけを測っていたころは、打ち込むブロックも 3人以上の Team も本文の画面も
+  一度も測られておらず、src/blocks.ts の maxChars は手で測った数のまま守られて
+  いなかった。字の段や余白を動かす変更が来ても、検査はその姿を見ないまま緑を出した。
+
+  どちらの中身も、訪問者の姿とログインした姿（柱に「管理画面」の入口が出る）の
+  両方で測る。ログインした姿は、セッションを使い捨ての D1 に直接作り、クッキーを
+  渡して開く（OAuth は通らない）。
+
+  骨格と書体は body の data-layout / data-typeface を差し替えて見る（下の measure）。
+  寸法3 × 骨格3 × 書体3 = 27通りを、URL ごと・姿ごとに。
 
   `npm test` とは分けてある。あちらは workerd の中で D1 と KV ごと動かす場所で、
   こちらは本物の版面が要る。混ぜると、片方のために片方の実行環境を曲げることになる。
+
+  ## 手元の dev を測る・絞る
+
+  FIT_ONLY=seed,many,solo で測る中身を絞れる（CI は絞らない）。
+
+  FIT_BASE を渡すと、そこに立っている dev サーバをそのまま測る（中身はその D1 の
+  まま・訪問者の姿だけ。セッションを作れないので）。FIT_PORT は自分で立てるときの
+  ポート（2つの中身を同じポートで順に立てる）。
 */
 
+import { createHash, randomBytes } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
 import process from 'node:process'
 import { chromium } from 'playwright'
-import { devServer } from './lib/dev-server.mjs'
+import { devServer, ROOT, scratchState } from './lib/dev-server.mjs'
+import { fixture } from './lib/fit-fixture.mjs'
 import { keysOf } from './lib/theme.mjs'
 
 /*
@@ -70,6 +111,12 @@ const VIEWPORTS = [
 ]
 
 /*
+  柱が本文の左に立つ骨格と、その幅。ほかの骨格・幅では柱は本文の上の帯になる。
+  app.css の「画面に収める外枠」の 900 以上（rail だけが .shell を1段にする）と同じ。
+*/
+const BESIDE = { rail: 900 }
+
+/*
   弁の付け先。public/app.css の
   `:where(body[data-layout]:not([data-whole])) main > :is(.hero, section)`
   と同じ相手を、同じ書き方で選ぶ。クラスを列挙すると、これから足す節が漏れる。
@@ -85,6 +132,24 @@ const SLACK = 1
 */
 const ANCHORED = 'main > section:not(.moonlit)'
 
+// src/lib/auth.ts の SESSION_COOKIE と sessionKey（SHA-256 の16進）と同じ
+const SESSION_COOKIE = 'nx_session'
+
+/*
+  ログインした姿のためのセッション。使い捨ての D1 に owner を1人と、その
+  セッションを1本、直接入れる。D1 にはクッキーの値のハッシュしか置かない
+  （src/lib/auth.ts の sessionKey）ので、同じ式で作る。
+*/
+function session() {
+  const token = randomBytes(32).toString('hex')
+  const id = createHash('sha256').update(token).digest('hex')
+  const sql = [
+    "INSERT INTO users (id, role) VALUES (9001, 'owner');",
+    `INSERT INTO sessions (id, user_id, expires_at) VALUES ('${id}', 9001, '2999-01-01T00:00:00.000Z');`,
+  ].join('\n')
+  return { token, sql }
+}
+
 /*
   測る URL は sitemap.xml から引く。
 
@@ -93,132 +158,204 @@ const ANCHORED = 'main > section:not(.moonlit)'
   （siteSteps / memberScreens / itemHref / itemStoryHref）から数え上げているので、
   新しい連なりを足せばこの検査の対象も自動で増える。
 
-  そのぶん、D1 に無い姿は測らない。作品の本文の画面（…/story）は本文を書いた
-  作品にしか無く、seed.sql は本文を書かない（本人の作品の中身を作り話で埋めない）
-  ので、seed のままでは1枚も測られない。本文の画面の上限は src/blocks.ts の
-  MAX_CHARS.itemBody に 27通りの実測があり、画面を測りたいときは本文を書いた作品を
-  置いてから回すこと（成功行の URL の数が本文のある作品の数だけ増える）。
+  **少なすぎたら止める。** ここが無いと、この検査は黙って空振りする——D1 が空なら
+  画面がほとんど生えず、それでも1本ずつは 200 で返るので「✓」で終わる。
+  seed は 17 本（1人のサイトでは /team がプロフィールへの 301 で sitemap から外れる）、
+  fixture は作った中身から必ず生える URL（fit-fixture.mjs の expect）を1本ずつ
+  突き合わせる。本当に画面を減らしたなら、この数も一緒に下げること——その変更が
+  diff に出ることに意味がある。
 */
-async function screenPaths(base) {
+async function screenPaths(base, run) {
   const response = await fetch(`${base}/sitemap.xml`)
   if (!response.ok) throw new Error(`/sitemap.xml が ${response.status} を返した`)
 
   const xml = await response.text()
   const all = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((found) => new URL(found[1]).pathname)
-  if (all.length === 0) throw new Error('sitemap.xml に URL が1つも無い')
-
-  /*
-    少なすぎたら止める。**ここが無いと、この検査は黙って空振りする。**
-
-    数え上げる相手を sitemap から引いているので、D1 が空（migrate / seed を
-    忘れた新しいワークツリー、など）だと画面がほとんど生えず、sitemap が
-    数本しか返さない。それでも1本ずつは 200 で返るので、検査は
-    「✓ 9 通り」と緑で終わる——**測っていないのに合格**になる。
-    実際に再現した（paths を1本に絞ると 3骨格 × 3寸法 × 1URL = 9通りで緑、
-    終了コード 0）。
-
-    このリポジトリは同じ型の事故を3回やっている（規則をそのまま引用した
-    コメントに当たって永久に緑になった件）。床は低めに置いてあり、
-    「中身が減った」ではなく「DB が立っていない」を捕まえるためのもの。
-    本当に画面を減らしたなら、この数も一緒に下げること——その変更が
-    diff に出ることに意味がある。
-  */
-  const FLOOR = 5
-  if (all.length < FLOOR) {
-    throw new Error(
-      `sitemap.xml の URL が ${all.length} 本しかない（最低 ${FLOOR} 本を期待）。` +
-        'D1 が空のまま測ると、ほとんど何も測らずに緑で終わる。' +
-        'npm run db:migrate:local と npm run db:seed:local を先に通すこと',
-    )
-  }
 
   // 縦に伸びてよいのは全体ページだけ（body[data-whole]）。ここだけは測らない
   const paths = all.filter((path) => path !== '/all')
   if (paths.length === all.length) {
     console.warn('注意: sitemap に /all が無い。全体ページの除外が空振りしている')
   }
+
+  if (paths.length < run.least) {
+    throw new Error(
+      `${run.label}: sitemap.xml の URL が ${paths.length} 本しかない（${run.least} 本を期待）。` +
+        '中身が入っていないまま測ると、ほとんど何も測らずに緑で終わる',
+    )
+  }
+  const missing = (run.expect ?? []).filter((path) => !paths.includes(path))
+  if (missing.length) {
+    throw new Error(
+      `${run.label}: 中身から生えるはずの画面が sitemap に無い: ${missing.join(', ')}。` +
+        '測ったつもりで、その画面は測られない',
+    )
+  }
   return paths
 }
 
 /*
-  骨格は body の data-layout を差し替えて見る。
+  1つの姿を測る。ページの中で動く（page.evaluate）。
 
-  マークアップはどのプリセットでも同じで、変わるのは app.css の [data-layout]
-  側だけ（src/ui/Layout.tsx がそう書いてあり、theme.layout を読むのもあの3行
-  しか無い）。だから属性を差し替えれば、管理画面で保存したのと同じ姿になる。
-  保存の経路を使うと owner のアカウントと D1 への書き込みが要り、CI では
-  seed に居ない人でログインすることになる——測りたいのは版面であって、
-  設定の保存経路ではない。
+  骨格と書体は body の data-layout / data-typeface を差し替えて見る。マークアップは
+  どのプリセットでも同じで、変わるのは app.css の [data-layout] / [data-typeface]
+  側だけ（src/ui/Layout.tsx がそう書いてある）。だから属性を差し替えれば、管理画面で
+  保存したのと同じ姿になる。保存の経路を通すと、測りたい版面ではなく設定の保存を
+  測ることになる。
 */
-const measure = ([layout, panels, anchored, slack]) => {
+const measure = ([layout, typeface, cfg]) => {
   document.body.dataset.layout = layout
+  document.body.dataset.typeface = typeface
 
-  // 標準モード（いまのこのサイト）では html、互換モード（DOCTYPE が無い）では body
+  const height = innerHeight
+  const slack = cfg.slack
+  const problems = []
+  const round = (n) => Math.round(n * 10) / 10
+  const nameOf = (el) =>
+    el.id
+      ? `#${el.id}`
+      : `${el.tagName.toLowerCase()}${el.classList.length ? `.${[...el.classList].join('.')}` : ''}`
+
+  // (4) 外側は clip。hidden は「見えないだけのスクロール箱」、visible は伸びるページ
+  for (const el of [document.documentElement, document.body]) {
+    const style = getComputedStyle(el)
+    if (style.overflowX !== 'clip' || style.overflowY !== 'clip') {
+      problems.push(
+        `${el.tagName.toLowerCase()} の overflow が ${style.overflowX} / ${style.overflowY}（clip のはず）`,
+      )
+    }
+  }
+
+  // (1) 外枠
+  const shell = document.querySelector('.shell')
+  const main = document.querySelector('main')
+  const rail = document.querySelector('.rail')
+  if (!shell || !main || !rail) {
+    return { problems: ['.shell / main / .rail のどれかが無い'], panels: [], anchor: null, page: 0 }
+  }
+  const frame = shell.getBoundingClientRect()
+  if (Math.abs(frame.height - height) > slack) {
+    problems.push(`.shell の高さが ${round(frame.height)}px（画面は ${height}px）`)
+  }
+  if (frame.bottom > height + slack) problems.push(`.shell の下端が ${round(frame.bottom)}px`)
+
+  // (4) 柱の場所。骨格どおりに解けているか
+  const railBox = rail.getBoundingClientRect()
+  const mainBox = main.getBoundingClientRect()
+  const beside = cfg.beside[layout] !== undefined && innerWidth >= cfg.beside[layout]
+  if (beside ? railBox.right > mainBox.left + slack : railBox.bottom > mainBox.top + slack) {
+    problems.push(
+      `柱が本文の${beside ? '左' : '上'}に居ない（柱 ${round(railBox.bottom)} / 本文 ${round(mainBox.top)}）`,
+    )
+  }
+
+  // (3) 弁と、節の余り
+  const boxes = [...document.querySelectorAll(cfg.panels)]
+  const panels = boxes.map((box) => {
+    const style = getComputedStyle(box)
+    if (style.overflowY !== 'auto')
+      problems.push(`節 ${nameOf(box)} の overflow-y が ${style.overflowY}（auto のはず）`)
+    const over = Math.max(0, box.scrollHeight - box.clientHeight)
+    /*
+      余り。中身を置ける高さ（clientHeight − 上下の padding）から、流れに乗った子の
+      外形（margin 込み）の上端〜下端を引く。絶対配置の子（月）は数えない
+    */
+    const kids = [...box.children].filter((kid) => {
+      const kidStyle = getComputedStyle(kid)
+      return kidStyle.position !== 'absolute' && kidStyle.display !== 'none'
+    })
+    let free = null
+    if (kids.length) {
+      const top = Math.min(
+        ...kids.map(
+          (kid) => kid.getBoundingClientRect().top - parseFloat(getComputedStyle(kid).marginTop),
+        ),
+      )
+      const bottom = Math.max(
+        ...kids.map(
+          (kid) =>
+            kid.getBoundingClientRect().bottom + parseFloat(getComputedStyle(kid).marginBottom),
+        ),
+      )
+      const inner =
+        box.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)
+      free = round(inner - (bottom - top))
+    }
+    return { box, name: nameOf(box), over, free }
+  })
+
+  // (2) 切り取り。弁の開いた節の中は (3) が数えるので除く
+  const open = panels.filter((panel) => panel.over > slack).map((panel) => panel.box)
+  const strays = []
+  for (const el of [...rail.querySelectorAll('*'), ...main.querySelectorAll('*')]) {
+    if (open.some((box) => box.contains(el))) continue
+    const rect = el.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) continue
+    if (rect.bottom <= height + slack) continue
+    if (getComputedStyle(el).visibility === 'hidden') continue
+    strays.push(`${nameOf(el)} ${round(rect.bottom)}px`)
+  }
+  if (strays.length) {
+    problems.push(
+      `画面の外（下端 ${height}px より下）で切られている: ${strays.slice(0, 3).join(', ')}${strays.length > 3 ? ` ほか ${strays.length - 3}` : ''}`,
+    )
+  }
+
+  // 以前の測り方も残す。標準モードでは scrollingElement が html で、動けば出る
   const scroller = document.scrollingElement ?? document.documentElement
-  const boxes = [...document.querySelectorAll(panels)]
+  const page = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+  if (page > slack) problems.push(`ページが ${page}px 動く`)
 
   /*
-    錨の y。節の最初の h1 の上端——ただし h1 より前に別の子（作品のページの
+    (5) 錨の y。節の最初の h1 の上端——ただし h1 より前に別の子（作品のページの
     「← 一覧に戻る」）が立つ画面では、その最初の子の上端。絶対配置の子
     （月）と display: none の子は並びに数えない。
   */
-  const panel = document.querySelector(anchored)
+  const anchored = document.querySelector(cfg.anchored)
   let anchor = null
-  if (panel) {
-    const kids = [...panel.children].filter((kid) => {
+  if (anchored) {
+    const kids = [...anchored.children].filter((kid) => {
       const style = getComputedStyle(kid)
       return style.position !== 'absolute' && style.display !== 'none'
     })
-    const heading = panel.querySelector('h1')
+    const heading = anchored.querySelector('h1')
     const first = kids[0]
     const leader = first && heading && !first.contains(heading) ? first : (heading ?? first)
-    anchor = leader ? Math.round(leader.getBoundingClientRect().top * 10) / 10 : null
+    anchor = leader ? round(leader.getBoundingClientRect().top) : null
   }
 
   return {
-    page: Math.max(0, scroller.scrollHeight - scroller.clientHeight),
-    open: boxes
-      .map((box) => ({
-        name: box.id || box.className || box.tagName.toLowerCase(),
-        over: Math.max(0, box.scrollHeight - box.clientHeight),
-      }))
-      .filter((box) => box.over > slack),
-    panels: boxes.length,
+    problems,
+    panels: panels.map(({ name, over, free }) => ({ name, over, free })),
     anchor,
+    page,
   }
 }
 
-async function main() {
-  // FIT_BASE を渡したときだけ、そこに向けて測る（手元の dev を使いたいとき）
-  const { base, stop } = await devServer(process.env.FIT_BASE, Number(process.env.FIT_PORT ?? 8788))
-
-  const browser = await chromium.launch()
+/*
+  1つの中身（seed か fixture）を測る。base に立っているサーバの sitemap の全 URL を、
+  寸法3 × 姿（訪問者・ログイン）× 骨格3 × 書体3 で。
+*/
+async function measureRun(browser, base, run, layouts, typefaces) {
   const failures = []
-  let checked = 0
-  let worstPage = 0
-  let worstValve = 0
-  let urlCount = 0
-  let layoutCount = 0
-  // 骨格 × 寸法ごとの、見出しの錨の y（URL ごと）
   const anchors = new Map()
-  let worstDrift = 0
+  let checked = 0
+  let closest = { free: Number.POSITIVE_INFINITY, where: '' }
 
-  try {
-    const layouts = keysOf('LAYOUTS')
-    const paths = await screenPaths(base)
-    urlCount = paths.length
-    layoutCount = layouts.length
-    console.log(
-      `画面に収まっているか — ${layoutCount}骨格 × ${VIEWPORTS.length}ビューポート × ${paths.length}URL = ${layouts.length * VIEWPORTS.length * paths.length}通り`,
-    )
+  const paths = await screenPaths(base, run)
+  const poses = run.token ? ['訪問者', 'ログイン'] : ['訪問者']
 
-    for (const viewport of VIEWPORTS) {
+  for (const viewport of VIEWPORTS) {
+    for (const pose of poses) {
       const context = await browser.newContext({
         viewport: { width: viewport.width, height: viewport.height },
         hasTouch: viewport.touch,
       })
+      if (pose === 'ログイン') {
+        await context.addCookies([{ name: SESSION_COOKIE, value: run.token, url: base }])
+      }
       const page = await context.newPage()
-      const where = `${viewport.width}x${viewport.height}${viewport.touch ? ' 指' : ''}`
+      const where = `${viewport.width}x${viewport.height}${viewport.touch ? ' 指' : ''}${pose === 'ログイン' ? ' ログイン' : ''}`
 
       for (const path of paths) {
         const response = await page.goto(base + path, { waitUntil: 'load' })
@@ -227,42 +364,56 @@ async function main() {
           failures.push(`${where} ${path} — ${status} が返った（sitemap に載っているのに）`)
           continue
         }
+        // ログインした姿は柱に管理画面への入口が出る。出ていなければ、その姿は測れていない
+        if (pose === 'ログイン' && (await page.locator('.rail a[href^="/admin"]').count()) === 0) {
+          failures.push(
+            `${where} ${path} — ログインしたのに柱に管理画面の入口が無い（姿を測れていない）`,
+          )
+        }
         // 書体が決まる前に測ると、行の高さが見積もりとずれる
         await page.evaluate(() => document.fonts.ready.then(() => true))
 
         for (const layout of layouts) {
-          const found = await page.evaluate(measure, [layout, PANELS, ANCHORED, SLACK])
-          checked += 1
-          if (found.anchor !== null) {
-            const key = `${layout} ${where}`
-            if (!anchors.has(key)) anchors.set(key, [])
-            anchors.get(key).push({ path, y: found.anchor })
-          }
-          worstPage = Math.max(worstPage, found.page)
-          worstValve = Math.max(worstValve, ...found.open.map((box) => box.over), 0)
-
-          if (found.panels === 0) {
-            failures.push(`${layout} ${where} ${path} — 節が1つも無い（${PANELS} に当たらない）`)
-          }
-          if (found.page > SLACK) {
-            failures.push(`${layout} ${where} ${path} — ページが ${found.page}px 動く`)
-          }
-          for (const box of found.open) {
-            failures.push(`${layout} ${where} ${path} — 節「${box.name}」の弁が ${box.over}px 開く`)
+          for (const typeface of typefaces) {
+            const found = await page.evaluate(measure, [
+              layout,
+              typeface,
+              { slack: SLACK, panels: PANELS, anchored: ANCHORED, beside: BESIDE },
+            ])
+            checked += 1
+            const label = `${layout}/${typeface} ${where} ${path}`
+            if (found.anchor !== null) {
+              const key = `${layout}/${typeface} ${where}`
+              if (!anchors.has(key)) anchors.set(key, [])
+              anchors.get(key).push({ path, y: found.anchor })
+            }
+            if (found.panels.length === 0) {
+              failures.push(`${label} — 節が1つも無い（${PANELS} に当たらない）`)
+            }
+            for (const problem of found.problems) failures.push(`${label} — ${problem}`)
+            for (const panel of found.panels) {
+              if (panel.over > SLACK) {
+                failures.push(`${label} — 節「${panel.name}」の弁が ${panel.over}px 開く`)
+              } else if (panel.free !== null && panel.free < -SLACK) {
+                // scrollHeight は整数に丸まる。余りは小数のまま測るので、こちらで拾う
+                failures.push(`${label} — 節「${panel.name}」の中身が ${-panel.free}px はみ出す`)
+              }
+              if (panel.free !== null && panel.free < closest.free) {
+                closest = { free: panel.free, where: label }
+              }
+            }
           }
         }
       }
       await context.close()
     }
-  } finally {
-    await browser.close()
-    stop()
   }
 
   /*
-    見出しの錨。同じ骨格・寸法の中で、いちばん上といちばん下の差が SLACK を
-    超えたら、外れた画面を名指しする（多数派の y から離れているもの）。
+    見出しの錨。同じ骨格・書体・寸法・姿の中で、いちばん上といちばん下の差が
+    SLACK を超えたら、外れた画面を名指しする（多数派の y から離れているもの）。
   */
+  let worstDrift = 0
   for (const [key, list] of anchors) {
     const ys = list.map((one) => one.y)
     const drift = Math.max(...ys) - Math.min(...ys)
@@ -283,22 +434,107 @@ async function main() {
     }
   }
 
-  if (failures.length > 0) {
-    console.error(`\n✗ ${failures.length} 件（${checked} 通り中）`)
-    for (const line of failures) console.error(`  ${line}`)
+  return {
+    failures,
+    checked,
+    urls: paths.length,
+    poses: poses.length,
+    closest,
+    drift: Math.round(worstDrift * 10) / 10,
+  }
+}
+
+async function main() {
+  const layouts = keysOf('LAYOUTS')
+  const typefaces = keysOf('TYPEFACES')
+  const port = Number(process.env.FIT_PORT ?? 8788)
+
+  const many = fixture()
+  const solo = fixture({ solo: true })
+  const runs = process.env.FIT_BASE
+    ? [{ label: '指定の先', base: process.env.FIT_BASE, least: 5 }]
+    : [
+        {
+          key: 'seed',
+          label: 'seed（1人のサイト）',
+          sql: [await readFile(`${ROOT}seed.sql`, 'utf8')],
+          least: 17,
+        },
+        {
+          key: 'many',
+          label: 'fixture（複数人・上限ちょうど）',
+          sql: [many.sql],
+          least: many.expect.length,
+          expect: many.expect,
+        },
+        {
+          key: 'solo',
+          label: 'fixture（1人・上限ちょうど）',
+          sql: [solo.sql],
+          least: solo.expect.length,
+          expect: solo.expect,
+        },
+      ]
+
+  // FIT_ONLY=seed,solo のように、測る中身を絞れる（手元で直しながら回すとき用。CI は全部）
+  const only = process.env.FIT_ONLY?.split(',')
+  const chosen = only ? runs.filter((run) => only.includes(run.key)) : runs
+  if (chosen.length === 0)
+    throw new Error(`FIT_ONLY=${process.env.FIT_ONLY} に当たる中身が無い（seed / many / solo）`)
+
+  const browser = await chromium.launch()
+  const results = []
+  try {
+    for (const run of chosen) {
+      let state = null
+      let server = null
+      try {
+        if (run.sql) {
+          const { token, sql } = session()
+          run.token = token
+          state = await scratchState('fit', [...run.sql, sql])
+        }
+        server = await devServer(run.base, port, state?.dir)
+        console.log(`測る — ${run.label}`)
+        results.push({ run, ...(await measureRun(browser, server.base, run, layouts, typefaces)) })
+      } finally {
+        await server?.stop()
+        await state?.cleanup()
+      }
+    }
+  } finally {
+    await browser.close()
+  }
+
+  const shape = `${layouts.length}骨格 × ${typefaces.length}書体 × ${VIEWPORTS.length}寸法`
+  let failed = 0
+  for (const result of results) {
+    const poses = result.poses > 1 ? ` × ${result.poses}姿` : ''
+    if (result.failures.length > 0) {
+      failed += result.failures.length
+      console.error(
+        `\n✗ ${result.run.label}: ${result.failures.length} 件（${result.checked} 通り中）`,
+      )
+      for (const line of result.failures.slice(0, 80)) console.error(`  ${line}`)
+      if (result.failures.length > 80) console.error(`  …ほか ${result.failures.length - 80} 件`)
+      continue
+    }
+    console.log(
+      `✓ ${result.run.label}: ${result.checked} 通り（${result.urls} URL × ${shape}${poses}）。` +
+        `ページが動いた画面 0・切られた要素 0・弁が開いた節 0。` +
+        `いちばん惜しい節の余り ${result.closest.free}px（${result.closest.where}）。` +
+        `見出しの錨のずれ 最大 ${result.drift}px`,
+    )
+  }
+
+  if (failed > 0) {
     console.error(
-      '\n設計サイズで弁が開いたら、それは弁の不具合ではなく src/blocks.ts の perScreen の不具合。まず件数を疑う。' +
+      '\n設計サイズで弁が開いたら、それは弁の不具合ではなく src/blocks.ts の perScreen / maxChars の不具合。まず件数と字数を疑う。' +
+        '\n切られた要素・外枠・柱の場所が出たら、app.css の「画面に収める外枠」が効いていない（後ろで上書きされた・条件が外れた）。' +
         '\n見出しの錨がずれたら、節の寄せ方（app.css の align-content: safe start）か、見出しより前に置いた子を疑う。',
     )
     process.exitCode = 1
-    return
   }
-
-  console.log(
-    `✓ ${checked} 通り（${urlCount} URL × ${layoutCount}骨格 × ${VIEWPORTS.length}寸法）。` +
-      `ページが動いた画面 0、弁が開いた節 0（いちばん惜しいところでページ ${worstPage}px・弁 ${worstValve}px）。` +
-      `見出しの錨のずれ 最大 ${Math.round(worstDrift * 10) / 10}px`,
-  )
 }
 
 await main()

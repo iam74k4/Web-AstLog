@@ -113,6 +113,31 @@
   --card-lines-shot: var(--card-lines);
 
   /*
+    カードのタグと行き先（.tags と .links）を、1画面の中で出すか。行数と同じ
+    組み方で、600 未満は出さず（none）、600 以上で出し（flex）、900 以上で画像の
+    枠を持つ行だけ出さない（--card-extras-shot）。全体ページ（/all）はいつも出す。
+
+    どちらも作品のページ（カードを押した先。カードは面ごと押せる）に同じものが
+    出ているので、畳んでも「どこにも無くなる」ものではない（サムネイルと同じ扱い）。
+    畳むのは、いちばん重いカード（説明 100 字・実績値・タグ3つ・行き先3本・
+    担当者名・画像）の行が、次の2か所で画面に収まらなかったため
+    （npm run check:fit の fixture。Hiragino Sans, macOS Chromium）:
+      390x844 指   2枚が縦に積まれて 197px 溢れた（= rail。タグ 45px・行き先 57px
+                   に間隔を足すと 1枚 126px）
+      1440x900     画像の枠と2行に折れた作品名で 83px（= center）/ 89px（= magazine）
+    600 以上 900 未満（板）は出したままで 129px 以上空く。
+  */
+  --card-extras: none;
+  --card-extras-shot: var(--card-extras);
+
+  /*
+    上の帯（中央寄せ・雑誌風の 900 以上）の職種の幅の上限。和文で16字。
+    中央寄せの 1440 で、名前（5字）・一言と並んで GitHub / メールが1行に残る幅
+    （19字までは1行、20字で2段目へ落ちた。「画面に収める外枠」の .identity__role）。
+  */
+  --role-w: 16em;
+
+  /*
     段落（.bio p。紹介文・メモ・作品の説明と本文）の1行の長さ。約40字で止める。
 
     和文の本文は1行 35〜40字あたりを超えると、行末から次の行頭へ目を戻すときに
@@ -144,6 +169,8 @@
     2枚とも説明 100 字・実績値・行き先3本の行で 空き 19px = center 3:1 /
     26px = magazine 4:1（下の --thumb-ratio-wide）@1440x900, 同条件。
     768x1024 と rail はどれも 130px 以上空く。600 未満は枠ごと出ない。
+    複数人のサイトの担当者名と2行に折れる作品名を足した行（check:fit の fixture）は
+    この枠では収まらず、900 以上の画像の行ではタグと行き先を畳んだ（--card-extras）。
 
     --shot-h は作品ページの画像の枠の高さ。絵はこの中に縮めて収める
     （object-fit: contain。切らない）。可変部は幅と高さの小さいほうで、
@@ -2221,13 +2248,22 @@ main > :is(.hero, section)[tabindex] > .moon {
   font-size: var(--fs-meta);
 }
 
+/*
+  矢印（.linklist__go）は行の右上に据え、行の右端にその幅ぶんの余白を取る。
+  flex の折り返しに任せていたころは、補足が長い行でラベル・補足・矢印が3段に
+  分かれ、矢印1字のためだけに1行ぶん（約 24px）の高さを使っていた——上限
+  ちょうどの補足を1行に寄せたリンク集が、そのぶんで弁を開けかけた
+  （-0.9px = center @1440x900 ログイン, Hiragino Sans, macOS Chromium）。
+*/
 .linklist li a {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--sp-2) var(--sp-4);
   min-height: var(--tap);
   padding-block: var(--sp-3);
+  padding-inline-end: var(--sp-6);
   border-bottom: 1px solid var(--line);
   transition: color var(--dur-fast) var(--ease);
 }
@@ -2246,7 +2282,9 @@ main > :is(.hero, section)[tabindex] > .moon {
 }
 
 .linklist__go {
-  margin-left: auto;
+  position: absolute;
+  top: var(--sp-3);
+  right: 0;
   color: var(--accent);
   font-size: var(--fs-sm);
 }
@@ -2496,6 +2534,8 @@ main > :is(.hero, section)[tabindex] > .moon {
   */
   :root {
     --card-lines: 6;
+    /* タグと行き先を出す。理由は :root の --card-extras */
+    --card-extras: flex;
   }
 
   /*
@@ -2543,6 +2583,8 @@ main > :is(.hero, section)[tabindex] > .moon {
   /* 画像の枠を持つカードの行数。理由と実測は「600px 以上」の :root */
   :root {
     --card-lines-shot: 3;
+    /* 画像の枠を持つ行はタグと行き先を畳む。理由は :root の --card-extras */
+    --card-extras-shot: none;
   }
 
   .shell {
@@ -3291,6 +3333,19 @@ body[data-layout='magazine'] .head :is(h1, h2) {
     line-clamp: var(--card-lines-shot);
   }
 
+  /*
+    カードのタグと行き先。出すかどうかは :root の --card-extras（行数と同じ組み方で、
+    画像の枠を持つ行は --card-extras-shot）。全体ページは縦に伸びてよいので、
+    この外枠の外で素の flex のまま全部出る。
+  */
+  :where(body[data-layout]:not([data-whole])) .card :is(.tags, .links) {
+    display: var(--card-extras);
+  }
+
+  :where(body[data-layout]:not([data-whole])) .card__thumb ~ :is(.tags, .links) {
+    display: var(--card-extras-shot);
+  }
+
   @media (max-width: 899px) {
     /* 名札を横帯にする。縦に積むと、それだけで画面の1/4を使ってしまう */
     :where(body[data-layout]:not([data-whole])) .rail {
@@ -3448,6 +3503,51 @@ body[data-layout='magazine'] .head :is(h1, h2) {
     :where(body[data-layout='center']:not([data-whole])) .shell,
     :where(body[data-layout='magazine']:not([data-whole])) .shell {
       grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    /*
+      上の帯になる骨格（中央寄せ・雑誌風）の目次は、900 以上でも1行の横帯にし、
+      帯の行の残りの幅に収める（899 以下と同じ姿）。
+
+      素の body[data-layout='center'] .toc は全体ページのために折り返す（wrap）ので、
+      打ち込むブロックを足すほど帯が段を増やし、そのぶん本文の予算が消えていた。
+      ブロック12本の中身では目次だけで5段になり、どの画面でも弁が開いた
+      （/projects で 212px = center @1440x900）。雑誌風の目次は折り返さないが、
+      中身の幅（max-content）のまま帯の行に入ろうとするので、長くなると行ごと
+      2段目へ落ちて帯が1段ぶん伸びた（1段の帯が3段に。= magazine @1440x900）。
+      件数で高さが変わる部品を1画面に置かない。
+
+      flex: 1 1 0 で、行に残った幅を目次が取る（中身の幅で行を決めない）。行き先は
+      その中で中央に寄せ（safe なので、溢れたら左から並べて右端をぼかす）、
+      帯の行は中央寄せなら2段（名札 / 目次と全体ページへの1本）、雑誌風なら1段の
+      まま動かない。
+
+      (0,3,1) で素の (0,2,1) に勝たせる。:where() では負ける（899 以下の目次と同じ事情）。
+    */
+    body[data-layout='center']:not([data-whole]) .toc,
+    body[data-layout='magazine']:not([data-whole]) .toc {
+      flex: 1 1 0;
+      min-width: 0;
+      flex-wrap: nowrap;
+      justify-content: safe center;
+      mask-image: var(--fade-right);
+    }
+
+    /*
+      上の帯になる骨格（中央寄せ・雑誌風）の職種は1行のまま、--role-w で末尾を省く
+      （読み上げには全部が残る。899 以下の帯の名前と同じ扱い）。職種の欄に上限は
+      無く、中央寄せの帯は名前・職種・一言・GitHub / メールを1行に並べるので、
+      長い職種（シニアソフトウェアエンジニア・テックリード、21字）で GitHub /
+      メールが2段目へ落ち、帯が 39px 伸びて上限ちょうどのリンク集の画面で弁が
+      30px 開いた（= center @1440x900, Hiragino Sans, macOS Chromium）。職種は
+      入口の Hero・個人ページの名札・<title>・description に全部が出ている。
+    */
+    :where(body[data-layout='center']:not([data-whole])) .identity__role,
+    :where(body[data-layout='magazine']:not([data-whole])) .identity__role {
+      max-width: var(--role-w);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   }
 

@@ -70,15 +70,20 @@ jobs:
       - name: ブラウザ
         run: npx playwright install --with-deps chromium
 
-      # 空の DB では、カードも目次も無い画面しか測れない
+      # scripts/check-fit.mjs が、使い捨ての D1 を3つ（seed・上限ちょうどの複数人の
+      # サイト・同じ中身の1人のサイト）作って wrangler dev を順に立て、終わったら落とす。
+      # 上限ちょうどの中身は scripts/lib/fit-fixture.mjs が src/blocks.ts の上限から作る
+      # ——seed だけを測っていたころは、打ち込むブロックも 3人以上の Team も本文の画面も
+      # 一度も測られていなかった。3書体 × 3骨格 × 3寸法 × 訪問者 / ログインの姿で測る
+      - name: 画面に収まっているか
+        run: npm run check:fit
+
+      # 空の DB では、月の上に乗る字（入口の帯・Contact）が生えない。check:contrast は
+      # 手元の D1（--local の既定の置き場）をそのまま読む
       - name: ローカル D1 を用意する
         run: |
           npm run db:migrate:local
           npm run db:seed:local
-
-      # scripts/check-fit.mjs が wrangler dev を自分で立てて、終わったら落とす
-      - name: 画面に収まっているか
-        run: npm run check:fit
 
       # 同じブラウザで、もう1つの「実際に描いてみないと分からない」不変条件を測る。
       # 入口の背景の月の上で、見出しとリード文が読めるか（WCAG 1.4.3）。

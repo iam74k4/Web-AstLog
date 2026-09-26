@@ -53,7 +53,13 @@ import { chunk, screenCount } from './lib/paginate'
   .bio p と .head）。メモは 400 のまま 5 字しか余らない——字の段や段落の間隔を
   動かしたら、まずメモを測り直すこと。
 
-  ここを上げるときは、CSS を触るのではなく、この27通りを測り直すこと。
+  **いまは npm run check:fit が毎回この上限ちょうどで測る。** scripts/lib/fit-fixture.mjs
+  がこのファイルの maxChars / perScreen / MAX_CHARS を読んで、上限ちょうどの中身
+  （均等に割った形と1つに寄せた形の2つずつ・見出しも上限の長さ・前後の画面も同じ
+  長さの見出し）を作り、27通り × 訪問者とログインの姿で測る。上の表は数を決めた
+  日の手測りの記録で、守っているのは検査のほう。数を変えれば検査も新しい数で測る。
+
+  ここを上げるときは、CSS を触るのではなく、check:fit を通すこと。
   設計サイズで弁が開いたら、それは弁の不具合ではなく件数か字数の不具合。
 */
 
@@ -205,6 +211,28 @@ export const BLOCK_TYPES = [
   下書きでは数を見ない（保存そのものは何個でも通る——D1 の束縛変数の上限は
   書き込みを行ごとに分けて避けている。admin.tsx の childWrites）。
 */
+/*
+  memberHeadline（個人ページの大見出し）と blockHeading（打ち込むブロックの見出し。
+  ひとことを除く）は、割れない1つの文・1つの名前。どちらも上限が無く、長い一文の
+  大見出しを書くと個人ページの1枚目で弁が開き、長い見出しはページャを壊した。
+
+  見出しはページャの手（「← 見出し」「見出し →」）と真ん中の枡に、前後の画面の
+  見出しと1行に並ぶ。20 字の見出しが3つ並ぶと、390 ではページャの手が1字ずつの
+  縦書きになって 443px まで伸び、どのブロックの画面も弁が 180〜350px 開いた。
+  （実測 = check:fit の fixture。前後も同じ長さの見出し・中身は上限ちょうど。
+  いちばん惜しい節の余り @プリセット, 書体, ブラウザ）
+    見出し 10字   26px @magazine 390x844 指（ページャ 89px）
+           12字    4px @magazine 390x844 指（ページャ 111px）
+           14字  +18px 溢れる @magazine 390x844 指（ページャ 133px）
+    大見出し 80字  82px @center 1440x900 / 100字 +17px 溢れる @center 1440x900
+    （Hiragino Sans, macOS Chromium。書体3つとも同じ）
+  見出しは 10 字、大見出しは 80 字にした。見出しの既定（Now・数字で見る・Links・
+  Timeline・メモ）はどれも収まる。字で数えるので英字の見出しは実際より厳しく
+  数えられる（Timeline は8字）が、ページャの幅はいちばん幅のある和文で決まる。
+
+  経歴（careerText）の上限は、できごと（timeline）の maxChars をそのまま使う
+  （memberPublishErrors の注記）。ここには置かない。
+*/
 export const MAX_CHARS = {
   itemSummary: 100,
   itemSummaryVisible: 42,
@@ -214,6 +242,8 @@ export const MAX_CHARS = {
   itemLinks: 3,
   memberBio: 400,
   memberBioParagraphs: 3,
+  memberHeadline: 80,
+  blockHeading: 10,
 } as const
 
 export type BlockType = (typeof BLOCK_TYPES)[number]
@@ -429,7 +459,7 @@ export type PublishTarget =
       tags: number
       links: number
     }
-  | { kind: 'member'; bio: string }
+  | { kind: 'member'; headline: string; bio: string; careerText: string }
 
 export function publishErrors(target: PublishTarget): Record<string, string> | null {
   const errors =
@@ -463,6 +493,15 @@ function blockPublishErrors(
   const invalid = blockValueErrors(type, values)
   if (invalid) return invalid
   const max = type.maxChars
+  const errors: Record<string, string> = {}
+  /*
+    見出し（ひとこと以外）。目次・節の見出し・ページャの行き先（「← 見出し」
+    「見出し →」）に出る名前で、ページャでは前後の画面の見出しと1行に並ぶ。
+    上限は MAX_CHARS.blockHeading（実測はそこ）
+  */
+  if (type.key !== 'statement' && chars(values.title) > MAX_CHARS.blockHeading) {
+    errors.title = `見出しは ${MAX_CHARS.blockHeading} 字までです（いま ${chars(values.title)} 字）。目次とページャに1行で並ぶ名前です`
+  }
   if (type.key === 'statement') {
     if (chars(values.title) > MAX_STATEMENT_SENTENCE) {
       return { title: `大きく出る一文です。${MAX_STATEMENT_SENTENCE} 字までにしてください` }
@@ -476,11 +515,9 @@ function blockPublishErrors(
   // 画面の数だけ数が並ぶので、広げずに畳む（行数に上限は無い）
   const worst = screenChars(type, values.body).reduce((most, n) => Math.max(most, n), 0)
   if (worst > max) {
-    return {
-      body: `1画面に収まりません。1画面は ${max} 字までです（いちばん多い画面が ${worst} 字）`,
-    }
+    errors.body = `1画面に収まりません。1画面は ${max} 字までです（いちばん多い画面が ${worst} 字）`
   }
-  return null
+  return errors
 }
 
 /*
@@ -522,26 +559,46 @@ function itemPublishErrors(target: Extract<PublishTarget, { kind: 'item' }>) {
   return errors
 }
 
+// 経歴を割る・数える相手。できごと（timeline）のブロックと同じ部品・同じ数
+export const TIMELINE = BLOCK_TYPES.find(
+  (type): type is Extract<BlockType, { key: 'timeline' }> => type.key === 'timeline',
+) as Extract<BlockType, { key: 'timeline' }>
+
 /*
   メンバー。紹介文は個人ページの About 1枚に全段落が出る（割る先が無い）。
   段落の数も見るのは、同じ字数でも空行を増やすと高くなるため（実測: 3段落なら
   405 字まで弁が閉じたまま、6段落に割ると 315 字まで下がる @rail 390x844 指,
   Hiragino Sans, macOS Chromium）。
+
+  大見出しは個人ページの1枚目に大きく出る1つの文で、割れない（件数で割れない
+  ものは入口で止めるほかに手が無い）。上限は MAX_CHARS.memberHeadline。
+
+  経歴は Career の画面に、できごと（timeline）のブロックと同じ部品（<Timeline>）・
+  同じ件数（MEMBER_PER_SCREEN.career = timeline の perScreen）で割って出る。だから
+  字数も同じ数で止める——同じ部品を同じ数で割る以上、1画面の字数の上限も同じ。
+  数え方も同じ（screenChars。割ったあとの1画面の字数）。以前は経歴だけ上限が
+  無く、1行 110 字 × 5行の経歴が黙って保存でき、Career の画面で弁が開いた。
+
+  止める理由は全部まとめて返す（publishErrors の決まり）。
 */
 function memberPublishErrors(target: Extract<PublishTarget, { kind: 'member' }>) {
+  const errors: Record<string, string> = {}
+  const headline = chars(target.headline)
+  if (headline > MAX_CHARS.memberHeadline) {
+    errors.headline = `1画面に収まりません。大見出しは ${MAX_CHARS.memberHeadline} 字までです（いま ${headline} 字）`
+  }
   const total = chars(target.bio)
   const parts = paragraphs(target.bio).length
   if (total > MAX_CHARS.memberBio) {
-    return {
-      bio: `1画面に収まりません。紹介文は ${MAX_CHARS.memberBio} 字までです（いま ${total} 字）`,
-    }
+    errors.bio = `1画面に収まりません。紹介文は ${MAX_CHARS.memberBio} 字までです（いま ${total} 字）`
+  } else if (parts > MAX_CHARS.memberBioParagraphs) {
+    errors.bio = `1画面に収まりません。段落は ${MAX_CHARS.memberBioParagraphs} つまでです（いま ${parts} つ）`
   }
-  if (parts > MAX_CHARS.memberBioParagraphs) {
-    return {
-      bio: `1画面に収まりません。段落は ${MAX_CHARS.memberBioParagraphs} つまでです（いま ${parts} つ）`,
-    }
+  const career = screenChars(TIMELINE, target.careerText).reduce((most, n) => Math.max(most, n), 0)
+  if (career > TIMELINE.maxChars) {
+    errors.careerText = `1画面に収まりません。経歴は1画面（${MEMBER_PER_SCREEN.career} 行）で ${TIMELINE.maxChars} 字までです（いちばん多い画面が ${career} 字）`
   }
-  return null
+  return errors
 }
 
 /*

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as schema from '../src/db/schema'
 import { createSession, SESSION_COOKIE, sessionKey, userForIdentity } from '../src/lib/auth'
 import { base64url } from '../src/lib/oauth'
-import { db, ensureOwner, form, get, resetDb, withCookie } from './helpers'
+import { db, ensureOwner, form, get, okText, resetDb, withCookie } from './helpers'
 
 /*
   管理画面のログイン（GitHub と Google の OAuth）の往復。
@@ -437,9 +437,7 @@ describe('state は1回きり', () => {
     expect(denied.status).toBe(303)
     // 戻り先はやり直しにも持ち回す
     expect(denied.headers.get('location')).toBe('/admin/login?error=denied&next=%2Fadmin%2Fitems')
-    expect(await (await get(denied.headers.get('location') ?? '')).text()).toContain(
-      'ログインを取りやめました',
-    )
+    expect(await okText(denied.headers.get('location') ?? '')).toContain('ログインを取りやめました')
     expect(await states()).toHaveLength(0)
 
     const other = await start('github')
@@ -528,9 +526,7 @@ describe('セッション', () => {
     expect((await laptop('/admin/members')).status).toBe(303)
     // ほかの人のセッションには触らない
     expect((await someoneElse('/admin/members')).status).toBe(200)
-    expect(await (await get('/admin/login?out=all')).text()).toContain(
-      'すべての端末からログアウトしました',
-    )
+    expect(await okText('/admin/login?out=all')).toContain('すべての端末からログアウトしました')
   })
 
   it('アカウントの画面に、紐づいたアカウントと最後のログインを出す。足元からも入れる', async () => {
@@ -579,7 +575,7 @@ describe('パスワードのログインは無い', () => {
     expect(response.headers.get('location')).toBe('/admin/login')
     expect(sessionCookie(response)).toBeUndefined()
 
-    const html = await (await get('/admin/login')).text()
+    const html = await okText('/admin/login')
     expect(html).not.toContain('type="password"')
     // 入口は GET のリンク（後で CSP の form-action 'self' を入れても外へ出られるように）
     expect(html).not.toContain('<form')

@@ -4,7 +4,7 @@ import css from '../public/app.css'
 import { blockType } from '../src/blocks'
 import * as schema from '../src/db/schema'
 import { ACCENTS, LAYOUTS, TYPEFACES } from '../src/theme'
-import { db, form, get, resetDb, seedItem, seedMember, signIn } from './helpers'
+import { db, form, get, okText, resetDb, seedItem, seedMember, signIn } from './helpers'
 
 beforeEach(resetDb)
 
@@ -17,7 +17,7 @@ const MAGAZINE = { layout: 'magazine', accent: 'ember', typeface: 'serif' }
 
 describe('見た目のプリセット', () => {
   it('何も選んでいなければ既定の姿で出す', async () => {
-    const html = await (await get('/')).text()
+    const html = await okText('/')
     expect(html).toContain('data-layout="rail"')
     expect(html).toContain('data-accent="iris"')
     expect(html).toContain('data-typeface="sans"')
@@ -28,7 +28,7 @@ describe('見た目のプリセット', () => {
     expect(response.status).toBe(303)
     expect(response.headers.get('location')).toBe('/admin/appearance?saved=1')
 
-    const html = await (await get('/')).text()
+    const html = await okText('/')
     expect(html).toContain('data-layout="magazine"')
     expect(html).toContain('data-accent="ember"')
     expect(html).toContain('data-typeface="serif"')
@@ -38,7 +38,7 @@ describe('見た目のプリセット', () => {
     await seedMember()
     await save(MAGAZINE)
 
-    const html = await (await get('/members/okazaki')).text()
+    const html = await okText('/members/okazaki')
     expect(html).toContain('data-layout="magazine"')
   })
 
@@ -48,7 +48,7 @@ describe('見た目のプリセット', () => {
 
     const rows = await db().select().from(schema.settings)
     expect(rows).toHaveLength(3)
-    expect(await (await get('/')).text()).toContain('data-layout="center"')
+    expect(await okText('/')).toContain('data-layout="center"')
   })
 
   it('知らない値は保存しない', async () => {
@@ -56,7 +56,7 @@ describe('見た目のプリセット', () => {
     expect(response.status).toBe(400)
 
     // 1つでも知らなければ、まとめて受け取らない
-    const html = await (await get('/')).text()
+    const html = await okText('/')
     expect(html).toContain('data-layout="rail"')
     expect(html).toContain('data-accent="iris"')
   })
@@ -75,7 +75,7 @@ describe('見た目のプリセット', () => {
     expect(response.status).toBe(303)
     expect(response.headers.get('location')).toBe('/admin/login')
 
-    expect(await (await get('/')).text()).toContain('data-layout="rail"')
+    expect(await okText('/')).toContain('data-layout="rail"')
   })
 
   it('選べるものだけを並べ、いま選んでいるものに印を付ける', async () => {
@@ -217,16 +217,149 @@ const blockAt = (raw: string, marker: string) => {
 }
 
 /*
+  CSS を規則の列として読む（後ろでの上書きを見つけるため）。
+
+  下の ruleWith / bodyOf は、書いてある最初の1か所を切り出す。それだけだと、
+  同じセレクタの規則が**後ろで**別の値に上書きされても緑のままだった——
+  外枠の @supports の末尾に「.shell の高さを auto」「節の overflow を visible」を
+  足しても、この文書の検査は 66 本とも緑だった（外枠が丸ごと効かないのに）。
+
+  だから切り出した規則について、後ろに同じセレクタ（並びを全部含む）を持つ規則が
+  あり、同じ性質を別の値にしていたら落とす——その性質は切り出した規則では一度も
+  効かない。並びの一部だけを後ろで差し替える（`.detail, .detail__text` の間隔を
+  `.detail__text` だけ詰める）のは、共通の規則を細かくする正しい書き方なので数えない。見るのは、同じ括りか、
+  より外側（条件の少ない）の括りに書いた規則だけ——@media (min-width: 900px) の
+  中で値を差し替えるのは、骨格や幅ごとの正しい書き方なので上書きとは数えない。
+
+  字句の解析は素朴（入れ子の規則を持たず、文字列の中に { } ; が無い）で足りる。
+  app.css と admin.css はそう書いてあり、書き方が変わったら閉じ括弧の数が合わず
+  例外になる。構文解析の依存（css-tree・postcss）を足さないのは、見たいのが
+  「規則・括り・宣言」の3つだけで、それ以上の解析は検査の確かさを増やさないため。
+  効いているかどうかの最後の確かめは npm run check:fit（ブラウザが解いた値を見る）。
+*/
+type CssRule = {
+  start: number
+  end: number
+  context: string[]
+  selectors: string[]
+  decls: [string, string][]
+}
+
+const squash = (text: string) => text.replace(/\s+/g, ' ').trim()
+
+// 括弧の外の区切り文字で分ける（:is(.a, .b) の中のコンマで割らない）
+const splitTop = (text: string, by: string) => {
+  const parts: string[] = []
+  let depth = 0
+  let from = 0
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] === '(') depth += 1
+    if (text[i] === ')') depth -= 1
+    if (text[i] === by && depth === 0) {
+      parts.push(text.slice(from, i))
+      from = i + 1
+    }
+  }
+  parts.push(text.slice(from))
+  return parts.map(squash).filter(Boolean)
+}
+
+const rulesCache = new Map<string, CssRule[]>()
+const rulesOf = (source: string): CssRule[] => {
+  const cached = rulesCache.get(source)
+  if (cached) return cached
+  const rules: CssRule[] = []
+  const stack: string[] = []
+  let from = 0
+  for (let i = 0; i < source.length; i += 1) {
+    const char = source[i]
+    if (char === '{') {
+      const prelude = squash(source.slice(from, i))
+      if (prelude.startsWith('@')) {
+        stack.push(prelude)
+        from = i + 1
+        continue
+      }
+      const close = source.indexOf('}', i)
+      const body = source.slice(i + 1, close)
+      rules.push({
+        start: i,
+        end: close,
+        context: [...stack],
+        selectors: splitTop(prelude, ','),
+        decls: splitTop(body, ';').flatMap((decl) => {
+          const colon = decl.indexOf(':')
+          return colon < 0 ? [] : [[squash(decl.slice(0, colon)), squash(decl.slice(colon + 1))]]
+        }) as [string, string][],
+      })
+      i = close
+      from = i + 1
+    } else if (char === '}') {
+      if (stack.pop() === undefined) throw new Error(`${i} 文字目の閉じ括弧が余っている`)
+      from = i + 1
+    } else if (char === ';' && source.slice(from, i).trim().startsWith('@')) {
+      from = i + 1 // @import のような、括りを持たない at 規則
+    }
+  }
+  if (stack.length) throw new Error(`括りが閉じていない: ${stack.join(' > ')}`)
+  rulesCache.set(source, rules)
+  return rules
+}
+
+/*
+  raw（sheet か adminSheet、またはその切り出し）の at 文字目を含む規則が、後ろで
+  上書きされていないか。切り出しを渡されても、上書きは切り出しの外にも居るので、
+  元の全体の中の位置に直して全体を見る。
+*/
+const expectNotOverridden = (raw: string, at: number) => {
+  const source = bare(raw)
+  const whole = [sheet, adminSheet].find((base) => base.includes(source))
+  if (whole === undefined) throw new Error('切り出しの元（sheet / adminSheet）が分からない')
+  const found = overridesAt(whole, whole.indexOf(source) + at)
+  if (found.length) throw new Error(found.join('\n'))
+}
+
+// whole の offset 文字目を含む規則の宣言のうち、後ろで上書きされているもの
+const overridesAt = (whole: string, offset: number): string[] => {
+  const rules = rulesOf(whole)
+  const rule = rules.find((one) => one.start <= offset && offset <= one.end)
+  if (!rule) throw new Error(`${offset} 文字目は規則の中ではない`)
+
+  const within = (outer: string[]) => outer.every((one, i) => rule.context[i] === one)
+  const later = rules.filter(
+    (other) =>
+      other.start > rule.end &&
+      other.context.length <= rule.context.length &&
+      within(other.context) &&
+      rule.selectors.every((selector) => other.selectors.includes(selector)),
+  )
+  return rule.decls.flatMap(([property, value]) =>
+    later.flatMap((other) => {
+      const again = other.decls.find(([name]) => name === property)
+      return again && again[1] !== value
+        ? [
+            `${rule.selectors.join(', ')} の ${property}: ${value} は、後ろの ` +
+              `${other.selectors.join(', ')} { ${property}: ${again[1]} } に上書きされている`,
+          ]
+        : []
+    }),
+  )
+}
+
+/*
   宣言を1つ指して、それが書いてある規則をセレクタごと切り出す。
 
   blockAt と違って「どこかに書いてある」では足りない場所のため。節には
   同じセレクタの規則が2つ（中身の寄せ方と、溢れの弁）あり、弁だけを
   別の相手に付け替えられると、寄るのに弁の無い節ができる。
+
+  切り出した規則が後ろで上書きされていたら落とす（expectNotOverridden）。
 */
 const ruleWith = (raw: string, decl: string) => {
   const source = bare(raw)
   const at = source.indexOf(decl)
   expect(at, `${decl} が見つからない`).toBeGreaterThan(-1)
+  expectNotOverridden(raw, at)
 
   const open = source.lastIndexOf('{', at)
   // 直前の規則の閉じ括弧か、括りの開き括弧。近いほうが自分のセレクタの頭
@@ -243,6 +376,8 @@ const ruleWith = (raw: string, decl: string) => {
   ruleWith の逆向き。セレクタを指して、その規則に何が書いてあるかを見る。
   「この1本に4行そろっているか」を確かめたいときのため——2行だけ写して
   持ってきた、という壊れ方は宣言の存在だけでは捕まらない。
+
+  こちらも、後ろで上書きされていたら落とす。
 */
 const bodyOf = (raw: string, selector: string) => {
   const source = bare(raw)
@@ -250,8 +385,41 @@ const bodyOf = (raw: string, selector: string) => {
   expect(at, `${selector} が見つからない`).toBeGreaterThan(-1)
 
   const open = source.indexOf('{', at)
+  expectNotOverridden(raw, open)
   return source.slice(open + 1, source.indexOf('}', open)).trim()
 }
+
+describe('CSS を読む道具', () => {
+  it('同じセレクタの規則が後ろで同じ性質を上書きしていたら見つける', () => {
+    // 外枠の値を末尾で消す、という壊れ方の縮図。@media の中の差し替えは数えない
+    const css = [
+      '@supports (height: 100svh) {',
+      '  :where(body) .shell { height: var(--screen-h); display: grid; }',
+      '  @media (min-width: 900px) { :where(body) .shell { height: 50vh; } }',
+      '  :where(body) .shell { height: auto; }',
+      '}',
+      '.detail, .detail__text { gap: 2px; }',
+      '.detail__text { gap: 1px; }',
+    ].join('\n')
+    const found = overridesAt(css, css.indexOf('height: var(--screen-h)'))
+    expect(found).toHaveLength(1)
+    expect(found[0]).toContain('height: auto')
+    // 並びの一部だけを細かくするのは上書きではない
+    expect(overridesAt(css, css.indexOf('gap: 2px'))).toEqual([])
+  })
+
+  it('外枠の要の規則は、後ろで上書きされていない', () => {
+    const frame = blockAt(sheet, '@supports (height: 100svh)')
+    for (const decl of [
+      'height: var(--screen-h)',
+      'overflow: clip',
+      'overscroll-behavior: contain',
+      'align-content: safe start',
+    ]) {
+      expect(() => ruleWith(frame, decl), decl).not.toThrow()
+    }
+  })
+})
 
 /*
   「1画面に収める・ページは動かさない」という作りは app.css にしかない。
@@ -444,23 +612,32 @@ describe('画面に収める外枠', () => {
     expect(sheet).not.toContain('align-content: center')
   })
 
+  /*
+    次の2つは、値がどのセレクタに付いているかまで見る。文字列が在るかだけを
+    見ていたころは、2つの値を入れ替えても（柱の骨格を2段、ほかを1段に）緑の
+    ままだった。実際にそう解けているか（柱が本文の左か上か）は npm run check:fit が
+    骨格 × 寸法ごとに測る。
+  */
   it('900 以上（2列）では .shell を1段にする', () => {
     // 2列になると柱も本文も1行目に入る。1列ぶんの 'auto + 1fr' のままだと
     // 2行目の 1fr が画面の残りを丸ごと取り、本文は柱の高さで止まって
     // 下が黒く空く。中身が増えても伸びないので、そのぶんは黙って切れる
     const wide = blockAt(blockAt(sheet, '@supports (height: 100svh)'), '@media (min-width: 900px)')
-    expect(wide).toContain('grid-template-rows: minmax(0, 1fr)')
+    expect(ruleWith(wide, 'grid-template-rows: minmax(0, 1fr)').selector).toBe(
+      ':where(body[data-layout]:not([data-whole])) .shell',
+    )
   })
 
   it('900 以上でも1列のままの骨格には、2段を残す', () => {
     // 中央寄せと雑誌風は広い画面でも柱を左に立てない。列を1つに戻す指定と
     // この2段は対。片方だけ直すと、その骨格でだけまた下が空く
     const wide = blockAt(blockAt(sheet, '@supports (height: 100svh)'), '@media (min-width: 900px)')
+    const rows = ruleWith(wide, 'grid-template-rows: auto minmax(0, 1fr)').selector
     for (const layout of ['center', 'magazine']) {
       expect(sheet).toContain(`body[data-layout='${layout}'] .shell`)
-      expect(wide).toContain(`body[data-layout='${layout}']`)
+      expect(rows).toContain(`body[data-layout='${layout}']`)
     }
-    expect(wide).toContain('grid-template-rows: auto minmax(0, 1fr)')
+    expect(rows).not.toContain("'rail'")
   })
 
   it('溢れたら弁が開く。hidden でも clip でもなく auto', () => {
@@ -524,10 +701,10 @@ describe('画面に収める外枠', () => {
   it('全体ページの body にだけ、外枠を外す印が付く', async () => {
     // CSS 側はこの印だけを頼りに /all を除いている。印が消えると全体ページが
     // 1画面に切られ、印刷も Ctrl-F も退避先も一度に使えなくなる
-    expect(await (await get('/all')).text()).toContain('data-whole=""')
+    expect(await okText('/all')).toContain('data-whole=""')
 
     await seedMember()
-    expect(await (await get('/members/okazaki')).text()).not.toContain('data-whole')
+    expect(await okText('/members/okazaki')).not.toContain('data-whole')
   })
 
   it('柱を上の帯にする骨格は、名札の中身も横に寝かせる', () => {
@@ -647,6 +824,56 @@ describe('画面に収める外枠', () => {
   骨格ではなく、部品の作法。どれも「壊れても HTML は変わらず、TypeScript も
   黙っている」種類の決まりなので、値ではなく規則の形を見張る。
 */
+/*
+  F5（TEST-2）で上限ちょうどの中身を測って見つかった溢れの直し。値の出どころと
+  付け先をここで見張り、効いているかは npm run check:fit が 27通りで測る。
+*/
+describe('上限ちょうどの中身で収めるための組み方', () => {
+  const frame = () => blockAt(sheet, '@supports (height: 100svh)')
+
+  it('カードのタグと行き先は :root の段で畳む（600 未満と、900 以上の画像の行）', () => {
+    const root = (block: string) => bodyOf(block, ':root {')
+    expect(root(sheet)).toContain('--card-extras: none')
+    expect(root(sheet)).toContain('--card-extras-shot: var(--card-extras)')
+    expect(root(blockAt(sheet, '@media (min-width: 600px)'))).toContain('--card-extras: flex')
+    expect(root(blockAt(sheet, '@media (min-width: 900px)'))).toContain('--card-extras-shot: none')
+
+    // 畳むのは1画面に収めるページだけ（外枠の中）。全体ページでは素の flex のまま全部出る
+    expect(ruleWith(frame(), 'display: var(--card-extras)').selector).toBe(
+      ':where(body[data-layout]:not([data-whole])) .card :is(.tags, .links)',
+    )
+    expect(ruleWith(frame(), 'display: var(--card-extras-shot)').selector).toBe(
+      ':where(body[data-layout]:not([data-whole])) .card__thumb ~ :is(.tags, .links)',
+    )
+  })
+
+  it('上の帯の目次は 900 以上でも1行で、帯の行の残りを取る（件数で帯を伸ばさない）', () => {
+    const wide = blockAt(frame(), '@media (min-width: 900px)')
+    const toc = ruleWith(wide, 'flex: 1 1 0')
+    expect(toc.selector).toContain("body[data-layout='center']:not([data-whole]) .toc")
+    expect(toc.selector).toContain("body[data-layout='magazine']:not([data-whole]) .toc")
+    for (const decl of ['min-width: 0', 'flex-wrap: nowrap', 'mask-image: var(--fade-right)']) {
+      expect(toc.body).toContain(decl)
+    }
+  })
+
+  it('上の帯の職種は1行のまま末尾を省く（長い職種で帯を2段にしない）', () => {
+    const wide = blockAt(frame(), '@media (min-width: 900px)')
+    const role = ruleWith(wide, 'max-width: var(--role-w)')
+    expect(role.selector).toContain('.identity__role')
+    expect(role.body).toContain('text-overflow: ellipsis')
+    expect(role.body).toContain('white-space: nowrap')
+    expect(bodyOf(sheet, ':root {')).toMatch(/--role-w: \d+em/)
+  })
+
+  it('リンク集の矢印は行の右上に据え、補足が長くても1行ぶんを取らない', () => {
+    expect(bodyOf(sheet, '.linklist__go {')).toContain('position: absolute')
+    const row = bodyOf(sheet, '.linklist li a {')
+    expect(row).toContain('position: relative')
+    expect(row).toContain('padding-inline-end')
+  })
+})
+
 describe('部品の作法', () => {
   it('目次に番号は振らず、数えるのはページャだけ', async () => {
     // 節が1つも無いと目次もページャも出ない。位置を名乗るのは2画面以上の
@@ -667,7 +894,7 @@ describe('部品の作法', () => {
       「次」と同じ行き先なのでページャを出さない（test/public.test.ts の
       「入口のページャ」）。数え上げが残るのはめくる画面のほう
     */
-    const projects = await (await get('/projects')).text()
+    const projects = await okText('/projects')
     expect(projects).not.toContain('toc__num')
     expect(projects).toContain('class="pager__count"')
 
@@ -1186,14 +1413,14 @@ describe('一覧の列数', () => {
     await seedItem({ title: '業務', type: 'work' })
 
     const cols = `<div class="grid" style="--cols:${perScreenOf('projects')}">`
-    expect(await (await get('/projects')).text()).toContain(cols)
+    expect(await okText('/projects')).toContain(cols)
     // 全体ページも同じ。ここだけ別の数にすると、1枚の中で列の幅が変わる
-    expect(await (await get('/all')).text()).toContain(cols)
+    expect(await okText('/all')).toContain(cols)
   })
 
   it('渡さない一覧を作らない（渡し忘れると列が1つに落ちる）', async () => {
     await seedItem({ title: 'アプリ' })
-    const html = await (await get('/projects')).text()
+    const html = await okText('/projects')
     // repeat(var(--cols)) は --cols が無いと計算できず、規則ごと無かったことに
     // なる（1列に戻る）。落ちてもエラーは出ないので、markup 側で数える
     const grids = html.match(/<div class="grid"/g) ?? []
@@ -1488,7 +1715,7 @@ describe('入口の月', () => {
       取得が実際に止まることは npm run check:contrast が本物のブラウザで測る
       （vitest からは public/ が見えない——実測で 404）。
     */
-    const html = await (await get('/')).text()
+    const html = await okText('/')
     expect(html).not.toContain('/assets/moon')
 
     // AVIF が本命・WebP が控え。素の url() は image-set を知らない環境の受け

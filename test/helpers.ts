@@ -1,6 +1,7 @@
 import { env, SELF } from 'cloudflare:test'
 import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
+import { expect } from 'vitest'
 import * as schema from '../src/db/schema'
 import { createSession, SESSION_COOKIE } from '../src/lib/auth'
 import { touchSite } from '../src/lib/page-cache'
@@ -124,3 +125,18 @@ export async function signIn() {
 
 export const get = (path: string, init: RequestInit = {}) =>
   SELF.fetch(`https://noctifex.test${path}`, { redirect: 'manual', ...init })
+
+/*
+  公開ページを 200 で受け取り、本文を返す。**本文を読んで確かめるテストはこれを通す。**
+
+  get(...).text() のまま「〜を含まない」を確かめると、URL が 404 や 301 に変わった日に
+  空の本文（や 404 のページ）を見て緑になる。Projects を1つにまとめたとき、
+  /apps の「構造化データを載せない」は /apps が本文の無い 301 になってからずっと
+  何も確かめていなかった。先に状態を確かめれば、否定の期待が空振りしない。
+  404 や 301 の本文そのものを見たいテストは、get で状態を確かめてから読むこと。
+*/
+export async function okText(path: string, init: RequestInit = {}) {
+  const response = await get(path, init)
+  expect(response.status, `${path} が ${response.status} を返した（200 を期待）`).toBe(200)
+  return response.text()
+}

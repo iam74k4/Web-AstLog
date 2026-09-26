@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import * as schema from '../src/db/schema'
-import { db, form, get, resetDb, seedItem, seedMember, signIn } from './helpers'
+import { db, form, get, okText, resetDb, seedItem, seedMember, signIn } from './helpers'
 
 /*
   導線。ある画面から次の画面へ、行き止まらずに進めるか。
@@ -31,7 +31,7 @@ describe('個人ページ → 一覧', () => {
     await place(['hero', 'team', 'contact'])
 
     // 送った先に節が無いと、行き止まり（404）になる
-    const html = await (await get('/members/okazaki')).text()
+    const html = await okText('/members/okazaki')
     expect(bandOf(html)).toBe('')
     expect(html).not.toContain('href="/projects')
   })
@@ -46,7 +46,7 @@ describe('個人ページ → 一覧', () => {
     */
     await place(['hero', 'projects', 'contact'])
 
-    const band = bandOf(await (await get('/members/okazaki')).text())
+    const band = bandOf(await okText('/members/okazaki'))
     expect(band).toContain('href="/projects"')
     expect(band).toContain('個人開発 1')
     // 業務はほかの人のもの。その人の帯で「業務 1」と出すと、どこにも無い1件になる
@@ -63,7 +63,7 @@ describe('個人ページ → 一覧', () => {
     await seedItem({ type: 'work', title: '業務の実績' })
     await place(['hero', 'projects', 'contact'])
 
-    const band = bandOf(await (await get('/')).text())
+    const band = bandOf(await okText('/'))
     expect(band).toContain('href="/projects"')
     expect(band).toContain('個人開発 1 · 業務 1')
   })
@@ -76,7 +76,7 @@ describe('1人のサイトの ?member=', () => {
     // 帯が出るのは Team を置かない1人のサイト（置くと帯は出さない。入口の帯と重なる）
     await place(['hero', 'projects', 'contact'])
 
-    const html = await (await get('/members/okazaki')).text()
+    const html = await okText('/members/okazaki')
     expect(bandOf(html)).toContain('href="/projects"')
     expect(html).not.toContain('?member=')
   })
@@ -87,7 +87,7 @@ describe('1人のサイトの ?member=', () => {
     await seedItem({ title: '担当の無いアプリ', sortOrder: 20 })
 
     // 名前のピルが無いので、効かせると「すべて」にも名前にも印が付かなくなる
-    const html = await (await get('/projects?member=okazaki')).text()
+    const html = await okText('/projects?member=okazaki')
     expect(html).toContain('担当の無いアプリ')
     expect(html).toContain('href="/projects" aria-current="true"')
   })
@@ -99,18 +99,16 @@ describe('トップ → 個人ページ', () => {
     await seedItem({ slug: 'appmixer', memberId: member.id })
     await place(['hero', 'projects', 'contact'])
 
-    expect(await (await get('/projects')).text()).toContain(
-      'class="card__member" href="/members/okazaki"',
-    )
+    expect(await okText('/projects')).toContain('class="card__member" href="/members/okazaki"')
     // 作品1件のページの「担当」も同じ条件
-    expect(await (await get('/apps/item/appmixer')).text()).toContain('href="/members/okazaki"')
+    expect(await okText('/apps/item/appmixer')).toContain('href="/members/okazaki"')
   })
 
   it('Team があってメンバーが1人なら、カードには名前を出さない', async () => {
     const member = await seedMember()
     await seedItem({ memberId: member.id })
 
-    expect(await (await get('/projects')).text()).not.toContain('card__member')
+    expect(await okText('/projects')).not.toContain('card__member')
   })
 })
 
@@ -122,7 +120,7 @@ describe('ログインの戻り先', () => {
     expect(bounced.headers.get('location')).toBe('/admin/login?next=%2Fadmin%2Fappearance')
 
     // ログイン画面はフォームではなく、提供元ごとの GET のリンク。戻り先はその query に乗る
-    const page = await (await get('/admin/login?next=%2Fadmin%2Fappearance')).text()
+    const page = await okText('/admin/login?next=%2Fadmin%2Fappearance')
     expect(page).toContain('href="/admin/auth/github/start?next=%2Fadmin%2Fappearance"')
     expect(page).toContain('href="/admin/auth/google/start?next=%2Fadmin%2Fappearance"')
     // 往復のあとで実際にそこへ戻ることは test/oauth.test.ts（next の安全化）
@@ -137,7 +135,7 @@ describe('ログインの戻り先', () => {
       '/admin/logout',
       '/admin/auth/github/start',
     ]) {
-      const page = await (await get(`/admin/login?next=${encodeURIComponent(next)}`)).text()
+      const page = await okText(`/admin/login?next=${encodeURIComponent(next)}`)
       expect(page, next).toContain('href="/admin/auth/github/start"')
       expect(page, next).not.toContain('start?next=')
     }

@@ -16,8 +16,10 @@ import {
   isBlockKey,
   MAX_CHARS,
   MAX_STATEMENT_SENTENCE,
+  MEMBER_PER_SCREEN,
   memberScreenCount,
   publishErrors,
+  TIMELINE,
 } from '../blocks'
 import {
   countPublishedItems,
@@ -860,7 +862,8 @@ const MemberForm = (props: {
             label="大見出し"
             name="headline"
             value={value('headline')}
-            hint="個人ページの一番上。言い切りで"
+            error={props.errors?.headline}
+            hint={`個人ページの一番上。言い切りで · ${MAX_CHARS.memberHeadline} 字まで`}
           />
           <Field
             label="並び順"
@@ -923,7 +926,8 @@ const MemberForm = (props: {
             name="careerText"
             value={value('careerText')}
             rows={4}
-            hint="1行に1件。「期間 | 肩書き | 所属」"
+            error={props.errors?.careerText}
+            hint={`1行に1件。「期間 | 肩書き | 所属」 · ${MEMBER_PER_SCREEN.career} 行ごとに1画面、1画面 ${TIMELINE.maxChars} 字まで`}
           />
           <label class="field">
             <span class="field__label">アバター画像</span>
@@ -1253,7 +1257,14 @@ app.post('/members', async (c) => {
     picked.error ? { avatar: picked.error } : null,
     unreadable,
     memberErrors(values),
-    values.published ? publishErrors({ kind: 'member', bio: values.bio }) : null,
+    values.published
+      ? publishErrors({
+          kind: 'member',
+          headline: values.headline,
+          bio: values.bio,
+          careerText: values.careerText,
+        })
+      : null,
     await memberSlugTaken(database, values.slug, null),
   )
   if (errors) return back(errors)
@@ -1300,7 +1311,14 @@ app.post('/members/:id', async (c) => {
     picked.error ? { avatar: picked.error } : null,
     unreadable,
     memberErrors(values),
-    values.published ? publishErrors({ kind: 'member', bio: values.bio }) : null,
+    values.published
+      ? publishErrors({
+          kind: 'member',
+          headline: values.headline,
+          bio: values.bio,
+          careerText: values.careerText,
+        })
+      : null,
     await memberSlugTaken(database, values.slug, id),
   )
   if (errors) return back(errors)
@@ -2743,7 +2761,7 @@ const BlockForm = (props: {
                 hint={
                   type.key === 'statement'
                     ? `大きく出る · ${MAX_STATEMENT_SENTENCE} 字まで`
-                    : `空なら「${type.title || type.label}」`
+                    : `空なら「${type.title || type.label}」 · ${MAX_CHARS.blockHeading} 字まで（目次とページャに1行で並ぶ）`
                 }
               />
               <Area

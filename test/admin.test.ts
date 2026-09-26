@@ -1,11 +1,12 @@
 import { env } from 'cloudflare:test'
+import seedSql from 'virtual:repo:seed.sql'
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { type BlockKey, blockType, MAX_CHARS } from '../src/blocks'
+import { type BlockKey, blockType, MAX_CHARS, MEMBER_PER_SCREEN, TIMELINE } from '../src/blocks'
 import * as schema from '../src/db/schema'
 import { yearFrom } from '../src/lib/format'
 import { chunk } from '../src/lib/paginate'
-import { db, form, get, resetDb, seedItem, seedMember, signIn } from './helpers'
+import { db, form, get, okText, resetDb, seedItem, seedMember, signIn } from './helpers'
 import { avif, file, gif, heic, jpeg, png, svg, webp } from './images'
 
 beforeEach(resetDb)
@@ -101,7 +102,7 @@ describe('Members', () => {
       body: form({ name: '岡崎 昂功', slug: 'okazaki', role: 'System Engineer', published: '1' }),
     })
     expect(response.status).toBe(303)
-    expect(await (await get('/all')).text()).toContain('岡崎 昂功')
+    expect(await okText('/all')).toContain('岡崎 昂功')
   })
 
   it('slug が重なったら弾き、打った内容は残す', async () => {
@@ -135,7 +136,7 @@ describe('Members', () => {
     const signed = await signIn()
     await signed(`/admin/members/${member.id}/delete`, { method: 'POST' })
 
-    expect(await (await get('/all')).text()).toContain('残るアプリ')
+    expect(await okText('/all')).toContain('残るアプリ')
     expect((await get('/members/okazaki')).status).toBe(404)
   })
 })
@@ -157,7 +158,7 @@ describe('Items', () => {
         linkUrl: ['https://example.com/repo', ''],
       }),
     })
-    const html = await (await get('/all')).text()
+    const html = await okText('/all')
     expect(html).toContain('テスト用アプリ')
     expect(html).toContain('SwiftUI')
     expect(html).toContain('https://example.com/repo')
@@ -172,7 +173,7 @@ describe('Items', () => {
       method: 'POST',
       body: form({ type: 'app', title: 'テスト用アプリ' }),
     })
-    expect(await (await get('/all')).text()).not.toContain('テスト用アプリ')
+    expect(await okText('/all')).not.toContain('テスト用アプリ')
 
     await signed(`/admin/items/${id}/delete`, { method: 'POST' })
     expect(await (await signed('/admin/items?type=app')).text()).not.toContain('テスト用アプリ')
@@ -220,7 +221,7 @@ describe('Items', () => {
       body: form({ type: 'app', title: '入れ替え', published: '1', tags: '新しいタグ' }),
     })
 
-    const html = await (await get('/all')).text()
+    const html = await okText('/all')
     expect(html).toContain('新しいタグ')
     expect(html).not.toContain('古いタグ')
   })
@@ -294,7 +295,7 @@ describe('Items — 本文と画像', () => {
     expect(image.status).toBe(200)
     expect(image.headers.get('content-type')).toBe('image/png')
 
-    const html = await (await get('/apps/item/appmixer')).text()
+    const html = await okText('/apps/item/appmixer')
     expect(html).toContain(
       `<figure class="shot"><img src="${url}" alt="音量ミキサーの画面" decoding="async"/></figure>`,
     )
@@ -303,7 +304,7 @@ describe('Items — 本文と画像', () => {
     expect(html).toContain('<a class="more" href="/apps/item/appmixer/story">')
     expect(html).not.toContain('背景と結果の段落です。')
     // 本文は本文の画面に、同じ段落の部品（Note）で出る
-    const story = await (await get('/apps/item/appmixer/story')).text()
+    const story = await okText('/apps/item/appmixer/story')
     expect(story).toContain('<div class="bio"><p>背景と結果の段落です。</p></div>')
   })
 
@@ -443,7 +444,7 @@ describe('Items — 本文と画像', () => {
     const [row] = await db().select().from(schema.items)
     expect(row?.imageUrl).toBeNull()
     expect(await itemKeys()).toEqual([])
-    expect(await (await get('/apps/item/gone')).text()).not.toContain('<figure')
+    expect(await okText('/apps/item/gone')).not.toContain('<figure')
   })
 
   it('差し替えると、前の画像は KV から消える', async () => {
@@ -955,7 +956,7 @@ describe('Items — 恒久リンクの slug', () => {
     expect(html).toContain('この slug は既に使われています')
     expect(html).toContain('消えてはいけない文章')
     // 1つの URL が2つの作品を指す状態は保存されない
-    expect(await (await get('/apps/item/appmixer')).text()).not.toContain('別のアプリ')
+    expect(await okText('/apps/item/appmixer')).not.toContain('別のアプリ')
   })
 
   it('この列より前からある行は、一度保存すれば恒久リンクが付く', async () => {
@@ -999,7 +1000,7 @@ describe('Items — 恒久リンクの slug', () => {
       body: form({ type: 'app', title: 'AppMixer 2', slug: 'appmixer', published: '1' }),
     })
     expect(response.status).toBe(303)
-    expect(await (await get('/apps/item/appmixer')).text()).toContain('AppMixer 2')
+    expect(await okText('/apps/item/appmixer')).toContain('AppMixer 2')
   })
 })
 
@@ -1055,7 +1056,7 @@ describe('構成 — 何画面になるかを見せる', () => {
       見るのは Projects の画面に出る数（管理画面の Projects の「N 画面」と同じ数）。
       全体の通し番号は持っていない——絞り込みで動いてしまうのでやめた。
     */
-    expect(await (await get('/projects')).text()).toContain(
+    expect(await okText('/projects')).toContain(
       `Projects の ${chunk(titles, per).length} 画面のうち 1 画面目`,
     )
 
@@ -1066,7 +1067,7 @@ describe('構成 — 何画面になるかを見せる', () => {
     const after = await (await signed('/admin/blocks')).text()
     expect(screenBadges(after)).toEqual([1, chunk(grown, per).length, 0, 1])
     expect(after).toContain('合計 5 画面')
-    expect(await (await get('/projects')).text()).toContain(
+    expect(await okText('/projects')).toContain(
       `Projects の ${chunk(grown, per).length} 画面のうち 1 画面目`,
     )
   })
@@ -1106,7 +1107,7 @@ describe('構成 — 何画面になるかを見せる', () => {
     // 公開ページ側と突き合わせる。/ から「次」を辿った数がそのまま合計になる
     let visited = 0
     for (let path: string | null = '/'; path && visited < 20; visited += 1) {
-      const page = await (await get(path)).text()
+      const page = await okText(path)
       path =
         page.match(/<a class="pager__go pager__go--next" href="([^"]+)" rel="next">/)?.[1] ?? null
     }
@@ -1197,7 +1198,7 @@ describe('構成 — 何画面になるかを見せる', () => {
         出る数と突き合わせる。置いてあるのはこのブロック1つだけなので、
         節の画面数＝管理画面の「N 画面」。
       */
-      const first = await (await get(`/block-${block.id}`)).text()
+      const first = await okText(`/block-${block.id}`)
       if (want > 1) expect(first, one.key).toContain(`${want} 画面のうち 1 画面目`)
       else expect(first, one.key).not.toContain('画面のうち')
 
@@ -1592,6 +1593,142 @@ describe('項目とメンバー — 書く場所の上限', () => {
       }),
     })
     expect(response.status).toBe(303)
+  })
+})
+
+/*
+  ADM-10。字数の関門が紹介文とブロックの本文にしか無く、個人ページの大見出し・
+  経歴、ブロックの見出しは上限なしで公開できた。経歴は timeline ブロックと同じ
+  部品・同じ件数で割るのに、timeline の字数の上限を持たなかった（同じ本文の
+  timeline は 400、経歴は 303）。上限はどれも npm run check:fit の fixture が
+  上限ちょうどの姿で測り続けている。
+*/
+describe('大見出し・経歴・ブロックの見出しの上限（公開の関門）', () => {
+  // 経歴の1行。年月 | 何を | 補足 で、見える字数が n 字になる
+  const careerLine = (n: number) => `2024 | ${'あ'.repeat(n - 5)} | あ`
+  const perScreen = MEMBER_PER_SCREEN.career
+  const overLine = Math.ceil((TIMELINE.maxChars + 1) / perScreen) + 2
+
+  it('長い大見出しと経歴は、公開するときに止め、理由をまとめて返す', async () => {
+    const signed = await signIn()
+    const response = await signed('/admin/members', {
+      method: 'POST',
+      body: form({
+        name: '岡崎 昂功',
+        slug: 'okazaki',
+        headline: 'あ'.repeat(MAX_CHARS.memberHeadline + 1),
+        careerText: Array.from({ length: perScreen }, () => careerLine(overLine)).join('\n'),
+        published: '1',
+      }),
+    })
+    expect(response.status).toBe(400)
+    const html = await response.text()
+    expect(html).toContain(`大見出しは ${MAX_CHARS.memberHeadline} 字までです`)
+    expect(html).toContain(`経歴は1画面（${perScreen} 行）で ${TIMELINE.maxChars} 字までです`)
+    expect(await db().select().from(schema.members)).toHaveLength(0)
+  })
+
+  it('下書きでは長さを見ない（上限より前に書いた人を行き止まりにしない）', async () => {
+    const signed = await signIn()
+    const response = await signed('/admin/members', {
+      method: 'POST',
+      body: form({
+        name: '岡崎 昂功',
+        slug: 'okazaki',
+        headline: 'あ'.repeat(MAX_CHARS.memberHeadline * 2),
+        careerText: Array.from({ length: perScreen }, () => careerLine(overLine)).join('\n'),
+      }),
+    })
+    expect(response.status).toBe(303)
+  })
+
+  it('経歴は割ったあとの1画面ごとに数える。次の画面に回るぶんまで足さない', async () => {
+    const signed = await signIn()
+    const each = Math.floor(TIMELINE.maxChars / perScreen)
+    const response = await signed('/admin/members', {
+      method: 'POST',
+      body: form({
+        name: '岡崎 昂功',
+        slug: 'okazaki',
+        headline: 'あ'.repeat(MAX_CHARS.memberHeadline),
+        careerText: Array.from({ length: perScreen * 2 }, () => careerLine(each)).join('\n'),
+        published: '1',
+      }),
+    })
+    expect(response.status).toBe(303)
+  })
+
+  it('ブロックの見出しは、公開するときに止める。ひとことの一文は別の上限', async () => {
+    const signed = await signIn()
+    const long = 'あ'.repeat(MAX_CHARS.blockHeading + 1)
+    const published = await signed('/admin/blocks', {
+      method: 'POST',
+      body: form({ type: 'now', title: long, body: '新しい道具を試す', published: '1' }),
+    })
+    expect(published.status).toBe(400)
+    expect(await published.text()).toContain(`見出しは ${MAX_CHARS.blockHeading} 字までです`)
+    expect(await db().select().from(schema.blocks)).toHaveLength(0)
+
+    const draft = await signed('/admin/blocks', {
+      method: 'POST',
+      body: form({ type: 'now', title: long, body: '新しい道具を試す' }),
+    })
+    expect(draft.status).toBe(303)
+
+    // ひとことの「見出し」の欄は大きく出る一文で、MAX_STATEMENT_SENTENCE が見る
+    const statement = await signed('/admin/blocks', {
+      method: 'POST',
+      body: form({ type: 'statement', title: long, body: '', published: '1' }),
+    })
+    expect(statement.status).toBe(303)
+  })
+
+  it('既定の見出し（空で保存したときに出る名前）は、どれも上限に収まる', () => {
+    for (const type of [
+      blockType('now'),
+      blockType('numbers'),
+      blockType('links'),
+      blockType('timeline'),
+    ]) {
+      if (type?.kind !== 'free') throw new Error('種類が無い')
+      expect([...type.title].length, type.key).toBeLessThanOrEqual(MAX_CHARS.blockHeading)
+    }
+  })
+
+  /*
+    seed.sql の紹介文は本人の文章で、いまの上限（紹介文 400 字）を超えている。
+    書き換えない（本人の言葉を検査の都合で削らない）。そのかわり関門がそれを
+    公開としては通さず、下書きへは戻せることをここで確かめる——上限を下げた日に
+    「公開中の本人のプロフィールが、次に保存した瞬間に止まる」ことを知っておくため。
+  */
+  it('seed の紹介文（本人の文章）は上限を超えている。公開では止まり、下書きへは戻せる', async () => {
+    const tuple = seedSql.slice(seedSql.indexOf('INSERT INTO members'))
+    const strings = [...tuple.matchAll(/'((?:[^']|'')*)'/g)].map((found) =>
+      (found[1] ?? '').replaceAll("''", "'"),
+    )
+    // slug, name, role, location, headline, bio の順
+    const bio = strings[5] ?? ''
+    expect(bio).toContain('コンピュータサイエンス')
+    expect([...bio].length).toBeGreaterThan(MAX_CHARS.memberBio)
+
+    const member = await seedMember({ bio, published: 1 })
+    const signed = await signIn()
+    const values = { name: member.name, slug: member.slug, bio }
+    const publish = await signed(`/admin/members/${member.id}`, {
+      method: 'POST',
+      body: form({ ...values, published: '1' }),
+    })
+    expect(publish.status).toBe(400)
+    expect(await publish.text()).toContain(`紹介文は ${MAX_CHARS.memberBio} 字までです`)
+
+    const draft = await signed(`/admin/members/${member.id}`, {
+      method: 'POST',
+      body: form(values),
+    })
+    expect(draft.status).toBe(303)
+    const row = await db().query.members.findFirst({ where: eq(schema.members.id, member.id) })
+    expect(row?.published).toBe(0)
+    expect(row?.bio).toBe(bio)
   })
 })
 

@@ -543,6 +543,12 @@ export const ItemCard = ({
       ) : null}
       {item.summary ? <p>{item.summary}</p> : null}
       <Metric item={item} />
+      {/*
+        タグと行き先は、1画面に収めるページでは 600 未満と、900 以上で画像の枠を
+        持つ行で畳む（app.css の --card-extras。全体ページではいつも出す）。
+        どちらも作品のページ（カードを押した先）に同じものが出ている。いちばん
+        重いカード2枚の行が、電話で 197px、1440 の中央寄せで 83px 溢れていた
+      */}
       <Tags tags={item.tags} />
       {showMember && item.memberName && item.memberSlug ? (
         <a class="card__member" href={`/members/${item.memberSlug}`}>

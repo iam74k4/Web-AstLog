@@ -149,10 +149,38 @@ npm run check:contrast # 入口の月の上で文字が読めるか（ブラウ�
 `check:fit` と `check:contrast` の2つだけは毛色が違う。`npm test` は workerd の中で動くので版面を組む
 エンジンが居らず、このサイトの名前そのものである不変条件——**公開ページは
 スクロールしない**——を1行も測れない。そこで `wrangler dev` を自分で立て、
-3骨格 × 3ビューポート（390x844 / 768x1024 / 1440x900。電話と板の2つは指＝
-`pointer: coarse` で）× `/sitemap.xml` に載った全 URL を Chromium で開き、ページの
-動きと節の弁の開き、それに**見出しの錨**（めくっても節の見出しが同じ高さに居るか）を
-測る。`/all` だけは縦に伸びてよいので測らない。初回は実体のブラウザが要る。
+3骨格 × 3書体 × 3ビューポート（390x844 / 768x1024 / 1440x900。電話と板の2つは指＝
+`pointer: coarse` で）× 訪問者とログインした姿（柱に「管理画面」が出る）×
+`/sitemap.xml` に載った全 URL を Chromium で開いて測る。`/all` だけは縦に伸びてよいので測らない。
+初回は実体のブラウザが要る（Node は 22.18 以降。上限の数を `src/blocks.ts` から
+そのまま読むのに、Node の型の読み飛ばしを使う）。
+
+測るのは箱の位置そのもの——外枠（`.shell`）が画面の高さちょうどか、`main` と柱の
+見えている要素が画面の下端より下に出ていないか（`overflow: clip` で黙って切られて
+いないか）、節の弁が開いていないか、`html` / `body` が `clip`・節が `auto` に解けて
+いるか、柱が骨格どおりの場所（左か上）に居るか、**見出しの錨**（めくっても節の
+見出しが同じ高さに居るか）。
+
+中身は3つで、どれも使い捨ての D1 に入れて測る（手元の D1 には触らない。migrate や
+seed を先に流さなくてよい）。
+
+| 中身 | 何か | URL |
+|---|---|---|
+| seed | `seed.sql`。本人のサイトそのもの | 17 |
+| fixture（複数人） | `scripts/lib/fit-fixture.mjs` が `src/blocks.ts` の上限から作る、上限ちょうどのサイト。打ち込むブロック6種を均等に割った形と1つに寄せた形で・6人の Team・長い肩書き・上限の大見出し / 紹介文 / 経歴・いちばん重いカードの行・本文の画面 | 41 |
+| fixture（1人） | 同じ中身で公開中のメンバーを1人にしたもの（Team の位置にプロフィール・柱が名前と長い職種で名乗る） | 28 |
+
+成功行は中身ごとに1行出る。
+
+```
+✓ seed（1人のサイト）: 918 通り（17 URL × 3骨格 × 3書体 × 3寸法 × 2姿）。ページが動いた画面 0・
+  切られた要素 0・弁が開いた節 0。いちばん惜しい節の余り 29.3px（…）。見出しの錨のずれ 最大 0px
+```
+
+読むのは3つ。**URL の数**（上の表より減っていたら、測れていない。検査は seed が 17 本
+より少ないとき・fixture から生えるはずの画面が1本でも欠けたときに自分で止まる）、
+**いちばん惜しい節の余り**（どこがいちばん窮屈か。数 px なら次の変更で溢れる）、
+**見出しの錨のずれ**（1px を超えたら落ちる）。
 
 `check:contrast` も同じ理由でブラウザが要る。入口と締め（Contact）の画面の背景には
 粒子で焼いた三日月があり、いちばん明るい所は白、見出しも `#f2f2f4` なので、置き方を間違えると
@@ -166,9 +194,13 @@ npm run check:contrast # 入口の月の上で文字が読めるか（ブラウ�
 
 ```bash
 npx playwright install chromium   # 一度だけ
-FIT_BASE=http://localhost:8787 npm run check:fit        # 立てっぱなしの dev に向けて測る
+FIT_ONLY=many,solo npm run check:fit                     # 中身を絞って測る（seed / many / solo）
+FIT_BASE=http://localhost:8787 npm run check:fit        # 立てっぱなしの dev に向けて測る（その D1 のまま・訪問者の姿だけ）
 CONTRAST_BASE=http://localhost:8787 npm run check:contrast
 ```
+
+`check:contrast` は手元の D1（`--local` の既定の置き場）をそのまま読むので、新しい
+ワークツリーでは `npm run db:migrate:local` と `npm run db:seed:local` を先に通すこと。
 
 push すると GitHub Actions が同じものを走らせる（`check` と `fit` の2つの job）。
 
@@ -306,9 +338,9 @@ Apps と Works を Projects に畳む）を流したあとの D1 は、Projects 
 画像は KV の `items/` に置かれ、`/images/items/…` から出る。画像を公開するときは
 代替テキストが要る。
 
-seed に本文が無いので、seed のままの `check:fit` は本文の画面を1枚も測らない
-（URL は 17 のまま）。本文の画面に触れたら、本文を書いた作品を置いてから測ること
-（本文のある作品の数だけ URL が増える）。
+seed に本文が無いので、seed の `check:fit` は本文の画面を1枚も測らない（URL は 17 の
+まま）。本文の画面は `check:fit` の fixture（上限ちょうどの本文を均等に割った形と
+1つに寄せた形の2件。1件は 390 で2行に折れる作品名）が測る。
 
 `items.image_width` / `image_height`（画像の寸法。共有カードの `og:image:width` /
 `height` と `twitter:card` の大きさにだけ使う）は `0008_item_image_size` で入る。
@@ -410,16 +442,18 @@ public/
                        public/ は Worker より先に配られるので、置くと
                        Worker が組み立てているほうが静かに届かなくなる
 scripts/
-  check-fit.mjs      npm run check:fit の中身。ブラウザで寸法を測る
+  check-fit.mjs      npm run check:fit の中身。ブラウザで寸法を測る（seed と、上限ちょうどの fixture）
   check-contrast.mjs npm run check:contrast の中身。月の上の文字を画素で測る
   check-ids.mjs      本番に触れる前の番兵。wrangler.toml の id がプレースホルダなら止める
   seed-remote.mjs    npm run db:seed:remote:destroys-prod の中身。本番が空のときだけ流す
   touch-site.mjs     公開ページの写しの版を上げる（npm run site:touch / db:seed:local の最後）
   moon/              入口の月。render.py が Blender で焼き、pack.py が配信用に詰める
                      配るのは無彩色の三日月だけ。光暈は app.css が --accent から描く
-  lib/               上の2本の共通部分。dev サーバの立て方（dev-server.mjs）と
+  lib/               上の2本の共通部分。dev サーバの立て方と使い捨ての D1（dev-server.mjs）、
                      src/theme.ts の読み方（theme.mjs）。写しを2本持たない
                      wrangler.toml の id の読み方（wrangler-ids.mjs）も
+                     fit-fixture.mjs は check:fit の上限ちょうどの中身を src/blocks.ts の
+                     上限から作る。ts-import.mjs は src/ の .ts を Node からそのまま読む口
 .github/workflows/
   check.yml          push と PR ごとの門。deploy からも同じものを呼ぶ（workflow_call）
   deploy.yml         本番へ出す道（main だけ・門 → 写し → 移行 → deploy）
