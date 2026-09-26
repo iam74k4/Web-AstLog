@@ -2,7 +2,8 @@
   月の上で、文字が読めるか（WCAG 1.4.3）を実際にブラウザで測る。
 
   月が出るのはサイトの連なりの最初と最後——入口と、締めの Contact（入口の
-  三日月を左右に返して小さく置く）。どちらも字の後ろに光暈が回る。
+  三日月を左右に返して小さく置く。画面に出る字はボタン2つだけ）。どちらも
+  字の後ろに光暈が回る。
   測る画面と字の一覧は下の SCREENS。
 
   月は入口の画面の h1 とリード文の後ろを通る。粒子はいちばん明るい所が白
@@ -96,15 +97,12 @@ const SCREENS = [
     name: '締め',
     path: '/contact',
     panel: 'main > .moonlit',
+    // 画面に出る字はボタン2つだけ（見出しは読み上げ用の .sr-only で、描かれない）
     targets: [
-      { selector: '.contact__kicker', name: '札', required: true },
-      { selector: '.contact > h1', name: '見出し', required: true },
-      { selector: '.contact__lead', name: 'リード文', required: true },
-      { selector: '.contact__address', name: 'アドレス', required: true },
-      { selector: '.contact__actions .socials a', name: 'GitHub のピル' },
+      { selector: '.contact__actions .socials a', name: 'GitHub のピル', required: true },
       { selector: '.contact__actions .pill-cta', name: 'メールのピル', required: true },
     ],
-    hide: 'main > .moonlit .contact > :is(p, h1)',
+    hide: null,
     ink: 'main > .moonlit .contact__actions a',
     minPixels: 4500,
     motion: false,

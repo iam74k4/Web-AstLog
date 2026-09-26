@@ -137,11 +137,12 @@
   /*
     締めの画面（Contact）の月の丈。入口の --moon-h より小さい。
 
-    Contact の字の塊は入口より背が高い（札・見出し2行・リード文・行き先・
-    アドレス）。入口と同じ 45% では、390 で三日月の下端（10% + 45%）が
-    字の上端に触れる。34% なら 390x844 で縦に離れ、1024 以上の中央寄せと
-    雑誌風では字が中央（左）・月が右で横に分かれる。
-    **動かしたら npm run check:contrast。** 締めの画面も測っている。
+    締めは入口より一段静かに置く。入口の月が画面の主役なのに対して、ここの
+    主役は下のボタン2つで、月は「最初の画面と対になっている」ことを示せれば
+    足りる。字を置いていたころは字の塊との間隔でも縛られていた（入口と同じ
+    45% では 390 で三日月の下端が字の上端に触れた）が、いまはボタンだけなので
+    その縛りは緩い。
+    **動かしたら npm run check:contrast。** 締めの画面のボタンも測っている。
   */
   --moon-closing-h: 34%;
 
@@ -971,20 +972,14 @@ main {
   中央寄せの骨格で text-align: center がそのまま効くようにするため
   （flex にすると、そちらだけ別の寄せ方を書くことになる）。
 */
-.hero .hero__role,
-.contact__kicker {
+.hero .hero__role {
   color: var(--ink-mid);
   font-family: var(--font-mono);
   font-size: var(--fs-meta);
   letter-spacing: 0.08em;
 }
 
-/*
-  締めの画面（Contact）の見出しの上の札も同じ姿にする。入口の肩書きと対に
-  なる位置で、点が同じく右上の月と字を結ぶ。
-*/
-.hero__role::before,
-.contact__kicker::before {
+.hero__role::before {
   content: '';
   display: inline-block;
   width: var(--dot);
@@ -1739,11 +1734,12 @@ main {
 
 /*
   連なりの最後の1枚。入口（.hero）と対になる締めで、同じ組み方をする——
-  月を右上に（.moon--closing）、字を画面の下に（.moonlit）。
+  月を右上に（.moon--closing）、ボタンを画面の下に（.moonlit）。
 
-  箱（枠・面・影）には入れない。箱だったころは、広い画面の真ん中に小さな
-  枠が浮き、周りの大半が空いたままだった（1440 でパネル 869x802 のうち
-  枠が 869x281）。入口と同じく、画面そのものを1枚の構図として使う。
+  画面に出すのは月とボタン2つだけで、字は置かない（見出しは読み上げ用の
+  .sr-only。理由は src/routes/public.tsx の Contact）。箱（枠・面・影）にも
+  入れない。箱だったころは、広い画面の真ん中に小さな枠が浮き、周りの大半が
+  空いたままだった（1440 でパネル 869x802 のうち枠が 869x281）。
   下の余白は .hero と同じ。
 */
 .contact {
@@ -1752,36 +1748,6 @@ main {
   gap: var(--sp-5);
   align-items: flex-start;
   padding-block: var(--sp-3) var(--enter-shift);
-}
-
-/*
-  割られた画面では h1、全体ページでは h2。.head と同じ理由で、要素が変わっても
-  字面は変えない。
-
-  入口の大見出しと同じ書き方で、段だけ1つ下げる（--fs-display-sm。個人ページの
-  名乗りと同じ段）。名前より長い一文なので、同じ段では 390 で3行になる。
-  塊（、。まで）を1行ずつに積むのも入口と同じ——流していたころは 390 で
-  「したい / い。」と1字だけ次の行へ落ちていた。
-*/
-.contact :is(h1, h2) {
-  font-family: var(--font-display);
-  font-size: var(--fs-display-sm);
-  font-weight: 500;
-  font-feature-settings: 'palt';
-  line-height: 1.3;
-  letter-spacing: -0.01em;
-}
-
-.contact :is(h1, h2) .phrase {
-  display: block;
-}
-
-/* 入口のリード文（.hero p）と同じ大きさ・同じ幅 */
-.contact__lead {
-  max-width: 54ch;
-  color: var(--ink-mid);
-  font-size: var(--fs-md);
-  text-wrap: pretty;
 }
 
 /* メール（塗りのピル）と GitHub（柱と同じ .socials）を横に並べる。狭ければ折り返す */
@@ -1793,11 +1759,9 @@ main {
 }
 
 /*
-  メールのアドレスは字で置く。mailto はメールソフトの無い環境では何も起きない
-  ので、写し取れる形でも持っておく。user-select: all で、1回押せば全部選べる。
-
-  小さい字なので 4.5:1 が要り、光暈の上にも乗りうる。--ink-weak では足りない
-  （入口の帯の件数と同じ理由で --ink-mid。npm run check:contrast が測る）。
+  メールのアドレス。全体ページ（/all）にだけ字で置く——あそこは印刷の宛先で、
+  紙の上ではボタンの行き先（mailto）が読めない。user-select: all で、1回
+  押せば全部選べる。小さい字なので 4.5:1 が要り、--ink-weak では足りない。
 */
 .contact__address {
   color: var(--ink-mid);
@@ -3027,8 +2991,7 @@ body[data-layout='center'] .toc {
   padding-top: 0;
 }
 
-body[data-layout='center'] .hero p,
-body[data-layout='center'] .contact__lead {
+body[data-layout='center'] .hero p {
   margin-inline: auto;
 }
 

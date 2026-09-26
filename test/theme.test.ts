@@ -583,11 +583,12 @@ describe('部品の作法', () => {
     expect(sheet).not.toContain('.head h2 {')
     expect(bodyOf(sheet, '.head :is(h1, h2) {')).toContain('font-size: var(--fs-lg)')
 
-    expect(sheet).not.toContain('.contact h2 {')
-    // 締めの見出しは入口の大見出しの1段下（個人ページの名乗りと同じ段）
-    expect(bodyOf(sheet, '.contact :is(h1, h2) {')).toContain('font-size: var(--fs-display-sm)')
-    // 塊を1行ずつに積む。流すと 390 で「したい / い。」と1字だけ落ちていた
-    expect(bodyOf(sheet, '.contact :is(h1, h2) .phrase {')).toContain('display: block')
+    /*
+      Contact の見出しは、割られた画面では読み上げ用の .sr-only、全体ページでは
+      .head（SectionHead）。専用の見出しの規則は持たない——持つと、画面に出ない
+      h1 に大きさを与えるだけの規則が残る
+    */
+    expect(sheet).not.toMatch(/\.contact (h1|h2|:is\(h1, h2\))/)
   })
 
   it('締めの画面（Contact）は箱に入れず、入口と同じ組み方をする', () => {

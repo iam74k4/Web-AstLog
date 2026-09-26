@@ -471,12 +471,16 @@ describe('連絡先の行き先', () => {
     }
   })
 
-  it('アドレスはピルの下に字でも置く。リンクにはしない（同じ行き先を2つ置かない）', async () => {
+  it('アドレスの字は全体ページにだけ置く。紙の上ではボタンの行き先が読めない', async () => {
     await seedMember()
 
-    const main = mainOf(await (await get('/contact')).text())
-    expect(main).toContain(`<p class="contact__address">${SITE.email}</p>`)
-    expect(main).toMatch(/<a class="pill-cta" href="mailto:[^"]+">[\s\S]*?メールを送る/)
+    const screen = mainOf(await (await get('/contact')).text())
+    expect(screen).toMatch(/<a class="pill-cta" href="mailto:[^"]+">[\s\S]*?メールを送る/)
+    expect(screen).not.toContain('contact__address')
+
+    const whole = await (await get('/all')).text()
+    const contact = whole.slice(whole.indexOf('<section id="contact"'))
+    expect(contact).toContain(`<p class="contact__address">${SITE.email}</p>`)
   })
 })
 
@@ -489,13 +493,32 @@ describe('締めの画面（Contact）', () => {
     expect(main).toContain('<div class="moon moon--closing" aria-hidden="true">')
   })
 
-  it('見出しは句読点で塊に切る。1字だけ次の行へ落とさない', async () => {
+  it('画面に出すのはボタン2つだけ。見出しは読み上げのためにだけ置く', async () => {
+    /*
+      字（見出し・リード文・アドレス）は描かない。ただし割られた画面は h1 を
+      ちょうど1つ持つ決まり（WCAG 1.3.1）なので、見出しは .sr-only で残す。
+      外すと、見出しで移動する人にはこの画面が「何も無い」画面になる
+    */
     await seedMember()
 
-    const main = mainOf(await (await get('/contact')).text())
-    const h1 = main.match(/<h1>([\s\S]*?)<\/h1>/)?.[1] ?? ''
-    expect(h1).toContain('class="phrase"')
-    expect(h1.replace(/<[^>]+>/g, '')).toBe(SITE.contactTitle)
+    for (const path of ['/contact', '/members/okazaki/contact']) {
+      const main = mainOf(await (await get(path)).text())
+      const contact = main.slice(main.indexOf('<div class="contact">'))
+      expect(contact.match(/<h1[^>]*>/g), path).toEqual(['<h1 class="sr-only">'])
+      expect(contact, path).toContain('<h1 class="sr-only">Contact</h1>')
+      // 画面に出る p は1つも無い（札・リード文・アドレスを置かない）
+      expect(contact, path).not.toMatch(/<p\b/)
+      expect(main, path).toContain('aria-label="Contact"')
+    }
+  })
+
+  it('全体ページでは、ほかの節と同じ見出しを目に見える形で置く', async () => {
+    await seedMember()
+
+    const whole = await (await get('/all')).text()
+    const contact = whole.slice(whole.indexOf('<section id="contact"'))
+    expect(contact).toContain('<div class="head"><h2>Contact</h2></div>')
+    expect(contact).not.toContain('sr-only')
   })
 
   it('全体ページと個人ページには月を敷かない', async () => {
