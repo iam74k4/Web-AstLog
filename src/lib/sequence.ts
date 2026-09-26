@@ -102,6 +102,32 @@ export function stepAt(steps: Step[], href: string | null): number {
   return href === null ? 0 : steps.findIndex((step) => step.href === href)
 }
 
+/*
+  列の前提: 1つの URL は列に1度しか現れない。
+
+  stepAt は URL から findIndex で添字を引くので、同じ URL が2度あると2つ目の
+  画面には決して着かない。そのうえ1つ目の「次」が同じ URL を指すので、
+  ページャが自分自身を指して先へ進めなくなる——固定のブロックが二重送信で
+  2行になったとき、入口の「次 →」を何度押しても入口に戻った。
+
+  **重なりは落とさずに例外にする。** データの側はもう重なりを作れない
+  （固定のブロックは DB の部分一意索引と publishedBlocks の重複落とし、
+  打ち込むものは block-<id>、メンバーと作品は slug の unique）。ここまで来る
+  重なりは列を組むコードの誤りで、黙って落とすと、どの画面が消えたかを誰も
+  知らないまま一部の画面に着けなくなる（check:fit も sitemap も URL を重ねずに
+  数えるので、検査からも見えない）。例外なら 500 になり、公開ページの全 URL を
+  描くテスト（test/public.test.ts）がその場で落ちる。
+*/
+function assertUniqueHrefs(steps: Step[]) {
+  const seen = new Set<string>()
+  for (const step of steps) {
+    if (seen.has(step.href)) {
+      throw new Error(`画面の連なりに同じ URL が2度並んでいる: ${step.href}`)
+    }
+    seen.add(step.href)
+  }
+}
+
 // 目次のまとめ単位と名前。省いたものは節（navKey / nav）と同じ
 const tocKeyOf = (step: Step) => step.tocKey ?? step.navKey
 // null は「目次に出さない」なので ?? では書けない（null も既定へ落ちてしまう）
@@ -119,6 +145,7 @@ const tocLabelOf = (step: Step) => (step.tocLabel === undefined ? step.nav : ste
   （Team の画面の代わり。同じ renderMemberScreen）。
 */
 export function sequence(steps: Step[], index: number): Sequence | null {
+  assertUniqueHrefs(steps)
   const current = steps[index]
   if (!current) return null
 

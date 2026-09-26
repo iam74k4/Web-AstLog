@@ -207,6 +207,21 @@ npm run deploy
 既にある画像は寸法が `null` のまま——作品のページの共有カードは寸法を名乗らず、
 小さい札（`summary`）になるだけ。画像を選び直して保存すれば読み取って入る。
 
+`0009_one_fixed_block` 〜 `0010_permalinks_and_order` で入るもの。どれも既にある行を
+壊さない。
+
+- 決まった中身のブロック（hero / projects / team / contact）が二重送信で2行に
+  なっていたら、0009 が種類ごとに1行へ畳む（公開中の行を先に、並びの先頭を残す）。
+  そのあと 0010 が「1つだけ」の部分一意索引 `blocks_fixed_once` を張る。重複を
+  残したまま索引を張ると移行ごと止まるので、この順は崩さないこと
+- `items.year_from`（並べるための年）は year から DB が作る列（生成列・VIRTUAL）で、
+  既にある作品にもそのまま効く。埋め直しの移行は要らない。頭が数字4桁でない年の
+  作品は、一覧の最後に回る（管理画面が「並びに使われません」と知らせる）
+- `item_slug_redirects` / `member_slug_redirects`（前の slug の転送表）は空で入る。
+  管理画面で slug を変えた日から、前の URL がいまの URL へ 301 で寄る
+- `form_key`（追加のフォームの一度きりの札。members・items・blocks）は既にある行では
+  `null` のまま（札を持たない行は何行でも入る）
+
 受け取る画像は中身の先頭のバイトで決めた PNG・JPEG・WebP・AVIF・GIF だけで、
 SVG と HEIC は弾く。この検査より前に上げた SVG / HEIC が KV に残っていても、
 `/images/*` は画像としてではなく添付（`application/octet-stream`）で返すので、

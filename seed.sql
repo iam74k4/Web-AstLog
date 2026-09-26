@@ -2,6 +2,8 @@
 -- 何度流しても同じ状態になるよう、先に消してから入れている。
 -- 本番に流すのは最初の一度だけ（npm run db:seed）。
 
+DELETE FROM item_slug_redirects;
+DELETE FROM member_slug_redirects;
 DELETE FROM item_links;
 DELETE FROM item_tags;
 DELETE FROM items;

@@ -1,6 +1,6 @@
 import { relations, sql } from 'drizzle-orm'
 import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
-import { BLOCK_KEYS } from '../blocks'
+import { BLOCK_KEYS, FIXED_BLOCK_KEYS } from '../blocks'
 import { PROVIDER_KEYS } from '../lib/oauth'
 
 /*
@@ -18,7 +18,12 @@ export const members = sqliteTable(
   'members',
   {
     id: integer('id').primaryKey({ autoIncrement: true }),
-    // /members/:slug になる。変えると URL が変わる
+    /*
+      /members/:slug になる。管理画面から変えられるが、変えたときは前の slug を
+      member_slug_redirects に残し、前の URL は新しい URL へ 301 で送る
+      （src/routes/public.tsx の renderMemberScreen）。欄を空にして保存しても
+      作り直さず、いまの値のまま（src/routes/admin.tsx の readMemberForm）
+    */
     slug: text('slug').notNull().unique(),
     name: text('name').notNull(),
     role: text('role').notNull().default(''),
@@ -37,11 +42,27 @@ export const members = sqliteTable(
     email: text('email'),
     published: integer('published').notNull().default(0),
     sortOrder: integer('sort_order').notNull().default(0),
+    // 追加のフォームの一度きりの札。二重送信で同じ人を2行作らない（form_key の注記）
+    formKey: text('form_key').unique(),
     createdAt: text('created_at').notNull().default(now),
     updatedAt: text('updated_at').notNull().default(now),
   },
   (t) => [index('idx_members_public').on(t.published, t.sortOrder)],
 )
+
+/*
+  追加のフォームの一度きりの札（form_key）。members・items・blocks の3つが持つ。
+
+  管理画面は JavaScript を持たない HTML フォームなので、送信ボタンを押したあとに
+  押せなくする手が無い。遅い回線で2度押すと、同じ中身の行が2つできていた
+  （日本語だけの題の作品は slug が毎回乱数で作られるので、slug の unique も効かない。
+  メモには自然なキーそのものが無い）。フォームを描くときに札を1枚作って hidden で
+  持ち回し、行と一緒に書く。同じ中身の2度目の送信は同じ札で見つかり、書かずに
+  「保存しました」へ送る（1度目がもう保存している）。
+
+  null は「札を持たずに作った行」——この列より前の行と、seed と、編集で書いた行。
+  SQLite は unique の中の NULL を互いに別物として扱うので、何行あっても通る。
+*/
 
 // 絞り込みボタンの元。自由入力をやめてここに寄せる。
 // "macOS" と "Mac OS" のような表記ゆれでフィルタが壊れるのを防ぐため
@@ -72,7 +93,11 @@ export const items = sqliteTable(
       名指しできる URL を、並び順から切り離してここに持つ。
 
       null は「恒久リンクがまだ無い」。この列より前からある行だけが該当し、
-      管理画面から一度保存すれば埋まる（保存時は必ず作品名から作る）。
+      管理画面から一度保存すれば埋まる（欄が空なら作品名から作る）。
+
+      管理画面から変えられるが、変えたときは前の slug を item_slug_redirects に
+      残し、前の URL は新しい URL へ 301 で送る。欄を空にして保存しても
+      作り直さず、いまの値のまま（src/routes/admin.tsx の readItemForm）。
       NOT NULL にしないのは、既にある行を1つの既定値で埋めると、その値が
       重なって unique を張れないため。SQLite は unique の中の NULL を
       互いに別物として扱うので、埋まっていない行が何行あっても通る。
@@ -80,6 +105,26 @@ export const items = sqliteTable(
     slug: text('slug').unique(),
     // "2026" や "2024 — 現在"（続いているもの。経歴の期間と同じ書き方）を入れるので文字列
     year: text('year').notNull().default(''),
+    /*
+      並べるための年。year の頭の数字4桁で、頭が数字4桁でなければ null。
+
+      公開の並び（src/db/queries.ts の itemOrder）は year_from の新しい順で、
+      null は最後。year の文字列をそのまま比べていたころは、「令和6」「〜2023」
+      「FY2024」のような数字で始まらない年が、文字の大小で 2026 より上に来ていた。
+      year は表示のためだけに残す。
+
+      **year から DB が作る列（生成列・VIRTUAL）。書く口は無い。** 保存のたびに
+      アプリが埋める形にすると、アプリを通らずに入る行（seed.sql・テスト・D1 を
+      手で直した行）で year とずれる。ずれた行は並びのどこにも居場所が無く、
+      誰にも気づかれない。生成列なら、既にある行の移行（埋め直し）も要らない。
+      規則を変えるときは src/lib/format.ts の yearFrom（管理画面の「並びに
+      使われません」の知らせ）も一緒に。全角の数字は、年の欄を保存するときに
+      半角へ直してある（admin.tsx の readItemForm）。
+    */
+    yearFrom: integer('year_from').generatedAlwaysAs(
+      sql`case when "year" glob '[0-9][0-9][0-9][0-9]*' then cast(substr("year", 1, 4) as integer) end`,
+      { mode: 'virtual' },
+    ),
     // 「何であるか。何をしたか。」の2文。常体（目録の文。本文 body は「です・ます」）
     summary: text('summary').notNull().default(''),
     /*
@@ -99,7 +144,7 @@ export const items = sqliteTable(
       カードにもサムネイルを出さない。
 
       代替テキストは別の列で持つ（画像そのものに焼き込めない）。空のまま
-      公開させない検査は src/routes/admin.tsx の itemErrors。
+      公開させない検査は src/blocks.ts の publishErrors（公開の関門）。
     */
     imageUrl: text('image_url'),
     imageAlt: text('image_alt').notNull().default(''),
@@ -120,7 +165,14 @@ export const items = sqliteTable(
     metricUnit: text('metric_unit'),
     metricNote: text('metric_note'),
     published: integer('published').notNull().default(0),
+    /*
+      同じ年の中の並び（小さいほど先）。個人開発と業務で1つの数の並びとして
+      比べる——公開ページは2つの区分を1つの一覧に混ぜるので、区分ごとに別々の
+      並びを持つと、同じ数どうしの前後が決まらない。同じ数なら先に作ったほう（id）
+    */
     sortOrder: integer('sort_order').notNull().default(0),
+    // 追加のフォームの一度きりの札（members の下の form_key の注記）
+    formKey: text('form_key').unique(),
     createdAt: text('created_at').notNull().default(now),
     updatedAt: text('updated_at').notNull().default(now),
   },
@@ -153,6 +205,45 @@ export const itemLinks = sqliteTable('item_links', {
 })
 
 /*
+  前の slug から、いまの行への転送表。作品とメンバーで1つずつ。
+
+  恒久リンク（/apps/item/<slug>・/members/<slug>）は貼られたあとも動かない、が
+  約束だった。ところが slug は管理画面から自由に書き換えられ、書き換えた日に
+  名刺や SNS に貼った前の URL が 404 になっていた。誤字を直す自由と、リンクを
+  切らない保証を両立させるため、書き換えるたびに前の slug をここに残し、
+  公開ページは見つからない slug をここで引いて、いまの URL へ 301 で送る。
+
+  old_slug は主キー（1つの前の URL は1つの行だけを指す）。ほかの行が前に使って
+  いた slug は、いまの slug として使わせない（src/routes/admin.tsx の itemSlugTaken / memberSlugTaken）
+  ——使わせると、貼られた前の URL が黙って別の作品を指す（それは 404 より悪い）。
+  自分の前の slug へ戻すのは通り、そのとき行はここから消える。
+  行を消すとここも消える（cascade）。消した作品の前の URL は 404 のまま。
+*/
+export const itemSlugRedirects = sqliteTable(
+  'item_slug_redirects',
+  {
+    oldSlug: text('old_slug').primaryKey(),
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    createdAt: text('created_at').notNull().default(now),
+  },
+  (t) => [index('idx_item_slug_redirects_item').on(t.itemId)],
+)
+
+export const memberSlugRedirects = sqliteTable(
+  'member_slug_redirects',
+  {
+    oldSlug: text('old_slug').primaryKey(),
+    memberId: integer('member_id')
+      .notNull()
+      .references(() => members.id, { onDelete: 'cascade' }),
+    createdAt: text('created_at').notNull().default(now),
+  },
+  (t) => [index('idx_member_slug_redirects_member').on(t.memberId)],
+)
+
+/*
   トップページの並び。1行が1ブロック。
 
   type の種類と、それぞれが何を出すかは src/blocks.ts が正。決まった中身を
@@ -161,6 +252,11 @@ export const itemLinks = sqliteTable('item_links', {
   読み方は種類ごとに違い、メンバーの skills_text と同じく1行1件で持つ。
 
   空のときは DEFAULT_BLOCKS の並びで描く（真っ白なトップを出さない）。
+
+  決まった中身の種類は1つずつしか置けない（src/blocks.ts の FIXED_BLOCK_KEYS）。
+  それを DB でも持つのが blocks_fixed_once（その種類の行だけに効く部分一意索引）。
+  「読んでから足す」だけで守っていたころは、二重送信で hero〜contact が2組になり、
+  ページャが自分自身を指して入口から先へ進めなくなった。
 */
 export const blocks = sqliteTable(
   'blocks',
@@ -171,10 +267,18 @@ export const blocks = sqliteTable(
     body: text('body').notNull().default(''),
     published: integer('published').notNull().default(0),
     sortOrder: integer('sort_order').notNull().default(0),
+    // 追加のフォームの一度きりの札（members の下の form_key の注記）。打ち込むものだけが持つ
+    formKey: text('form_key').unique(),
     createdAt: text('created_at').notNull().default(now),
     updatedAt: text('updated_at').notNull().default(now),
   },
-  (t) => [index('idx_blocks_order').on(t.sortOrder)],
+  (t) => [
+    index('idx_blocks_order').on(t.sortOrder),
+    // 値は DDL に焼き込む（索引の条件に束縛変数は置けない）。一覧は src/blocks.ts が正
+    uniqueIndex('blocks_fixed_once')
+      .on(t.type)
+      .where(sql`${t.type} in (${sql.raw(FIXED_BLOCK_KEYS.map((key) => `'${key}'`).join(', '))})`),
+  ],
 )
 
 /*

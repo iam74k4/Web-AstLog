@@ -9,6 +9,8 @@ export const db = () => drizzle(env.DB, { schema })
 // テストごとに素の状態から始める。前のテストの残りに引きずられないように
 export async function resetDb() {
   const database = db()
+  await database.delete(schema.itemSlugRedirects)
+  await database.delete(schema.memberSlugRedirects)
   await database.delete(schema.itemLinks)
   await database.delete(schema.itemTags)
   await database.delete(schema.items)

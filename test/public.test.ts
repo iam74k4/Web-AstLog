@@ -8,7 +8,7 @@ import { publicRoutes } from '../src/routes/public'
 import { SITE } from '../src/site'
 import { LinkList, LinkRow, splitPhrases } from '../src/ui/components'
 import { MARK_POINTS } from '../src/ui/icons'
-import { db, get, resetDb, seedItem, seedMember, signIn } from './helpers'
+import { db, form, get, resetDb, seedItem, seedMember, signIn } from './helpers'
 
 beforeEach(resetDb)
 
@@ -416,7 +416,7 @@ describe('入口の名乗り', () => {
     }
   })
 
-  it('Contact の画面では、柱に GitHub / Mail を出さない。本文にボタンがある', async () => {
+  it('Contact の画面では、柱に GitHub / メールを出さない。本文にボタンがある', async () => {
     await seedMember()
 
     const contact = await (await get('/contact')).text()
@@ -1217,11 +1217,16 @@ describe('作品1件の恒久リンク', () => {
     expect((await get('/apps/item/draft-one')).status).toBe(404)
   })
 
-  it('知らない slug は 404。1語目と種類の食い違いも 404', async () => {
+  it('知らない slug は 404。1語目と種類の食い違いは、いまの区分の URL へ 301', async () => {
     await seedItem({ type: 'app', title: 'AppMixer', slug: 'appmixer' })
     expect((await get('/apps/item/nosuch')).status).toBe(404)
-    // 同じ作品に2つの URL を作らない（どちらが正かを canonical で名指し直すことになる）
-    expect((await get('/works/item/appmixer')).status).toBe(404)
+    /*
+      区分を変えた作品の、前の区分の URL（SYS-6）。以前は 404 で、区分を直すと
+      貼られたリンクが切れた。200 で2つ目の URL を作るのではなく、いまの1つへ寄せる
+    */
+    const moved = await get('/works/item/appmixer')
+    expect(moved.status).toBe(301)
+    expect(moved.headers.get('location')).toBe('/apps/item/appmixer')
   })
 
   it('一覧のカードの題から行ける。slug の無い作品はリンクにしない', async () => {
@@ -2787,6 +2792,280 @@ describe('文書の外枠', () => {
       }
     } finally {
       vi.useRealTimers()
+    }
+  })
+})
+
+/*
+  サイトを「置けるものを全部置いた」姿にする。sitemap の全 URL を回す検査
+  （h1・<title>・ページャ）が、手で並べた URL ではなく実物の連なりを見るため。
+  書くブロックは全種類、メモは見出しを空けたもの、Projects と経歴は2画面に割れる数。
+*/
+async function seedEverything() {
+  await seedMember({
+    skillsText: 'LANGUAGES:\nC# | 3年以上',
+    careerText: Array.from(
+      { length: MEMBER_PER_SCREEN.career + 1 },
+      (_, i) => `20${10 + i}.04 | 仕事${i} | 会社`,
+    ).join('\n'),
+  })
+  for (let i = 0; i < blockPerScreen('projects') + 1; i += 1) {
+    await seedItem({ title: `作品${i}`, slug: `item-${i}`, year: `20${20 + i}`, sortOrder: i })
+  }
+  await db()
+    .insert(schema.blocks)
+    .values([
+      { type: 'hero', published: 1, sortOrder: 10 },
+      { type: 'statement', title: 'つくる速さは、設計で決まる。', published: 1, sortOrder: 20 },
+      { type: 'projects', published: 1, sortOrder: 30 },
+      {
+        type: 'now',
+        title: 'Now',
+        body: 'ポートフォリオ | 作り直し中',
+        published: 1,
+        sortOrder: 40,
+      },
+      {
+        type: 'numbers',
+        title: '数字で見る',
+        body: '20 | 人日 | 半減',
+        published: 1,
+        sortOrder: 50,
+      },
+      {
+        type: 'links',
+        title: 'Links',
+        body: 'GitHub | https://github.com/iam74k4',
+        published: 1,
+        sortOrder: 60,
+      },
+      {
+        type: 'timeline',
+        title: 'Timeline',
+        body: '2024.03 | 入社 | 会社',
+        published: 1,
+        sortOrder: 70,
+      },
+      // 見出しを空けたメモ（段落だけの画面）。perScreen を超えて2画面に割れる
+      {
+        type: 'note',
+        title: '',
+        body: Array.from(
+          { length: blockPerScreen('note') + 1 },
+          (_, i) => `メモの段落 ${i} です。`,
+        ).join('\n\n'),
+        published: 1,
+        sortOrder: 80,
+      },
+      {
+        type: 'note',
+        title: 'あとがき',
+        body: '見出しのあるメモです。',
+        published: 1,
+        sortOrder: 90,
+      },
+      { type: 'team', published: 1, sortOrder: 100 },
+      { type: 'contact', published: 1, sortOrder: 110 },
+    ])
+}
+
+const sitemapPaths = async () => {
+  const xml = await (await get('/sitemap.xml')).text()
+  return [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => new URL(match[1] ?? '').pathname)
+}
+
+const titleOf = (html: string) => html.match(/<title>([^<]*)<\/title>/)?.[1] ?? ''
+
+/*
+  見出しの無いメモ（PUB-3）と、画面ごとの題（PUB-2）。どちらも sitemap の全 URL で見る
+  ——固定のブロックと個人ページだけを並べていた検査は、管理画面が許す「見出しを
+  空けたメモ」の画面に h1 が1つも無いことを見逃していた。
+*/
+describe('連なりの全画面', () => {
+  it('割られた画面は、どれも h1 をちょうど1つ持つ（sitemap の全 URL、書くブロックの全種類）', async () => {
+    await seedEverything()
+    const paths = (await sitemapPaths()).filter((path) => path !== '/all')
+    expect(paths.length).toBeGreaterThan(15)
+    for (const path of paths) {
+      const html = await (await get(path)).text()
+      expect(html.match(/<h1[^>]*>/g) ?? [], path).toHaveLength(1)
+    }
+  })
+
+  it('見出しを空けたメモは、種類の名前（メモ）を読み上げの h1・region の名前・ページャに使う。目次には並べない', async () => {
+    await seedEverything()
+    const note = await db().query.blocks.findFirst({
+      where: (t, { and, eq }) => and(eq(t.type, 'note'), eq(t.title, '')),
+    })
+    const html = await (await get(`/block-${note?.id}`)).text()
+    expect(mainOf(html)).toContain('<h1 class="sr-only">メモ</h1>')
+    expect(mainOf(html)).toContain('aria-label="メモ"')
+    expect(html).toContain('<span class="pager__section">メモ</span>')
+    expect(tocOf(html)).not.toContain('メモ')
+    // 見出しのあるメモは今までどおり目に見える h1 で、目次にも並ぶ
+    const titled = await db().query.blocks.findFirst({
+      where: (t, { eq }) => eq(t.title, 'あとがき'),
+    })
+    const other = await (await get(`/block-${titled?.id}`)).text()
+    expect(other).toContain('<h1>あとがき</h1>')
+    expect(tocOf(other)).toContain('あとがき')
+  })
+
+  it('sitemap の URL はどれも違う <title> を持つ。割った2画面目以降は数え方を添える', async () => {
+    await seedEverything()
+    const titles = new Map<string, string>()
+    for (const path of await sitemapPaths()) {
+      titles.set(path, titleOf(await (await get(path)).text()))
+    }
+    const seen = new Map<string, string>()
+    for (const [path, title] of titles) {
+      expect(seen.get(title), `${path} と ${seen.get(title)} が同じ題「${title}」`).toBeUndefined()
+      seen.set(title, path)
+    }
+    expect(titles.get('/projects')).toBe(`Projects 1 / 2 — ${SITE.name}`)
+    expect(titles.get('/projects/2')).toBe(`Projects 2 / 2 — ${SITE.name}`)
+    expect(titles.get('/members/okazaki/career/2')).toBe(`岡崎 昂功 · Career 2 / 2 — ${SITE.name}`)
+    // 1画面しかない節には数を添えない
+    expect(titles.get('/contact')).toBe(`Contact — ${SITE.name}`)
+    expect(titles.get('/members/okazaki/about')).toBe(`岡崎 昂功 · About — ${SITE.name}`)
+    // 名前の無い画面は、その画面の文の頭（入口と同じ題にしない）
+    expect([...titles.values()]).toContain(`つくる速さは、設計で決まる。 — ${SITE.name}`)
+  })
+
+  it('全体ページの題は入口と違う', async () => {
+    await seedMember()
+    expect(titleOf(await (await get('/all')).text())).not.toBe(
+      titleOf(await (await get('/')).text()),
+    )
+  })
+})
+
+describe('肩書きの無い人', () => {
+  it('題にも説明にも「（）」を出さない。jobTitle も名乗らない（PUB-6）', async () => {
+    await seedMember({ role: '', headline: '', bio: '' })
+    for (const path of ['/', '/members/okazaki', '/all']) {
+      const html = await (await get(path)).text()
+      expect(html, path).not.toContain('（）')
+    }
+    const entrance = await (await get('/')).text()
+    expect(titleOf(entrance)).toBe(`岡崎 昂功 — ${SITE.name}`)
+    expect(entrance).not.toContain('"jobTitle"')
+  })
+})
+
+/*
+  作品の並び（PUB-4）。year の頭の4文字を文字列のまま比べていたころは、数字で
+  始まらない年が文字の大小で 2026 より上、一覧の先頭に来た。
+*/
+describe('作品の並び', () => {
+  it('年の頭が数字4桁でない作品は、年のある作品より後ろ。そのあいだは並び順', async () => {
+    const years = ['令和6', '〜2023', 'FY2024', '24', '2026', '2019.04 — 2021', '']
+    for (const [index, year] of years.entries()) {
+      await seedItem({ title: `年「${year}」`, slug: `y${index}`, year, sortOrder: index * 10 })
+    }
+    const html = await (await get('/all')).text()
+    const order = years
+      .map((year) => ({ year, at: html.indexOf(`年「${year}」`) }))
+      .sort((a, b) => a.at - b.at)
+      .map((one) => one.year)
+    expect(order).toEqual(['2026', '2019.04 — 2021', '令和6', '〜2023', 'FY2024', '24', ''])
+  })
+
+  it('同じ年の中では、区分をまたいで並び順を比べる', async () => {
+    await seedItem({ type: 'work', title: '業務の20', slug: 'w', year: '2026', sortOrder: 20 })
+    await seedItem({ type: 'app', title: '個人の10', slug: 'a', year: '2026', sortOrder: 10 })
+    await seedItem({ type: 'app', title: '個人の30', slug: 'b', year: '2026', sortOrder: 30 })
+    const html = await (await get('/all')).text()
+    const at = (title: string) => html.indexOf(title)
+    expect(at('個人の10')).toBeLessThan(at('業務の20'))
+    expect(at('業務の20')).toBeLessThan(at('個人の30'))
+  })
+})
+
+/*
+  前の URL（ADM-7 / SYS-6）。slug を変えた作品・メンバーの前の URL は、いまの URL へ
+  301。以前は変えた日から 404 で、名刺や SNS に貼ったリンクが切れた。
+*/
+describe('前の URL', () => {
+  it('slug を変えた作品の前の URL は、いまの URL へ 301', async () => {
+    const item = await seedItem({ title: 'AppMixer', slug: 'appmixer' })
+    const signed = await signIn()
+    await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: form({ type: 'app', title: 'AppMixer', slug: 'app-mixer', published: '1' }),
+    })
+    const moved = await get('/apps/item/appmixer')
+    expect(moved.status).toBe(301)
+    expect(moved.headers.get('location')).toBe('/apps/item/app-mixer')
+    // 前の区分の URL でも、いまの URL へ
+    expect((await get('/works/item/appmixer')).headers.get('location')).toBe('/apps/item/app-mixer')
+    // 下書きにしたら、送る先ごと無い
+    await db().update(schema.items).set({ published: 0 })
+    expect((await get('/apps/item/appmixer')).status).toBe(404)
+  })
+
+  it('slug を変えたメンバーの前の URL は、同じ画面のいまの URL へ 301', async () => {
+    const member = await seedMember({ careerText: '2024.03 | 入社 | ある会社' })
+    const signed = await signIn()
+    await signed(`/admin/members/${member.id}`, {
+      method: 'POST',
+      body: form({ name: member.name, slug: 'okazaki-k', published: '1' }),
+    })
+    for (const [from, to] of [
+      ['/members/okazaki', '/members/okazaki-k'],
+      ['/members/okazaki/career', '/members/okazaki-k/career'],
+    ] as const) {
+      const response = await get(from)
+      expect(response.status, from).toBe(301)
+      expect(response.headers.get('location'), from).toBe(to)
+    }
+    expect((await get('/members/nobody')).status).toBe(404)
+  })
+})
+
+/*
+  固定のブロックが2行ある D1（PUB-1）。いまは DB の部分一意索引が2行目を拒むが、
+  索引より前に二重送信でできた重複は残りうる。読む側（publishedBlocks）でも1行に
+  絞り、ページャが自分自身を指して先へ進めない、を起こさない。
+*/
+describe('固定のブロックの重複', () => {
+  it('2組ある構成でも、ページャは自分自身を指さず、全体ページの節も1つずつ', async () => {
+    const index = env.TEST_MIGRATIONS.flatMap((one) => one.queries).find((query) =>
+      query.includes('blocks_fixed_once'),
+    )
+    if (!index) throw new Error('blocks_fixed_once の移行が無い')
+    await env.DB.prepare('DROP INDEX blocks_fixed_once').run()
+    try {
+      await seedMember({ slug: 'hoshino', name: '星野' })
+      await seedMember()
+      await seedItem({ title: 'AppMixer', slug: 'appmixer' })
+      await db()
+        .insert(schema.blocks)
+        .values(
+          (['hero', 'projects', 'team', 'contact'] as const).flatMap((type, at) => [
+            { type, published: 1, sortOrder: (at + 1) * 10 },
+            { type, published: 1, sortOrder: (at + 1) * 10 + 100 },
+          ]),
+        )
+
+      const nextOf = (html: string) =>
+        html.match(/<a class="pager__go pager__go--next" href="([^"]+)" rel="next">/)?.[1] ?? null
+      const visited: string[] = []
+      for (let path: string | null = '/projects'; path && visited.length < 20; ) {
+        visited.push(path)
+        const next = nextOf(await (await get(path)).text())
+        expect(next, `${path} の「次」が自分自身`).not.toBe(path)
+        path = next
+      }
+      expect(visited).toEqual(['/projects', '/team', '/contact'])
+
+      const whole = await (await get('/all')).text()
+      for (const id of ['projects', 'team', 'contact']) {
+        expect(whole.match(new RegExp(`id="${id}"`, 'g')), id).toHaveLength(1)
+      }
+    } finally {
+      await db().delete(schema.blocks)
+      await env.DB.prepare(index).run()
     }
   })
 })

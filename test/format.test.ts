@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
+  int,
   isHttpsUrl,
   isSafeUrl,
-  num,
   paragraphs,
   parseLines,
   parseSkills,
   parseTags,
   skillRows,
   toSlug,
+  yearFrom,
   yearInJapan,
 } from '../src/lib/format'
 
@@ -151,18 +152,41 @@ describe('toSlug', () => {
   })
 })
 
-describe('num', () => {
-  it('未入力は既定値', () => {
-    expect(num('', 10)).toBe(10)
-    expect(num(null, 10)).toBe(10)
+describe('int', () => {
+  it('未入力は null（空をどう扱うかは呼ぶ側が決める）', () => {
+    expect(int('')).toBeNull()
+    expect(int(null)).toBeNull()
   })
 
-  it('数字でなければ既定値', () => {
-    expect(num('abc', 10)).toBe(10)
+  it('数字でなければ null。黙って別の数に倒さない', () => {
+    expect(int('abc')).toBeNull()
+    expect(int('1.5')).toBeNull()
+    expect(int('10 番')).toBeNull()
+  })
+
+  it('全角の数字は半角に直して読む（日本語入力のままの「２０」）', () => {
+    expect(int('２０')).toBe(20)
+    expect(int('－５')).toBe(-5)
   })
 
   it('0 は 0 のまま', () => {
-    expect(num('0', 10)).toBe(0)
+    expect(int('0')).toBe(0)
+  })
+})
+
+describe('yearFrom', () => {
+  it('頭の数字4桁を読む。続いているもの（— 現在）も頭の年', () => {
+    expect(yearFrom('2026')).toBe(2026)
+    expect(yearFrom('2024 — 現在')).toBe(2024)
+    expect(yearFrom('2019.04 — 2021')).toBe(2019)
+    // 全角の数字は保存のときに半角へ直るので、知らせる側も直して読む
+    expect(yearFrom('２０２４')).toBe(2024)
+  })
+
+  it('頭が数字4桁でなければ null（並びでは最後に回る）', () => {
+    for (const year of ['', '令和6', '〜2023', 'FY2024', '24', 'Spring 2024', ' 2024']) {
+      expect(yearFrom(year), year).toBeNull()
+    }
   })
 })
 

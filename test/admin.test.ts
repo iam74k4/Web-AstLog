@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { type BlockKey, blockType, MAX_CHARS } from '../src/blocks'
 import * as schema from '../src/db/schema'
+import { yearFrom } from '../src/lib/format'
 import { chunk } from '../src/lib/paginate'
 import { db, form, get, resetDb, seedItem, seedMember, signIn } from './helpers'
 import { avif, file, gif, heic, jpeg, png, svg, webp } from './images'
@@ -1393,7 +1394,7 @@ describe('構成 — 上限に引っかかる行でも、引っ込められる',
     expect(row?.body).toHaveLength(1200)
   })
 
-  it('一覧のトグルからも、フォームを通らずに切り替えられる', async () => {
+  it('一覧のトグルで下書きに戻すのは、中身を見ずに通す', async () => {
     const block = await seedLongNote()
     const signed = await signIn()
 
@@ -1402,19 +1403,36 @@ describe('構成 — 上限に引っかかる行でも、引っ込められる',
       body: form({}),
     })
     expect(off.status).toBe(303)
-    expect(
-      (await db().query.blocks.findFirst({ where: (t, { eq }) => eq(t.id, block.id) }))?.published,
-    ).toBe(0)
+    const row = await db().query.blocks.findFirst({ where: (t, { eq }) => eq(t.id, block.id) })
+    expect(row?.published).toBe(0)
+    // 中身は触らない
+    expect(row?.body).toHaveLength(maxCharsOf('note') * 3)
+  })
 
-    // 戻すほうも同じ口から。中身は触らない
+  it('一覧のトグルで公開に戻すほうは、編集フォームと同じ関門で止め、理由を編集画面に出す', async () => {
+    /*
+      「中身は触らないので検査もしない」としていたころは、下書きの保存（長さを
+      見ない）とこのトグルを続けると、検査が1度も走らずに上限の3倍のメモが
+      公開になった（ADM-1 / MNT-1）。関門は published が 1 になるときに1か所
+    */
+    const block = await seedLongNote()
+    await db().update(schema.blocks).set({ published: 0 }).where(eq(schema.blocks.id, block.id))
+    const signed = await signIn()
+
     const on = await signed(`/admin/blocks/${block.id}/publish`, {
       method: 'POST',
       body: form({ published: '1' }),
     })
     expect(on.status).toBe(303)
+    expect(on.headers.get('location')).toBe(`/admin/blocks/${block.id}/edit?publish=blocked`)
     const row = await db().query.blocks.findFirst({ where: (t, { eq }) => eq(t.id, block.id) })
-    expect(row?.published).toBe(1)
-    expect(row?.body).toHaveLength(maxCharsOf('note') * 3)
+    expect(row?.published).toBe(0)
+
+    // 送られた先で、止めた理由と「公開する」の印（直して保存すれば公開される）
+    const edit = await (await signed(on.headers.get('location') ?? '')).text()
+    expect(edit).toContain('公開できませんでした')
+    expect(edit).toContain('1画面に収まりません')
+    expect(edit).toContain('name="published" value="1" checked=""')
   })
 
   it('一覧にその切り替えの口がある', async () => {
@@ -1507,7 +1525,7 @@ describe('項目とメンバー — 書く場所の上限', () => {
     expect(html).not.toContain('→ 実績')
   })
 
-  it('紹介文は字数と段落の数の両方で止める', async () => {
+  it('紹介文は、公開するときに字数と段落の数の両方で止める', async () => {
     const signed = await signIn()
     const long = await signed('/admin/members', {
       method: 'POST',
@@ -1515,6 +1533,7 @@ describe('項目とメンバー — 書く場所の上限', () => {
         name: '岡崎 昂功',
         slug: 'okazaki',
         bio: 'あ'.repeat(MAX_CHARS.memberBio + 1),
+        published: '1',
       }),
     })
     expect(long.status).toBe(400)
@@ -1527,11 +1546,30 @@ describe('項目とメンバー — 書く場所の上限', () => {
         name: '岡崎 昂功',
         slug: 'okazaki',
         bio: Array.from({ length: MAX_CHARS.memberBioParagraphs + 1 }, () => 'あ').join('\n\n'),
+        published: '1',
       }),
     })
     expect(manyParagraphs.status).toBe(400)
     expect(await manyParagraphs.text()).toContain('段落は')
     expect(await db().select().from(schema.members)).toHaveLength(0)
+  })
+
+  it('上限より前に保存された長い紹介文の人も、下書きに戻せる（行き止まりにしない）', async () => {
+    /*
+      紹介文の長さを下書きの保存でも見ていたころは、上限より前に保存された長い
+      紹介文を持つ人の編集フォームが同じ 400 で戻り、公開を外すことすらできなかった
+      （ADM-1 の「関門が3つの validator に別々に書いてあり、2つは下書きにも掛かる」）
+    */
+    const member = await seedMember({ bio: 'あ'.repeat(MAX_CHARS.memberBio * 2) })
+    const signed = await signIn()
+    const response = await signed(`/admin/members/${member.id}`, {
+      method: 'POST',
+      body: form({ name: member.name, slug: 'okazaki', bio: member.bio }),
+    })
+    expect(response.status).toBe(303)
+    const row = await db().query.members.findFirst({ where: eq(schema.members.id, member.id) })
+    expect(row?.published).toBe(0)
+    expect(row?.bio).toHaveLength(MAX_CHARS.memberBio * 2)
   })
 
   it('上限のうちに収まる紹介文は通る', async () => {
@@ -1549,5 +1587,645 @@ describe('項目とメンバー — 書く場所の上限', () => {
       }),
     })
     expect(response.status).toBe(303)
+  })
+})
+
+/*
+  作品の保存は、全部書けるか何も書かないか（ADM-6 / SYS-3 / DATA-1）。
+
+  行・タグ・リンク・転送表を1つの batch に入れた。1本ずつ await していたころは、
+  タグを 34 個付けるだけで D1 の束縛変数の上限（1文に 100 個）に当たって 500 になり、
+  その時点で前のタグとリンクはもう消えていた。
+*/
+describe('作品の保存は、全部書けるか何も書かないか', () => {
+  const tags = (n: number) => Array.from({ length: n }, (_, i) => `tag${i + 1}`).join(', ')
+
+  // テストの中だけの trigger——その表への書き込みを RAISE で止める
+  const failing = async (table: 'item_tags' | 'item_links') => {
+    await env.DB.prepare(
+      `CREATE TRIGGER IF NOT EXISTS fail_${table} BEFORE INSERT ON ${table} BEGIN SELECT RAISE(ABORT, 'D1 を落とす'); END`,
+    ).run()
+    return () => env.DB.prepare(`DROP TRIGGER IF EXISTS fail_${table}`).run()
+  }
+
+  const seedWithChildren = async () => {
+    const item = await seedItem({ slug: 'appmixer' })
+    await db().insert(schema.itemTags).values({ itemId: item.id, tag: 'Swift', sortOrder: 0 })
+    await db()
+      .insert(schema.itemLinks)
+      .values({ itemId: item.id, label: 'Repository', url: 'https://example.test/r', sortOrder: 0 })
+    return item
+  }
+
+  it('タグが多くても 500 にしない。下書きなら全部書く（束縛変数の上限は文を分けて避ける）', async () => {
+    const item = await seedWithChildren()
+    const signed = await signIn()
+    const response = await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: form({
+        type: 'app',
+        title: 'AppMixer',
+        slug: 'appmixer',
+        tags: tags(40),
+        linkLabel: ['Repository'],
+        linkUrl: ['https://example.test/r'],
+      }),
+    })
+    expect(response.status).toBe(303)
+    expect(await db().select().from(schema.itemTags)).toHaveLength(40)
+    expect(await db().select().from(schema.itemLinks)).toHaveLength(1)
+  })
+
+  it('公開では、タグとリンクは作品のページに収まる数まで。止めても前のタグとリンクは残る', async () => {
+    const item = await seedWithChildren()
+    const signed = await signIn()
+    const response = await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: form({
+        type: 'app',
+        title: 'AppMixer',
+        slug: 'appmixer',
+        tags: tags(MAX_CHARS.itemTags + 1),
+        linkLabel: Array.from({ length: MAX_CHARS.itemLinks + 1 }, (_, i) => `L${i}`),
+        linkUrl: Array.from({ length: MAX_CHARS.itemLinks + 1 }, (_, i) => `https://e.test/${i}`),
+        published: '1',
+      }),
+    })
+    expect(response.status).toBe(400)
+    const html = await response.text()
+    expect(html).toContain(`タグは ${MAX_CHARS.itemTags} つまでです`)
+    expect(html).toContain(`リンクは ${MAX_CHARS.itemLinks} 本までです`)
+    expect((await db().select().from(schema.itemTags)).map((row) => row.tag)).toEqual(['Swift'])
+    expect(await db().select().from(schema.itemLinks)).toHaveLength(1)
+  })
+
+  it('途中の1文が落ちたら、何も書かない（題も前のタグとリンクも元のまま）', async () => {
+    const item = await seedWithChildren()
+    const signed = await signIn()
+    const restore = await failing('item_links')
+    try {
+      const response = await signed(`/admin/items/${item.id}`, {
+        method: 'POST',
+        body: form({
+          type: 'app',
+          title: '書き換えた題',
+          slug: 'appmixer',
+          tags: 'Kotlin, Compose',
+          linkLabel: ['Store'],
+          linkUrl: ['https://example.test/s'],
+        }),
+      })
+      expect(response.status).toBe(500)
+    } finally {
+      await restore()
+    }
+    const [row] = await db().select().from(schema.items)
+    expect(row?.title).toBe('AppMixer')
+    expect((await db().select().from(schema.itemTags)).map((one) => one.tag)).toEqual(['Swift'])
+    expect(await db().select().from(schema.itemLinks)).toHaveLength(1)
+  })
+
+  it('新しく作るときも、子の1文が落ちたら作品の行は残らない。送り直せば通る', async () => {
+    const signed = await signIn()
+    const send = () =>
+      signed('/admin/items', {
+        method: 'POST',
+        body: form({ type: 'app', title: 'Solo', slug: 'solo', tags: 'A, B' }),
+      })
+    const restore = await failing('item_tags')
+    try {
+      expect((await send()).status).toBe(500)
+    } finally {
+      await restore()
+    }
+    // 行だけが残っていると、送り直しが「この slug は既に使われています」で弾かれた
+    expect(await db().select().from(schema.items)).toHaveLength(0)
+    expect((await send()).status).toBe(303)
+    const [item] = await db().select().from(schema.items)
+    const children = await db().select().from(schema.itemTags)
+    expect(children.map((row) => [row.itemId, row.tag])).toEqual([
+      [item?.id, 'A'],
+      [item?.id, 'B'],
+    ])
+  })
+
+  it('担当メンバーやプラットフォームが消えていたら、400 で選び直してもらう（500 にしない）', async () => {
+    const signed = await signIn()
+    const response = await signed('/admin/items', {
+      method: 'POST',
+      body: form({ type: 'app', title: '残ってほしい題', memberId: '9999', platformKey: 'nope' }),
+    })
+    expect(response.status).toBe(400)
+    const html = await response.text()
+    expect(html).toContain('担当メンバーが見つかりません')
+    expect(html).toContain('プラットフォームが見つかりません')
+    expect(html).toContain('value="残ってほしい題"')
+    expect(await db().select().from(schema.items)).toHaveLength(0)
+  })
+
+  it('上限より前に4本以上のリンクを持つ作品も、編集フォームに全部の行が出る（保存で消えない）', async () => {
+    const item = await seedItem({ slug: 'many' })
+    await db()
+      .insert(schema.itemLinks)
+      .values(
+        Array.from({ length: 5 }, (_, i) => ({
+          itemId: item.id,
+          label: `L${i}`,
+          url: `https://e.test/${i}`,
+          sortOrder: i,
+        })),
+      )
+    const signed = await signIn()
+    const html = await (await signed(`/admin/items/${item.id}/edit`)).text()
+    expect(html.match(/name="linkLabel"/g)).toHaveLength(5)
+    expect(html).toContain('value="L4"')
+  })
+})
+
+/*
+  二重送信（ADM-5）。管理画面は JavaScript を持たないので、押したあとにボタンを
+  押せなくする手が無い。追加のフォームは描くときに一度きりの札（formKey）を持ち、
+  同じ札の2度目は書かずに「保存しました」へ送る。
+*/
+describe('二重送信', () => {
+  const keyOf = (html: string) => {
+    const key = html.match(/name="formKey" value="([0-9a-f]{16})"/)?.[1]
+    if (!key) throw new Error('フォームに札が無い')
+    return key
+  }
+
+  it('同じフォームを2度送っても、作品は1件。2度目も「保存しました」へ（日本語だけの題でも）', async () => {
+    const signed = await signIn()
+    const key = keyOf(await (await signed('/admin/items/new?type=work')).text())
+    const send = () =>
+      signed('/admin/items', {
+        method: 'POST',
+        body: form({ type: 'work', title: '業務システム', formKey: key }),
+      })
+    const first = await send()
+    const second = await send()
+    expect([first.status, second.status]).toEqual([303, 303])
+    expect(second.headers.get('location')).toContain('saved=draft')
+    expect(await db().select().from(schema.items)).toHaveLength(1)
+  })
+
+  it('英字の題の2度目を「この slug は既に使われています」にしない（保存できたのに失敗に見えた）', async () => {
+    const signed = await signIn()
+    const key = keyOf(await (await signed('/admin/items/new?type=app')).text())
+    const send = () =>
+      signed('/admin/items', {
+        method: 'POST',
+        body: form({ type: 'app', title: 'AppMixer', formKey: key }),
+      })
+    await send()
+    const second = await send()
+    expect(second.status).toBe(303)
+    expect(await db().select().from(schema.items)).toHaveLength(1)
+  })
+
+  it('同時に届いた2本でも、書くのは1度だけ', async () => {
+    const signed = await signIn()
+    const key = keyOf(await (await signed('/admin/items/new?type=work')).text())
+    const send = () =>
+      signed('/admin/items', {
+        method: 'POST',
+        body: form({ type: 'work', title: '業務システム', formKey: key }),
+      })
+    const responses = await Promise.all([send(), send()])
+    expect(responses.map((response) => response.status)).toEqual([303, 303])
+    expect(await db().select().from(schema.items)).toHaveLength(1)
+  })
+
+  it('メモを2度送っても1つ。メンバーを2度送っても1人', async () => {
+    const signed = await signIn()
+    await signed('/admin/blocks/init', { method: 'POST' })
+    const noteKey = keyOf(await (await signed('/admin/blocks/new?type=note')).text())
+    for (let i = 0; i < 2; i += 1) {
+      const response = await signed('/admin/blocks', {
+        method: 'POST',
+        body: form({ type: 'note', title: '', body: '段落です', formKey: noteKey }),
+      })
+      expect(response.status).toBe(303)
+    }
+    const notes = await db().select().from(schema.blocks).where(eq(schema.blocks.type, 'note'))
+    expect(notes).toHaveLength(1)
+
+    const memberKey = keyOf(await (await signed('/admin/members/new')).text())
+    for (let i = 0; i < 2; i += 1) {
+      const response = await signed('/admin/members', {
+        method: 'POST',
+        body: form({ name: '星野', formKey: memberKey }),
+      })
+      expect(response.status).toBe(303)
+    }
+    expect(await db().select().from(schema.members)).toHaveLength(1)
+  })
+
+  it('同じ札でも中身が違えば別の行として書く（「戻る」で開き直したフォームから、別のものを書いた）', async () => {
+    const signed = await signIn()
+    const key = keyOf(await (await signed('/admin/items/new?type=app')).text())
+    for (const title of ['AppMixer', 'AllTasks']) {
+      const response = await signed('/admin/items', {
+        method: 'POST',
+        body: form({ type: 'app', title, formKey: key }),
+      })
+      expect(response.status).toBe(303)
+    }
+    const titles = (await db().select().from(schema.items)).map((row) => row.title).sort()
+    // 黙って捨てて「保存しました」と言わない
+    expect(titles).toEqual(['AllTasks', 'AppMixer'])
+  })
+
+  it('札の無い送信は今までどおり書く（札は重複を止めるためのもので、書いてよいかは決めない）', async () => {
+    const signed = await signIn()
+    for (const title of ['一つ目', '二つ目']) {
+      await signed('/admin/items', { method: 'POST', body: form({ type: 'work', title }) })
+    }
+    expect(await db().select().from(schema.items)).toHaveLength(2)
+  })
+})
+
+/*
+  決まった中身のブロックは1つだけ（ADM-5 / PUB-1 / SYS-4）。「読んでから足す」だけで
+  守っていたころは、「この並びから始める」を2本同時に送ると hero〜contact が2組になり、
+  公開ページのページャが自分自身を指して入口から先へ進めなくなった。
+*/
+describe('決まった中身のブロックは1つだけ', () => {
+  it('「この並びから始める」を2本同時に送っても、並びは1組', async () => {
+    const signed = await signIn()
+    const responses = await Promise.all([
+      signed('/admin/blocks/init', { method: 'POST' }),
+      signed('/admin/blocks/init', { method: 'POST' }),
+    ])
+    expect(responses.map((response) => response.status)).toEqual([303, 303])
+    const rows = await db().select().from(schema.blocks)
+    expect(rows.map((row) => row.type).sort()).toEqual(['contact', 'hero', 'projects', 'team'])
+  })
+
+  it('決まった中身を2本同時に置いても1行', async () => {
+    const signed = await signIn()
+    await signed('/admin/blocks/init', { method: 'POST' })
+    await db().delete(schema.blocks).where(eq(schema.blocks.type, 'team'))
+    const place = () => signed('/admin/blocks', { method: 'POST', body: form({ type: 'team' }) })
+    await Promise.all([place(), place()])
+    const teams = await db().select().from(schema.blocks).where(eq(schema.blocks.type, 'team'))
+    expect(teams).toHaveLength(1)
+  })
+
+  it('DB も2行目を受け付けない（書く口が増えても最後に効く）。打ち込むものは何行でも', async () => {
+    await db().insert(schema.blocks).values({ type: 'hero', published: 1, sortOrder: 10 })
+    await expect(
+      db().insert(schema.blocks).values({ type: 'hero', published: 0, sortOrder: 20 }),
+    ).rejects.toThrow()
+    await db()
+      .insert(schema.blocks)
+      .values([
+        { type: 'note', body: 'a', sortOrder: 30 },
+        { type: 'note', body: 'b', sortOrder: 40 },
+      ])
+    expect(await db().select().from(schema.blocks)).toHaveLength(3)
+  })
+
+  it('移行は、既に2行ある固定のブロックを畳む（公開中の行を残す）。年の並びも既にある行に効く', async () => {
+    const d1 = env.MIGRATION_DB
+    const { results } = await d1
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY rowid DESC",
+      )
+      .all<{ name: string }>()
+    for (const { name } of results) await d1.prepare(`DROP TABLE \`${name}\``).run()
+    const run = async (names: (name: string) => boolean) => {
+      for (const migration of env.TEST_MIGRATIONS.filter((one) => names(one.name))) {
+        for (const query of migration.queries) await d1.prepare(query).run()
+      }
+    }
+
+    await run((name) => name < '0009')
+    await d1.batch([
+      d1.prepare(
+        "INSERT INTO blocks (id, type, published, sort_order) VALUES (1, 'hero', 1, 10), (2, 'projects', 0, 20), (3, 'projects', 1, 25), (4, 'team', 1, 30), (5, 'team', 1, 35), (6, 'note', 1, 40), (7, 'note', 1, 50), (8, 'hero', 1, 60)",
+      ),
+      d1.prepare(
+        "INSERT INTO items (id, type, title, slug, year, published) VALUES (1, 'work', '続いている', 'a', '2024 — 現在', 1), (2, 'app', '和暦', 'b', '令和6', 1), (3, 'app', '無い', 'c', '', 1)",
+      ),
+    ])
+    await run((name) => name >= '0009')
+
+    const blocks = await d1.prepare('SELECT id, type FROM blocks ORDER BY id').all()
+    expect(blocks.results).toEqual([
+      { id: 1, type: 'hero' },
+      // 下書きの projects（2）ではなく、公開中の projects（3）を残す
+      { id: 3, type: 'projects' },
+      { id: 4, type: 'team' },
+      { id: 6, type: 'note' },
+      { id: 7, type: 'note' },
+    ])
+    const years = await d1.prepare('SELECT id, year_from FROM items ORDER BY id').all()
+    expect(years.results).toEqual([
+      { id: 1, year_from: 2024 },
+      { id: 2, year_from: null },
+      { id: 3, year_from: null },
+    ])
+    // 移行のあとは DB が2行目を受け付けない
+    await expect(
+      d1.prepare("INSERT INTO blocks (type, sort_order) VALUES ('team', 90)").run(),
+    ).rejects.toThrow()
+  })
+})
+
+/*
+  公開の関門（ADM-1 / MNT-1）。published が 1 になる書き込みは、どの入口からでも
+  同じ関数（src/blocks.ts の publishErrors）を通る。下書きに戻す方向は通さない。
+*/
+describe('公開の関門', () => {
+  it('公開になる入口はどれも同じ関門（新しく書く・編集・一覧のトグル）。下書きの保存は長さを見ない', async () => {
+    const signed = await signIn()
+    await signed('/admin/blocks/init', { method: 'POST' })
+    const long = 'あ'.repeat(maxCharsOf('note') + 1)
+
+    // 新しく書く: 公開は止める、下書きは通す
+    const publish = await signed('/admin/blocks', {
+      method: 'POST',
+      body: form({ type: 'note', title: '長い', body: long, published: '1' }),
+    })
+    expect(publish.status).toBe(400)
+    const draft = await signed('/admin/blocks', {
+      method: 'POST',
+      body: form({ type: 'note', title: '長い', body: long }),
+    })
+    expect(draft.status).toBe(303)
+    const note = await db().query.blocks.findFirst({ where: eq(schema.blocks.type, 'note') })
+    if (!note) throw new Error('note が無い')
+
+    // 編集: 公開にする保存は止める
+    const edit = await signed(`/admin/blocks/${note.id}`, {
+      method: 'POST',
+      body: form({ title: '長い', body: long, published: '1' }),
+    })
+    expect(edit.status).toBe(400)
+
+    // 一覧のトグル: 止めて編集画面へ
+    const toggle = await signed(`/admin/blocks/${note.id}/publish`, {
+      method: 'POST',
+      body: form({ published: '1' }),
+    })
+    expect(toggle.headers.get('location')).toBe(`/admin/blocks/${note.id}/edit?publish=blocked`)
+    const row = await db().query.blocks.findFirst({ where: eq(schema.blocks.id, note.id) })
+    expect(row?.published).toBe(0)
+  })
+
+  it('一文を空にしたひとことも、トグルでは公開にならない（公開なのにサイトに出ない行を作らない）', async () => {
+    const [statement] = await db()
+      .insert(schema.blocks)
+      .values({ type: 'statement', title: '', published: 0, sortOrder: 10 })
+      .returning()
+    if (!statement) throw new Error('ひとことを置けなかった')
+    const signed = await signIn()
+    const toggle = await signed(`/admin/blocks/${statement.id}/publish`, {
+      method: 'POST',
+      body: form({ published: '1' }),
+    })
+    expect(toggle.status).toBe(303)
+    expect(toggle.headers.get('location')).toContain('publish=blocked')
+    const edit = await (await signed(toggle.headers.get('location') ?? '')).text()
+    expect(edit).toContain('一文を入れてください')
+  })
+
+  it('決まった中身のブロックは、トグルで何も見ずに公開にできる', async () => {
+    const [team] = await db()
+      .insert(schema.blocks)
+      .values({ type: 'team', published: 0, sortOrder: 10 })
+      .returning()
+    if (!team) throw new Error('Team を置けなかった')
+    const signed = await signIn()
+    const toggle = await signed(`/admin/blocks/${team.id}/publish`, {
+      method: 'POST',
+      body: form({ published: '1' }),
+    })
+    expect(toggle.headers.get('location')).toBe(`/admin/blocks?saved=1#block-${team.id}`)
+  })
+})
+
+/*
+  リンク集は、全部の行が通るときだけ保存する（ADM-8）。「通る URL が1行でもあれば」
+  保存を通していたころは、https:// を付け忘れた行や URL を書き忘れた行が、
+  「保存しました」のあとで公開ページから黙って消えた。
+*/
+describe('リンク集の行', () => {
+  const BODY = 'Good | https://example.com\nTypo | github.com/iam74k4\nNo URL'
+
+  it('落ちる行を名指しして 400。下書きでも止める（受け取れない値）', async () => {
+    const signed = await signIn()
+    for (const published of [{ published: '1' }, {}] as Record<string, string>[]) {
+      const response = await signed('/admin/blocks', {
+        method: 'POST',
+        body: form({ type: 'links', title: 'Links', body: BODY, ...published }),
+      })
+      expect(response.status).toBe(400)
+      const html = await response.text()
+      expect(html).toContain('2 行目（Typo）の URL は https:// か mailto: か / で始めてください')
+      expect(html).toContain('3 行目（No URL）に URL がありません')
+      expect(html).not.toContain('1 行目')
+    }
+    expect(await db().select().from(schema.blocks)).toHaveLength(0)
+  })
+
+  it('全部の行が通れば保存する。行の番号は欄の中の行（空行も数える）', async () => {
+    const signed = await signIn()
+    const ok = await signed('/admin/blocks', {
+      method: 'POST',
+      body: form({
+        type: 'links',
+        title: 'Links',
+        body: 'Good | https://example.com',
+        published: '1',
+      }),
+    })
+    expect(ok.status).toBe(303)
+
+    const gap = await signed('/admin/blocks', {
+      method: 'POST',
+      body: form({ type: 'links', title: 'Links', body: 'Good | https://example.com\n\nBad | x' }),
+    })
+    expect(await gap.text()).toContain('3 行目（Bad）')
+  })
+})
+
+describe('メンバーのフォーム', () => {
+  it('入力エラーで描き直しても、外した「公開する」は外れたまま（ADM-9）', async () => {
+    const member = await seedMember({ published: 1 })
+    await seedMember({ slug: 'hoshino', name: '星野' })
+    const signed = await signIn()
+    // 公開を外し、同じ送信で slug を重ねる
+    const response = await signed(`/admin/members/${member.id}`, {
+      method: 'POST',
+      body: form({ name: member.name, slug: 'hoshino' }),
+    })
+    expect(response.status).toBe(400)
+    expect(await response.text()).not.toContain('name="published" value="1" checked=""')
+
+    // 新しく作るときは、付けた「公開する」が付いたまま戻る
+    const added = await signed('/admin/members', {
+      method: 'POST',
+      body: form({ name: '三人目', slug: 'hoshino', published: '1' }),
+    })
+    expect(added.status).toBe(400)
+    expect(await added.text()).toContain('name="published" value="1" checked=""')
+  })
+})
+
+/*
+  並び順（ADM-11）。欄は type=text なので、日本語入力のまま全角で入る。以前は
+  Number('２０') が NaN になり、黙って 0 で保存してその行を一覧の先頭へ動かした。
+*/
+describe('並び順の数', () => {
+  it('全角の数字は半角に直して読む。数でなければ 400 で欄を示し、黙って 0 にしない', async () => {
+    const member = await seedMember({ sortOrder: 50 })
+    const signed = await signIn()
+    const zenkaku = await signed(`/admin/members/${member.id}`, {
+      method: 'POST',
+      body: form({ name: member.name, slug: 'okazaki', sortOrder: '２０', published: '1' }),
+    })
+    expect(zenkaku.status).toBe(303)
+    const read = async () =>
+      (await db().query.members.findFirst({ where: eq(schema.members.id, member.id) }))?.sortOrder
+    expect(await read()).toBe(20)
+
+    const text = await signed(`/admin/members/${member.id}`, {
+      method: 'POST',
+      body: form({ name: member.name, slug: 'okazaki', sortOrder: '二十', published: '1' }),
+    })
+    expect(text.status).toBe(400)
+    const html = await text.text()
+    expect(html).toContain('並び順は数字で入れてください')
+    // 打った字をそのまま返す（倒した数を見せない）
+    expect(html).toContain('value="二十"')
+    expect(await read()).toBe(20)
+
+    // 作品も同じ読み方
+    const item = await seedItem({ slug: 'appmixer', sortOrder: 50 })
+    await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: form({ type: 'app', title: 'AppMixer', slug: 'appmixer', sortOrder: '３０' }),
+    })
+    const [row] = await db().select().from(schema.items)
+    expect(row?.sortOrder).toBe(30)
+  })
+
+  it('空のまま保存したら、いまの並び順のまま', async () => {
+    const member = await seedMember({ sortOrder: 50 })
+    const signed = await signIn()
+    await signed(`/admin/members/${member.id}`, {
+      method: 'POST',
+      body: form({ name: member.name, slug: 'okazaki', sortOrder: '' }),
+    })
+    const row = await db().query.members.findFirst({ where: eq(schema.members.id, member.id) })
+    expect(row?.sortOrder).toBe(50)
+  })
+})
+
+/*
+  恒久リンクの slug を変える（ADM-7 / SYS-6）。変えてよいが、前の URL は新しい URL へ
+  301 で送る（src/db/schema.ts の item_slug_redirects / member_slug_redirects）。
+*/
+describe('恒久リンクの slug を変える', () => {
+  it('欄を空にして保存しても、いまの slug のまま（作り直さない）', async () => {
+    const item = await seedItem({ type: 'work', title: '開発工程の効率化', slug: 'dev-efficiency' })
+    const member = await seedMember({ name: '岡崎 昂功', slug: 'okazaki' })
+    const signed = await signIn()
+    await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: form({ type: 'work', title: '開発工程の効率化', slug: '' }),
+    })
+    await signed(`/admin/members/${member.id}`, {
+      method: 'POST',
+      body: form({ name: '岡崎 昂功', slug: '' }),
+    })
+    expect((await db().select().from(schema.items))[0]?.slug).toBe('dev-efficiency')
+    expect((await db().select().from(schema.members))[0]?.slug).toBe('okazaki')
+  })
+
+  it('変えたら前の slug を転送に残し、保存の知らせでそう言う。欄の説明も書く前に言う', async () => {
+    const item = await seedItem({ title: 'AppMixer', slug: 'appmixer', published: 1 })
+    const signed = await signIn()
+    const edit = await (await signed(`/admin/items/${item.id}/edit`)).text()
+    expect(edit).toContain('前の URL は新しい URL へ転送する')
+
+    const response = await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: form({ type: 'app', title: 'AppMixer', slug: 'app-mixer', published: '1' }),
+    })
+    expect(response.headers.get('location')).toContain('moved=1')
+    const list = await (await signed(response.headers.get('location') ?? '')).text()
+    expect(list).toContain('前の URL は、新しい URL へ転送します')
+    expect(await db().select().from(schema.itemSlugRedirects)).toEqual([
+      expect.objectContaining({ oldSlug: 'appmixer', itemId: item.id }),
+    ])
+  })
+
+  it('自分の前の slug へは戻せる（転送は消える）。ほかの作品の前の slug は使わせない', async () => {
+    const first = await seedItem({ title: 'AppMixer', slug: 'appmixer' })
+    const second = await seedItem({ title: 'Other', slug: 'other' })
+    const signed = await signIn()
+    const rename = (id: number, slug: string) =>
+      signed(`/admin/items/${id}`, {
+        method: 'POST',
+        body: form({ type: 'app', title: 'x', slug }),
+      })
+    await rename(first.id, 'app-mixer')
+
+    // 前の URL（/apps/item/appmixer）を別の作品が名乗ると、貼られたリンクが黙って別の作品を指す
+    const taken = await rename(second.id, 'appmixer')
+    expect(taken.status).toBe(400)
+    expect(await taken.text()).toContain('別の作品の前の URL として転送に使っています')
+
+    expect((await rename(first.id, 'appmixer')).status).toBe(303)
+    expect(await db().select().from(schema.itemSlugRedirects)).toEqual([
+      expect.objectContaining({ oldSlug: 'app-mixer', itemId: first.id }),
+    ])
+  })
+})
+
+/*
+  作品の並び（PUB-4 / SYS-9）。並べる年（items.year_from）は DB が year から作り、
+  管理画面の知らせは同じ規則の yearFrom が出す。2つの答えがずれないことを見る。
+*/
+describe('作品の並べる年', () => {
+  it('DB が作る年（year_from）と、管理画面の知らせ（yearFrom）は同じ答え', async () => {
+    const years = ['2026', '2024 — 現在', '2019.04 — 2021', '令和6', '〜2023', 'FY2024', '24', '']
+    for (const [index, year] of years.entries()) {
+      await seedItem({ title: `t${index}`, slug: `t${index}`, year })
+    }
+    const rows = await db().select().from(schema.items)
+    for (const row of rows) expect(row.yearFrom, row.year).toBe(yearFrom(row.year))
+  })
+
+  it('年の頭が数字4桁でなければ、並びに使われないと欄の下で知らせる（保存は止めない）', async () => {
+    const signed = await signIn()
+    const response = await signed('/admin/items', {
+      method: 'POST',
+      body: form({ type: 'app', title: 'Reiwa', year: '令和6' }),
+    })
+    expect(response.status).toBe(303)
+    const [item] = await db().select().from(schema.items)
+    const html = await (await signed(`/admin/items/${item?.id}/edit`)).text()
+    expect(html).toContain('並びに使われません')
+
+    // 全角の数字は保存のときに半角へ直す（並べる年は DB がこの字から作る）
+    await signed(`/admin/items/${item?.id}`, {
+      method: 'POST',
+      body: form({ type: 'app', title: 'Reiwa', slug: 'reiwa', year: '２０２４ — 現在' }),
+    })
+    const [saved] = await db().select().from(schema.items)
+    expect(saved?.year).toBe('2024 — 現在')
+    expect(saved?.yearFrom).toBe(2024)
+  })
+
+  it('管理画面の一覧も公開ページと同じ並び（年 → 並び順 → 作った順）', async () => {
+    await seedItem({ title: '古いが1番', slug: 'old', year: '2020', sortOrder: 1 })
+    await seedItem({ title: '新しい', slug: 'new', year: '2026', sortOrder: 50 })
+    const signed = await signIn()
+    const html = await (await signed('/admin/items?type=app')).text()
+    expect(html.indexOf('新しい')).toBeLessThan(html.indexOf('古いが1番'))
   })
 })

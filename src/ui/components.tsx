@@ -153,6 +153,23 @@ export const SectionHead = ({
 )
 
 /*
+  読み上げのためだけに置く見出し（.sr-only）。目に見える見出しを持たない画面が
+  使う——締めの Contact（ボタンの言葉が見出しの代わり）と、見出しを空けた
+  メモ（段落が画面の全部）。
+
+  割られた画面は h1 をちょうど1つ持つ決まり（CLAUDE.md「1画面 = 1ドキュメント」、
+  WCAG 1.3.1）。見出しの無い画面は、見出しで移動する人にとって「何も無い」
+  画面になる。全体ページ（/all）では節の見出しの段（h2）。
+
+  目に見える見出しを置かない理由は呼ぶ側にある（Contact・メモの注記）。ここは
+  見出しの段と見えなさだけを持つ。月の節（.moonlit）の直下には置かないこと
+  ——「中身を月より前に出す」規則（position: relative）に .sr-only の
+  position: absolute が負けて、1px の段が1つ増える（Contact は .contact の中に置く）。
+*/
+export const HiddenHeading = ({ text, h1 }: { text: string; h1?: boolean }) =>
+  h1 ? <h1 class="sr-only">{text}</h1> : <h2 class="sr-only">{text}</h2>
+
+/*
   画面1枚ぶんの箱。main の直接の子になるものは、ここか Hero が作る。
 
   この箱そのものが「弁」——app.css の `main > :is(.hero, section)` に付いた
@@ -539,7 +556,7 @@ export const LinkRow = ({ links }: { links: { label: string; url: string }[] }) 
   作品のスクリーンショット。作品1件のページの figure。
 
   代替テキストは管理画面で書いたもの（items.image_alt）。空のまま公開させない
-  （src/routes/admin.tsx の itemErrors）——このページではこの画像がその作品の
+  （src/blocks.ts の publishErrors。公開の関門）——このページではこの画像がその作品の
   見た目を伝える唯一の手段で、カードのサムネイル（飾り）とは役目が違う。
 
   枠の高さは CSS が決め（:root の --shot-h。900 以上では文の列と同じ高さ）、

@@ -1,4 +1,5 @@
-import { and, asc, count, eq, inArray, lt, ne } from 'drizzle-orm'
+import { and, asc, count, eq, inArray, lt, ne, type SQL, sql } from 'drizzle-orm'
+import type { BatchItem } from 'drizzle-orm/batch'
 import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
@@ -8,21 +9,22 @@ import type { Child } from 'hono/jsx'
 import {
   BLOCK_TYPES,
   type BlockType,
-  blockLines,
   blockPerScreen,
-  blockTexts,
   blockType,
   blockUnitCount,
-  blockVisibleParts,
-  DEFAULT_BLOCKS,
+  blockValueErrors,
   isBlockKey,
   MAX_CHARS,
+  MAX_STATEMENT_SENTENCE,
   memberScreenCount,
+  publishErrors,
 } from '../blocks'
 import {
   countPublishedItems,
   defaultBlocks,
   ensureBlocks,
+  initBlocks,
+  itemOrder,
   listBlocks,
   listPublishedMembers,
   loadTheme,
@@ -44,15 +46,15 @@ import {
 } from '../lib/auth'
 import {
   bool,
+  halfWidthDigits,
+  int,
   isHttpsUrl,
   isSafeUrl,
-  num,
-  paragraphs,
-  parseLines,
   parseTags,
   str,
   timeInJapan,
   toSlug,
+  yearFrom,
 } from '../lib/format'
 import { IMAGE_ACCEPT, IMAGE_LABELS, type SniffedImage, sniffImage } from '../lib/image'
 import {
@@ -159,9 +161,59 @@ const savedParam = (published: number) => (published ? '1' : 'draft')
 
 function flashFor(c: Context<AppEnv>, deleted = '削除しました'): string | null {
   const saved = c.req.query('saved')
-  if (saved === 'draft') return '下書きで保存しました。サイトにはまだ出ていません'
-  if (saved) return '保存しました'
+  /*
+    slug を変えた保存。前の URL が切れていないことまで言う——言わないと、
+    名刺や SNS に貼った URL を直しに行くことになる（src/db/schema.ts の
+    item_slug_redirects）
+  */
+  const moved = c.req.query('moved') ? '。前の URL は、新しい URL へ転送します' : ''
+  if (saved === 'draft') return `下書きで保存しました。サイトにはまだ出ていません${moved}`
+  if (saved) return `保存しました${moved}`
   return c.req.query('deleted') ? deleted : null
+}
+
+/*
+  追加のフォームの一度きりの札（src/db/schema.ts の form_key の注記）。
+
+  フォームを描くときに1枚作って hidden で持ち回し、行と一緒に書く。同じ札で
+  同じ中身（題・名前…）の2度目の送信は、検査より先に「もう保存してある」と見て、
+  書かずに一覧へ送る（英字の題の作品を2度押すと、2度目が「この slug は既に
+  使われています」の 400 になり、保存できたのに失敗したように見えていた）。
+  検査に当たって描き直すときも同じ札を持ち回す。
+
+  同じ札で中身が違うのは、ブラウザの「戻る」で開き直した追加のフォームから、
+  別のものを書いて送ったとき。それは2度押しではないので、新しい札で書く
+  （黙って捨てて「保存しました」と言わない）。
+
+  受け取るのはこちらが作った形（16進 16 字）だけ。手で組んだ POST の任意の
+  文字列を unique の列に入れない。札の無い送信は今までどおり書く（札は重複を
+  止めるためのもので、書いてよいかの判断には使わない）。
+*/
+const newFormKey = () => newToken(8)
+
+function formKeyOf(form: FormData): string | null {
+  const key = str(form.get('formKey'))
+  return /^[0-9a-f]{16}$/.test(key) ? key : null
+}
+
+const FormKey = ({ value }: { value?: string | null }) =>
+  value ? <input type="hidden" name="formKey" value={value} /> : null
+
+/*
+  書き込みが unique のどの列に当たって止まったか（列は「表.列」で渡す）。
+  drizzle は D1 の例外を cause に包んで投げ直すので、原因をたどって見る。
+  同時に来た2本の送信が、検査を両方すり抜けて DB の制約で止まったときに、
+  500 ではなく検査と同じ答え（400・保存済み）に戻すために使う。
+*/
+function uniqueViolation(error: unknown, column: string): boolean {
+  let current: unknown = error
+  while (current instanceof Error) {
+    if (current.message.includes('UNIQUE constraint failed') && current.message.includes(column)) {
+      return true
+    }
+    current = current.cause
+  }
+  return false
 }
 
 // 削除の確認から「キャンセル」したときの戻り先。編集画面から来たなら編集画面へ
@@ -176,6 +228,11 @@ const Field = (props: {
   type?: string
   hint?: string
   error?: string
+  /*
+    保存は止めないが、書いた人に知らせたいこと（作品の年が並びに使われない、など）。
+    エラーとは色を分ける——赤で出すと「保存できなかった」と読まれる
+  */
+  warning?: string
   required?: boolean
   placeholder?: string
 }) => (
@@ -190,6 +247,7 @@ const Field = (props: {
       placeholder={props.placeholder}
     />
     {props.error ? <span class="field__error">{props.error}</span> : null}
+    {props.warning ? <span class="field__warn">{props.warning}</span> : null}
     {props.hint ? <span class="field__hint">{props.hint}</span> : null}
   </label>
 )
@@ -231,10 +289,11 @@ const Select = (props: {
   value?: string | number | null
   options: { value: string; label: string }[]
   hint?: string
+  error?: string
 }) => (
   <label class="field">
     <span class="field__label">{props.label}</span>
-    <select class="input" name={props.name}>
+    <select class={props.error ? 'input input--error' : 'input'} name={props.name}>
       {props.options.map((option) => (
         <option
           key={option.value}
@@ -245,6 +304,7 @@ const Select = (props: {
         </option>
       ))}
     </select>
+    {props.error ? <span class="field__error">{props.error}</span> : null}
     {props.hint ? <span class="field__hint">{props.hint}</span> : null}
   </label>
 )
@@ -728,12 +788,21 @@ app.get('/members', async (c) => {
 const MemberForm = (props: {
   account: string
   member?: schema.Member
+  // 追加のフォームの一度きりの札（newFormKey）。編集では持たない
+  formKey?: string | null
   errors?: Record<string, string>
   values?: Record<string, string>
 }) => {
   const member = props.member
   const value = (key: keyof schema.Member, fallback = '') =>
     props.values?.[key] ?? (member ? String(member[key] ?? '') : fallback)
+  /*
+    入力エラーで描き直すときは、送られた「公開する」をそのまま返す（項目・
+    ブロックのフォームと同じ）。DB の値に戻していたころは、公開を外して保存し、
+    slug の重なりで弾かれて直すと、描き直しで付いた「公開する」がそのまま
+    送られて、引っ込めたはずのページが公開のまま残った
+  */
+  const published = props.values ? Number(props.values.published === '1') : (member?.published ?? 0)
 
   return (
     <AdminLayout
@@ -754,6 +823,7 @@ const MemberForm = (props: {
         enctype="multipart/form-data"
         class="form"
       >
+        <FormKey value={props.formKey} />
         <div class="form-grid">
           <Field
             label="氏名"
@@ -762,12 +832,21 @@ const MemberForm = (props: {
             required
             error={props.errors?.name}
           />
+          {/*
+            変えてよい。前の URL は新しい URL へ 301 で送る（member_slug_redirects）。
+            それを書く前に言っておく——言わないと、変えた人は貼った先を全部
+            直しに行くか、変えるのをあきらめる
+          */}
           <Field
             label="slug"
             name="slug"
             value={value('slug')}
             error={props.errors?.slug}
-            hint="/members/<slug> になる。空なら氏名から作る"
+            hint={
+              member
+                ? '/members/<slug> になる。変えると、前の URL は新しい URL へ転送する。空にしたときはいまのまま'
+                : '/members/<slug> になる。空なら氏名から作る'
+            }
           />
           <Field label="役割 / 肩書" name="role" value={value('role')} />
           <Field label="所在地" name="location" value={value('location')} />
@@ -781,6 +860,7 @@ const MemberForm = (props: {
             label="並び順"
             name="sortOrder"
             value={value('sortOrder', '10')}
+            error={props.errors?.sortOrder}
             hint="小さいほど先。10刻み"
           />
           {/*
@@ -857,7 +937,7 @@ const MemberForm = (props: {
         </div>
 
         <div class="form-foot">
-          <PublishToggle published={member?.published ?? 0} />
+          <PublishToggle published={published} />
           <FormActions
             cancelHref="/admin/members"
             deleteHref={member ? `/admin/members/${member.id}/delete?from=edit` : undefined}
@@ -868,7 +948,9 @@ const MemberForm = (props: {
   )
 }
 
-app.get('/members/new', (c) => c.html(<MemberForm account={c.get('account')} />))
+app.get('/members/new', (c) =>
+  c.html(<MemberForm account={c.get('account')} formKey={newFormKey()} />),
+)
 
 app.get('/members/:id/edit', async (c) => {
   const member = await db(c).query.members.findFirst({
@@ -878,13 +960,47 @@ app.get('/members/:id/edit', async (c) => {
   return c.html(<MemberForm account={c.get('account')} member={member} />)
 })
 
-async function readMemberForm(c: Context<AppEnv>) {
+/*
+  並び順の欄。空なら編集ではいまの値、追加では既定の 10（フォームが初めに出す数）。
+  数として読めなければ、黙って別の数に倒さず 400 で欄を示す（src/lib/format.ts の
+  int）。返す text は描き直し用——打った字をそのまま返す。
+*/
+const SORT_ORDER_ERROR = '並び順は数字で入れてください（例: 10）'
+
+function readSortOrder(form: FormData, current: number | undefined) {
+  const text = str(form.get('sortOrder'))
+  const value = text ? int(text) : (current ?? 10)
+  return {
+    text,
+    value: value ?? current ?? 10,
+    error: value === null ? { sortOrder: SORT_ORDER_ERROR } : null,
+  }
+}
+
+/*
+  slug の欄の読み方。メンバーと作品で同じ。
+
+  **欄が空なら、編集ではいまの slug のまま。** 以前は空にすると名前から作り直し、
+  日本語だけの名前では乱数になって、貼られていた前の URL がその日から 404 に
+  なった（「空にすれば作り直される」と思って消すのは、ごく自然な操作）。
+  作り直すのは、まだ slug を持たない行（追加と、slug の列より前からある作品）だけ。
+  打った slug が英数字を1つも含まない（toSlug が空を返す）ときも空と同じ扱い。
+*/
+const readSlug = (typed: string, current: string | null | undefined, name: string) =>
+  toSlug(typed) || current || toSlug(name) || null
+
+async function readMemberForm(c: Context<AppEnv>, existing?: schema.Member) {
   const form = await c.req.formData()
   const name = str(form.get('name'))
-  const slug = toSlug(str(form.get('slug')) || name) || `member-${newToken(3)}`
+  const slug = readSlug(str(form.get('slug')), existing?.slug, name) ?? `member-${newToken(3)}`
+  const sortOrder = readSortOrder(form, existing?.sortOrder)
 
   return {
     form,
+    // 下書きでも止める、受け取れない値（並び順が数でない）
+    errors: sortOrder.error,
+    // 読めなかった並び順は、打ったままの字を欄へ返す（倒した数を見せない）
+    typed: (sortOrder.error ? { sortOrder: sortOrder.text } : {}) as Record<string, string>,
     values: {
       name,
       slug,
@@ -896,7 +1012,7 @@ async function readMemberForm(c: Context<AppEnv>) {
       careerText: str(form.get('careerText')),
       github: str(form.get('github')) || null,
       email: str(form.get('email')) || null,
-      sortOrder: num(form.get('sortOrder'), 0),
+      sortOrder: sortOrder.value,
       published: bool(form.get('published')),
       updatedAt: new Date().toISOString(),
     },
@@ -1009,26 +1125,18 @@ const imageNotKept = (form: FormData, field: string, errors: Record<string, stri
 }
 
 /*
-  紹介文の長さ。個人ページの About は1枚で、割る先が無い。
+  メンバーの、下書きでも止める値（受け取れない値）。氏名が空・通らない GitHub。
 
-  段落の数も見るのは、同じ字数でも空行を増やすと高くなるため（実測: 3段落なら
-  405 字まで弁が閉じたまま、6段落に割ると 315 字まで下がる @rail 390x844 指,
-  Hiragino Sans, macOS Chromium）。上限と測り方は src/blocks.ts の MAX_CHARS。
+  紹介文の長さはここでは見ない。公開するときにだけ見る（src/blocks.ts の
+  publishErrors）——下書きの保存でも見ていたころは、上限より前に保存された
+  長い紹介文の人が「公開を外すことすらできない」行き止まりになっていた。
 */
 function memberErrors(values: {
   name: string
-  bio: string
   github: string | null
 }): Record<string, string> | null {
   if (!values.name) return { name: '氏名は必須です' }
   const errors: Record<string, string> = {}
-  const total = chars(values.bio)
-  const parts = paragraphs(values.bio).length
-  if (total > MAX_CHARS.memberBio) {
-    errors.bio = `1画面に収まりません。紹介文は ${MAX_CHARS.memberBio} 字までです（いま ${total} 字）`
-  } else if (parts > MAX_CHARS.memberBioParagraphs) {
-    errors.bio = `1画面に収まりません。段落は ${MAX_CHARS.memberBioParagraphs} つまでです（いま ${parts} つ）`
-  }
   /*
     GitHub は https:// で始まる絶対 URL だけ。公開ページも同じ検査（isHttpsUrl）で
     落とすので、ここで通さないと「保存できたのにサイトに出ない」になる。
@@ -1048,70 +1156,168 @@ function asValues(values: Record<string, unknown>): Record<string, string> {
   )
 }
 
+/*
+  slug が重なったら弾く。いまの slug に加えて、ほかの行の前の slug
+  （転送表に残っているもの）も使わせない——使わせると、その前の URL を
+  貼っていた人のリンクが黙って別の人・別の作品を指す（404 より悪い）。
+  自分の前の slug へ戻すのは通す（転送の行は、保存の batch の中で消える）。
+
+  黙って番号を足して通さないのは、そうすると「保存した順」で URL が決まって
+  しまうため。恒久リンクは1つの URL が1つの行を指すことに全部が懸かって
+  いるので、重なりは人に直してもらう。
+*/
+const SLUG_TAKEN = 'この slug は既に使われています'
+const SLUG_MOVED = (whose: string) =>
+  `この slug は、${whose}の前の URL として転送に使っています。使うと、貼られた前の URL が行き先を変えます`
+
+async function memberSlugTaken(
+  database: ReturnType<typeof db>,
+  slug: string,
+  exceptId: number | null,
+): Promise<Record<string, string> | null> {
+  const [live, moved] = await Promise.all([
+    database.query.members.findFirst({
+      where: exceptId
+        ? and(eq(schema.members.slug, slug), ne(schema.members.id, exceptId))
+        : eq(schema.members.slug, slug),
+    }),
+    database.query.memberSlugRedirects.findFirst({
+      where: exceptId
+        ? and(
+            eq(schema.memberSlugRedirects.oldSlug, slug),
+            ne(schema.memberSlugRedirects.memberId, exceptId),
+          )
+        : eq(schema.memberSlugRedirects.oldSlug, slug),
+    }),
+  ])
+  if (live) return { slug: SLUG_TAKEN }
+  if (moved) return { slug: SLUG_MOVED('別のメンバー') }
+  return null
+}
+
+/*
+  slug を変えた保存に足す2文（src/db/schema.ts の member_slug_redirects）。
+  前の slug を転送表に残し、新しい slug が自分の前の slug だったなら、その行を
+  消す（いまの slug と転送が同じ URL を指さない）。行の書き換えと同じ batch に
+  入れる——別々に書くと、行は変わったのに転送が無い、が途中で止まったときに残る。
+*/
+function memberSlugMoves(
+  database: ReturnType<typeof db>,
+  id: number,
+  before: string,
+  after: string,
+): BatchItem<'sqlite'>[] {
+  if (before === after) return []
+  return [
+    database
+      .delete(schema.memberSlugRedirects)
+      .where(eq(schema.memberSlugRedirects.oldSlug, after)),
+    database
+      .insert(schema.memberSlugRedirects)
+      .values({ oldSlug: before, memberId: id })
+      .onConflictDoUpdate({ target: schema.memberSlugRedirects.oldSlug, set: { memberId: id } }),
+  ]
+}
+
 app.post('/members', async (c) => {
-  const { form, values } = await readMemberForm(c)
+  const database = db(c)
+  const { form, values, errors: unreadable, typed } = await readMemberForm(c)
   const account = c.get('account')
+  const sent = formKeyOf(form)
+  const saved = () => c.redirect(`/admin/members?saved=${savedParam(values.published)}`, 303)
+  // 同じフォームの2度目の送信。1度目がもう書いている（newFormKey の注記）
+  const twin = sent
+    ? await database.query.members.findFirst({ where: eq(schema.members.formKey, sent) })
+    : undefined
+  if (twin?.name === values.name) return saved()
+  const formKey = twin ? newFormKey() : sent
   const back = (errors: Record<string, string>) =>
-    c.html(<MemberForm account={account} errors={errors} values={asValues(values)} />, 400)
+    c.html(
+      <MemberForm
+        account={account}
+        formKey={formKey}
+        errors={imageNotKept(form, 'avatar', errors)}
+        values={{ ...asValues(values), ...typed }}
+      />,
+      400,
+    )
 
   const picked = await pickImage(form, 'avatar')
-  const errors =
-    (picked.error ? { avatar: picked.error } : null) ??
-    memberErrors(values) ??
-    ((await db(c).query.members.findFirst({ where: eq(schema.members.slug, values.slug) }))
-      ? { slug: 'この slug は既に使われています' }
-      : null)
-  if (errors) return back(imageNotKept(form, 'avatar', errors))
+  const errors = mergeErrors(
+    picked.error ? { avatar: picked.error } : null,
+    unreadable,
+    memberErrors(values),
+    values.published ? publishErrors({ kind: 'member', bio: values.bio }) : null,
+    await memberSlugTaken(database, values.slug, null),
+  )
+  if (errors) return back(errors)
 
   // 検査が全部通ってから KV に置き、D1 が落ちたら置いた画像を消す（commitWithImage）
   const avatarUrl = picked.image
     ? await putImage(c.env.MEDIA, picked.image, 'avatars', values.slug)
     : null
-  await commitWithImage(c.env.MEDIA, avatarUrl, () =>
-    db(c)
-      .insert(schema.members)
-      .values({ ...values, avatarUrl }),
-  )
-  return c.redirect(`/admin/members?saved=${savedParam(values.published)}`, 303)
+  try {
+    await commitWithImage(c.env.MEDIA, avatarUrl, () =>
+      database.insert(schema.members).values({ ...values, avatarUrl, formKey }),
+    )
+  } catch (error) {
+    // 検査のあとに同じ札・同じ slug が先に書かれた（同時に来た2本の送信）
+    if (uniqueViolation(error, 'members.form_key')) return saved()
+    if (uniqueViolation(error, 'members.slug')) return back({ slug: SLUG_TAKEN })
+    throw error
+  }
+  return saved()
 })
 
 app.post('/members/:id', async (c) => {
   const id = parseId(c.req.param('id'))
   if (!id) return c.notFound()
-  const member = await db(c).query.members.findFirst({ where: eq(schema.members.id, id) })
+  const database = db(c)
+  const member = await database.query.members.findFirst({ where: eq(schema.members.id, id) })
   if (!member) return c.notFound()
 
-  const { form, values } = await readMemberForm(c)
+  const { form, values, errors: unreadable, typed } = await readMemberForm(c, member)
   const account = c.get('account')
   const back = (errors: Record<string, string>) =>
     c.html(
-      <MemberForm account={account} member={member} errors={errors} values={asValues(values)} />,
+      <MemberForm
+        account={account}
+        member={member}
+        errors={imageNotKept(form, 'avatar', errors)}
+        values={{ ...asValues(values), ...typed }}
+      />,
       400,
     )
 
   const picked = await pickImage(form, 'avatar')
-  const errors =
-    (picked.error ? { avatar: picked.error } : null) ??
-    memberErrors(values) ??
-    ((await db(c).query.members.findFirst({
-      where: and(eq(schema.members.slug, values.slug), ne(schema.members.id, id)),
-    }))
-      ? { slug: 'この slug は既に使われています' }
-      : null)
-  if (errors) return back(imageNotKept(form, 'avatar', errors))
+  const errors = mergeErrors(
+    picked.error ? { avatar: picked.error } : null,
+    unreadable,
+    memberErrors(values),
+    values.published ? publishErrors({ kind: 'member', bio: values.bio }) : null,
+    await memberSlugTaken(database, values.slug, id),
+  )
+  if (errors) return back(errors)
 
   // 新しい画像を置く → D1 → 通ってから前の画像を消す（commitWithImage の順序）
   const avatarUrl = picked.image
     ? await putImage(c.env.MEDIA, picked.image, 'avatars', values.slug)
     : null
-  await commitWithImage(c.env.MEDIA, avatarUrl, () =>
-    db(c)
-      .update(schema.members)
-      .set({ ...values, ...(avatarUrl ? { avatarUrl } : {}) })
-      .where(eq(schema.members.id, id)),
-  )
+  const update = database
+    .update(schema.members)
+    .set({ ...values, ...(avatarUrl ? { avatarUrl } : {}) })
+    .where(eq(schema.members.id, id))
+  try {
+    await commitWithImage(c.env.MEDIA, avatarUrl, () =>
+      database.batch([update, ...memberSlugMoves(database, id, member.slug, values.slug)]),
+    )
+  } catch (error) {
+    if (uniqueViolation(error, 'members.slug')) return back({ slug: SLUG_TAKEN })
+    throw error
+  }
   if (avatarUrl) await removeImage(c.env.MEDIA, member.avatarUrl)
-  return c.redirect(`/admin/members?saved=${savedParam(values.published)}`, 303)
+  const moved = member.slug !== values.slug ? '&moved=1' : ''
+  return c.redirect(`/admin/members?saved=${savedParam(values.published)}${moved}`, 303)
 })
 
 app.get('/members/:id/delete', async (c) => {
@@ -1167,9 +1373,14 @@ const typeLabel = (type: 'app' | 'work') => KIND_LABEL[type]
 
 app.get('/items', async (c) => {
   const type = c.req.query('type') === 'work' ? 'work' : 'app'
+  /*
+    並びは公開ページと同じ（年の新しい順 → 並び順 → 作った順。queries.ts の
+    itemOrder）。並び順だけで並べていたころは、ここで先頭に見えている作品が
+    公開ページでは年に負けて後ろにいて、公開の並びをどこでも確かめられなかった
+  */
   const rows = await db(c).query.items.findMany({
     where: eq(schema.items.type, type),
-    orderBy: [asc(schema.items.sortOrder), asc(schema.items.id)],
+    orderBy: itemOrder,
     with: { member: true, platform: true },
   })
 
@@ -1191,6 +1402,15 @@ app.get('/items', async (c) => {
           ＋ Add item
         </a>
       </div>
+
+      {/*
+        タブは入力欄の違い（プラットフォーム / 業界と実績値）で分けているだけで、
+        公開ページでは1つの一覧。並びの規則を1文で言っておく
+      */}
+      <p class="form-note">
+        公開ページでは{typeLabel('app')}と{typeLabel('work')}を1つの一覧に混ぜ、年の新しい順 →
+        並び順（区分をまたいで比べる）→ 作った順に並べます。ここもその順です。
+      </p>
 
       {rows.length === 0 ? (
         <div class="empty-state">
@@ -1251,6 +1471,8 @@ type ItemFormData = {
   members: schema.Member[]
   platforms: schema.Platform[]
   item?: schema.Item & { tags: { tag: string }[]; links: { label: string; url: string }[] }
+  // 追加のフォームの一度きりの札（newFormKey）。編集では持たない
+  formKey?: string | null
   // 入力エラーで描き直すとき、送られてきた内容をそのまま返すために使う
   submitted?: Record<string, string>
   errors?: Record<string, string>
@@ -1336,7 +1558,19 @@ const METRIC_NOTE_HINT =
 const ItemForm = (props: ItemFormData) => {
   const item = props.item
   const d = itemDraft(item, props.submitted)
-  const links = [...d.links, { label: '', url: '' }, { label: '', url: '' }].slice(0, 3)
+  /*
+    リンクの欄は、公開できる本数（MAX_CHARS.itemLinks）ぶんを空けて出す。
+    それより多く持っている作品（上限より前に保存したもの）は全部の行を出す
+    ——3行で切っていたころは、4本目から先が欄に出ないまま、保存の総入れ替えで
+    黙って消えた
+  */
+  const blank = { label: '', url: '' }
+  const links = [
+    ...d.links,
+    ...Array.from({ length: Math.max(0, MAX_CHARS.itemLinks - d.links.length) }, () => blank),
+  ]
+  // 年の欄の頭が数字4桁でなければ、並びに使われない（保存は止めない）
+  const unordered = d.year !== '' && yearFrom(d.year) === null
 
   return (
     <AdminLayout title={item ? item.title : '新しい項目'} active="items" account={props.account}>
@@ -1357,6 +1591,7 @@ const ItemForm = (props: ItemFormData) => {
         class="form"
       >
         <input type="hidden" name="type" value={props.type} />
+        <FormKey value={props.formKey} />
         <div class="form-grid">
           <Field
             label="タイトル"
@@ -1367,20 +1602,25 @@ const ItemForm = (props: ItemFormData) => {
           />
           {/*
             この作品だけを指す URL。一覧の URL（/projects/3）は並べ替えるたびに
-            別の作品を指すので、貼るならこちら。変えると前の URL は 404 に
-            なる——貼ったあとで変えないこと
+            別の作品を指すので、貼るならこちら。変えてよい——前の URL は新しい
+            URL へ 301 で送る（item_slug_redirects）。それを書く前に言っておく
           */}
           <Field
             label="slug"
             name="slug"
             value={d.slug}
             error={props.errors?.slug}
-            hint={`${itemHref({ type: props.type, slug: '<slug>' })} になる。空なら作品名から作る（日本語だけの題からは作れないので自動生成になる）`}
+            hint={
+              item?.slug
+                ? `${itemHref({ type: props.type, slug: '<slug>' })} になる。変えると、前の URL は新しい URL へ転送する。空にしたときはいまのまま`
+                : `${itemHref({ type: props.type, slug: '<slug>' })} になる。空なら作品名から作る（日本語だけの題からは作れないので自動生成になる）`
+            }
           />
           <Select
             label="担当メンバー"
             name="memberId"
             value={d.memberId}
+            error={props.errors?.memberId}
             options={[
               { value: '', label: '（なし）' },
               ...props.members.map((member) => ({ value: String(member.id), label: member.name })),
@@ -1391,6 +1631,7 @@ const ItemForm = (props: ItemFormData) => {
               label="プラットフォーム"
               name="platformKey"
               value={d.platformKey}
+              error={props.errors?.platformKey}
               options={[
                 { value: '', label: '（なし）' },
                 ...props.platforms.map((platform) => ({
@@ -1411,15 +1652,25 @@ const ItemForm = (props: ItemFormData) => {
           {/*
             年の書き方は経歴（「2024.03 — 現在」）とそろえる。「2024 —」と書いて
             いたころは、ダッシュの先が空いたまま書きかけに見えた。一覧の並び
-            （新しい順）は頭の4桁だけで決まる（queries.ts の publicOrder）ので、
-            「2024 — 現在」でも 2024 として並ぶ
+            （新しい順）は頭の数字4桁だけで決まる（items.year_from。DB が year から
+            作る列で、知らせは同じ規則の src/lib/format.ts の yearFrom）ので、
+            「2024 — 現在」でも 2024 として並ぶ。
+
+            頭が数字4桁でない年（「令和6」「FY2024」）は保存を止めない（表示の
+            書き方は自由）が、並びに使われないことをその場で言う——言わないと、
+            一覧の最後に回った理由がどこにも見えない
           */}
           <Field
             label="年"
             name="year"
             value={d.year}
             placeholder="2026 / 2024 — 現在"
-            hint="終わったものは「2026」、続いているものは「2024 — 現在」。一覧は頭の4桁で新しい順に並ぶ"
+            warning={
+              unordered
+                ? '頭が数字4桁ではないので、並びに使われません（一覧では年の無い作品と一緒に最後に並びます）'
+                : undefined
+            }
+            hint="終わったものは「2026」、続いているものは「2024 — 現在」。一覧は頭の数字4桁で新しい順に並ぶ"
           />
           <Area
             label="説明文"
@@ -1475,7 +1726,7 @@ const ItemForm = (props: ItemFormData) => {
           {/*
             代替テキストは画像そのものと別の欄。作品のページではこの画像が作品の
             見た目を伝える唯一の手段なので、画像を公開するなら空にできない
-            （itemErrors）。下書きでは空のまま保存できる
+            （公開の関門 publishErrors）。下書きでは空のまま保存できる
           */}
           <Field
             label="画像の代替テキスト"
@@ -1495,8 +1746,26 @@ const ItemForm = (props: ItemFormData) => {
               </label>
             </div>
           ) : null}
-          <Field label="タグ" name="tags" value={d.tags} hint="カンマ区切り" />
-          <Field label="並び順" name="sortOrder" value={d.sortOrder} hint="小さいほど先。10刻み" />
+          <Field
+            label="タグ"
+            name="tags"
+            value={d.tags}
+            error={props.errors?.tags}
+            hint={`カンマ区切り · 公開は ${MAX_CHARS.itemTags} つまで（作品のページの1画面に収まる数）`}
+          />
+          {/*
+            並びは年が先に効き、同じ年の中でこの数。個人開発と業務は公開ページで
+            1つの一覧に混ざるので、この数も区分をまたいで比べる（queries.ts の
+            itemOrder）。「小さいほど先」とだけ書いていたころは、1 を付けても年が
+            古い作品は後ろのままで、理由が分からなかった
+          */}
+          <Field
+            label="並び順"
+            name="sortOrder"
+            value={d.sortOrder}
+            error={props.errors?.sortOrder}
+            hint="同じ年の中で、小さいほど先。個人開発と業務をまたいで比べる（同じ数なら先に作ったほう）。10刻み"
+          />
 
           {/*
             行ごとの検査は readLinks。知らせは何行目かで言うので、行の順は
@@ -1528,7 +1797,8 @@ const ItemForm = (props: ItemFormData) => {
             })}
             {props.errors?.links ? <span class="field__error">{props.errors.links}</span> : null}
             <span class="field__hint">
-              ラベルと URL は両方入れる。URL は https:// か mailto: か / から
+              ラベルと URL は両方入れる。URL は https:// か mailto: か / から · 公開は{' '}
+              {MAX_CHARS.itemLinks} 本まで
             </span>
           </fieldset>
 
@@ -1589,7 +1859,13 @@ app.get('/items/new', async (c) => {
   const type = c.req.query('type') === 'work' ? 'work' : 'app'
   const { members, platforms } = await formContext(c)
   return c.html(
-    <ItemForm account={c.get('account')} type={type} members={members} platforms={platforms} />,
+    <ItemForm
+      account={c.get('account')}
+      type={type}
+      members={members}
+      platforms={platforms}
+      formKey={newFormKey()}
+    />,
   )
 })
 
@@ -1616,108 +1892,107 @@ app.get('/items/:id/edit', async (c) => {
   )
 })
 
-async function readItemForm(form: FormData) {
+/*
+  フォームの値を行の形にする。読めなかった値は errors に入れて返す
+  （下書きでも止める、受け取れない値）。
+
+  担当メンバーとプラットフォームは、フォームを描いたときの選択肢（formContext）に
+  在るものだけを受ける。別のタブでメンバーを消したあとで、古いフォームのまま
+  保存すると、以前は外部キーで 500 になり、打った内容も消えていた。いまは
+  選び直してもらう（400。打った内容は残す）。
+*/
+function readItemForm(
+  form: FormData,
+  context: { members: schema.Member[]; platforms: schema.Platform[] },
+  existing?: schema.Item,
+) {
   const type = str(form.get('type')) === 'work' ? ('work' as const) : ('app' as const)
-  const memberId = num(form.get('memberId'), 0)
-  const platformKey = str(form.get('platformKey'))
   const title = str(form.get('title'))
+  // 全角の数字は半角に直す。並べるための年（year_from）は DB がこの字から作る
+  const year = halfWidthDigits(str(form.get('year')))
+  const sortOrder = readSortOrder(form, existing?.sortOrder)
+  const errors: Record<string, string> = { ...sortOrder.error }
+
+  const memberText = str(form.get('memberId'))
+  const memberId = memberText ? int(memberText) : null
+  if (memberText && !context.members.some((member) => member.id === memberId)) {
+    errors.memberId =
+      '担当メンバーが見つかりません（削除された可能性があります）。選び直してください'
+  }
+  const platformKey = type === 'app' ? str(form.get('platformKey')) : ''
+  if (platformKey && !context.platforms.some((platform) => platform.key === platformKey)) {
+    errors.platformKey = 'プラットフォームが見つかりません。選び直してください'
+  }
 
   return {
-    type,
-    memberId: memberId || null,
-    platformKey: type === 'app' && platformKey ? platformKey : null,
-    category: type === 'work' ? str(form.get('category')) : '',
-    title,
-    /*
-      恒久リンクの3語目。空なら作品名から作る（メンバーの slug と同じ作り方）。
+    errors: Object.keys(errors).length ? errors : null,
+    tags: parseTags(str(form.get('tags'))),
+    values: {
+      type,
+      memberId,
+      platformKey: platformKey || null,
+      category: type === 'work' ? str(form.get('category')) : '',
+      title,
+      /*
+        恒久リンクの3語目（readSlug）。空なら、編集ではいまの slug のまま、まだ
+        持たない行では作品名から作る。
 
-      題が日本語だけだと toSlug は空を返すので、そのときは読めない代わりに
-      重ならない名前にする。空のまま保存させないのは、恒久リンクの無い作品を
-      作らないため——この列より前からある行だけが「まだ無い」側で、
-      ここを通った行は必ず名指しできる。
-    */
-    slug: toSlug(str(form.get('slug')) || title) || `item-${newToken(3)}`,
-    year: str(form.get('year')),
-    summary: str(form.get('summary')),
-    body: str(form.get('body')),
-    imageAlt: str(form.get('imageAlt')),
-    metricValue: str(form.get('metricValue')) || null,
-    metricUnit: str(form.get('metricUnit')) || null,
-    metricNote: str(form.get('metricNote')) || null,
-    sortOrder: num(form.get('sortOrder'), 0),
-    published: bool(form.get('published')),
-    updatedAt: new Date().toISOString(),
+        題が日本語だけだと toSlug は空を返すので、そのときは読めない代わりに
+        重ならない名前にする。空のまま保存させないのは、恒久リンクの無い作品を
+        作らないため——この列より前からある行だけが「まだ無い」側で、
+        ここを通った行は必ず名指しできる。
+      */
+      slug: readSlug(str(form.get('slug')), existing?.slug, title) ?? `item-${newToken(3)}`,
+      year,
+      summary: str(form.get('summary')),
+      body: str(form.get('body')),
+      imageAlt: str(form.get('imageAlt')),
+      metricValue: str(form.get('metricValue')) || null,
+      metricUnit: str(form.get('metricUnit')) || null,
+      metricNote: str(form.get('metricNote')) || null,
+      sortOrder: sortOrder.value,
+      published: bool(form.get('published')),
+      updatedAt: new Date().toISOString(),
+    },
   }
 }
 
 /*
-  項目の中身のうち、公開ページで落ちる・切られる・困るもの。
+  作品の、下書きでも止める値。いまは題だけ（空の題の作品は一覧でも名指しできない）。
 
-  説明文はカードの行数で切られる（--card-lines）。切られても画面からは溢れない
-  ので no-scroll は壊れないが、書いたぶんが黙って消える。上限は 600 以上の
-  カードなら切れずに出る長さ（src/blocks.ts の MAX_CHARS.itemSummary）にしてある。
-
-  本文は作品のページ1枚に全段落が出る。割る先が無いので、字数と段落の数の
-  両方で止める（MAX_CHARS.itemBody / itemBodyParagraphs。紹介文と同じ形）。
-  字数は打った文字列そのままで数える（空行も字。紹介文と同じ数え方）。
-
-  画像があるのに代替テキストが空なら止める。作品のページではこの画像が
-  作品の見た目を伝える唯一の手段で、名前の無い画像は読み上げでは「画像」と
-  しか言えない。hasImage は保存したあとに画像が残るか（新しく選んだ・いまの
-  画像を外さずに残す）で、呼ぶ側が決める。
-
-  **下書きの保存では、題のほかは見ない。** 長さも代替テキストも、公開する
-  ものに掛ける決まり（CLAUDE.md「下書きに戻す保存では長さを見ない」）。
-  見ると、上限より前に保存された長い中身を持つ作品が「公開を外すことすら
-  できない」行き止まりになる。以前は説明文の長さだけを下書きでも見ていて、
-  その行き止まりがここに1つ残っていた。
-
-  止める理由は全部まとめて返す。1つずつ返すと、直して保存するたびに次の
-  理由が1つずつ出てくる。
+  説明文・本文の長さ、タグの数・リンクの本数、画像の代替テキストは、公開する
+  ときにだけ見る（src/blocks.ts の publishErrors）。見ると、上限より前に保存された
+  長い中身を持つ作品が「公開を外すことすらできない」行き止まりになる
+  （CLAUDE.md「下書きに戻す保存では長さを見ない」）。
 */
-function itemErrors(
-  values: { title: string; summary: string; body: string; imageAlt: string; published: number },
-  hasImage: boolean,
-): Record<string, string> | null {
-  if (!values.title) return { title: 'タイトルは必須です' }
-  if (!values.published) return null
-
-  const errors: Record<string, string> = {}
-  const summary = chars(values.summary)
-  if (summary > MAX_CHARS.itemSummary) {
-    errors.summary = `カードに収まりません。説明文は ${MAX_CHARS.itemSummary} 字までです（いま ${summary} 字）`
-  }
-  const body = chars(values.body)
-  const parts = paragraphs(values.body).length
-  if (body > MAX_CHARS.itemBody) {
-    errors.body = `1画面に収まりません。本文は ${MAX_CHARS.itemBody} 字までです（いま ${body} 字）`
-  } else if (parts > MAX_CHARS.itemBodyParagraphs) {
-    errors.body = `1画面に収まりません。段落は ${MAX_CHARS.itemBodyParagraphs} つまでです（いま ${parts} つ）`
-  }
-  if (hasImage && !values.imageAlt) {
-    errors.imageAlt = '画像を公開するときは、代替テキストが要ります'
-  }
-  return Object.keys(errors).length ? errors : null
+function itemValueErrors(values: { title: string }): Record<string, string> | null {
+  return values.title ? null : { title: 'タイトルは必須です' }
 }
 
-/*
-  slug が重なったら弾く。メンバーの slug と同じ扱い。
-
-  黙って番号を足して通さないのは、そうすると「保存した順」で URL が決まって
-  しまうため。恒久リンクは1つの URL が1つの作品を指すことに全部が懸かって
-  いるので、重なりは人に直してもらう。
-*/
-async function slugTaken(
+// slug の重なり。いまの slug と、ほかの作品の前の slug（memberSlugTaken と同じ規則）
+async function itemSlugTaken(
   database: ReturnType<typeof db>,
   slug: string,
   exceptId: number | null,
 ): Promise<Record<string, string> | null> {
-  const duplicate = await database.query.items.findFirst({
-    where: exceptId
-      ? and(eq(schema.items.slug, slug), ne(schema.items.id, exceptId))
-      : eq(schema.items.slug, slug),
-  })
-  return duplicate ? { slug: 'この slug は既に使われています' } : null
+  const [live, moved] = await Promise.all([
+    database.query.items.findFirst({
+      where: exceptId
+        ? and(eq(schema.items.slug, slug), ne(schema.items.id, exceptId))
+        : eq(schema.items.slug, slug),
+    }),
+    database.query.itemSlugRedirects.findFirst({
+      where: exceptId
+        ? and(
+            eq(schema.itemSlugRedirects.oldSlug, slug),
+            ne(schema.itemSlugRedirects.itemId, exceptId),
+          )
+        : eq(schema.itemSlugRedirects.oldSlug, slug),
+    }),
+  ])
+  if (live) return { slug: SLUG_TAKEN }
+  if (moved) return { slug: SLUG_MOVED('別の作品') }
+  return null
 }
 
 // 弾いたときに、打った内容をそのままフォームへ返すための形
@@ -1793,29 +2068,75 @@ function mergeErrors(
   return Object.keys(all).length ? all : null
 }
 
-// タグとリンクは総入れ替えにする。差分を取るより、消して入れ直すほうが読める
-async function replaceChildren(
+/*
+  作品の保存は、行・タグ・リンク・転送表の書き込みを全部1つの batch に入れる
+  （D1 の batch は1つのトランザクション。途中で落ちれば何も書かれない）。
+
+  1本ずつ await していたころは、途中で止まると半分だけ書かれた。タグを 34 個
+  付けて保存すると、D1 の束縛変数の上限（1文に 100 個）でタグの INSERT が落ち、
+  その時点で前のタグとリンクはもう DELETE 済み——500 の画面の裏で、リポジトリや
+  ストアのリンクまで消えていた。新しく作るときは作品の行だけが残り、送り直すと
+  「この slug は既に使われています」で弾かれた（タグの無い作品は公開済み）。
+  構成の並べ替え（queries.ts の reorderBlocks）が batch なのと同じ理由。
+
+  新しく作るときは親の id がまだ無い。そこで子の行は親を slug で引く
+  （INSERT … VALUES ((SELECT id FROM items WHERE slug = ?), …)）。slug は保存の前に
+  決まっていて unique なので、同じ batch の中の先の INSERT が作った行を指せる。
+
+  タグとリンクの総入れ替えはそのまま（差分を取るより、消して入れ直すほうが読める）。
+  複数行の INSERT は、1文の束縛変数が D1 の上限（100）を超えないように分ける。
+*/
+const D1_MAX_VARIABLES = 100
+// 1行ぶんの束縛変数の数（item_id か親を引く slug・残りの列）から、1文に入る行数
+const rowsPerInsert = (variablesPerRow: number) => Math.floor(D1_MAX_VARIABLES / variablesPerRow)
+
+function childWrites(
   database: ReturnType<typeof db>,
-  itemId: number,
-  form: FormData,
+  // 既にある作品なら id、同じ batch で作る作品なら slug
+  owner: number | string,
+  tags: string[],
   links: ItemLink[],
-) {
-  const tags = parseTags(str(form.get('tags')))
+): BatchItem<'sqlite'>[] {
+  const itemId: number | SQL =
+    typeof owner === 'number'
+      ? owner
+      : sql`(select ${schema.items.id} from ${schema.items} where ${schema.items.slug} = ${owner})`
+  return [
+    // 新しく作る作品には、消す子がまだ無い
+    ...(typeof owner === 'number'
+      ? [
+          database.delete(schema.itemTags).where(eq(schema.itemTags.itemId, owner)),
+          database.delete(schema.itemLinks).where(eq(schema.itemLinks.itemId, owner)),
+        ]
+      : []),
+    // item_id・tag・sort_order
+    ...chunk(
+      tags.map((tag, index) => ({ itemId, tag, sortOrder: index })),
+      rowsPerInsert(3),
+    ).map((rows) => database.insert(schema.itemTags).values(rows)),
+    // item_id・label・url・sort_order（id は自動なので変数を使わない）
+    ...chunk(
+      links.map((link, index) => ({ itemId, ...link, sortOrder: index })),
+      rowsPerInsert(4),
+    ).map((rows) => database.insert(schema.itemLinks).values(rows)),
+  ]
+}
 
-  await database.delete(schema.itemTags).where(eq(schema.itemTags.itemId, itemId))
-  await database.delete(schema.itemLinks).where(eq(schema.itemLinks.itemId, itemId))
-
-  if (tags.length) {
-    await database
-      .insert(schema.itemTags)
-      .values(tags.map((tag, index) => ({ itemId, tag, sortOrder: index })))
-  }
-
-  if (links.length) {
-    await database
-      .insert(schema.itemLinks)
-      .values(links.map((link, index) => ({ itemId, ...link, sortOrder: index })))
-  }
+// slug を変えた保存に足す2文。メンバーの memberSlugMoves と同じ（前の slug が無い行は何も残さない）
+function itemSlugMoves(
+  database: ReturnType<typeof db>,
+  id: number,
+  before: string | null,
+  after: string,
+): BatchItem<'sqlite'>[] {
+  if (!before || before === after) return []
+  return [
+    database.delete(schema.itemSlugRedirects).where(eq(schema.itemSlugRedirects.oldSlug, after)),
+    database
+      .insert(schema.itemSlugRedirects)
+      .values({ oldSlug: before, itemId: id })
+      .onConflictDoUpdate({ target: schema.itemSlugRedirects.oldSlug, set: { itemId: id } }),
+  ]
 }
 
 // 画像の列（URL と寸法）。寸法は読めたときだけ（src/db/schema.ts の imageWidth）
@@ -1826,57 +2147,119 @@ const imageColumns = (url: string | null, image: PickedImage | null) => ({
 })
 
 app.post('/items', async (c) => {
+  const database = db(c)
   const form = await c.req.formData()
-  const values = await readItemForm(form)
+  const context = await formContext(c)
+  const { values, tags, errors: unreadable } = readItemForm(form, context)
+  const saved = () =>
+    c.redirect(`/admin/items?type=${values.type}&saved=${savedParam(values.published)}`, 303)
+  // 同じ札で書いた行（newFormKey の注記）
+  const twinOf = (key: string | null) =>
+    key
+      ? database.query.items.findFirst({
+          where: eq(schema.items.formKey, key),
+          columns: { title: true, type: true },
+        })
+      : undefined
+  const same = (row: { title: string; type: string } | undefined) =>
+    row?.title === values.title && row.type === values.type
+  // 同じフォームの2度目の送信。1度目がもう書いている
+  const sent = formKeyOf(form)
+  const twin = await twinOf(sent)
+  if (same(twin)) return saved()
+  const formKey = twin ? newFormKey() : sent
+
+  const back = (errors: Record<string, string>) =>
+    c.html(
+      <ItemForm
+        account={c.get('account')}
+        type={values.type}
+        members={context.members}
+        platforms={context.platforms}
+        formKey={formKey}
+        submitted={submittedItem(form)}
+        errors={imageNotKept(form, 'image', errors)}
+      />,
+      400,
+    )
+
   // 画像の種類と大きさ、リンクの形は下書きでも見る。長さの話ではなく、受け取れない値
   const picked = await pickImage(form, 'image')
   const links = readLinks(form)
   const errors = mergeErrors(
     picked.error ? { image: picked.error } : null,
     links.error ? { links: links.error } : null,
-    itemErrors(values, picked.image !== null),
-    await slugTaken(db(c), values.slug, null),
+    unreadable,
+    itemValueErrors(values),
+    values.published
+      ? publishErrors({
+          kind: 'item',
+          summary: values.summary,
+          body: values.body,
+          imageAlt: values.imageAlt,
+          hasImage: picked.image !== null,
+          tags: tags.length,
+          links: links.links.length,
+        })
+      : null,
+    await itemSlugTaken(database, values.slug, null),
   )
-  if (errors) {
-    const { members, platforms } = await formContext(c)
-    return c.html(
-      <ItemForm
-        account={c.get('account')}
-        type={values.type}
-        members={members}
-        platforms={platforms}
-        submitted={submittedItem(form)}
-        errors={imageNotKept(form, 'image', errors)}
-      />,
-      400,
-    )
-  }
+  if (errors) return back(errors)
 
   // 検査が全部通ってから KV に置き、D1 が落ちたら置いた画像を消す（commitWithImage）
   const imageUrl = picked.image
     ? await putImage(c.env.MEDIA, picked.image, 'items', values.slug)
     : null
-  const inserted = await commitWithImage(c.env.MEDIA, imageUrl, () =>
-    db(c)
-      .insert(schema.items)
-      .values({ ...values, ...imageColumns(imageUrl, picked.image) })
-      .returning({ id: schema.items.id }),
-  )
-  const id = inserted[0]?.id
-  if (id) await replaceChildren(db(c), id, form, links.links)
-  return c.redirect(`/admin/items?type=${values.type}&saved=${savedParam(values.published)}`, 303)
+  try {
+    await commitWithImage(c.env.MEDIA, imageUrl, () =>
+      database.batch([
+        database
+          .insert(schema.items)
+          .values({ ...values, ...imageColumns(imageUrl, picked.image), formKey }),
+        ...childWrites(database, values.slug, tags, links.links),
+      ]),
+    )
+  } catch (error) {
+    /*
+      検査のあとに同じ札か同じ slug が先に書かれた（同時に来た2本の送信）。
+      同じ札の行があれば、それは1度目の送信——英字の題なら slug も同じなので、
+      どちらの制約が先に当たっても「保存済み」に寄せる
+    */
+    if (uniqueViolation(error, 'items.')) {
+      if (same(await twinOf(formKey))) return saved()
+      if (uniqueViolation(error, 'items.slug')) return back({ slug: SLUG_TAKEN })
+    }
+    throw error
+  }
+  return saved()
 })
 
 app.post('/items/:id', async (c) => {
   const id = parseId(c.req.param('id'))
   if (!id) return c.notFound()
+  const database = db(c)
   // 先に存在を確かめる。無い id のまま進むと、タグの差し替えが外部キーで
   // 落ちて 500 になるか、何も変わっていないのに「保存しました」と出る
-  const existing = await db(c).query.items.findFirst({ where: eq(schema.items.id, id) })
+  const existing = await database.query.items.findFirst({ where: eq(schema.items.id, id) })
   if (!existing) return c.notFound()
 
   const form = await c.req.formData()
-  const values = await readItemForm(form)
+  const context = await formContext(c)
+  const { values, tags, errors: unreadable } = readItemForm(form, context, existing)
+  const back = (errors: Record<string, string>) =>
+    c.html(
+      <ItemForm
+        account={c.get('account')}
+        type={values.type}
+        members={context.members}
+        platforms={context.platforms}
+        item={{ ...existing, tags: [], links: [] }}
+        submitted={submittedItem(form)}
+        errors={imageNotKept(form, 'image', errors)}
+      />,
+      400,
+    )
+
   const picked = await pickImage(form, 'image')
   const links = readLinks(form)
   /*
@@ -1889,40 +2272,55 @@ app.post('/items/:id', async (c) => {
   const errors = mergeErrors(
     picked.error ? { image: picked.error } : null,
     links.error ? { links: links.error } : null,
-    itemErrors(values, picked.image !== null || keeps),
-    await slugTaken(db(c), values.slug, id),
+    unreadable,
+    itemValueErrors(values),
+    values.published
+      ? publishErrors({
+          kind: 'item',
+          summary: values.summary,
+          body: values.body,
+          imageAlt: values.imageAlt,
+          hasImage: picked.image !== null || keeps,
+          tags: tags.length,
+          links: links.links.length,
+        })
+      : null,
+    await itemSlugTaken(database, values.slug, id),
   )
-  if (errors) {
-    const { members, platforms } = await formContext(c)
-    return c.html(
-      <ItemForm
-        account={c.get('account')}
-        type={values.type}
-        members={members}
-        platforms={platforms}
-        item={{ ...existing, tags: [], links: [] }}
-        submitted={submittedItem(form)}
-        errors={imageNotKept(form, 'image', errors)}
-      />,
-      400,
-    )
-  }
+  if (errors) return back(errors)
 
   // 新しい画像を置く → D1 → 通ってから前の画像を消す（commitWithImage の順序）
   const placed = picked.image
     ? await putImage(c.env.MEDIA, picked.image, 'items', values.slug)
     : null
   const image = placed ? imageColumns(placed, picked.image) : keeps ? {} : imageColumns(null, null)
-  await commitWithImage(c.env.MEDIA, placed, () =>
-    db(c)
-      .update(schema.items)
-      .set({ ...values, ...image })
-      .where(eq(schema.items.id, id)),
-  )
+  try {
+    await commitWithImage(c.env.MEDIA, placed, () =>
+      database.batch([
+        database
+          .update(schema.items)
+          .set({ ...values, ...image })
+          .where(eq(schema.items.id, id)),
+        ...itemSlugMoves(database, id, existing.slug, values.slug),
+        ...childWrites(database, id, tags, links.links),
+      ]),
+    )
+  } catch (error) {
+    if (uniqueViolation(error, 'items.slug')) return back({ slug: SLUG_TAKEN })
+    throw error
+  }
   // 差し替えた・外した画像は KV から消す（removeImage の注記）
   if (placed || !keeps) await removeImage(c.env.MEDIA, existing.imageUrl)
-  await replaceChildren(db(c), id, form, links.links)
-  return c.redirect(`/admin/items?type=${values.type}&saved=${savedParam(values.published)}`, 303)
+  /*
+    前の URL が変わったか。slug を変えたときと、区分を変えたとき（1語目の
+    apps / works が変わる。公開ページが前の区分の URL を 301 で寄せる）
+  */
+  const moved =
+    existing.slug !== null && (existing.slug !== values.slug || existing.type !== values.type)
+  return c.redirect(
+    `/admin/items?type=${values.type}&saved=${savedParam(values.published)}${moved ? '&moved=1' : ''}`,
+    303,
+  )
 })
 
 app.get('/items/:id/delete', async (c) => {
@@ -2178,6 +2576,8 @@ const BlocksPage = (props: {
                       公開と下書きを、編集フォームを通らずに切り替える。
                       フォームを通ると本文の検査に当たるので、上限より前に
                       保存された長い中身は「引っ込める」ことすらできなかった。
+                      公開にするほうは編集フォームと同じ関門を通る（止めたら
+                      その行の編集画面へ。POST /blocks/:id/publish の注記）。
                       ピルは状態の表示、こちらは操作——文言は起きることで書く
                     */}
                     <form
@@ -2289,13 +2689,16 @@ const BlockForm = (props: {
   account: string
   type: BlockType
   block?: schema.Block
+  // 追加のフォームの一度きりの札（newFormKey）。編集では持たない
+  formKey?: string | null
   values?: Record<string, string>
   errors?: Record<string, string>
+  // フォームの上に出す知らせ（一覧の「公開する」を関門が止めて、ここへ送ってきたとき）
+  notice?: string
 }) => {
   const { type, block } = props
   const value = (key: 'title' | 'body') =>
     props.values?.[key] ?? block?.[key] ?? (key === 'title' && 'title' in type ? type.title : '')
-  // 入力エラーで描き直すとき、外した「公開する」も外したまま返す
   /*
     入力エラーで描き直すとき、外した「公開する」も外したまま返す。
     新しく書くときは下書きから始める（メンバー・項目と同じ。置くだけのもの——
@@ -2312,12 +2715,15 @@ const BlockForm = (props: {
         </div>
       </div>
 
+      {props.notice ? <p class="banner banner--error">{props.notice}</p> : null}
+
       <form
         method="post"
         action={block ? `/admin/blocks/${block.id}` : '/admin/blocks'}
         class="form"
       >
         <input type="hidden" name="type" value={type.key} />
+        <FormKey value={props.formKey} />
         <div class="form-grid">
           {type.kind === 'free' ? (
             <>
@@ -2366,8 +2772,18 @@ app.get('/blocks/new', (c) => {
   const type = isBlockKey(key) ? blockType(key) : undefined
   // 決まった中身のものは書くことが無いので、一覧の「置く」から直接入る
   if (type?.kind !== 'free') return c.notFound()
-  return c.html(<BlockForm account={c.get('account')} type={type} />)
+  return c.html(<BlockForm account={c.get('account')} type={type} formKey={newFormKey()} />)
 })
+
+/*
+  一覧の「公開する」を関門（publishErrors）が止めたときの着地点。
+  /admin/blocks/:id/edit?publish=blocked で来る。
+
+  止めた理由をその行のフォームに出し、「公開する」に印を付けて描く——直して
+  保存すれば、押したかった「公開」がそのまま通る。理由がもう無ければ（別の
+  タブで直した）、ふつうの編集画面。
+*/
+const PUBLISH_BLOCKED = '公開できませんでした。下の理由を直して保存すると、公開されます'
 
 app.get('/blocks/:id/edit', async (c) => {
   const id = parseId(c.req.param('id'))
@@ -2375,7 +2791,24 @@ app.get('/blocks/:id/edit', async (c) => {
   const block = await db(c).query.blocks.findFirst({ where: eq(schema.blocks.id, id) })
   const type = block ? blockType(block.type) : undefined
   if (!block || !type) return c.notFound()
-  return c.html(<BlockForm account={c.get('account')} type={type} block={block} />)
+  const blocked =
+    c.req.query('publish') === 'blocked'
+      ? publishErrors({ kind: 'block', type, title: block.title, body: block.body })
+      : null
+  return c.html(
+    blocked ? (
+      <BlockForm
+        account={c.get('account')}
+        type={type}
+        block={block}
+        values={{ title: block.title, body: block.body, published: '1' }}
+        errors={blocked}
+        notice={PUBLISH_BLOCKED}
+      />
+    ) : (
+      <BlockForm account={c.get('account')} type={type} block={block} />
+    ),
+  )
 })
 
 function readBlockForm(form: FormData) {
@@ -2387,97 +2820,58 @@ function readBlockForm(form: FormData) {
 }
 
 /*
-  自由文の長さの上限。数そのものは src/blocks.ts の maxChars が正で、
-  ここはその数を「画面ごとの合計」に当てる側。
-
-  1行1件のものは件数で割れる（入りきらないぶんは次の画面に回る）が、割った
-  「あと」の1画面に何字入るかは件数では決まらない。2000字の段落を保存させると、
-  公開ページでは弁（overflow: auto）が開いて節の中がスクロールするだけで、
-  1画面には収まらない。入口で止めるほかに手が無いので、ここで見る。
-
-  一文だけは字数と別に見る。ひとことは1枚の画面に大きく出る一文で、
-  120 字を超えると「大きな一文」ではなく段落になる（収まるかどうかとは別の話）。
+  ブロックを保存してよいか。下書きでも止めるのは受け取れない値（中身が空・
+  リンク集の通らない行。blockValueErrors）だけで、1画面に収まる長さは公開に
+  なるときにだけ見る（publishErrors）。数そのものは src/blocks.ts の maxChars が正。
 */
-const MAX_STATEMENT_SENTENCE = 120
-
-// 「字」で数える。絵文字や異体字を2字と数えないように、コードポイントで数える
-const chars = (text: string) => [...text].length
-
-/*
-  1画面ぶんずつの字数。割りかたは公開ページと同じ（chunk と perScreen）で、
-  行の開き方も同じ（src/blocks.ts の blockTexts / blockLines）。
-
-  数えるのは画面に文字として出るものだけ。リンク集の URL は href であって
-  本文には出ないので、2列目は落とす（URL の長さで書ける説明が減るのはおかしい）。
-  形が通らない URL の行は公開ページに出ないので、blockLines が先に落とす。
-*/
-function screenChars(type: BlockType, body: string): number[] {
-  const perScreen = blockPerScreen(type.key)
-  const units =
-    type.key === 'note'
-      ? blockTexts(body)
-      : blockLines(type.key, body).map((parts) => blockVisibleParts(type.key, parts).join(''))
-  return chunk(units, perScreen).map((screen) => screen.reduce((sum, text) => sum + chars(text), 0))
-}
-
-/*
-  出せない中身は保存しない。「公開」なのにサイトに出ない行を作らないため。
-  ひとことは一文が、それ以外は中身が要る。リンク集は URL の形まで見る
-  （公開ページは通らない URL を落とすので、素通しすると節ごと消える）。
-
-  長さも同じ理由で見る——公開ページで1画面に収まらない中身は、管理画面でも
-  保存させない。いちばん多い画面の字数を出して添えるのは、何字削れば通るかが
-  分からないと直しようがないため。
-*/
-function blockErrors(
-  /*
-    free に絞ってあるのは、**安全性のため**。BlockType のまま受けて
-    `'maxChars' in type ? type.maxChars : Infinity` としていたころは、
-    maxChars を持たない free ブロックを足したときに無制限で保存を通し、
-    公開ページで弁が開いて「スクロールしない」が静かに破れた。
-    いまは同じ足し忘れが TS2339 でその場で落ちる。
-  */
-  type: Extract<BlockType, { kind: 'free' }>,
-  values: { title: string; body: string },
-): Record<string, string> | null {
-  const max = type.maxChars
-  if (type.key === 'statement') {
-    if (!values.title) return { title: '一文を入れてください' }
-    if (chars(values.title) > MAX_STATEMENT_SENTENCE) {
-      return { title: `大きく出る一文です。${MAX_STATEMENT_SENTENCE} 字までにしてください` }
-    }
-    const total = chars(values.title) + chars(values.body)
-    if (total > max) {
-      return { body: `1画面に収まりません。一文と添え書きで ${max} 字までです（いま ${total} 字）` }
-    }
-    return null
-  }
-  if (!values.body) return { body: '中身を入れてください' }
-  if (type.key === 'links' && !parseLines(values.body).some(([, url]) => isSafeUrl(url))) {
-    return { body: 'URL は https:// か mailto: か / で始めてください' }
-  }
-  // 画面の数だけ数が並ぶので、広げずに畳む（行数に上限は無い）
-  const worst = screenChars(type, values.body).reduce((most, n) => Math.max(most, n), 0)
-  if (worst > max) {
-    return {
-      body: `1画面に収まりません。1画面は ${max} 字までです（いちばん多い画面が ${worst} 字）`,
-    }
-  }
-  return null
-}
+const blockSaveErrors = (type: BlockType, values: ReturnType<typeof readBlockForm>) =>
+  values.published
+    ? publishErrors({ kind: 'block', type, title: values.title, body: values.body })
+    : blockValueErrors(type, values)
 
 // 足す先はいちばん下。行はもう読んであるので、最大値を DB に聞き直さない
 const nextBlockOrder = (rows: schema.Block[]) =>
   rows.reduce((last, row) => Math.max(last, row.sortOrder), 0) + 10
 
 app.post('/blocks', async (c) => {
+  const database = db(c)
   const form = await c.req.formData()
   const key = str(form.get('type'))
   const type = isBlockKey(key) ? blockType(key) : undefined
   const account = c.get('account')
-  const stored = await listBlocks(db(c))
+  const values = type?.kind === 'free' ? readBlockForm(form) : null
+  const saved = (id: number) =>
+    c.redirect(`/admin/blocks?saved=${savedParam(values ? values.published : 1)}#block-${id}`, 303)
+
+  // 同じ札で書いた、同じ中身の行（newFormKey の注記）
+  const twinOf = (key: string | null) =>
+    key ? database.query.blocks.findFirst({ where: eq(schema.blocks.formKey, key) }) : undefined
+  const same = (row: schema.Block | undefined) =>
+    row !== undefined &&
+    row.type === type?.key &&
+    row.title === values?.title &&
+    row.body === values?.body
+  // 同じフォームの2度目の送信。1度目がもう書いている
+  const sent = formKeyOf(form)
+  const twin = await twinOf(sent)
+  if (twin && same(twin)) return saved(twin.id)
+  const formKey = twin ? newFormKey() : sent
+
+  const stored = await listBlocks(database)
   // 0件のときサイトに出ているのは既定の並び。重複かどうかもそれで判断する
   const rows = stored.length ? stored : defaultBlocks()
+  const placedAlready = (label: string) =>
+    siteCounts(database).then((counts) =>
+      c.html(
+        <BlocksPage
+          account={account}
+          rows={stored}
+          counts={counts}
+          error={`${label} は既に置いてあります`}
+        />,
+        400,
+      ),
+    )
 
   // 画面の数を数えるのは、一覧を描き直すときだけ。保存できた側では要らない
   if (!type) {
@@ -2485,33 +2879,28 @@ app.post('/blocks', async (c) => {
       <BlocksPage
         account={account}
         rows={stored}
-        counts={await siteCounts(db(c))}
+        counts={await siteCounts(database)}
         error="置けないブロックです"
       />,
       400,
     )
   }
 
-  if (type.kind === 'fixed') {
-    if (rows.some((row) => row.type === type.key)) {
-      return c.html(
-        <BlocksPage
-          account={account}
-          rows={stored}
-          counts={await siteCounts(db(c))}
-          error={`${type.label} は既に置いてあります`}
-        />,
-        400,
-      )
-    }
+  if (type.kind === 'fixed' && rows.some((row) => row.type === type.key)) {
+    return placedAlready(type.label)
   }
 
-  const values = type.kind === 'free' ? readBlockForm(form) : null
-  if (type.kind === 'free' && values) {
-    const errors = blockErrors(type, values)
+  if (values) {
+    const errors = blockSaveErrors(type, values)
     if (errors) {
       return c.html(
-        <BlockForm account={account} type={type} values={asValues(values)} errors={errors} />,
+        <BlockForm
+          account={account}
+          type={type}
+          formKey={formKey}
+          values={asValues(values)}
+          errors={errors}
+        />,
         400,
       )
     }
@@ -2519,18 +2908,28 @@ app.post('/blocks', async (c) => {
 
   /*
     ここまで来てから足す。0件なら、先に既定の並びを行にする。
-    そうしないと、足した1つだけの DB になって、見えていた5節が消える
+    そうしないと、足した1つだけの DB になって、見えていた5節が消える。
+
+    書くのは ON CONFLICT DO NOTHING の1文。決まった中身の種類は DB の部分一意
+    索引（blocks_fixed_once）が、打ち込むものは札（form_key）が、同時に来た
+    2本目を止める。止まったら行は返らない
   */
-  const current = await ensureBlocks(db(c))
-  const [added] = await db(c)
+  const current = await ensureBlocks(database)
+  const [added] = await database
     .insert(schema.blocks)
     .values({
       type: type.key,
       ...(values ?? { published: 1 }),
       sortOrder: nextBlockOrder(current),
+      formKey: values ? formKey : null,
     })
+    .onConflictDoNothing()
     .returning({ id: schema.blocks.id })
-  if (!added) return c.text('足せませんでした', 500)
+  if (!added) {
+    // 打ち込むものなら1度目の送信が書いている。決まった中身なら、もう置いてある
+    const first = await twinOf(formKey)
+    return first && same(first) ? saved(first.id) : placedAlready(type.label)
+  }
 
   /*
     足す先は Contact の手前。連なりのいちばん後ろに付けると締めの連絡先の後ろに
@@ -2540,25 +2939,20 @@ app.post('/blocks', async (c) => {
   if (contact >= 0) {
     const ids = current.map((row) => row.id)
     ids.splice(contact, 0, added.id)
-    await reorderBlocks(db(c), ids)
+    await reorderBlocks(database, ids)
   }
 
-  const published = values ? values.published : 1
-  return c.redirect(`/admin/blocks?saved=${savedParam(published)}#block-${added.id}`, 303)
+  return saved(added.id)
 })
 
-// 何も置いていないときだけ、既定の並びを行にする。2回目以降は何もしない
+/*
+  何も置いていないときだけ、既定の並びを行にする。2回目以降は何もしない
+  （何もしていないのに「保存しました」と出さない）。数えると足すを1文でやる
+  （src/db/queries.ts の initBlocks）ので、2本同時に来ても2組にならない
+*/
 app.post('/blocks/init', async (c) => {
-  const rows = await listBlocks(db(c))
-  // 2回目以降は何もしない。何もしていないのに「保存しました」と出さない
-  if (rows.length > 0) return c.redirect('/admin/blocks', 303)
-
-  await db(c)
-    .insert(schema.blocks)
-    .values(
-      DEFAULT_BLOCKS.map((type, index) => ({ type, published: 1, sortOrder: (index + 1) * 10 })),
-    )
-  return c.redirect('/admin/blocks?saved=1', 303)
+  const created = await initBlocks(db(c))
+  return c.redirect(created ? '/admin/blocks?saved=1' : '/admin/blocks', 303)
 })
 
 app.post('/blocks/:id', async (c) => {
@@ -2581,15 +2975,16 @@ app.post('/blocks/:id', async (c) => {
   }
 
   /*
-    下書きに戻す保存では中身を見ない。公開しないものは公開ページに出ないので、
-    1画面に収まるかどうかを問う理由が無い。
+    下書きに戻す保存では中身の長さを見ない（関門は published が 1 になるときだけ。
+    publishErrors）。公開しないものは公開ページに出ないので、1画面に収まるか
+    どうかを問う理由が無い。
 
     問うていたころは行き止まりができていた。上限より前に保存された長い中身を
     持つ行は、編集フォームが DB の本文で初期化されるので、「公開する」を外して
     保存しようとしても同じ 400 で戻ってくる。引っ込める手は本文ごと削除しか
     残らず、一度当たった人はその画面を触らなくなる。
   */
-  const errors = values.published ? blockErrors(type, values) : null
+  const errors = blockSaveErrors(type, values)
   if (errors) {
     return c.html(
       <BlockForm
@@ -2611,10 +3006,18 @@ app.post('/blocks/:id', async (c) => {
 })
 
 /*
-  一覧から公開・下書きだけを切り替える。中身は触らないので検査もしない。
+  一覧から公開・下書きだけを切り替える。中身は触らない。
 
-  種類も見ない（外すのと同じ理由——blocks.ts から種類を1つ減らしたとき、
-  その行が引っ込められずに残らないように）。
+  **公開にするほうは、編集フォームと同じ関門を通す（publishErrors）。** 中身は
+  触らないから検査もしない、としていたころは、下書きのまま上限の3倍に書き足した
+  メモや、一文を空にしたひとことが、このボタン1つで公開になった（下書きの保存は
+  長さを見ないので、検査が1度も走らない道ができていた）。止めたら 303 でその行の
+  編集画面へ送り、理由を出す（GET /blocks/:id/edit の publish=blocked）。
+
+  下書きに戻すほうは何も見ない（引っ込める道を塞がない）。種類も見ない——
+  外すのと同じ理由で、blocks.ts から種類を1つ減らしたとき、その行が引っ込められずに
+  残らないように。種類の消えた行を公開にするときも見るものが無い（公開ページが
+  読み飛ばす）。
 */
 app.post('/blocks/:id/publish', async (c) => {
   const id = parseId(c.req.param('id'))
@@ -2623,12 +3026,21 @@ app.post('/blocks/:id/publish', async (c) => {
   if (!block) return c.notFound()
 
   const form = await c.req.formData()
+  const published = bool(form.get('published'))
+  const type = blockType(block.type)
+  if (
+    published &&
+    type &&
+    publishErrors({ kind: 'block', type, title: block.title, body: block.body })
+  ) {
+    return c.redirect(`/admin/blocks/${id}/edit?publish=blocked`, 303)
+  }
   await db(c)
     .update(schema.blocks)
-    .set({ published: bool(form.get('published')), updatedAt: new Date().toISOString() })
+    .set({ published, updatedAt: new Date().toISOString() })
     .where(eq(schema.blocks.id, id))
   // 押した行へ戻す。一覧の頭に戻すと、どれを切り替えたかを探し直すことになる
-  return c.redirect(`/admin/blocks?saved=1#block-${id}`, 303)
+  return c.redirect(`/admin/blocks?saved=${savedParam(published)}#block-${id}`, 303)
 })
 
 /*

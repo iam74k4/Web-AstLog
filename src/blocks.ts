@@ -1,6 +1,6 @@
 import type { Member } from './db/schema'
 import { isSafeUrl, paragraphs, parseLines, parseSkills } from './lib/format'
-import { screenCount } from './lib/paginate'
+import { chunk, screenCount } from './lib/paginate'
 
 /*
   トップページを組むブロックの一覧。
@@ -66,7 +66,7 @@ export const BLOCK_TYPES = [
     2つの節だったが、見る側にとってはどちらも「つくったもの」で、節が分かれて
     いると目次もページャも2倍に伸びるだけだった。区分はデータに残り、カードの
     札（プラットフォーム / 業界）と絞り込みのピル（すべて・個人開発・業務）で
-    見分ける。並びは新しい順（src/db/queries.ts の publicOrder）
+    見分ける。並びは新しい順（src/db/queries.ts の itemOrder）
   */
   {
     key: 'projects',
@@ -191,11 +191,23 @@ export const BLOCK_TYPES = [
   4本目）を決め直すこと。
   説明（summary）は数えない。別の欄で、上限（itemSummary）も別に持っている。
 */
+/*
+  itemTags / itemLinks は字数ではなく数。作品のページの高さを決めているのは
+  字数だけではなく、タグの札の数（.tags は折り返す）と行き先の本数も同じ——
+  上の itemBody を測った「いちばん重い作品」がタグ3つ・行き先4本（リンク3本 +
+  複数人のサイトの「担当」）の姿なので、公開できるのはその数まで。それより多い
+  作品は、測っていない高さを持つことになる。増やすなら 27通りを測り直すこと。
+  リンクの欄が3行なのも同じ数（src/routes/admin.tsx の ItemForm）。
+  下書きでは数を見ない（保存そのものは何個でも通る——D1 の束縛変数の上限は
+  書き込みを行ごとに分けて避けている。admin.tsx の childWrites）。
+*/
 export const MAX_CHARS = {
   itemSummary: 100,
   itemSummaryVisible: 42,
   itemBody: 60,
   itemBodyParagraphs: 1,
+  itemTags: 3,
+  itemLinks: 3,
   memberBio: 400,
   memberBioParagraphs: 3,
 } as const
@@ -205,6 +217,20 @@ export type BlockKey = BlockType['key']
 type FixedBlockKey = Extract<BlockType, { kind: 'fixed' }>['key']
 
 export const BLOCK_KEYS = BLOCK_TYPES.map((type) => type.key) as [BlockKey, ...BlockKey[]]
+
+/*
+  決まった中身の種類（hero / projects / team / contact）。サイトに1つずつしか置けない。
+
+  「1つだけ」は画面の都合ではなく連なりの前提。同じ種類が2行あると、公開ページの
+  画面の列に同じ URL（/projects）が2度並び、ページャの「次」が自分自身を指して
+  入口から先へ進めなくなった（二重送信で実際に2行できた）。だから3か所で守る——
+  DB の部分一意索引（src/db/schema.ts の blocks_fixed_once。この一覧から作る）、
+  書く側の onConflictDoNothing（src/db/queries.ts の ensureBlocks と admin.tsx の
+  「置く」）、読む側の重複落とし（publishedBlocks）。
+*/
+export const FIXED_BLOCK_KEYS = BLOCK_TYPES.filter((type) => type.kind === 'fixed').map(
+  (type) => type.key,
+) as FixedBlockKey[]
 
 export function blockType(key: string): BlockType | undefined {
   return BLOCK_TYPES.find((type) => type.key === key)
@@ -250,7 +276,7 @@ export function blockTexts(body: string): string[] {
 
   リンク集の2列目は URL で、href にはなるが本文には出ない。だから
   説明文に畳むとき（public.tsx の lineDigest）も字数を数えるとき
-  （admin.tsx の screenChars）も、そこは外す。その規則が2か所に別々に
+  （このファイルの screenChars）も、そこは外す。その規則が2か所に別々に
   書いてあった——このファイルは「開く式は blockLines / blockTexts /
   blockUnitCount が1本の正」と宣言しているのに、ここだけ漏れていた。
 
@@ -264,6 +290,230 @@ export function blockVisibleParts(key: BlockKey, parts: string[]): string[] {
 // その中身が何単位あるか。画面の数を数えるだけの側（管理画面）はこれで足りる
 export function blockUnitCount(key: BlockKey, body: string): number {
   return key === 'note' ? blockTexts(body).length : blockLines(key, body).length
+}
+
+/* ------------------------------------------------------------- 公開の関門 */
+
+// 「字」で数える。絵文字や異体字を2字と数えないように、コードポイントで数える
+export const chars = (text: string) => [...text].length
+
+/*
+  ひとことの一文の長さ。字数（maxChars）とは別の決まりで、1枚の画面に大きく
+  出る一文が 120 字を超えると「大きな一文」ではなく段落になる（収まるかどうか
+  とは別の話。実測では 200 字でも弁は開かない）。
+*/
+export const MAX_STATEMENT_SENTENCE = 120
+
+/*
+  1画面ぶんずつの字数。割りかたは公開ページと同じ（chunk と perScreen）で、
+  行の開き方も同じ（blockTexts / blockLines）。
+
+  数えるのは画面に文字として出るものだけ。リンク集の URL は href であって
+  本文には出ないので、2列目は落とす（URL の長さで書ける説明が減るのはおかしい）。
+  形が通らない URL の行は公開ページに出ないので、blockLines が先に落とす。
+*/
+export function screenChars(type: BlockType, body: string): number[] {
+  const perScreen = blockPerScreen(type.key)
+  const units =
+    type.key === 'note'
+      ? blockTexts(body)
+      : blockLines(type.key, body).map((parts) => blockVisibleParts(type.key, parts).join(''))
+  return chunk(units, perScreen).map((screen) => screen.reduce((sum, text) => sum + chars(text), 0))
+}
+
+/*
+  リンク集の中で、公開ページが落とす行。
+
+  **全部の行が通るときだけ保存させる。** 以前は「通る URL が1行でもあれば」
+  保存を通し、残りの行は「保存しました」のあとで公開ページから黙って消えた
+  （https:// を付け忘れた行・URL を書き忘れた行）。「公開なのにサイトに出ない行」
+  がいちばん分かりにくい、の行の単位版。
+
+  落ちるかどうかは blockLines そのものに聞く（isSafeUrl の条件をここに写さない。
+  写すと、公開側の条件を変えた日にここだけ古いまま残る）。1行ずつ渡して、
+  列から消えたら落ちる行。行の番号は欄の中の行（空行も数える）で言う——書いた
+  人が見ているのはその番号なので。
+*/
+export function droppedLinkLines(body: string): string[] {
+  return body.split('\n').flatMap((line, index) => {
+    const [parts] = parseLines(line)
+    if (!parts || blockLines('links', line).length > 0) return []
+    const [label, url] = parts
+    const where = `${index + 1} 行目${label ? `（${label}）` : ''}`
+    return [
+      url
+        ? `${where}の URL は https:// か mailto: か / で始めてください`
+        : `${where}に URL がありません（「ラベル | URL | 補足」）`,
+    ]
+  })
+}
+
+/*
+  書くブロックの、下書きでも止める中身（受け取れない値）。
+
+  - 中身が空。ひとことは一文が、それ以外は中身が要る。空の行は下書きでも
+    作らせない（何も書いていないブロックを一覧に増やさない）
+  - リンク集の、公開ページが落とす行（droppedLinkLines）。長さの話ではなく、
+    公開ページがどう描いても落とすもの——作品のリンクやメンバーの GitHub と
+    同じ扱い（CLAUDE.md「URL の検査は保存と描画の2か所」）
+
+  1画面に収まる長さは、ここでは見ない。公開になるときだけ（publishErrors）。
+*/
+export function blockValueErrors(
+  type: BlockType,
+  values: { title: string; body: string },
+): Record<string, string> | null {
+  if (type.kind !== 'free') return null
+  if (type.key === 'statement') return values.title ? null : { title: '一文を入れてください' }
+  if (!values.body) return { body: '中身を入れてください' }
+  if (type.key !== 'links') return null
+  const dropped = droppedLinkLines(values.body)
+  return dropped.length ? { body: `${dropped.join('。')}。` } : null
+}
+
+/*
+  公開の関門。**published が 1 になる書き込みは、どれもこの1本を通す**——
+  ブロックの編集フォーム・新しく書くブロック・構成の一覧の「公開する」・
+  作品の保存・メンバーの保存。下書きに戻す方向（published が 0 になる書き込み）
+  は通さない。
+
+  関門が入口ごとに書いてあったころは、2本の入口のうち1本でしか守られて
+  いなかった。構成の一覧の「公開する」は検査を通らず、下書きで上限の3倍に
+  書き足したメモを、そのまま公開できた（設計サイズで弁が 522px 開いた）。
+  一文を空にしたひとことも「公開」になり、公開ページでは節ごと消えた。
+  逆に、メンバーの紹介文の長さは下書きの保存でも見ていて、上限より前に
+  保存された長い紹介文の人は「公開を外すことすらできない」行き止まりだった。
+  検査を入口ではなく状態の変わり目に付ければ、どちらも起きない。
+
+  止める理由は全部まとめて返す（1つずつ返すと、直すたびに次の理由が出る）。
+  下書きでも止める「受け取れない値」（題が空・通らない URL・画像の種類）は
+  それぞれの保存の側が見る（ブロックだけは blockValueErrors をここでも
+  もう一度見る。一覧の「公開する」は保存を通らないので）。
+*/
+export type PublishTarget =
+  | { kind: 'block'; type: BlockType; title: string; body: string }
+  | {
+      kind: 'item'
+      summary: string
+      body: string
+      imageAlt: string
+      // 保存したあとに画像が残るか（新しく選んだ・いまの画像を外さずに残す）
+      hasImage: boolean
+      tags: number
+      links: number
+    }
+  | { kind: 'member'; bio: string }
+
+export function publishErrors(target: PublishTarget): Record<string, string> | null {
+  const errors =
+    target.kind === 'block'
+      ? blockPublishErrors(target.type, target)
+      : target.kind === 'item'
+        ? itemPublishErrors(target)
+        : memberPublishErrors(target)
+  return errors && Object.keys(errors).length ? errors : null
+}
+
+/*
+  ブロック。出せない中身は公開させない——下書きでも止める中身（blockValueErrors。
+  空・リンク集の通らない行）をもう一度見る。一覧の「公開する」は保存を通らない
+  ので、この関門より前に保存された下書き（空にしたひとこと、など）がここに来る。
+
+  長さも同じ理由で見る。公開ページで1画面に収まらない中身は公開させない。
+  いちばん多い画面の字数を添えるのは、何字削れば通るかが分からないと
+  直しようがないため。決まった中身のもの（hero・projects…）は見るものが無い。
+
+  free に絞ってから maxChars を読むのは**安全性のため**。どの種類でも
+  `'maxChars' in type ? … : Infinity` と読んでいたころは、maxChars を持たない
+  free ブロックを足したときに無制限で公開を通し、弁が開いて「スクロールしない」が
+  静かに破れた。いまは同じ足し忘れが TS2339 でその場で落ちる。
+*/
+function blockPublishErrors(
+  type: BlockType,
+  values: { title: string; body: string },
+): Record<string, string> | null {
+  if (type.kind !== 'free') return null
+  const invalid = blockValueErrors(type, values)
+  if (invalid) return invalid
+  const max = type.maxChars
+  if (type.key === 'statement') {
+    if (chars(values.title) > MAX_STATEMENT_SENTENCE) {
+      return { title: `大きく出る一文です。${MAX_STATEMENT_SENTENCE} 字までにしてください` }
+    }
+    const total = chars(values.title) + chars(values.body)
+    if (total > max) {
+      return { body: `1画面に収まりません。一文と添え書きで ${max} 字までです（いま ${total} 字）` }
+    }
+    return null
+  }
+  // 画面の数だけ数が並ぶので、広げずに畳む（行数に上限は無い）
+  const worst = screenChars(type, values.body).reduce((most, n) => Math.max(most, n), 0)
+  if (worst > max) {
+    return {
+      body: `1画面に収まりません。1画面は ${max} 字までです（いちばん多い画面が ${worst} 字）`,
+    }
+  }
+  return null
+}
+
+/*
+  作品。説明文はカードの行数で切られる（--card-lines）。切られても画面からは
+  溢れないが、書いたぶんが黙って消える。上限は 600 以上のカードなら切れずに
+  出る長さ（MAX_CHARS.itemSummary）。
+
+  本文は作品のページ1枚に全段落が出る。割る先が無いので、字数と段落の数の
+  両方で止める（紹介文と同じ形）。字数は打った文字列そのままで数える（空行も字）。
+  タグの数と行き先の本数も、作品のページの高さを決める（MAX_CHARS の注記）。
+
+  画像があるのに代替テキストが空なら止める。作品のページではこの画像が
+  作品の見た目を伝える唯一の手段で、名前の無い画像は読み上げでは「画像」と
+  しか言えない。
+*/
+function itemPublishErrors(target: Extract<PublishTarget, { kind: 'item' }>) {
+  const errors: Record<string, string> = {}
+  const summary = chars(target.summary)
+  if (summary > MAX_CHARS.itemSummary) {
+    errors.summary = `カードに収まりません。説明文は ${MAX_CHARS.itemSummary} 字までです（いま ${summary} 字）`
+  }
+  const body = chars(target.body)
+  const parts = paragraphs(target.body).length
+  if (body > MAX_CHARS.itemBody) {
+    errors.body = `1画面に収まりません。本文は ${MAX_CHARS.itemBody} 字までです（いま ${body} 字）`
+  } else if (parts > MAX_CHARS.itemBodyParagraphs) {
+    errors.body = `1画面に収まりません。段落は ${MAX_CHARS.itemBodyParagraphs} つまでです（いま ${parts} つ）`
+  }
+  if (target.tags > MAX_CHARS.itemTags) {
+    errors.tags = `1画面に収まりません。タグは ${MAX_CHARS.itemTags} つまでです（いま ${target.tags} つ）`
+  }
+  if (target.links > MAX_CHARS.itemLinks) {
+    errors.links = `1画面に収まりません。リンクは ${MAX_CHARS.itemLinks} 本までです（いま ${target.links} 本）`
+  }
+  if (target.hasImage && !target.imageAlt) {
+    errors.imageAlt = '画像を公開するときは、代替テキストが要ります'
+  }
+  return errors
+}
+
+/*
+  メンバー。紹介文は個人ページの About 1枚に全段落が出る（割る先が無い）。
+  段落の数も見るのは、同じ字数でも空行を増やすと高くなるため（実測: 3段落なら
+  405 字まで弁が閉じたまま、6段落に割ると 315 字まで下がる @rail 390x844 指,
+  Hiragino Sans, macOS Chromium）。
+*/
+function memberPublishErrors(target: Extract<PublishTarget, { kind: 'member' }>) {
+  const total = chars(target.bio)
+  const parts = paragraphs(target.bio).length
+  if (total > MAX_CHARS.memberBio) {
+    return {
+      bio: `1画面に収まりません。紹介文は ${MAX_CHARS.memberBio} 字までです（いま ${total} 字）`,
+    }
+  }
+  if (parts > MAX_CHARS.memberBioParagraphs) {
+    return {
+      bio: `1画面に収まりません。段落は ${MAX_CHARS.memberBioParagraphs} つまでです（いま ${parts} つ）`,
+    }
+  }
+  return null
 }
 
 /*

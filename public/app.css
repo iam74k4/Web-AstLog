@@ -413,6 +413,14 @@
   */
   --focus-ring: 2px;
   --focus-offset: 3px;
+
+  /*
+    割られた画面の節（弁のある箱）の、輪郭の内側の空き。輪郭の太さ + 字との
+    すき間（--sp-1）。節は輪郭を縁の内側に描く（下の :focus-visible の注記）ので、
+    ここが 0 だと輪郭が端の字にかぶる——字は節の左右の端いっぱいまで組んである
+    （= 390x844 の About で、左端の字が輪郭の2本の線の上に乗っていた）
+  */
+  --focus-inset: calc(var(--focus-ring) + var(--sp-1));
 }
 
 /*
@@ -562,6 +570,32 @@ img {
 */
 main > :is(.hero, section)[tabindex]:focus-visible {
   outline-offset: calc(var(--focus-ring) * -1);
+}
+
+/*
+  内側に描いた輪郭が、端の字に触れないようにする。
+
+  節の中身は節の左右の端いっぱいまで組んであるので、縁の内側に描いた 2px の
+  輪郭がそのまま左右の端の字にかぶっていた。見えることは保ったまま（太さも色も
+  素の規則のまま）、輪郭と字のあいだに --focus-inset の空きを取る。
+
+  空きは中身を縮めて作らない。箱を左右へ --focus-inset だけ広げ（負の margin）、
+  同じだけ内側に padding を置く——中身の箱の位置と幅は1pxも変わらないので、
+  1画面の字数の上限（src/blocks.ts の maxChars。この幅で測ってある）も、
+  見出しの錨も、月の上の字の位置もそのまま。中身を padding で縮めると、字数の
+  上限を27通り測り直すことになる（390 の電話では 358px が 350px になる）。
+  広げたぶんは外枠の余白（--gutter。いちばん狭くて 16px）の中に収まる。
+
+  上下は広げない。節の上下の端の字は行の高さの半分の空き（half-leading）を
+  持っていて、輪郭と字の墨はもう離れている。
+
+  月（.moon）は節いっぱいに敷く絶対配置の面（inset: 0）なので、広げた箱の
+  ぶんだけ内へ戻す（.moon のすぐ下）。戻さないと月の位置と大きさが 8px 変わり、
+  月の上の字のコントラスト（npm run check:contrast）を測り直すことになる。
+*/
+main > :is(.hero, section)[tabindex] {
+  margin-inline: calc(var(--focus-inset) * -1);
+  padding-inline: var(--focus-inset);
 }
 
 /*
@@ -862,6 +896,14 @@ main {
   overflow: clip;
   z-index: 0;
   pointer-events: none;
+}
+
+/*
+  割られた画面では、節の箱が輪郭の空き（--focus-inset）ぶん左右に広がっている
+  （:focus-visible の下の注記）。月はその前の箱に敷くので、同じだけ内へ戻す
+*/
+main > :is(.hero, section)[tabindex] > .moon {
+  inset-inline: var(--focus-inset);
 }
 
 /*
@@ -2772,6 +2814,16 @@ main {
   font-size: var(--fs-meta);
 }
 
+/*
+  保存は止めないが、知らせたいこと（作品の年が並びに使われない、など）。
+  エラー（--danger）と色を分ける——赤は「保存できなかった」と読まれる
+*/
+.field__warn {
+  color: var(--ember);
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+}
+
 .input {
   width: 100%;
   min-height: 44px;
@@ -3819,7 +3871,7 @@ body[data-layout='magazine'] .head :is(h1, h2) {
     雑誌風の名札は、ページの上に渡す題字になる。
 
     帯の3つ（名札の行・目次・足元）は縦の中心でそろえる。下端（flex-end）で
-    そろえていたころは、高さの違う3つ——名札の行は GitHub / Mail の札で 40px、
+    そろえていたころは、高さの違う3つ——名札の行は GitHub / メールの札で 40px、
     目次の行き先は 28px、足元は 11px の字1行——の下端だけが同じ線に乗り、
     字のほうは3段ばらばらの高さに座っていた（札の枠の下端と、字の下端は別物）。
     中心でそろえれば、どれも帯の同じ高さを通る1本の行に読める。字の中心の高さ
@@ -4326,7 +4378,7 @@ body[data-layout='magazine'] .head :is(h1, h2) {
 
     /*
       帯に入らないものは畳む。畳むのは4つ——肩書き、ひとこと、柱の中の
-      GitHub / Mail、著作権表示。ロゴと名前と目次に場所を譲る。900 以上の柱と、
+      GitHub / メール、著作権表示。ロゴと名前と目次に場所を譲る。900 以上の柱と、
       縦に伸びる全体ページ（/all）では今までどおり出る。
 
       **畳んだぶんが「どこにも無くなる」ものを、この中に入れてはいけない。**

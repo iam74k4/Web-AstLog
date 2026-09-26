@@ -64,6 +64,20 @@
       "when": 1790426806160,
       "tag": "0008_item_image_size",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1790428355024,
+      "tag": "0009_one_fixed_block",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1790429067419,
+      "tag": "0010_permalinks_and_order",
+      "breakpoints": true
     }
   ]
 }

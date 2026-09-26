@@ -17,6 +17,8 @@ import {
   countPublishedByKind,
   countPublishedItems,
   type Db,
+  findMovedItem,
+  findMovedMember,
   findPublishedItem,
   findPublishedMember,
   listPublishedItemKeys,
@@ -42,6 +44,7 @@ import {
   FilterLinks,
   filterQuery,
   Hero,
+  HiddenHeading,
   ItemCard,
   ItemDetail,
   type ItemFilter,
@@ -79,6 +82,11 @@ export const publicRoutes = new Hono<AppEnv>()
   GitHub は https:// の絶対 URL だけを描く（isHttpsUrl。保存でも同じ検査で弾いて
   いる——admin.tsx の memberErrors）。部品の側でも見るのは、その検査より前に
   保存された行を呼ぶ側の検査に頼らずに落とすため。
+
+  メールの札は「メール」。押す手の言葉は日本語（CLAUDE.md「文言」——英語で書くのは
+  節の名前だけ）。「Mail」と書いていたころは、同じサイトの締めのボタン
+  「メールを送る →」と同じ行き先を別の言語で呼んでいた。GitHub はサービスの
+  固有名なのでそのまま。
 */
 const Socials = ({ github, email }: { github?: string | null; email?: string | null }) => (
   <div class="socials">
@@ -89,7 +97,7 @@ const Socials = ({ github, email }: { github?: string | null; email?: string | n
     ) : null}
     {email ? (
       <a href={`mailto:${email}`}>
-        <MailIcon /> Mail
+        <MailIcon /> メール
       </a>
     ) : null}
   </div>
@@ -135,7 +143,7 @@ const OwnSocials = ({ member }: { member: schema.Member }) => {
   GitHub のプロフィールはここに常設する。柱の .socials は 899 以下で畳んで
   あり（横帯に入らない）、プロフィールへの道はそこ1本しか無かった——つまり
   スマホで開いた人には、このサイトの一次動線が外枠の都合で消えていた
-  （WCAG 1.4.10 の「機能の損失」）。逆にこの画面では、柱の GitHub / Mail を
+  （WCAG 1.4.10 の「機能の損失」）。逆にこの画面では、柱の GitHub / メールを
   出さない（SiteIdentity の contact）。同じ行き先が柱と本文に2組並ぶため。
 
   split は「割られた画面（1画面 = 1ドキュメント）か」。見出しが h1 に上がるのも、
@@ -165,7 +173,7 @@ const Contact = ({
     */}
     {split ? null : <SectionHead title="Contact" />}
     <div class="contact">
-      {split ? <h1 class="sr-only">Contact</h1> : null}
+      {split ? <HiddenHeading text="Contact" h1 /> : null}
       {/* 句読点までの塊で折る（入口のリード文と同じ Phrases）。語の途中で折らない */}
       <p class="contact__lead">
         <Phrases text={SITE.contactLead} />
@@ -238,7 +246,8 @@ const personJsonLd = (
 ) => ({
   '@type': 'Person' as const,
   name: member.name,
-  jobTitle: member.role,
+  // 肩書きを書いていない人は jobTitle を名乗らない（空文字を名乗らない）
+  ...(member.role ? { jobTitle: member.role } : {}),
   url,
   ...extra,
 })
@@ -267,6 +276,45 @@ const siteJsonLd = (members: schema.Member[]) => {
 }
 
 /*
+  名前と肩書きの組み方。肩書きがあれば「名前（肩書き）」、無ければ名前だけ。
+
+  題・説明文・Team の説明文がそれぞれ `${name}（${role}）` を手で組んでいて、
+  肩書きを空で保存した人では入口の <title> に「岡崎 昂功（）」が出た（共有
+  カードと検索結果にもそのまま載る）。組み方をここ1本にする。
+*/
+const nameWithRole = (member: Pick<schema.Member, 'name' | 'role'>) =>
+  member.role ? `${member.name}（${member.role}）` : member.name
+
+/*
+  <title> の組み方。画面の名前を「 · 」でつなぎ、最後にサイトの名前を置く。
+
+  画面ごとに違う題にする（CLAUDE.md「1画面 = 1ドキュメント」）。割った2画面目
+  以降が1画面目と同じ題だと、履歴にもタブにも検索結果にも同じ行が並び、どれが
+  何番目かを題から選び直せなかった（/projects から /projects/4 までが全部
+  「Projects — Noctifex」だった）。だから、
+    - 割られた画面は、ページャと同じ数え方を添える（「Projects 2 / 4」）
+    - 名前の無い画面（ひとこと・見出しの無いメモ）は、その画面に出ている文の
+      頭を抜き出す（excerpt。入口と同じ題にしない）
+    - 個人ページは人の名前を頭に置く（「岡崎 昂功 · About 2 / 2」）
+  組むのはここと、数え方の countOf、抜き出しの excerpt の3つだけ。
+*/
+const pageTitle = (...parts: string[]) =>
+  `${parts.filter((part) => part !== '').join(' · ')} — ${SITE.name}`
+
+// 1画面しか無い節には数を添えない（「Contact 1 / 1」は何も言っていない）
+const countOf = (page: number, pages: number) => (pages > 1 ? ` ${page} / ${pages}` : '')
+
+// 題に使う文の頭。説明文（describe）と同じく1行に畳んで、字で数えて切る
+const TITLE_EXCERPT = 30
+
+const excerpt = (text: string) => {
+  const letters = [...text.replace(/\s+/g, ' ').trim()]
+  return letters.length > TITLE_EXCERPT
+    ? `${letters.slice(0, TITLE_EXCERPT - 1).join('')}…`
+    : letters.join('')
+}
+
+/*
   入口の題と説明。1人なら名前と職種を載せる。
 
   ここが「Noctifex — Projects」だけだと、共有リンクのカードにも検索の
@@ -274,10 +322,10 @@ const siteJsonLd = (members: schema.Member[]) => {
   同じものを head にも置く。
 */
 const siteTitle = (solo?: schema.Member) =>
-  solo ? `${solo.name}（${solo.role}） — ${SITE.name}` : `${SITE.name} — Projects`
+  solo ? pageTitle(nameWithRole(solo)) : `${SITE.name} — Projects`
 
 const siteDescription = (solo?: schema.Member) =>
-  solo ? `${solo.name}（${solo.role}）のポートフォリオ。${SITE.heroLead}` : SITE.heroLead
+  solo ? `${nameWithRole(solo)}のポートフォリオ。${SITE.heroLead}` : SITE.heroLead
 
 /*
   画面ごとの説明文（<meta name="description"> と og:description）。
@@ -309,7 +357,7 @@ const describe = (text: string) => {
 
 /*
   1行1件のものを説明文に畳む。リンク集の URL（2列目）は落とす——href で
-  あって本文には出ないので、字数の検査（admin.tsx の screenChars）と
+  あって本文には出ないので、字数の検査（src/blocks.ts の screenChars）と
   同じ数え方にそろえる。
 */
 const lineDigest = (key: BlockKey, rows: string[][]) =>
@@ -352,7 +400,7 @@ const metricDigest = (item: ItemView) =>
   サイトに見える。
 
   contact は「Contact の画面か」。本文にメールと GitHub のボタンがあるので、
-  柱の GitHub / Mail は出さない——同じ行き先が柱と本文に2組並んでいた。
+  柱の GitHub / メールは出さない——同じ行き先が柱と本文に2組並んでいた。
   全体ページ（/all）では出す（あそこの Contact は節の1つで、柱は全体の柱）。
 */
 const SiteIdentity = ({
@@ -512,7 +560,20 @@ type Rendered = {
   id: string
   slug: string
   pages: number
+  // ページャが名乗る節の名前。目次にもこの名前で並ぶ（toc が false なら並ばない）
   nav: string | null
+  /*
+    目次に行を持つか。見出しを空けたメモは、ページャでは種類の名前（メモ）で
+    名乗るが、目次には並べない——目次は目に見える見出しの一覧で、画面に
+    「メモ」とは書いていない（柱の帯の幅も取らない）
+  */
+  toc: boolean
+  /*
+    <title> のうち、この画面の名前の部分（pageTitle に渡す）。割られた画面の
+    数え方（countOf）も、名前の無い画面の文の頭（excerpt）もここで作る——
+    中身を持っているのはここだけなので。null は入口（サイトの題を使う）
+  */
+  title: string | null
   description: string
   node: Child
 }
@@ -577,6 +638,9 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
   */
   const split = page !== null
 
+  // この画面の番号（全体ページでは割らないので 1 として数える）
+  const at = page ?? 1
+
   switch (block.type) {
     case 'hero': {
       if (!once) return null
@@ -586,6 +650,8 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
         slug: id,
         pages: 1,
         nav: null,
+        toc: false,
+        title: null,
         // 入口はサイトそのものの画面。名乗りと同じ文をそのまま出す
         description: describe(siteDescription(solo)),
         node: (
@@ -651,7 +717,7 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
     case 'projects': {
       /*
         個人開発（app）と業務（work）を1つの一覧に並べる。並びは新しい順
-        （queries.ts の publicOrder）。区分はカードの札（プラットフォーム /
+        （queries.ts の itemOrder）。区分はカードの札（プラットフォーム /
         業界）と絞り込みのピルで見分ける。
 
         公開中の項目が1件も無ければ節ごと出さない。絞り込んで0件になっただけの
@@ -667,6 +733,8 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
         slug: id,
         pages,
         nav: 'Projects',
+        toc: true,
+        title: `Projects${countOf(at, pages)}`,
         /*
           件数と区分は、この画面に出ている絞り込みのピルそのもの。そのあとに、
           いまの画面に載っているカードの名前を並べる——ここが画面ごとに変わるので、
@@ -758,6 +826,8 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
           slug: 'profile',
           pages: 1,
           nav: 'Profile',
+          toc: true,
+          title: 'Profile',
           description: describe(`${person.name}のプロフィール`),
           node: (
             <Screen id="profile" label="Profile" whole>
@@ -776,15 +846,10 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
         slug: id,
         pages: screen.pages,
         nav: 'Team',
+        toc: true,
+        title: `Team${countOf(at, screen.pages)}`,
         // 人数は数えない（「1 member」をやめたのと同じ理由）。名前と職種を並べる
-        description: describe(
-          joinParts(
-            'メンバー',
-            screen.rows
-              .map((member) => (member.role ? `${member.name}（${member.role}）` : member.name))
-              .join('、'),
-          ),
-        ),
+        description: describe(joinParts('メンバー', screen.rows.map(nameWithRole).join('、'))),
         node: (
           <Screen id={id} label="Team" whole={!split}>
             {/*
@@ -826,6 +891,8 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
         slug: id,
         pages: 1,
         nav: 'Contact',
+        toc: true,
+        title: 'Contact',
         description: describe(SITE.contactLead),
         node: <Contact email={SITE.email} github={SITE.github} split={split} />,
       }
@@ -840,6 +907,9 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
         slug: id,
         pages: 1,
         nav: null,
+        toc: false,
+        // 名前を持たない画面。題はその一文の頭（入口と同じ題にしない）
+        title: excerpt(block.title),
         // 大きく出る一文が、この画面の全部。説明文もそれと添え書きで足りる
         description: describe(joinParts(block.title, blockTexts(block.body).join(' '))),
         node: (
@@ -883,6 +953,8 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
         slug: id,
         pages: screen.pages,
         nav: title,
+        toc: true,
+        title: `${title}${countOf(at, screen.pages)}`,
         description: describe(joinParts(title, lineDigest(type.key, screen.rows))),
         node: (
           <Screen id={id} label={title} whole={!split}>
@@ -893,21 +965,41 @@ function renderBlock(block: schema.Block, data: TopData, page: number | null): R
       }
     }
 
+    /*
+      メモ。見出しは空けてよい（段落だけの画面）——管理画面も「空なら『メモ』」と
+      言って保存を通す。
+
+      見出しを空けても、名前は種類の名前（title の控え。「メモ」）で持つ。
+      読み上げの h1 と region の名前とページャはそれを使う。以前は生の
+      block.title で出し分けていて、見出しの無いメモの画面は h1 が0個・region の
+      名前も無し・ページャの位置表示も空で、<title> は入口と同じだった——
+      割られた画面は h1 をちょうど1つ持つ、の決まりが管理画面の許す入力で破れた。
+      目に見える見出しは置かない（書いた人が空けた）ので、h1 は読み上げ用
+      （HiddenHeading）。目次にも並べない（toc）。<title> はその画面の最初の
+      段落の頭（「メモ」だと、見出しの無いメモどうしが同じ題になる）。
+    */
     case 'note': {
       const texts = blockTexts(block.body)
       if (!texts.length) return null
       const screen = screenOf(texts, perScreen, page)
       if (!screen) return null
+      const headed = block.title !== ''
       return {
         id,
         slug: id,
         pages: screen.pages,
-        nav: block.title || null,
+        nav: title,
+        toc: headed,
+        title: headed ? `${title}${countOf(at, screen.pages)}` : excerpt(screen.rows[0] ?? title),
         // 段落そのもの。見出しを持たないメモは本文だけで説明になる
         description: describe(joinParts(block.title, screen.rows.join(' '))),
         node: (
-          <Screen id={id} label={block.title || undefined} whole={!split}>
-            {block.title ? <SectionHead title={block.title} h1={split} /> : null}
+          <Screen id={id} label={title} whole={!split}>
+            {headed ? (
+              <SectionHead title={title} h1={split} />
+            ) : (
+              <HiddenHeading text={title} h1={split} />
+            )}
             <Note paragraphs={screen.rows} />
           </Screen>
         ),
@@ -959,14 +1051,15 @@ async function renderWholePage(c: Context<AppEnv>) {
     .map((block) => renderBlock(block, data, null))
     .filter((section) => section !== null)
   const nav: NavItem[] = sections
-    .filter((section) => section.nav !== null)
+    .filter((section) => section.nav !== null && section.toc)
     .map((section) => ({ href: `#${section.id}`, label: section.nav ?? '' }))
 
   const solo = soloMember(members)
 
   return c.html(
     <Layout
-      title={siteTitle(solo)}
+      // 入口と同じ題にしない（履歴と検索結果で、全体版を選び直せるように）
+      title={solo ? pageTitle(nameWithRole(solo), '全体') : pageTitle('全体')}
       /*
         中身が全部ある唯一のページなので、説明文もそれを言う。並べるのは
         実際に描いた節の名前——固定の一覧を書くと、節を1つ外した日にここだけ
@@ -1018,6 +1111,9 @@ type BlockScreen = {
   block: schema.Block
   slug: string
   nav: string | null
+  toc: boolean
+  // <title> の画面の部分（Rendered の title）。画面ごとに違う
+  title: string | null
   page: number
 }
 
@@ -1059,7 +1155,21 @@ function screenList(blocks: schema.Block[], data: TopData): SiteScreen[] {
     const first = renderBlock(block, data, 1)
     if (!first) continue
     for (let page = 1; page <= first.pages; page += 1) {
-      screens.push({ kind: 'block', block, slug: first.slug, nav: first.nav, page })
+      /*
+        2画面目からも描いて題だけを聞く。題はその画面の中身から決まる
+        （見出しの無いメモは、その画面の最初の段落の頭）。数えるためだけの
+        呼び出しなので、描いた節は捨てる
+      */
+      const rendered = page === 1 ? first : renderBlock(block, data, page)
+      screens.push({
+        kind: 'block',
+        block,
+        slug: first.slug,
+        nav: first.nav,
+        toc: first.toc,
+        title: rendered?.title ?? first.title,
+        page,
+      })
     }
   }
   return screens
@@ -1311,7 +1421,9 @@ const siteSteps = (screens: SiteScreen[], filter: ItemFilter, solo?: schema.Memb
               : screenHref(screen, stepQuery(screen.slug, filter)),
           canonical: position === 0 ? '/' : screenHref(screen),
           nav: screen.nav,
-          title: screen.nav ? `${screen.nav} — ${SITE.name}` : siteTitle(solo),
+          // 目次に並べない節（見出しを空けたメモ）。ページャでは名乗る
+          ...(screen.toc ? {} : { tocLabel: null }),
+          title: screen.title === null ? siteTitle(solo) : pageTitle(screen.title),
         },
   )
 
@@ -1436,7 +1548,7 @@ async function renderScreen(c: Context<AppEnv>, want: { slug: string; page: numb
       theme,
       /*
       入口（Hero）では柱に名乗らない（Hero の h1 が名乗る）。Contact では柱の
-      GitHub / Mail を出さない（本文にボタンがある）。理由は SiteIdentity
+      GitHub / メールを出さない（本文にボタンがある）。理由は SiteIdentity
     */
       sidebar: (
         <SiteIdentity
@@ -1483,12 +1595,24 @@ async function renderItem(c: Context<AppEnv>, type: 'app' | 'work', slug: string
   ])
 
   /*
-    種類は URL の1語目が持つ。/works/item/<app の slug> は「別の URL」ではなく
-    「無い URL」——同じ作品に2つの URL を作ると、どちらが正かを canonical で
-    名指しし直すことになる。
+    貼られたあとで動いた URL は、いまの URL へ 301 で寄せる。2つある。
+
+    - slug を変えた作品。前の slug は転送表（item_slug_redirects）に残っている。
+      以前は変えた日から前の URL が 404 で、名刺や SNS に貼ったリンクが切れた
+    - 区分を変えた作品。1語目（apps / works）が区分を持つので、前の区分の URL
+      （/works/item/<slug> と書かれた、いまは個人開発の作品）が残る
+
+    どちらも「同じ作品に2つの URL」ではない——開けば必ずいまの1つへ移る。
+    知らない slug と、下書きの作品（転送先も含めて）は 404 のまま。
   */
-  const href = item && item.type === type ? itemHref(item) : null
-  if (!item || !href) return c.notFound()
+  if (!item) {
+    const moved = await findMovedItem(db, slug)
+    const to = moved ? itemHref(moved) : null
+    return to ? c.redirect(to, 301) : c.notFound()
+  }
+  const href = itemHref(item)
+  if (!href) return c.notFound()
+  if (item.type !== type) return c.redirect(href, 301)
 
   const solo = soloMember(members)
   // 目次はサイトの画面のまま。この画面に絞り込みは無いので、素の並びを聞く
@@ -1496,7 +1620,7 @@ async function renderItem(c: Context<AppEnv>, type: 'app' | 'work', slug: string
   const steps = siteSteps(screens, { kind: null, member: null }, solo)
 
   /*
-    作品の列。並びは一覧と同じ（listPublishedItemKeys が publicOrder で引く）で、
+    作品の列。並びは一覧と同じ（listPublishedItemKeys が itemOrder で引く）で、
     恒久リンクを持つ作品だけ——slug の無い作品にはめくって着く URL が無い。
 
     navKey はどれも同じ 'item' なので、sequence は列ぜんぶを1つの節として
@@ -1519,7 +1643,7 @@ async function renderItem(c: Context<AppEnv>, type: 'app' | 'work', slug: string
             href: at,
             canonical: at,
             nav: 'Projects',
-            title: `${row.title} — ${SITE.name}`,
+            title: pageTitle(row.title),
           },
         ]
       : []
@@ -1686,6 +1810,8 @@ publicRoutes.get('/', (c) => renderScreen(c, null))
 type MemberScreen = {
   key: string
   page: number
+  // その画面の節（About・Career…）が何画面に割れたか。<title> の数え方に使う
+  pages: number
   nav: string | null
   // トップの画面と同じ扱い。5枚が同じ1文を配ると、どれも同じ顔で検索に並ぶ
   description: string
@@ -1717,9 +1843,10 @@ const memberStep = (
   // 個人ページに絞り込みは無いので、正の URL は開いた URL と同じ
   canonical: memberHref(member.slug, screen.key, screen.page),
   nav: screen.nav ?? member.name,
+  // 「岡崎 昂功 · About 2 / 2 — Noctifex」。1枚目は名前だけ（pageTitle）
   title: screen.nav
-    ? `${member.name} · ${screen.nav} — ${SITE.name}`
-    : `${member.name} — ${SITE.name}`,
+    ? pageTitle(member.name, `${screen.nav}${countOf(screen.page, screen.pages)}`)
+    : pageTitle(member.name),
   ...toc,
 })
 
@@ -1736,11 +1863,10 @@ function memberScreens(member: schema.Member, band: Child): MemberScreen[] {
     {
       key: '',
       page: 1,
+      pages: 1,
       nav: null,
       // 入口は今までどおり大見出し（無ければ紹介文の1段落目）
-      description: describe(
-        member.headline || bio[0] || `${member.name}（${member.role}）のプロフィール`,
-      ),
+      description: describe(member.headline || bio[0] || `${nameWithRole(member)}のプロフィール`),
       node: (
         <Hero>
           {/*
@@ -1779,7 +1905,7 @@ function memberScreens(member: schema.Member, band: Child): MemberScreen[] {
   */
   const add = (key: string, nav: string, parts: { description: string; node: Child }[]) => {
     for (const [index, part] of parts.entries()) {
-      screens.push({ key, page: index + 1, nav, ...part })
+      screens.push({ key, page: index + 1, pages: parts.length, nav, ...part })
     }
   }
 
@@ -1882,7 +2008,20 @@ async function renderMemberScreen(
     loadTheme(db),
     publishedBlocks(db),
   ])
-  if (!member) return c.notFound()
+  /*
+    slug を変えたメンバー。前の slug は転送表（member_slug_redirects）に残って
+    いるので、同じ画面のいまの URL へ 301 で寄せる（作品の恒久リンクと同じ）。
+    行き先は URL の残り（画面の名前・ページ数・query）をそのまま継ぐ——
+    パスの一部から組むので、Location に入れてよい形かを確かめてから
+    （readPage の注記と同じ）。
+  */
+  if (!member) {
+    const moved = await findMovedMember(db, slug)
+    const to = moved ? memberHref(moved, want?.key ?? '', want?.page ?? 1) : null
+    return to && isSafeRedirect(to)
+      ? c.redirect(`${to}${new URL(c.req.url).search}`, 301)
+      : c.notFound()
+  }
 
   const solo = soloMember(members)
   // サイトの画面の列。1人のサイトならこの人の画面はもう入っている（profileOf）

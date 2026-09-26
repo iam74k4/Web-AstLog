@@ -1,6 +1,6 @@
-import { and, asc, count, desc, eq, sql } from 'drizzle-orm'
+import { and, asc, count, eq, sql } from 'drizzle-orm'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
-import { DEFAULT_BLOCKS } from '../blocks'
+import { blockType, DEFAULT_BLOCKS } from '../blocks'
 import { normalizeTheme, THEME_KEYS, type Theme, type ThemeKey } from '../theme'
 import type { ItemKind, ItemView } from '../ui/components'
 import * as schema from './schema'
@@ -8,14 +8,25 @@ import * as schema from './schema'
 export type Db = DrizzleD1Database<typeof schema>
 
 /*
-  公開ページの並び。新しい順で、個人開発と業務を混ぜて並べる（Projects は
-  1つの一覧）。年は頭の4桁で比べる——「2024 — 現在」（2024年から続いている）は
-  2024。年を書いていない行は最後に回る（空文字は数字より小さい）。
-  同じ年の中は管理画面で決めた並び（sort_order）。区分ごとに別々に振った
-  数なので、同じ数どうしは先に作ったほう（id）が前に来る。
+  作品の並び。新しい順で、個人開発と業務を混ぜて並べる（Projects は1つの一覧）。
+
+  1. 年（year_from）の新しい順。year の頭の数字4桁を保存のときに数にしたもの
+     （src/lib/format.ts の yearFrom）で、「2024 — 現在」は 2024。頭が数字4桁で
+     ない年と、年を書いていない行は null で、最後に回る（NULLS LAST）
+  2. 同じ年の中は管理画面の並び順（sort_order。小さいほど先）。個人開発と業務を
+     またいで1つの数の並びとして比べる——公開ページは2つの区分を混ぜて並べるので
+  3. それも同じなら先に作ったほう（id）
+
+  以前は year の頭の4文字を文字列のまま比べていた。数字で始まらない年
+  （「令和6」「〜2023」「FY2024」）が文字の大小で 2026 より上に来て、一覧の
+  先頭に出ていた。
+
+  公開ページの一覧・作品のページのページャ（listPublishedItemKeys）・管理画面の
+  一覧が、どれもこの1本を読む。別の並びで数えると、「次」で着く作品が一覧の隣の
+  カードと食い違う。
 */
-const publicOrder = [
-  desc(sql`substr(${schema.items.year}, 1, 4)`),
+export const itemOrder = [
+  sql`${schema.items.yearFrom} desc nulls last`,
   asc(schema.items.sortOrder),
   asc(schema.items.id),
 ]
@@ -100,13 +111,39 @@ function toItemView(row: ItemRow): ItemView {
 export async function listPublishedItems(db: Db, slice: ItemSlice = {}): Promise<ItemView[]> {
   const rows = await db.query.items.findMany({
     where: itemsWhere(slice),
-    orderBy: publicOrder,
+    orderBy: itemOrder,
     limit: slice.limit,
     offset: slice.offset,
     with: itemWith,
   })
 
   return rows.map(toItemView)
+}
+
+/*
+  前の slug から、いまの作品を引く（src/db/schema.ts の item_slug_redirects）。
+  公開中のものだけ——下書きの作品へ送ると、送った先が 404 になる。
+  返すのは恒久リンクを組むのに要る2つ（区分と、いまの slug）だけ。
+*/
+export async function findMovedItem(db: Db, oldSlug: string) {
+  const [row] = await db
+    .select({ type: schema.items.type, slug: schema.items.slug })
+    .from(schema.itemSlugRedirects)
+    .innerJoin(schema.items, eq(schema.items.id, schema.itemSlugRedirects.itemId))
+    .where(and(eq(schema.itemSlugRedirects.oldSlug, oldSlug), eq(schema.items.published, 1)))
+    .limit(1)
+  return row ?? null
+}
+
+// メンバーも同じ（member_slug_redirects）。返すのはいまの slug
+export async function findMovedMember(db: Db, oldSlug: string) {
+  const [row] = await db
+    .select({ slug: schema.members.slug })
+    .from(schema.memberSlugRedirects)
+    .innerJoin(schema.members, eq(schema.members.id, schema.memberSlugRedirects.memberId))
+    .where(and(eq(schema.memberSlugRedirects.oldSlug, oldSlug), eq(schema.members.published, 1)))
+    .limit(1)
+  return row?.slug ?? null
 }
 
 /*
@@ -132,7 +169,7 @@ export async function findPublishedItem(db: Db, slug: string): Promise<ItemView 
   ——前後の作品へめくるページャと、「← 一覧に戻る」がその作品の載っている
   Projects の何画面目かを数えるのに。
 
-  並びは一覧と同じ publicOrder。別の並びで数えると、「次」で着く作品が一覧の
+  並びは一覧と同じ itemOrder。別の並びで数えると、「次」で着く作品が一覧の
   隣のカードと食い違い、戻った画面にその作品が居ない。
 
   カードの中身（タグ・リンク・担当）は引かない。要るのは並びの中の位置だけで、
@@ -148,7 +185,7 @@ export function listPublishedItemKeys(db: Db) {
     })
     .from(schema.items)
     .where(itemsWhere({}))
-    .orderBy(...publicOrder)
+    .orderBy(...itemOrder)
 }
 
 /*
@@ -231,6 +268,7 @@ export function defaultBlocks(): schema.Block[] {
     body: '',
     published: 1,
     sortOrder: (index + 1) * 10,
+    formKey: null,
     createdAt: '',
     updatedAt: '',
   }))
@@ -240,11 +278,23 @@ export function defaultBlocks(): schema.Block[] {
   公開ページが描く並び。
   1行も無ければ既定の並び。1行でもあれば、公開中のものだけ。
   「全部下書き」と「まだ何も置いていない」を分けるため、published で絞る前に数える
+
+  決まった中身の種類（hero・projects・team・contact）は、並びの先頭の1行だけを
+  採る。DB の部分一意索引（blocks_fixed_once）ができる前に二重送信で2行になった
+  D1 でも、同じ URL が画面の列に2度並んでページャが自分自身を指す、を起こさない
+  ための読む側の受け（移行 0009 も同じ行を残して片付ける）。
 */
 export async function publishedBlocks(db: Db): Promise<schema.Block[]> {
   const rows = await listBlocks(db)
   if (rows.length === 0) return defaultBlocks()
-  return rows.filter((row) => row.published === 1)
+  const placed = new Set<string>()
+  return rows.filter((row) => {
+    if (row.published !== 1) return false
+    if (blockType(row.type)?.kind !== 'fixed') return true
+    if (placed.has(row.type)) return false
+    placed.add(row.type)
+    return true
+  })
 }
 
 /*
@@ -267,6 +317,33 @@ export async function reorderBlocks(db: Db, ids: number[]) {
 }
 
 /*
+  何も置いていない DB に、既定の並びを行にする。1行でもあれば何もしない。
+  行を足したかどうかを返す（「この並びから始める」が、何もしていないのに
+  「保存しました」と出さないため）。
+
+  「数えてから足す」を2文で書かない。2本の送信が同時に来ると、どちらも0件と
+  数えて両方が足し、hero〜contact が2組になっていた（ページャが自分自身を指して
+  入口から先へ進めなくなる）。1文の INSERT … SELECT … WHERE NOT EXISTS は
+  SQLite の中で原子的に動くので、数えると足すの間に割り込めない。それでも
+  重なったときの最後の受けが ON CONFLICT DO NOTHING（blocks_fixed_once）。
+
+  値はコードの定数（DEFAULT_BLOCKS）で、束縛変数として渡している。
+*/
+export async function initBlocks(db: Db): Promise<boolean> {
+  const rows = sql.join(
+    DEFAULT_BLOCKS.map((type, index) => sql`(${type}, ${(index + 1) * 10})`),
+    sql`, `,
+  )
+  const result = await db.run(sql`
+    insert into ${schema.blocks} (type, published, sort_order)
+    select column1, 1, column2 from (values ${rows})
+    where not exists (select 1 from ${schema.blocks})
+    on conflict do nothing
+  `)
+  return (result.meta?.changes ?? 0) > 0
+}
+
+/*
   何も置いていない DB に最初の1つを足すときは、先に既定の並びを行にする。
 
   0件のトップは既定の並びで描いているので、見えているものは Hero〜Contact。
@@ -274,13 +351,6 @@ export async function reorderBlocks(db: Db, ids: number[]) {
   足した人から見れば「足したのに減った」になる
 */
 export async function ensureBlocks(db: Db): Promise<schema.Block[]> {
-  const rows = await listBlocks(db)
-  if (rows.length > 0) return rows
-
-  await db
-    .insert(schema.blocks)
-    .values(
-      DEFAULT_BLOCKS.map((type, index) => ({ type, published: 1, sortOrder: (index + 1) * 10 })),
-    )
+  await initBlocks(db)
   return listBlocks(db)
 }

@@ -451,7 +451,7 @@ describe('画面に収める外枠', () => {
     const band = narrow.slice(narrow.indexOf('.identity {'))
     expect(band.slice(0, band.indexOf('}'))).toContain('flex-direction: row')
 
-    // 帯に入らないものは畳む（肩書き・ひとこと・柱の GitHub / Mail）
+    // 帯に入らないものは畳む（肩書き・ひとこと・柱の GitHub / メール）
     expect(narrow).toContain('.identity__role')
     expect(narrow).toContain('.identity__tagline')
   })
@@ -488,7 +488,7 @@ describe('画面に収める外枠', () => {
   it('雑誌風の上の帯は、名札の行・目次・足元を縦の中心でそろえる', () => {
     /*
       下端（flex-end）でそろえていたころは、高さの違う3つ——名札の行（GitHub /
-      Mail の札で 40px）・目次（28px）・足元（11px の字1行）——の箱の下端だけが
+      メールの札で 40px）・目次（28px）・足元（11px の字1行）——の箱の下端だけが
       そろい、字は3段ばらばらの高さに座っていた。900 以上の帯にだけ効く規則
     */
     const presets = sheet.slice(sheet.indexOf("body[data-layout='magazine'] .shell {"))
@@ -1023,6 +1023,25 @@ describe('部品の作法', () => {
     const ring = bodyOf(sheet, 'main > :is(.hero, section)[tabindex]:focus-visible {')
     expect(ring).toContain('outline-offset: calc(var(--focus-ring) * -1)')
     expect(ring).not.toContain('outline:')
+  })
+
+  it('内側に描いた輪郭と端の字のあいだに空きを取る。中身の箱の幅は変えない', () => {
+    /*
+      節の字は左右の端いっぱいまで組んであり、縁の内側に描いた 2px の輪郭が
+      端の字にかぶっていた（= 390x844 の About）。箱を負の margin で広げ、同じ
+      だけ padding を置く——中身の位置と幅は変わらないので、字数の上限（この幅で
+      測った maxChars）も月の位置も動かない。月は広げたぶん内へ戻す
+    */
+    const box = bodyOf(sheet, 'main > :is(.hero, section)[tabindex] {')
+    expect(box).toContain('margin-inline: calc(var(--focus-inset) * -1)')
+    expect(box).toContain('padding-inline: var(--focus-inset)')
+    expect(bodyOf(sheet, 'main > :is(.hero, section)[tabindex] > .moon {')).toContain(
+      'inset-inline: var(--focus-inset)',
+    )
+    // 空きは輪郭の太さより広い（等しいと、輪郭がまた字に触れる）
+    expect(bodyOf(sheet, ':root {')).toMatch(
+      /--focus-inset: calc\(var\(--focus-ring\) \+ var\(--sp-\d\)\)/,
+    )
   })
 
   it('指のときは目次の行き先も、ほかの押す手と同じ --tap の的', () => {

@@ -197,3 +197,29 @@ describe('URL から画面を引く', () => {
     expect(stepAt(STEPS, '/nope')).toBe(-1)
   })
 })
+
+/*
+  列の前提は「1つの URL は1度だけ」（PUB-1 / SYS-4）。固定のブロックが二重送信で
+  2行になったとき、/projects が列に2度並び、1つ目の「次」が自分自身を指して
+  入口から先へ進めなくなった。重なりは黙って落とさず、例外にする（理由は
+  src/lib/sequence.ts の assertUniqueHrefs）。
+*/
+describe('URL の重なり', () => {
+  it('同じ URL が2度並んだ列は、組む前に例外にする（黙って自分自身を指さない）', () => {
+    const doubled: Step[] = [
+      step('hero', '/', null),
+      step('projects', '/projects'),
+      step('contact', '/contact'),
+      step('projects', '/projects'),
+    ]
+    expect(() => sequence(doubled, 0)).toThrow('/projects')
+  })
+
+  it('重なりの無い列はそのまま組める。次は自分以外を指す', () => {
+    for (const [index, current] of STEPS.entries()) {
+      const pager = sequence(STEPS, index)?.pager
+      expect(pager?.next, current.href).not.toBe(current.href)
+      expect(pager?.prev, current.href).not.toBe(current.href)
+    }
+  })
+})
