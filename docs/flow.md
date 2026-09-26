@@ -21,6 +21,7 @@ flowchart LR
     MScreen["その人の画面<br>/about ・ /skills ・ /career ・ /contact<br>（続きは …/:page）"]
     Mail["メールソフト"]
     NotFound["404"]
+    Admin["管理画面（その画面を直す場所）"]
 
     Top -->|"ページャ 次 →"| Screen
     Screen -->|"ページャ 次 →"| Page
@@ -59,6 +60,11 @@ flowchart LR
     Page -.->|"範囲の外のページ数"| NotFound
     Item -.->|"下書き / 知らない slug / 種類の食い違い"| NotFound
     NotFound -->|"トップへ戻る"| Top
+
+    Top -.->|"柱の「管理画面」（ログイン中だけ）"| Admin
+    Screen -.->|"柱の「管理画面」（ログイン中だけ）"| Admin
+    Item -.->|"柱の「管理画面」（ログイン中だけ）"| Admin
+    MScreen -.->|"柱の「管理画面」（ログイン中だけ）"| Admin
 ```
 
 めくる先はページャ。数えるのは**節の中**（`Apps  2 / 3`）で、サイト全体の通し番号では
@@ -96,6 +102,25 @@ flowchart LR
 管理画面の「構成」からも同じ1本が開く。印刷・Ctrl-F・翻訳・全体の点検のための
 1本で、ここだけは縦に伸びる。詳しくは [screens.md](./screens.md#全体ページ)。
 
+管理画面へは、**ログインしている人にだけ**柱に出る「管理画面」から行く（訪問者の
+見た目は変わらない）。目次のすぐ後ろに置くので、899 以下の横帯でも右端に残る。
+行き先は「いま見ている画面を直す場所」で、`src/routes/public.tsx` の `blockAdminPath`
+が決める。
+
+| 見ている画面 | 行き先 |
+|---|---|
+| 入口（Hero） | 1人のサイトならその人の編集、それ以外は Members 一覧 |
+| Apps / Works | 項目の一覧（`/admin/items?type=app` / `work`） |
+| Team | Members 一覧 |
+| Contact | 構成のその行（中身は `src/site.ts` にあり、管理画面からは変えられない） |
+| 打ち込むブロック（ひとこと・メモ …） | そのブロックの編集 |
+| 全体ページ（`/all`）・0件のトップ | 構成 |
+| 作品1件 | その項目の編集 |
+| 個人ページ（どの画面でも） | その人の編集 |
+
+同じタブで開く（管理画面の「サイトを見る ↗」は別タブ。両方を別タブにすると、
+直して見に行くたびにタブが増える）。
+
 機械に読ませる `/robots.txt` と `/sitemap.xml` は、人の導線には出てこない。
 どちらも Worker が公開ページと同じ式から組み立てる。
 
@@ -128,6 +153,7 @@ flowchart TD
     Blocks -->|"足す（決まった中身）<br>POST /admin/blocks → 303 #block-id"| Blocks
     Blocks -->|"サイトを見る ↗ / 全体を1ページで見る ↗"| Public
     Members -->|"サイトで見る ↗（公開中の行）"| Public
+    Public -->|"柱の「管理画面」（ログイン中だけ。その画面を直す場所へ）"| Members
     Blocks -->|"足す（打ち込む）/ 編集"| BForm
     BForm -->|"POST → 303 ?saved=1 / ?saved=draft"| Blocks
     BForm -->|"入力エラー → 400"| BForm

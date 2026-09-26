@@ -1,6 +1,7 @@
 import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
+import { getCookie } from 'hono/cookie'
 import type { Child } from 'hono/jsx'
 import {
   type BlockKey,
@@ -27,6 +28,7 @@ import {
 } from '../db/queries'
 import * as schema from '../db/schema'
 import type { AppEnv } from '../env'
+import { getSessionUser, SESSION_COOKIE } from '../lib/auth'
 import { isSafeRedirect, paragraphs, parseLines, parseSkills } from '../lib/format'
 import { chunk, screenCount } from '../lib/paginate'
 import { type NavLink, type Sequence, type Step, sequence, stepAt } from '../lib/sequence'
@@ -264,6 +266,49 @@ const SiteIdentity = ({ solo }: { solo?: schema.Member }) => (
     <Socials github={SITE.github} email={SITE.email} />
   </div>
 )
+
+/*
+  管理画面への入口（柱の AdminLink）の行き先。ログインしている人にだけ返し、
+  訪問者には undefined——柱は今までと同じ姿のまま。
+
+  クッキーが無ければ D1 には聞きに行かない。訪問者のリクエストは1本も
+  増えない。ログインしている人に返すページは、共有のキャッシュに置かせない
+  （private）。置かれると、次に来た訪問者に管理画面への入口が出る。
+*/
+async function adminHref(c: Context<AppEnv>, to: string): Promise<string | undefined> {
+  const sessionId = getCookie(c, SESSION_COOKIE)
+  if (!sessionId) return undefined
+  const user = await getSessionUser(drizzle(c.env.DB, { schema }), sessionId)
+  if (!user) return undefined
+  c.header('cache-control', 'private, no-store')
+  return to
+}
+
+/*
+  サイトの画面から、その中身を直す管理画面へ。
+
+  打ち込むブロックはその編集画面。決まった中身のブロックは、中身の出どころへ
+  ——Apps / Works は項目の一覧、Team はメンバーの一覧、入口の名前と職種は
+  メンバー（1人のサイトならその人の編集）。Contact と入口のリード文は
+  src/site.ts にあって管理画面からは変えられないので、「構成」のその行へ送る。
+*/
+const blockAdminPath = (block: schema.Block, solo?: schema.Member) => {
+  switch (block.type) {
+    case 'apps':
+      return '/admin/items?type=app'
+    case 'works':
+      return '/admin/items?type=work'
+    case 'team':
+      return '/admin/members'
+    case 'hero':
+      return solo ? `/admin/members/${solo.id}/edit` : '/admin/members'
+    case 'contact':
+      // 既定の並び（まだ構成を保存していない）では id が 0 で、指す行が無い
+      return block.id ? `/admin/blocks#block-${block.id}` : '/admin/blocks'
+    default:
+      return `/admin/blocks/${block.id}/edit`
+  }
+}
 
 /*
   一覧への帯（行き先と件数）。
@@ -801,6 +846,8 @@ async function renderWholePage(c: Context<AppEnv>) {
       // 縦に伸びてよい唯一の公開ページ。app.css の「画面に収める外枠」を外す印
       whole
       sidebar={<SiteIdentity solo={solo} />}
+      // 全部の節が並ぶページなので、節の並び（構成）へ送る
+      admin={await adminHref(c, '/admin/blocks')}
     >
       {sections.map((section) => section.node)}
     </Layout>,
@@ -913,10 +960,18 @@ async function screenRows(
   やるのは、その結果を Layout に渡すことだけ。画面の列を作る側が違っても、
   題の付け方も canonical の出し方も名乗りを載せる場所も1つになる。
 */
-function screenPage(
+async function screenPage(
   c: Context<AppEnv>,
   seq: Sequence,
-  page: { node: Child; description: string; jsonLd?: unknown; theme: Theme; sidebar: Child },
+  page: {
+    node: Child
+    description: string
+    jsonLd?: unknown
+    theme: Theme
+    sidebar: Child
+    // この画面の中身を直す管理画面（adminHref が、ログインしている人にだけ出す）
+    adminPath: string
+  },
 ) {
   return c.html(
     <Layout
@@ -928,6 +983,7 @@ function screenPage(
       nav={seq.nav}
       theme={page.theme}
       sidebar={page.sidebar}
+      admin={await adminHref(c, page.adminPath)}
     >
       {/* 1画面しか無いなら、めくる先が無いのでページャは出さない */}
       {seq.pager ? (
@@ -1091,6 +1147,8 @@ async function renderScreen(c: Context<AppEnv>, want: { slug: string; page: numb
         nav={[]}
         theme={theme}
         sidebar={sidebar}
+        // 何も出ていないのは、構成に公開中のブロックが無いから。直す場所はそこ
+        admin={await adminHref(c, '/admin/blocks')}
       >
         <Empty>まだ何も置いていません</Empty>
       </Layout>,
@@ -1136,6 +1194,7 @@ async function renderScreen(c: Context<AppEnv>, want: { slug: string; page: numb
     jsonLd: siteJsonLd(members),
     theme,
     sidebar,
+    adminPath: blockAdminPath(current.block, solo),
   })
 }
 
@@ -1245,6 +1304,7 @@ async function renderItem(c: Context<AppEnv>, type: 'app' | 'work', slug: string
     },
     theme,
     sidebar: <SiteIdentity solo={solo} />,
+    adminPath: `/admin/items/${item.id}/edit`,
   })
 }
 
@@ -1578,6 +1638,7 @@ async function renderMemberScreen(
         <Socials github={member.github} email={member.email ?? SITE.email} />
       </div>
     ),
+    adminPath: `/admin/members/${member.id}/edit`,
   })
 }
 

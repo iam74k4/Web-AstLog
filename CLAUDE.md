@@ -311,6 +311,12 @@ GitHub / Mail・著作権表示）。「ひとこと」ブロックとは別物�
 - **`public/` に置いたファイルは Worker より先に配られる。** `wrangler.toml` の
   `[assets]` がそうなっているので、`public/robots.txt` や `public/sitemap.xml` を
   置いた瞬間に静的なほうが勝ち、Worker が組み立てているほうは静かに届かなくなる
+- **公開ページの「管理画面」の入口はログイン中だけ出る。** 判定は
+  `src/routes/public.tsx` の `adminHref`（クッキーが無ければ D1 に聞かない）で、
+  出したページは `cache-control: private, no-store`。外すと、共有のキャッシュに
+  置かれた「入口つきのページ」が次の訪問者に出る。行き先は同じファイルの
+  `blockAdminPath`。`check:fit` は訪問者の姿しか測らないので、柱に手を入れたら
+  ログインした状態でも収まりを見ること
 - **`/images/*`** は KV をそのまま読む。同じ KV にログイン試行の記録も入っている
   ので、キーの形（`avatars/…`）の検査を外さないこと
 - **`sameOrigin`** は認証の壁より外側に掛けてある。内側だけにすると、ログインと

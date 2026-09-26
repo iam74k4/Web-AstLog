@@ -686,6 +686,32 @@ main {
   text-underline-offset: var(--sp-1);
 }
 
+/*
+  管理画面への入口（AdminLink）。ログインしている人にだけ出る。
+
+  目次の行と同じ大きさ・同じ手触りにして、柱に新しい段を増やさない。色だけ
+  アクセントに寄せる——目次（画面の移動）とは別の行き先だと見分けるため。
+  鉛筆の形も添えるので、色だけには頼っていない。
+
+  899 以下の横帯では目次が縮んで場所を譲る（目次はもともと横に送れる帯）。
+  訪問者には出ないので、npm run check:fit はこれを測らない。足したときに
+  ログインした状態で同じ 171通りを測り、ページの動きも弁の開きも 0 だった
+  （390 の帯で目次 137px・入口 86px = rail, macOS Chromium）。
+*/
+.rail__admin {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  font-size: var(--fs-sm);
+  transition:
+    background var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
+}
+
 /* ============================================================ 本文 */
 
 .hero {
@@ -2758,7 +2784,8 @@ main {
     padding-top: var(--sp-5);
   }
 
-  .toc a {
+  .toc a,
+  .rail__admin {
     margin-left: calc(var(--sp-3) * -1);
   }
 
@@ -2994,7 +3021,9 @@ body[data-layout='magazine'] .head {
   }
 
   body[data-layout='center'] .toc a,
-  body[data-layout='magazine'] .toc a {
+  body[data-layout='magazine'] .toc a,
+  body[data-layout='center'] .rail__admin,
+  body[data-layout='magazine'] .rail__admin {
     margin-left: 0;
   }
 
@@ -3049,6 +3078,7 @@ body[data-layout='magazine'] .head {
 .move-btn:not(:disabled):active,
 .tabs a:active,
 .toc a:active,
+.rail__admin:active,
 .preset:active .preset__box,
 .band:active,
 .member:active {
@@ -3102,6 +3132,11 @@ body[data-layout='magazine'] .head {
   .toc a:hover {
     color: var(--ink);
     background: var(--surface-hover);
+  }
+
+  /* 色はアクセントのまま（目次と見分ける印なので、ホバーで消さない） */
+  .rail__admin:hover {
+    background: var(--accent-soft);
   }
 
   .socials a:hover,

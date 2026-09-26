@@ -1,7 +1,7 @@
 import type { Child } from 'hono/jsx'
 import type { Item, Member, Platform } from '../db/schema'
 import { initials } from '../lib/format'
-import { MarkIcon } from './icons'
+import { MarkIcon, PencilIcon } from './icons'
 
 /*
   画面はこの部品だけで組む。新しい見た目が要るときは、まずここに足してから使う。
@@ -17,6 +17,23 @@ export const Brand = ({ size = 'md' }: { size?: 'sm' | 'md' }) => (
   <a class={size === 'md' ? 'brand' : `brand brand--${size}`} href="/">
     <MarkIcon size={size === 'sm' ? 17 : 27} />
     <span class="brand__word">NOCTIFEX</span>
+  </a>
+)
+
+/*
+  公開ページから管理画面への入口。ログインしている人にだけ柱に出る
+  （出すかどうかと行き先は src/routes/public.tsx の adminHref が決める）。
+  行き先は「いま見ている画面を直す場所」——/apps なら Apps の一覧、
+  作品1件のページならその作品の編集。
+
+  同じタブで開く。管理画面の側には「サイトを見る ↗」が別タブで付いているので、
+  行き来の片方は同じタブ、片方は別タブになる。こちらまで別タブにすると、
+  直して見に来るたびにタブが1枚ずつ増えていく。
+*/
+export const AdminLink = ({ href }: { href: string }) => (
+  <a class="rail__admin" href={href}>
+    <PencilIcon />
+    管理画面
   </a>
 )
 

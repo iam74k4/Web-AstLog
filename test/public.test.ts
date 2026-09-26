@@ -8,7 +8,7 @@ import { publicRoutes } from '../src/routes/public'
 import { SITE } from '../src/site'
 import { splitPhrases } from '../src/ui/components'
 import { MARK_POINTS } from '../src/ui/icons'
-import { db, get, resetDb, seedItem, seedMember } from './helpers'
+import { db, get, resetDb, seedItem, seedMember, signIn } from './helpers'
 
 beforeEach(resetDb)
 
@@ -1246,6 +1246,65 @@ describe('全体ページへの導線', () => {
   it('全体ページ自身には出さない（自分への行き先）', async () => {
     await seedItem()
     expect(await (await get('/all')).text()).not.toContain('href="/all"')
+  })
+})
+
+describe('管理画面への入口', () => {
+  it('訪問者には出さない。柱は今までと同じ姿のまま', async () => {
+    await seedMember()
+    await seedItem({ slug: 'appmixer' })
+
+    for (const path of ['/', '/apps', '/all', '/members/okazaki', '/apps/item/appmixer']) {
+      const response = await get(path)
+      expect(await response.text(), path).not.toContain('rail__admin')
+      expect(response.headers.get('cache-control'), path).toBeNull()
+    }
+  })
+
+  it('ログインしている人には、いま見ている画面を直す場所へ送る入口を出す', async () => {
+    const member = await seedMember()
+    const item = await seedItem({ slug: 'appmixer' })
+    const signed = await signIn()
+
+    const cases: [string, string][] = [
+      ['/', `/admin/members/${member.id}/edit`],
+      ['/apps', '/admin/items?type=app'],
+      ['/team', '/admin/members'],
+      // 既定の並び（構成を保存していない）には、指せる行がまだ無い
+      ['/contact', '/admin/blocks'],
+      ['/all', '/admin/blocks'],
+      ['/members/okazaki', `/admin/members/${member.id}/edit`],
+      ['/apps/item/appmixer', `/admin/items/${item.id}/edit`],
+    ]
+    for (const [path, href] of cases) {
+      const response = await signed(path)
+      expect(await response.text(), path).toContain(`<a class="rail__admin" href="${href}">`)
+      // 共有のキャッシュに置かれると、次の訪問者に入口が出る
+      expect(response.headers.get('cache-control'), path).toBe('private, no-store')
+    }
+  })
+
+  it('打ち込むブロックの画面は、そのブロックの編集へ送る', async () => {
+    await seedMember()
+    const [block] = await db()
+      .insert(schema.blocks)
+      .values({ type: 'statement', title: 'つくる速さは、設計で決まる。', published: 1 })
+      .returning()
+    if (!block) throw new Error('ブロックを置けなかった')
+    const signed = await signIn()
+
+    const html = await (await signed(`/block-${block.id}`)).text()
+    expect(html).toContain(`<a class="rail__admin" href="/admin/blocks/${block.id}/edit">`)
+  })
+
+  it('期限の切れたセッションでは出さない', async () => {
+    await seedMember()
+    const signed = await signIn()
+    await db().update(schema.sessions).set({ expiresAt: '2000-01-01T00:00:00.000Z' })
+
+    const response = await signed('/')
+    expect(await response.text()).not.toContain('rail__admin')
+    expect(response.headers.get('cache-control')).toBeNull()
   })
 })
 

@@ -1,6 +1,7 @@
 import type { Child } from 'hono/jsx'
 import { SITE } from '../site'
 import type { Theme } from '../theme'
+import { AdminLink } from './components'
 import { MARK_POINTS } from './icons'
 
 export type NavItem = { href: string; label: string; active?: boolean }
@@ -54,6 +55,11 @@ export const Layout = (props: {
     「画面に収める外枠」を外す。印の無いページは1画面に収まり、動かない。
   */
   whole?: boolean
+  /*
+    ログインしている人にだけ渡る、管理画面の行き先（AdminLink）。訪問者には
+    undefined が渡り、柱は今までと同じ姿のまま。
+  */
+  admin?: string
   children?: Child
 }) => (
   <html lang="ja">
@@ -126,6 +132,12 @@ export const Layout = (props: {
               </a>
             ))}
           </nav>
+          {/*
+            目次のすぐ後ろ。足元（.rail__footer）には入れない——あちらは 899 以下で
+            畳まれるので、電話からは管理画面へ行けなくなる。ここなら 899 以下の
+            横帯でも右端に残る
+          */}
+          {props.admin ? <AdminLink href={props.admin} /> : null}
           {/*
             全体ページ（/all）への1本道。
 
