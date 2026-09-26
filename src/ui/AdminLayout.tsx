@@ -30,8 +30,9 @@ const AdminHead = ({ title }: { title: string }) => (
 
 export const AdminLayout = (props: {
   title: string
-  active: 'members' | 'items' | 'blocks' | 'appearance'
-  email: string
+  active: 'members' | 'items' | 'blocks' | 'appearance' | 'account'
+  // いま誰として入っているか（最後にログインしたアカウントの @ログイン名かメールアドレス）
+  account: string
   flash?: string | null
   children?: Child
 }) => (
@@ -66,7 +67,18 @@ export const AdminLayout = (props: {
             <a class="btn btn--link" href="/" target="_blank" rel="noreferrer">
               サイトを見る ↗
             </a>
-            <span class="admin-nav__email">{props.email}</span>
+            {/*
+              いま誰として入っているかを出し、そのままアカウントの画面への入口にする。
+              上の4つと並べないのは、900 未満の横帯に5つ目が入らないため
+            */}
+            <a
+              class="admin-nav__account"
+              href="/admin/account"
+              aria-current={props.active === 'account' ? 'page' : undefined}
+            >
+              <span class="sr-only">アカウント: </span>
+              {props.account}
+            </a>
             <form method="post" action="/admin/logout">
               <button type="submit" class="btn btn--link">
                 Sign out

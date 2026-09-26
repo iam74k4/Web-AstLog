@@ -1,4 +1,4 @@
-import { and, asc, count, eq, ne } from 'drizzle-orm'
+import { and, asc, count, eq, inArray, lt, ne } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
@@ -32,20 +32,41 @@ import {
 import * as schema from '../db/schema'
 import type { AppEnv } from '../env'
 import {
-  clearLoginFailures,
+  accountLabel,
   createSession,
-  DUMMY_HASH,
   destroySession,
+  destroyUserSessions,
   getSessionUser,
-  hashPassword,
-  LOGIN_LIMIT,
-  loginAttempts,
   newToken,
-  recordLoginFailure,
   SESSION_COOKIE,
-  verifyPassword,
+  timingSafeEqual,
+  userForIdentity,
 } from '../lib/auth'
-import { bool, isSafeUrl, num, paragraphs, parseLines, parseTags, str, toSlug } from '../lib/format'
+import {
+  bool,
+  isSafeUrl,
+  num,
+  paragraphs,
+  parseLines,
+  parseTags,
+  str,
+  timeInJapan,
+  toSlug,
+} from '../lib/format'
+import {
+  authorizeUrl,
+  callbackUrl,
+  clientFor,
+  type Identity,
+  IdTokenError,
+  identify,
+  isProviderKey,
+  PROVIDER_KEYS,
+  PROVIDER_LABEL,
+  ProviderError,
+  type ProviderKey,
+  pkcePair,
+} from '../lib/oauth'
 import { chunk, screenCount } from '../lib/paginate'
 import {
   isThemeValue,
@@ -66,16 +87,46 @@ export const adminRoutes = new Hono<AppEnv>()
 const db = (c: { env: { DB: D1Database } }) => drizzle(c.env.DB, { schema })
 
 /*
-  SameSite=Lax だけに頼らず、書き込みは Origin も見る。
-  ログイン・ログアウト・初期設定も「書き込み」なので、認証の壁より
-  外側で掛ける。内側だけに置くと、壁の手前にあるこの3つを素通りする。
+  SameSite=Lax だけに頼らず、書き込みは送り元も見る。
+  ログアウトも「書き込み」なので、認証の壁より外側で掛ける（内側だけに置くと、
+  壁の手前にあるものを素通りする）。/admin/auth/* は GET だけなのでここには
+  掛からない——あちらの CSRF は、クッキーと D1 の state が一致することで止める。
+
+  見る順は Origin → Sec-Fetch-Site → Referer。比べるのは scheme・host・port の
+  組（origin）ごと。host だけだと http と https を取り違える。
+
+  - Origin: null は拒む（403）。Referrer-Policy: no-referrer のページや
+    サンドボックスの iframe から来ると null になり、どこから来たか分からない。
+    以前は new URL('null') が例外を投げて 500 になっていた
+  - 3つとも無いときは通す。今のブラウザは POST に Origin も Sec-Fetch-Site も
+    付けるので、どちらも無いのはブラウザ以外（curl など）で、それはそもそも
+    ほかの人のクッキーを持てない。しかも管理画面の POST はどれもセッションの
+    クッキーが要り、そのクッキーは SameSite=Lax で、別のサイトからの POST には
+    付かない。パスワードのログイン（クッキー無しで受ける POST）はもう無いので、
+    「クッキー無しでも効く CSRF」の入口も残っていない
 */
-const sameOrigin = createMiddleware<AppEnv>(async (c, next) => {
-  if (c.req.method === 'POST') {
-    const origin = c.req.header('origin')
-    if (origin && new URL(origin).host !== new URL(c.req.url).host) {
-      return c.text('別のサイトからの送信は受け付けません', 403)
+function writeIsSameOrigin(request: Request): boolean {
+  const own = new URL(request.url).origin
+  const origin = request.headers.get('origin')
+  if (origin !== null) return origin !== 'null' && origin === own
+
+  const site = request.headers.get('sec-fetch-site')
+  if (site !== null) return site === 'same-origin' || site === 'none'
+
+  const referer = request.headers.get('referer')
+  if (referer !== null) {
+    try {
+      return new URL(referer).origin === own
+    } catch {
+      return false
     }
+  }
+  return true
+}
+
+const sameOrigin = createMiddleware<AppEnv>(async (c, next) => {
+  if (c.req.method !== 'GET' && c.req.method !== 'HEAD' && !writeIsSameOrigin(c.req.raw)) {
+    return c.text('別のサイトからの送信は受け付けません', 403)
   }
   await next()
 })
@@ -90,12 +141,14 @@ function parseId(value: string | undefined): number | null {
 
 /*
   ログイン後の戻り先。管理画面の中の経路だけを通す。
-  外の URL や //host を通すと、ログイン画面が他サイトへの踏み台になる
+  外の URL や //host を通すと、ログイン画面が他サイトへの踏み台になる。
+  ログインの往復そのもの（/admin/login・/admin/auth/…）とログアウトも
+  戻り先にしない——戻った先でまたログインが始まる・すぐ抜ける、の輪になる
 */
-function safeNext(value: string | undefined): string | null {
+function safeNext(value: string | null | undefined): string | null {
   if (!value || !/^\/admin(\/[\w\-./?=&%]*)?$/.test(value)) return null
   if (value.includes('..') || value.includes('//')) return null
-  if (/^\/admin\/(login|logout|setup)/.test(value)) return null
+  if (/^\/admin\/(login|logout|auth)/.test(value)) return null
   return value
 }
 
@@ -258,147 +311,328 @@ const Confirm = (props: {
   </div>
 )
 
-/* ------------------------------------------------------- ログインと初期設定 */
+/* ------------------------------------------------------------- ログイン */
 
-const LoginPage = ({ email, error, next }: { email?: string; error?: string; next?: string }) => (
+/*
+  ログインは GitHub / Google の OAuth だけ（パスワードは持たない）。
+
+  入口の2つはフォームではなく GET のリンク。フォームの POST から提供元へ
+  リダイレクトさせると、あとで CSP の form-action 'self' を入れた日に、
+  外へのリダイレクトごと止まる。
+
+  往復は /admin/auth/:provider/start → 提供元 → /admin/auth/:provider/callback。
+  どちらも認証の壁の外で、sameOrigin の内側（ただし GET なので Origin は見ない。
+  CSRF はクッキーと D1 の state が一致することで止める）。
+*/
+
+// state を入れるクッキー。往復の2本（start と callback）にだけ送られればよい
+const STATE_COOKIE = 'nx_oauth_state'
+const STATE_PATH = '/admin/auth'
+const STATE_MINUTES = 10
+
+/*
+  クッキーの Secure は https のときだけ。本番（noctifex.dev）は常に https なので
+  必ず付く。http://localhost の開発では、Secure のクッキーを捨てるブラウザが
+  あり（Safari）、付けるとログインの往復そのものが通らなくなる
+*/
+const isHttps = (c: Context<AppEnv>) => new URL(c.req.url).protocol === 'https:'
+
+// 提供元に登録するコールバック。本番と開発で origin だけが違う（src/lib/oauth.ts の callbackUrl）
+const redirectUri = (c: Context<AppEnv>, provider: ProviderKey) =>
+  callbackUrl(c.env, c.req.url, provider)
+
+// ログイン画面の知らせ。query から受けるのは決まった札だけで、文言はここで持つ
+function loginError(code: string | undefined): string | undefined {
+  switch (code) {
+    case 'denied':
+      return 'ログインを取りやめました。'
+    case 'expired':
+      return 'ログインの手続きが切れたか、別のタブで始めたものです。もう一度お試しください。'
+    case 'provider':
+      return 'ログインを受け付けられませんでした。もう一度お試しください。'
+    default:
+      return undefined
+  }
+}
+
+const backToLogin = (error: string, next?: string | null) => {
+  const query = new URLSearchParams({ error })
+  const safe = safeNext(next)
+  if (safe) query.set('next', safe)
+  return `/admin/login?${query}`
+}
+
+const LoginBrand = () => (
+  <span class="login__brand">
+    <MarkIcon size={30} />
+    <span class="login__word">NOCTIFEX</span>
+    <span class="login__label">ADMIN</span>
+  </span>
+)
+
+const LoginPage = (props: {
+  providers: ProviderKey[]
+  next?: string
+  error?: string
+  note?: string
+}) => (
   <AdminBare title="ログイン">
-    <form class="login" method="post" action="/admin/login">
-      {next ? <input type="hidden" name="next" value={next} /> : null}
-      <span class="login__brand">
-        <MarkIcon size={30} />
-        <span class="login__word">NOCTIFEX</span>
-        <span class="login__label">ADMIN</span>
-      </span>
-      {error ? <p class="banner banner--error">{error}</p> : null}
-      <Field
-        label="Email"
-        name="email"
-        type="email"
-        value={email}
-        required
-        placeholder="you@example.com"
-      />
-      <Field label="Password" name="password" type="password" required />
-      <button class="btn btn--primary btn--block" type="submit">
-        Sign in →
-      </button>
+    <div class="login">
+      <LoginBrand />
+      {/* 見出しで移動する人のために。目に見える名乗りはロゴの箱が持っている */}
+      <h1 class="sr-only">ログイン</h1>
+      {props.note ? <p class="flash">{props.note}</p> : null}
+      {props.error ? <p class="banner banner--error">{props.error}</p> : null}
+      {props.providers.length === 0 ? (
+        <p class="banner banner--error">
+          ログインの設定がまだありません（README の「管理画面に入る」）。
+        </p>
+      ) : null}
+      {props.providers.map((provider) => (
+        <a
+          key={provider}
+          class="btn btn--ghost btn--block"
+          href={`/admin/auth/${provider}/start${props.next ? `?next=${encodeURIComponent(props.next)}` : ''}`}
+        >
+          {PROVIDER_LABEL[provider]} でログイン
+        </a>
+      ))}
       <span class="login__note">Noctifex メンバーのみアクセスできます</span>
-    </form>
+    </div>
   </AdminBare>
 )
 
-adminRoutes.get('/login', (c) =>
-  c.html(<LoginPage next={safeNext(c.req.query('next')) ?? undefined} />),
+// 往復の途中で止まったときの画面。ログイン画面と同じ箱に、理由と戻り道だけを置く
+const AuthProblem = (props: { title: string; detail: string; children?: Child }) => (
+  <AdminBare title={props.title}>
+    <div class="login">
+      <LoginBrand />
+      <h1 class="banner banner--error">{props.title}</h1>
+      <p class="login__note">{props.detail}</p>
+      {props.children}
+      <a class="btn btn--ghost btn--block" href="/admin/login">
+        ログイン画面へ戻る
+      </a>
+    </div>
+  </AdminBare>
 )
 
-adminRoutes.post('/login', async (c) => {
-  const form = await c.req.formData()
-  const email = str(form.get('email')).toLowerCase()
-  const password = str(form.get('password'))
-  const next = safeNext(str(form.get('next'))) ?? undefined
+const notConfigured = (c: Context<AppEnv>, provider: ProviderKey) =>
+  c.html(
+    <AuthProblem
+      title={`${PROVIDER_LABEL[provider]} でのログインはまだ使えません`}
+      detail="クライアント ID とシークレットが設定されていません（README の「管理画面に入る」）。"
+    />,
+    503,
+  )
 
-  if ((await loginAttempts(c.env.MEDIA, email)) >= LOGIN_LIMIT.max) {
-    return c.html(
-      <LoginPage
-        email={email}
-        next={next}
-        error={`試行回数が多すぎます。${LOGIN_LIMIT.windowMinutes}分後にもう一度お試しください。`}
-      />,
-      429,
+const configuredProviders = (env: AppEnv['Bindings']) =>
+  PROVIDER_KEYS.filter((provider) => clientFor(env, provider))
+
+adminRoutes.get('/login', (c) =>
+  c.html(
+    <LoginPage
+      providers={configuredProviders(c.env)}
+      next={safeNext(c.req.query('next')) ?? undefined}
+      error={loginError(c.req.query('error'))}
+      note={c.req.query('out') === 'all' ? 'すべての端末からログアウトしました。' : undefined}
+    />,
+  ),
+)
+
+adminRoutes.get('/auth/:provider/start', async (c) => {
+  const provider = c.req.param('provider')
+  if (!isProviderKey(provider)) return c.notFound()
+  const client = clientFor(c.env, provider)
+  if (!client) return notConfigured(c, provider)
+
+  const state = newToken()
+  const nonce = newToken()
+  const { verifier, challenge } = await pkcePair()
+  const now = Date.now()
+  const database = db(c)
+  // 期限切れの札はここで掃除する。セッションと同じく、掃除だけの定期実行を持たない
+  await database.batch([
+    database
+      .delete(schema.oauthStates)
+      .where(lt(schema.oauthStates.expiresAt, new Date(now).toISOString())),
+    database.insert(schema.oauthStates).values({
+      state,
+      provider,
+      codeVerifier: verifier,
+      nonce,
+      next: safeNext(c.req.query('next')),
+      expiresAt: new Date(now + STATE_MINUTES * 60_000).toISOString(),
+    }),
+  ])
+
+  /*
+    SameSite=Lax でなければならない。提供元からのコールバックは別のサイトからの
+    トップレベルの GET で、Strict のクッキーはそこで送られない（state が毎回
+    食い違う）。None にする理由も無い
+  */
+  setCookie(c, STATE_COOKIE, state, {
+    httpOnly: true,
+    secure: isHttps(c),
+    sameSite: 'Lax',
+    path: STATE_PATH,
+    maxAge: STATE_MINUTES * 60,
+  })
+  c.header('cache-control', 'no-store')
+  return c.redirect(
+    authorizeUrl(provider, {
+      clientId: client.id,
+      redirectUri: redirectUri(c, provider),
+      state,
+      challenge,
+      nonce,
+    }),
+    302,
+  )
+})
+
+adminRoutes.get('/auth/:provider/callback', async (c) => {
+  const provider = c.req.param('provider')
+  if (!isProviderKey(provider)) return c.notFound()
+  c.header('cache-control', 'no-store')
+
+  const cookieState = getCookie(c, STATE_COOKIE)
+  const queryState = c.req.query('state')
+  deleteCookie(c, STATE_COOKIE, { path: STATE_PATH, secure: isHttps(c) })
+
+  /*
+    出した札は、この先どう転んでも使い切る。クッキーの側と query の側の両方を
+    消すので、食い違って弾いた場合も、同じ state がもう一度通ることは無い
+  */
+  const presented = [...new Set([cookieState, queryState])].filter((value): value is string =>
+    Boolean(value),
+  )
+  const burned =
+    presented.length > 0
+      ? await db(c)
+          .delete(schema.oauthStates)
+          .where(inArray(schema.oauthStates.state, presented))
+          .returning()
+      : []
+  const row = burned.find((one) => one.state === cookieState)
+
+  // 提供元の画面で断った（access_denied）・提供元が断った。state の検査より先に帰す
+  const refused = c.req.query('error')
+  if (refused) {
+    return c.redirect(
+      backToLogin(refused === 'access_denied' ? 'denied' : 'provider', row?.next),
+      303,
     )
   }
 
-  const user = await db(c).query.users.findFirst({ where: eq(schema.users.email, email) })
-  // ユーザーが居なくても必ず1回ハッシュを計算する。
-  // 居ないときだけ即座に返すと、応答の速さでアカウントの有無が分かってしまう
-  const ok = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH)
+  const code = c.req.query('code')
+  if (
+    !row ||
+    !cookieState ||
+    !queryState ||
+    !timingSafeEqual(cookieState, queryState) ||
+    row.provider !== provider ||
+    new Date(row.expiresAt).getTime() <= Date.now() ||
+    !code
+  ) {
+    return c.redirect(backToLogin('expired', row?.next), 303)
+  }
 
-  if (!user || !ok) {
-    await recordLoginFailure(c.env.MEDIA, email)
-    // どちらが違うかは言わない。メールアドレスの存在を教えないため
+  const client = clientFor(c.env, provider)
+  if (!client) return notConfigured(c, provider)
+
+  let identity: Identity
+  try {
+    identity = await identify(provider, {
+      client,
+      code,
+      redirectUri: redirectUri(c, provider),
+      verifier: row.codeVerifier,
+      nonce: row.nonce,
+    })
+  } catch (error) {
+    // 文言は提供元の名前と error の種類だけ（src/lib/oauth.ts）。トークンは入っていない
+    if (error instanceof ProviderError) {
+      console.error(error.message)
+      return c.html(
+        <AuthProblem
+          title={`${PROVIDER_LABEL[provider]} との通信に失敗しました`}
+          detail="時間をおいてもう一度お試しください。"
+        />,
+        502,
+      )
+    }
+    if (error instanceof IdTokenError) {
+      console.error(`Google の id_token を受け付けません: ${error.message}`)
+      return c.html(
+        <AuthProblem
+          title="ログインを確かめられませんでした"
+          detail="最初からもう一度お試しください。"
+        />,
+        400,
+      )
+    }
+    throw error
+  }
+
+  const user = await userForIdentity(db(c), c.env, identity)
+  if (!user) {
     return c.html(
-      <LoginPage email={email} next={next} error="メールアドレスかパスワードが違います" />,
-      401,
+      <AuthProblem
+        title="このアカウントでは入れません"
+        detail={`${PROVIDER_LABEL[provider]} の ${identity.label}（ID ${identity.subject}）は、この管理画面に紐づいていません。`}
+      >
+        {/* 持ち主が設定を間違えたときの助け。出すのはその人自身の ID だけ */}
+        <p class="login__note">
+          {provider === 'github'
+            ? '持ち主のアカウントなら、wrangler.toml の OWNER_GITHUB_ID をこの ID にしてください。'
+            : identity.emailVerified
+              ? '持ち主のアカウントなら、wrangler.toml の OWNER_GOOGLE_EMAIL をこのアドレスにしてください。'
+              : 'このアドレスは Google で確認されていないため、紐づけられません。'}
+        </p>
+      </AuthProblem>,
+      403,
     )
   }
 
-  await clearLoginFailures(c.env.MEDIA, email)
+  // 前のセッションが残っていれば捨ててから発行し直す（ログインの前後で同じ ID を使わない）
+  const previous = getCookie(c, SESSION_COOKIE)
+  if (previous) await destroySession(db(c), previous)
   await startSession(c, user.id)
   // 開こうとしていた画面へ戻す。セッションが切れて弾かれた人を、一覧の頭に放り出さない
-  return c.redirect(next ?? '/admin/members', 303)
+  return c.redirect(safeNext(row.next) ?? '/admin', 303)
 })
 
 async function startSession(c: Context<AppEnv>, userId: number) {
   const session = await createSession(db(c), userId)
-  setCookie(c, SESSION_COOKIE, session.id, {
+  setCookie(c, SESSION_COOKIE, session.token, {
     httpOnly: true,
     sameSite: 'Lax',
-    secure: new URL(c.req.url).protocol === 'https:',
+    secure: isHttps(c),
     path: '/',
     expires: session.expiresAt,
   })
 }
 
 adminRoutes.post('/logout', async (c) => {
-  const sessionId = getCookie(c, SESSION_COOKIE)
-  if (sessionId) await destroySession(db(c), sessionId)
-  deleteCookie(c, SESSION_COOKIE, { path: '/' })
+  const token = getCookie(c, SESSION_COOKIE)
+  if (token) await destroySession(db(c), token)
+  deleteCookie(c, SESSION_COOKIE, { path: '/', secure: isHttps(c) })
   return c.redirect('/admin/login', 303)
 })
 
 /*
-  最初の owner を作るためだけの入口。users が空のときしか通らず、
-  SETUP_TOKEN（wrangler secret）と一致しない限り何もしない。
-  パスワードをリポジトリに置かずに済ませるための仕掛け。
+  パスワードの頃の初期設定の入口。消したことを 404 で言い切る——壁に吸わせると
+  ログイン画面へ送られ、まだどこかに在るように見える。最初の owner は、
+  OWNER_GITHUB_ID / OWNER_GOOGLE_EMAIL と一致するアカウントの初回ログインで作られる
 */
-adminRoutes.all('/setup', async (c) => {
-  const existing = await db(c).select({ n: count() }).from(schema.users)
-  if ((existing[0]?.n ?? 0) > 0) return c.text('すでに設定済みです', 404)
-  if (!c.env.SETUP_TOKEN) return c.text('SETUP_TOKEN が未設定です', 404)
-
-  if (c.req.method !== 'POST') {
-    return c.html(
-      <AdminBare title="初期設定">
-        <form class="login" method="post" action="/admin/setup">
-          <span class="login__brand">
-            <MarkIcon size={30} />
-            <span class="login__word">NOCTIFEX</span>
-            <span class="login__label">SETUP</span>
-          </span>
-          <Field label="Setup token" name="token" type="password" required />
-          <Field label="Email" name="email" type="email" required />
-          <Field label="Password" name="password" type="password" required hint="12文字以上" />
-          <button class="btn btn--primary btn--block" type="submit">
-            owner を作成
-          </button>
-        </form>
-      </AdminBare>,
-    )
-  }
-
-  const form = await c.req.formData()
-  if (str(form.get('token')) !== c.env.SETUP_TOKEN) return c.text('token が違います', 403)
-  const email = str(form.get('email')).toLowerCase()
-  const password = str(form.get('password'))
-  if (!email || password.length < 12)
-    return c.text('メールアドレスと12文字以上のパスワードが必要です', 400)
-
-  const [owner] = await db(c)
-    .insert(schema.users)
-    .values({ email, passwordHash: await hashPassword(password), role: 'owner' })
-    .returning({ id: schema.users.id })
-  if (!owner) return c.text('owner を作れませんでした', 500)
-
-  // 打ったばかりのメールとパスワードを、もう一度打たせない
-  await startSession(c, owner.id)
-  return c.redirect('/admin/members', 303)
-})
+adminRoutes.all('/setup', (c) => c.notFound())
 
 /* --------------------------------------------------------------- 認証の壁 */
 
 const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
-  const sessionId = getCookie(c, SESSION_COOKIE)
-  const user = sessionId ? await getSessionUser(db(c), sessionId) : null
+  const token = getCookie(c, SESSION_COOKIE)
+  const user = token ? await getSessionUser(db(c), token) : null
   if (!user) {
     // GET なら行き先を持ち回す（POST の宛先は開き直せないので持たない）
     const url = new URL(c.req.url)
@@ -406,6 +640,7 @@ const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
     return c.redirect(next ? `/admin/login?next=${encodeURIComponent(next)}` : '/admin/login', 303)
   }
   c.set('user', user)
+  c.set('account', (await accountLabel(db(c), user.id)) ?? 'アカウント')
   await next()
 })
 
@@ -422,7 +657,7 @@ app.get('/members', async (c) => {
   })
 
   return c.html(
-    <AdminLayout title="Members" active="members" email={c.get('user').email} flash={flashFor(c)}>
+    <AdminLayout title="Members" active="members" account={c.get('account')} flash={flashFor(c)}>
       <div class="admin-head">
         <h1>Members</h1>
         <a class="btn btn--primary" href="/admin/members/new">
@@ -489,7 +724,7 @@ app.get('/members', async (c) => {
 })
 
 const MemberForm = (props: {
-  email: string
+  account: string
   member?: schema.Member
   errors?: Record<string, string>
   values?: Record<string, string>
@@ -502,7 +737,7 @@ const MemberForm = (props: {
     <AdminLayout
       title={member ? member.name : '新しいメンバー'}
       active="members"
-      email={props.email}
+      account={props.account}
     >
       <div class="admin-head">
         <div class="admin-head__title">
@@ -619,14 +854,14 @@ const MemberForm = (props: {
   )
 }
 
-app.get('/members/new', (c) => c.html(<MemberForm email={c.get('user').email} />))
+app.get('/members/new', (c) => c.html(<MemberForm account={c.get('account')} />))
 
 app.get('/members/:id/edit', async (c) => {
   const member = await db(c).query.members.findFirst({
     where: eq(schema.members.id, Number(c.req.param('id'))),
   })
   if (!member) return c.notFound()
-  return c.html(<MemberForm email={c.get('user').email} member={member} />)
+  return c.html(<MemberForm account={c.get('account')} member={member} />)
 })
 
 async function readMemberForm(c: Context<AppEnv>) {
@@ -748,9 +983,9 @@ function asValues(values: Record<string, unknown>): Record<string, string> {
 
 app.post('/members', async (c) => {
   const { form, values } = await readMemberForm(c)
-  const email = c.get('user').email
+  const account = c.get('account')
   const back = (errors: Record<string, string>) =>
-    c.html(<MemberForm email={email} errors={errors} values={asValues(values)} />, 400)
+    c.html(<MemberForm account={account} errors={errors} values={asValues(values)} />, 400)
 
   const invalid = memberErrors(values)
   if (invalid) return back(invalid)
@@ -776,10 +1011,10 @@ app.post('/members/:id', async (c) => {
   if (!member) return c.notFound()
 
   const { form, values } = await readMemberForm(c)
-  const email = c.get('user').email
+  const account = c.get('account')
   const back = (errors: Record<string, string>) =>
     c.html(
-      <MemberForm email={email} member={member} errors={errors} values={asValues(values)} />,
+      <MemberForm account={account} member={member} errors={errors} values={asValues(values)} />,
       400,
     )
 
@@ -815,7 +1050,7 @@ app.get('/members/:id/delete', async (c) => {
   const n = owned[0]?.n ?? 0
 
   return c.html(
-    <AdminLayout title="削除の確認" active="members" email={c.get('user').email}>
+    <AdminLayout title="削除の確認" active="members" account={c.get('account')}>
       <Confirm
         title={`「${member.name}」を削除しますか？`}
         detail="この操作は取り消せません。"
@@ -862,7 +1097,7 @@ app.get('/items', async (c) => {
   })
 
   return c.html(
-    <AdminLayout title="Projects" active="items" email={c.get('user').email} flash={flashFor(c)}>
+    <AdminLayout title="Projects" active="items" account={c.get('account')} flash={flashFor(c)}>
       <div class="admin-head">
         <div class="admin-head__title">
           <h1>Projects</h1>
@@ -934,7 +1169,7 @@ app.get('/items', async (c) => {
 })
 
 type ItemFormData = {
-  email: string
+  account: string
   type: 'app' | 'work'
   members: schema.Member[]
   platforms: schema.Platform[]
@@ -1027,7 +1262,7 @@ const ItemForm = (props: ItemFormData) => {
   const links = [...d.links, { label: '', url: '' }, { label: '', url: '' }].slice(0, 3)
 
   return (
-    <AdminLayout title={item ? item.title : '新しい項目'} active="items" email={props.email}>
+    <AdminLayout title={item ? item.title : '新しい項目'} active="items" account={props.account}>
       <div class="admin-head">
         <div class="admin-head__title">
           <span class="crumbs">
@@ -1265,7 +1500,7 @@ app.get('/items/new', async (c) => {
   const type = c.req.query('type') === 'work' ? 'work' : 'app'
   const { members, platforms } = await formContext(c)
   return c.html(
-    <ItemForm email={c.get('user').email} type={type} members={members} platforms={platforms} />,
+    <ItemForm account={c.get('account')} type={type} members={members} platforms={platforms} />,
   )
 })
 
@@ -1283,7 +1518,7 @@ app.get('/items/:id/edit', async (c) => {
   const { members, platforms } = await formContext(c)
   return c.html(
     <ItemForm
-      email={c.get('user').email}
+      account={c.get('account')}
       type={item.type}
       members={members}
       platforms={platforms}
@@ -1470,7 +1705,7 @@ app.post('/items', async (c) => {
     const { members, platforms } = await formContext(c)
     return c.html(
       <ItemForm
-        email={c.get('user').email}
+        account={c.get('account')}
         type={values.type}
         members={members}
         platforms={platforms}
@@ -1520,7 +1755,7 @@ app.post('/items/:id', async (c) => {
     const { members, platforms } = await formContext(c)
     return c.html(
       <ItemForm
-        email={c.get('user').email}
+        account={c.get('account')}
         type={values.type}
         members={members}
         platforms={platforms}
@@ -1557,7 +1792,7 @@ app.get('/items/:id/delete', async (c) => {
   if (!item) return c.notFound()
 
   return c.html(
-    <AdminLayout title="削除の確認" active="items" email={c.get('user').email}>
+    <AdminLayout title="削除の確認" active="items" account={c.get('account')}>
       <Confirm
         title={`「${item.title}」を削除しますか？`}
         detail="この操作は取り消せません。"
@@ -1675,7 +1910,7 @@ function blockScreens(block: schema.Block, counts: SiteCounts): number {
 }
 
 const BlocksPage = (props: {
-  email: string
+  account: string
   rows: schema.Block[]
   counts: SiteCounts
   flash?: string | null
@@ -1689,7 +1924,7 @@ const BlocksPage = (props: {
   const total = screens.reduce((sum, n) => sum + n, 0)
 
   return (
-    <AdminLayout title="構成" active="blocks" email={props.email} flash={props.flash}>
+    <AdminLayout title="構成" active="blocks" account={props.account} flash={props.flash}>
       <div class="admin-head">
         <div class="admin-head__title">
           <span class="crumbs">トップページ</span>
@@ -1879,7 +2114,7 @@ app.get('/blocks', async (c) => {
   const [rows, counts] = await Promise.all([listBlocks(database), siteCounts(database)])
   return c.html(
     <BlocksPage
-      email={c.get('user').email}
+      account={c.get('account')}
       rows={rows}
       counts={counts}
       flash={flashFor(c, '外しました')}
@@ -1908,7 +2143,7 @@ const bodyHint = (type: Extract<BlockType, { kind: 'free' }>) => {
 }
 
 const BlockForm = (props: {
-  email: string
+  account: string
   type: BlockType
   block?: schema.Block
   values?: Record<string, string>
@@ -1926,7 +2161,7 @@ const BlockForm = (props: {
   const published = props.values ? Number(props.values.published === '1') : (block?.published ?? 0)
 
   return (
-    <AdminLayout title={type.label} active="blocks" email={props.email}>
+    <AdminLayout title={type.label} active="blocks" account={props.account}>
       <div class="admin-head">
         <div class="admin-head__title">
           <span class="crumbs">構成 / {block ? '編集' : '追加'}</span>
@@ -1988,7 +2223,7 @@ app.get('/blocks/new', (c) => {
   const type = isBlockKey(key) ? blockType(key) : undefined
   // 決まった中身のものは書くことが無いので、一覧の「置く」から直接入る
   if (type?.kind !== 'free') return c.notFound()
-  return c.html(<BlockForm email={c.get('user').email} type={type} />)
+  return c.html(<BlockForm account={c.get('account')} type={type} />)
 })
 
 app.get('/blocks/:id/edit', async (c) => {
@@ -1997,7 +2232,7 @@ app.get('/blocks/:id/edit', async (c) => {
   const block = await db(c).query.blocks.findFirst({ where: eq(schema.blocks.id, id) })
   const type = block ? blockType(block.type) : undefined
   if (!block || !type) return c.notFound()
-  return c.html(<BlockForm email={c.get('user').email} type={type} block={block} />)
+  return c.html(<BlockForm account={c.get('account')} type={type} block={block} />)
 })
 
 function readBlockForm(form: FormData) {
@@ -2096,7 +2331,7 @@ app.post('/blocks', async (c) => {
   const form = await c.req.formData()
   const key = str(form.get('type'))
   const type = isBlockKey(key) ? blockType(key) : undefined
-  const email = c.get('user').email
+  const account = c.get('account')
   const stored = await listBlocks(db(c))
   // 0件のときサイトに出ているのは既定の並び。重複かどうかもそれで判断する
   const rows = stored.length ? stored : defaultBlocks()
@@ -2105,7 +2340,7 @@ app.post('/blocks', async (c) => {
   if (!type) {
     return c.html(
       <BlocksPage
-        email={email}
+        account={account}
         rows={stored}
         counts={await siteCounts(db(c))}
         error="置けないブロックです"
@@ -2118,7 +2353,7 @@ app.post('/blocks', async (c) => {
     if (rows.some((row) => row.type === type.key)) {
       return c.html(
         <BlocksPage
-          email={email}
+          account={account}
           rows={stored}
           counts={await siteCounts(db(c))}
           error={`${type.label} は既に置いてあります`}
@@ -2133,7 +2368,7 @@ app.post('/blocks', async (c) => {
     const errors = blockErrors(type, values)
     if (errors) {
       return c.html(
-        <BlockForm email={email} type={type} values={asValues(values)} errors={errors} />,
+        <BlockForm account={account} type={type} values={asValues(values)} errors={errors} />,
         400,
       )
     }
@@ -2215,7 +2450,7 @@ app.post('/blocks/:id', async (c) => {
   if (errors) {
     return c.html(
       <BlockForm
-        email={c.get('user').email}
+        account={c.get('account')}
         type={type}
         block={block}
         values={asValues(values)}
@@ -2270,7 +2505,7 @@ app.post('/blocks/:id/move', async (c) => {
   if (dir !== 'up' && dir !== 'down') {
     return c.html(
       <BlocksPage
-        email={c.get('user').email}
+        account={c.get('account')}
         rows={rows}
         counts={await siteCounts(db(c))}
         error="動かす向きが分かりません"
@@ -2302,7 +2537,7 @@ app.get('/blocks/:id/delete', async (c) => {
   const type = blockType(block.type)
 
   return c.html(
-    <AdminLayout title="外す" active="blocks" email={c.get('user').email}>
+    <AdminLayout title="外す" active="blocks" account={c.get('account')}>
       <Confirm
         title={`「${blockLabel(block)}」をトップから外しますか？`}
         detail={
@@ -2375,12 +2610,12 @@ const PresetChoice = (props: { group: ThemeKey; option: PresetOption; current: s
 )
 
 const AppearancePage = (props: {
-  email: string
+  account: string
   theme: Theme
   flash?: string | null
   error?: string
 }) => (
-  <AdminLayout title="見た目" active="appearance" email={props.email} flash={props.flash}>
+  <AdminLayout title="見た目" active="appearance" account={props.account} flash={props.flash}>
     <div class="admin-head">
       <div class="admin-head__title">
         <span class="crumbs">サイト全体</span>
@@ -2429,7 +2664,7 @@ app.get('/appearance', async (c) => {
   const theme = await loadTheme(db(c))
   return c.html(
     <AppearancePage
-      email={c.get('user').email}
+      account={c.get('account')}
       theme={theme}
       flash={c.req.query('saved') ? '保存しました' : null}
     />,
@@ -2448,7 +2683,7 @@ app.post('/appearance', async (c) => {
   if (THEME_KEYS.some((key) => !isThemeValue(key, picked[key] ?? ''))) {
     return c.html(
       <AppearancePage
-        email={c.get('user').email}
+        account={c.get('account')}
         theme={await loadTheme(db(c))}
         error="選べない見た目です。もう一度選び直してください"
       />,
@@ -2458,6 +2693,73 @@ app.post('/appearance', async (c) => {
 
   await saveTheme(db(c), normalizeTheme(picked))
   return c.redirect('/admin/appearance?saved=1', 303)
+})
+
+/* ------------------------------------------------------------- アカウント */
+
+/*
+  ログインに使えるアカウントの一覧と、「すべての端末からログアウト」。
+
+  紐づけも外しもここからはしない。紐づくのは OWNER_… と一致するアカウントで
+  初めてログインしたときだけで、外すのは D1 の行を消す（README）。画面から
+  外せると、セッションを盗んだ人が持ち主のアカウントを外して締め出せる。
+*/
+app.get('/account', async (c) => {
+  const identities = await db(c)
+    .select()
+    .from(schema.userIdentities)
+    .where(eq(schema.userIdentities.userId, c.get('user').id))
+    .orderBy(asc(schema.userIdentities.provider), asc(schema.userIdentities.id))
+  const unlinked = PROVIDER_KEYS.filter(
+    (provider) => !identities.some((identity) => identity.provider === provider),
+  )
+
+  return c.html(
+    <AdminLayout title="アカウント" active="account" account={c.get('account')}>
+      <div class="admin-head">
+        <h1>アカウント</h1>
+      </div>
+      <p class="form-note">
+        この管理画面に入れるアカウントです。どれでログインしても、同じ管理画面に入ります。
+      </p>
+      <ul class="rows">
+        {identities.map((identity) => (
+          <li class="row" key={identity.id}>
+            <span class="row__main">
+              <strong>{PROVIDER_LABEL[identity.provider]}</strong>
+              <span class="row__sub">{identity.label}</span>
+            </span>
+            <span class="row__col">最後のログイン {timeInJapan(identity.lastLoginAt)}</span>
+          </li>
+        ))}
+      </ul>
+      {unlinked.map((provider) => (
+        <p class="form-note" key={provider}>
+          {PROVIDER_LABEL[provider]} はまだ紐づいていません。
+          {provider === 'github'
+            ? 'OWNER_GITHUB_ID と同じ ID の GitHub アカウントで一度ログインすると紐づきます。'
+            : 'OWNER_GOOGLE_EMAIL と同じ、Google が確認済みのアドレスで一度ログインすると紐づきます。'}
+        </p>
+      ))}
+      <section class="catalog">
+        <h2 class="catalog__title">すべての端末からログアウト</h2>
+        <p class="catalog__note">
+          この端末も含めて、ログインしている端末をすべてログアウトします。端末を失くした・共用の端末でログアウトし忘れたときに使います。
+        </p>
+        <form method="post" action="/admin/account/logout-all">
+          <button class="btn btn--danger" type="submit">
+            すべての端末からログアウト
+          </button>
+        </form>
+      </section>
+    </AdminLayout>,
+  )
+})
+
+app.post('/account/logout-all', async (c) => {
+  await destroyUserSessions(db(c), c.get('user').id)
+  deleteCookie(c, SESSION_COOKIE, { path: '/', secure: isHttps(c) })
+  return c.redirect('/admin/login?out=all', 303)
 })
 
 adminRoutes.route('/', app)

@@ -12,7 +12,8 @@
 | --- | --- | --- |
 | 実行環境 | Cloudflare Workers | 常時起動のサーバーを持たずに済む |
 | データ | D1（SQLite） | メンバーと Projects（個人開発 / 業務） |
-| 画像 | KV | アバター（`avatars/`）と作品のスクリーンショット（`items/`）。R2 が未有効なので当面こちら |
+| 画像 | KV | アバター（`avatars/`）と作品のスクリーンショット（`items/`）だけ。R2 が未有効なので当面こちら |
+| 管理画面のログイン | GitHub / Google の OAuth | パスワードを持たない。本人は提供元の ID で照合する |
 | 言語 | TypeScript | |
 | ルーティング・描画 | Hono（JSX でサーバーサイドレンダリング） | クライアント側のフレームワークを持たない |
 | DB | Drizzle ORM | スキーマは TypeScript が正、SQL は生成する |
@@ -45,14 +46,89 @@ npm run db:seed:local      # 初期データを入れる
 npm run dev                # http://localhost:8787
 ```
 
-管理画面に入るには owner が要る。`.dev.vars` を作り、
+管理画面（`http://localhost:8787/admin`）に入るには、GitHub か Google の
+OAuth クライアントが要る。作り方と `.dev.vars` の書き方は下の「管理画面に入る」。
+
+## 管理画面に入る
+
+ログインは GitHub か Google の OAuth だけ（パスワードは無い）。owner として
+最初に紐づくのは、`wrangler.toml` の `[vars]` に書いたアカウントだけ。
+
+- `OWNER_GITHUB_ID` — GitHub の**数値の**ユーザー id（ログイン名ではない。
+  `https://api.github.com/users/<ログイン名>` の `id`）。いまは `118629892`
+- `OWNER_GOOGLE_EMAIL` — Google アカウントのメールアドレス（Google が確認済みの
+  もの。大小は無視する）。いまはサイトに出しているアドレス `iam74k4@gmail.com` を
+  入れてある。**別の Google アカウントで入るなら、ここを書き換える**
+
+そのアカウントで一度ログインすると D1 の `user_identities` に紐づき、以後は
+提供元の ID（GitHub の id / Google の sub）で照合する。ログイン名やアドレスを
+変えても入れる。どちらにも当たらないアカウントは「このアカウントでは入れません」
+（403）になり、その画面にそのアカウント自身の ID が出る——設定を間違えたときは、
+それを `[vars]` に写せばよい。
+
+### OAuth のクライアントを作る
+
+GitHub（OAuth App。コールバック URL を1つしか持てないので、本番用と開発用の2つを作る）
+
+1. GitHub の Settings → Developer settings → OAuth Apps → New OAuth App
+2. 本番用: Homepage URL `https://noctifex.dev`、Authorization callback URL
+   `https://noctifex.dev/admin/auth/github/callback`
+3. 開発用: Homepage URL `http://localhost:8787`、Authorization callback URL
+   `http://localhost:8787/admin/auth/github/callback`
+4. それぞれの Client ID と、Generate a new client secret で出るシークレットを控える。
+   スコープは頼まない（公開プロフィールの id だけを見る）
+
+Google（ウェブ アプリケーションの OAuth クライアントを1つ）
+
+1. Google Cloud Console の「API とサービス」→ OAuth 同意画面を作る。スコープは
+   `openid` と `email` だけ。公開前（テスト中）のままなら、テストユーザーに自分を足す
+2. 「認証情報」→「認証情報を作成」→「OAuth クライアント ID」→ 種類は
+   「ウェブ アプリケーション」
+3. 承認済みのリダイレクト URI に2つ足す:
+   `https://noctifex.dev/admin/auth/google/callback` と
+   `http://localhost:8787/admin/auth/google/callback`
+
+開発では `.dev.vars`（コミットしない）に、開発用の値を書く。
 
 ```
-SETUP_TOKEN=何か長い文字列
+GITHUB_CLIENT_ID=開発用 OAuth App の Client ID
+GITHUB_CLIENT_SECRET=開発用 OAuth App のシークレット
+GOOGLE_CLIENT_ID=….apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=…
+OAUTH_REDIRECT_ORIGIN=http://localhost:8787
 ```
 
-`/admin/setup` を開いて、その token とメールアドレス・パスワードを入れる。
-owner が1件でもあれば、この入口は 404 になる。
+`OAUTH_REDIRECT_ORIGIN` は開発でだけ要る。`wrangler.toml` に `routes`（noctifex.dev）が
+あると、`wrangler dev` は Worker に見せる URL を `http://noctifex.dev/…` に書き換える
+ので、リクエストから組んだコールバックが登録したもの（`http://localhost:8787/…`）と
+食い違う。本番では入れない（リクエストの origin＝`https://noctifex.dev` を使う）。
+
+本番では同じ4つを secret で入れる（GitHub は本番用の OAuth App の値）。
+
+```bash
+npx wrangler secret put GITHUB_CLIENT_ID
+npx wrangler secret put GITHUB_CLIENT_SECRET
+npx wrangler secret put GOOGLE_CLIENT_ID
+npx wrangler secret put GOOGLE_CLIENT_SECRET
+```
+
+片方の提供元だけでもよい。ログイン画面には、ID とシークレットがそろった提供元だけが出る。
+
+### 紐づけを外す・端末を締め出す
+
+紐づいたアカウントは、`[vars]` を書き換えても外れない（ID で照合しているため）。
+外すときは D1 の行を消す。
+
+```bash
+npx wrangler d1 execute noctifex --remote --command "DELETE FROM user_identities WHERE provider = 'github'"
+```
+
+端末を失くした・共用の端末でログアウトし忘れたときは、管理画面の「アカウント」
+（左ナビの足元の名前）→「すべての端末からログアウト」。管理画面に入れないときは、
+
+```bash
+npx wrangler d1 execute noctifex --remote --command "DELETE FROM sessions"
+```
 
 ## 確かめる
 
@@ -97,8 +173,9 @@ push すると GitHub Actions が同じものを走らせる（`check` と `fit`
 ```bash
 npx wrangler d1 create noctifex          # 出力の database_id を wrangler.toml へ
 npx wrangler kv namespace create MEDIA   # 出力の id を wrangler.toml へ
-npx wrangler secret put SETUP_TOKEN
 ```
+
+OAuth のクライアントの secret も入れる（上の「管理画面に入る」）。
 
 以降は、
 
@@ -125,6 +202,14 @@ npm run deploy
 作品のフォームから書く。画像は KV の `items/` に置かれ、`/images/items/…` から出る。
 画像を公開するときは代替テキストが要る。
 
+パスワードのログインから OAuth へ移す移行（`0006_oauth_identities` と
+`0007_hash_sessions`）を当てると、`users` からメールアドレスとパスワードの
+ハッシュが外れ、ログイン中のセッションは全部消える（セッションの id を D1 には
+ハッシュで置くようになったため）。owner の行は id もメンバーとの紐づけもそのまま
+残り、`[vars]` と一致するアカウントで最初にログインしたときに、その行へ紐づく。
+前に入れた `SETUP_TOKEN` はもう使わないので `npx wrangler secret delete SETUP_TOKEN`
+で消してよい。
+
 Actions の deploy ワークフロー（手動実行）でも同じことができる。使うなら
 `CLOUDFLARE_API_TOKEN` をリポジトリの secret に入れる。
 
@@ -149,7 +234,8 @@ src/
     schema.ts        テーブル定義。ここが正
     queries.ts       公開ページが読む問い合わせと、構成・見た目の読み書き
   lib/
-    auth.ts          パスワード・セッション・試行回数
+    auth.ts          セッション（D1 にはハッシュで置く）と、通してよいアカウントの判定
+    oauth.ts         GitHub / Google との約束（認可 URL・トークンの交換・id_token の検査）
     format.ts        テキストの解釈とフォーム値の受け取り
     paginate.ts      一覧を1画面ぶんずつに割る（chunk / screenCount）
     sequence.ts      画面の連なり。前後・目次・通し番号・canonical をここで組む

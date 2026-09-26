@@ -1,74 +1,19 @@
-import { eq, lt } from 'drizzle-orm'
+import { and, asc, desc, eq, lt, sql } from 'drizzle-orm'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import * as schema from '../db/schema'
+import type { Identity } from './oauth'
 
 /*
-  パスワードは PBKDF2-SHA256 で伸ばして保存する。Workers には bcrypt が無く、
-  WebCrypto だけで完結するのがこれ。保存形式は pbkdf2$<反復回数>$<salt>$<hash>。
-  反復回数を字面に含めているので、後で上げても古い行を読み続けられる。
+  管理画面のセッションと、「このアカウントを通してよいか」。
 
-  注意: 反復回数は CPU 時間に直結する。Workers の無料プランは1リクエスト
-  10ms なので、ログインだけがその上限に当たりうる。実測して決めること。
+  ログインは GitHub / Google の OAuth だけで、パスワードは持たない（往復は
+  src/routes/admin.tsx の /admin/auth/*、提供元との約束は src/lib/oauth.ts）。
+  以前ここにあった PBKDF2・ダミーのハッシュ・KV の試行回数は、パスワードと
+  一緒に外した——当てられるパスワードが無ければ、数える相手も居ない。
 */
-const ITERATIONS = 100_000
-const KEY_BITS = 256
 const SESSION_DAYS = 14
 
-const encoder = new TextEncoder()
-
-function toBase64(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary)
-}
-
-function fromBase64(value: string): Uint8Array {
-  const binary = atob(value)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-  return bytes
-}
-
-async function derive(password: string, salt: Uint8Array, iterations: number) {
-  const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, [
-    'deriveBits',
-  ])
-  const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', hash: 'SHA-256', salt: salt as BufferSource, iterations },
-    key,
-    KEY_BITS,
-  )
-  return new Uint8Array(bits)
-}
-
-export async function hashPassword(password: string): Promise<string> {
-  const salt = crypto.getRandomValues(new Uint8Array(16))
-  const hash = await derive(password, salt, ITERATIONS)
-  return `pbkdf2$${ITERATIONS}$${toBase64(salt)}$${toBase64(hash)}`
-}
-
-// 比較は必ず定数時間で。早期 return すると、どこまで一致したかが時間に出る
-function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false
-  let diff = 0
-  for (let i = 0; i < a.length; i++) diff |= (a[i] as number) ^ (b[i] as number)
-  return diff === 0
-}
-
-export async function verifyPassword(password: string, stored: string): Promise<boolean> {
-  const [scheme, iterations, salt, hash] = stored.split('$')
-  if (scheme !== 'pbkdf2' || !iterations || !salt || !hash) return false
-  const derived = await derive(password, fromBase64(salt), Number(iterations))
-  return timingSafeEqual(derived, fromBase64(hash))
-}
-
-/*
-  存在しないメールアドレスで来たときに、代わりに検証するハッシュ。
-  乱数から作った捨て値で、これに一致するパスワードは無い。
-  「ユーザーが居ないので即座に失敗」を避け、常に同じだけ時間を使うためにある。
-*/
-export const DUMMY_HASH =
-  'pbkdf2$100000$62JM2mGBbJhiAhTaHjcMEA==$usCnWkqRH5nZxJtwZCec3HvfMTuNX/0rw8NgwSmAMIc='
+type Db = DrizzleD1Database<typeof schema>
 
 export function newToken(bytes = 32): string {
   return [...crypto.getRandomValues(new Uint8Array(bytes))]
@@ -76,64 +21,156 @@ export function newToken(bytes = 32): string {
     .join('')
 }
 
-export async function createSession(db: DrizzleD1Database<typeof schema>, userId: number) {
-  const id = newToken()
-  const expiresAt = new Date(Date.now() + SESSION_DAYS * 86_400_000)
-  await db.insert(schema.sessions).values({ id, userId, expiresAt: expiresAt.toISOString() })
-  // 期限切れはここで掃除する。掃除だけの定期実行を持たないための割り切り
-  await db.delete(schema.sessions).where(lt(schema.sessions.expiresAt, new Date().toISOString()))
-  return { id, expiresAt }
+/*
+  D1 の sessions.id に入れる値。クッキーの値（newToken の 32 バイト）を
+  SHA-256 にした16進。D1 の写しだけが漏れても、そこからクッキーは作れない。
+  入力が 256 ビットの乱数なので、塩も伸ばしも要らない（総当たりの余地が無い）。
+*/
+export async function sessionKey(token: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-export async function getSessionUser(db: DrizzleD1Database<typeof schema>, sessionId: string) {
+// 比較は定数時間で。早期 return すると、どこまで一致したかが時間に出る
+export function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
+}
+
+// 返す token がクッキーに入る値。D1 にはそのハッシュしか置かない
+export async function createSession(db: Db, userId: number) {
+  const token = newToken()
+  const expiresAt = new Date(Date.now() + SESSION_DAYS * 86_400_000)
+  await db
+    .insert(schema.sessions)
+    .values({ id: await sessionKey(token), userId, expiresAt: expiresAt.toISOString() })
+  // 期限切れはここで掃除する。掃除だけの定期実行を持たないための割り切り
+  await db.delete(schema.sessions).where(lt(schema.sessions.expiresAt, new Date().toISOString()))
+  return { token, expiresAt }
+}
+
+export async function getSessionUser(db: Db, token: string) {
+  const id = await sessionKey(token)
   const rows = await db
     .select({ user: schema.users, expiresAt: schema.sessions.expiresAt })
     .from(schema.sessions)
     .innerJoin(schema.users, eq(schema.users.id, schema.sessions.userId))
-    .where(eq(schema.sessions.id, sessionId))
+    .where(eq(schema.sessions.id, id))
     .limit(1)
 
   const row = rows[0]
   if (!row) return null
   if (new Date(row.expiresAt) < new Date()) {
-    await destroySession(db, sessionId)
+    await db.delete(schema.sessions).where(eq(schema.sessions.id, id))
     return null
   }
   return row.user
 }
 
-export async function destroySession(db: DrizzleD1Database<typeof schema>, sessionId: string) {
-  await db.delete(schema.sessions).where(eq(schema.sessions.id, sessionId))
+export async function destroySession(db: Db, token: string) {
+  await db.delete(schema.sessions).where(eq(schema.sessions.id, await sessionKey(token)))
+}
+
+// 「すべての端末からログアウト」。その人のセッションを、いま使っている端末のものも含めて消す
+export async function destroyUserSessions(db: Db, userId: number) {
+  await db.delete(schema.sessions).where(eq(schema.sessions.userId, userId))
+}
+
+export type OwnerEnv = { OWNER_GITHUB_ID?: string; OWNER_GOOGLE_EMAIL?: string }
+
+/*
+  まだ誰にも紐づいていないアカウントを、owner に紐づけてよいか。
+
+  GitHub は数値の id が OWNER_GITHUB_ID と同じとき。Google はメールアドレスが
+  OWNER_GOOGLE_EMAIL と同じ（大小は無視）で、かつ Google がそのアドレスを
+  確かめている（email_verified）とき。確かめていないアドレスは、誰でも
+  自分のアカウントに名乗らせられる。
+
+  使うのは最初の1回だけ。紐づいたあとは subject で引く（userForIdentity）。
+*/
+export function isOwnerIdentity(env: OwnerEnv, identity: Identity): boolean {
+  if (identity.provider === 'github') {
+    const want = env.OWNER_GITHUB_ID?.trim()
+    return Boolean(want) && identity.subject === want
+  }
+  const want = env.OWNER_GOOGLE_EMAIL?.trim().toLowerCase()
+  return Boolean(want) && identity.emailVerified === true && identity.email?.toLowerCase() === want
 }
 
 /*
-  ログイン試行の制限。KV の TTL に任せるので、掃除する処理を持たない。
-  メールアドレス単位で数える（IP は共有されることがあるため）。
+  提供元のアカウントから、管理画面の user を引く。通さないなら null。
+
+  1. user_identities に（提供元, subject）の行があれば、その user。label と
+     最終ログインを書き直す
+  2. 無ければ、isOwnerIdentity に当たったときだけ owner に紐づける。owner の行は
+     既にあればそれ（パスワードの頃から居る owner も id を変えずに引き継ぐ）、
+     無ければ作る
+  3. どれにも当たらなければ null（呼ぶ側が 403 にする）
 */
-const MAX_ATTEMPTS = 5
-const WINDOW_SECONDS = 900
+export async function userForIdentity(
+  db: Db,
+  env: OwnerEnv,
+  identity: Identity,
+): Promise<schema.User | null> {
+  const where = and(
+    eq(schema.userIdentities.provider, identity.provider),
+    eq(schema.userIdentities.subject, identity.subject),
+  )
+  const linked = async () =>
+    (
+      await db
+        .select({ user: schema.users })
+        .from(schema.userIdentities)
+        .innerJoin(schema.users, eq(schema.users.id, schema.userIdentities.userId))
+        .where(where)
+        .limit(1)
+    )[0]?.user ?? null
 
-export async function loginAttempts(kv: KVNamespace, email: string): Promise<number> {
-  const value = await kv.get(`login:${email.toLowerCase()}`)
-  return value ? Number(value) : 0
+  const found = await linked()
+  if (found) {
+    await db
+      .update(schema.userIdentities)
+      .set({ label: identity.label, lastLoginAt: sql`(datetime('now'))` })
+      .where(where)
+    return found
+  }
+
+  if (!isOwnerIdentity(env, identity)) return null
+
+  const owner =
+    (await db.query.users.findFirst({
+      where: eq(schema.users.role, 'owner'),
+      orderBy: [asc(schema.users.id)],
+    })) ?? (await db.insert(schema.users).values({ role: 'owner' }).returning())[0]
+  if (!owner) return null
+
+  /*
+    同じアカウントで2本同時に来ても、unique に当たった側は黙って下がり、
+    先に入った行の user を読み直して返す（自分が作った owner を返さない）
+  */
+  await db
+    .insert(schema.userIdentities)
+    .values({
+      userId: owner.id,
+      provider: identity.provider,
+      subject: identity.subject,
+      label: identity.label,
+    })
+    .onConflictDoNothing()
+  return linked()
 }
 
-/*
-  KV は読んで書くまでの間に他のリクエストが割り込める（かつ結果整合）ので、
-  同時に叩かれると上限を数回超えうる。総当たりを鈍らせるのが目的で、
-  厳密な回数制限ではない。正確に止めたくなったら Durable Object に移すこと。
-*/
-export async function recordLoginFailure(kv: KVNamespace, email: string): Promise<void> {
-  const key = `login:${email.toLowerCase()}`
-  const current = await kv.get(key)
-  await kv.put(key, String((current ? Number(current) : 0) + 1), {
-    expirationTtl: WINDOW_SECONDS,
-  })
+// 管理画面の足元に出す「いま誰として入っているか」。最後にログインしたアカウントの label
+export async function accountLabel(db: Db, userId: number): Promise<string | null> {
+  const [row] = await db
+    .select({ label: schema.userIdentities.label })
+    .from(schema.userIdentities)
+    .where(eq(schema.userIdentities.userId, userId))
+    .orderBy(desc(schema.userIdentities.lastLoginAt), desc(schema.userIdentities.id))
+    .limit(1)
+  return row?.label || null
 }
 
-export async function clearLoginFailures(kv: KVNamespace, email: string): Promise<void> {
-  await kv.delete(`login:${email.toLowerCase()}`)
-}
-
-export const LOGIN_LIMIT = { max: MAX_ATTEMPTS, windowMinutes: WINDOW_SECONDS / 60 }
 export const SESSION_COOKIE = 'nx_session'

@@ -61,8 +61,25 @@ export default defineConfig({
         bindings: {
           // drizzle-kit が生成した SQL をそのままテスト用 D1 に流す
           TEST_MIGRATIONS: migrations,
-          SETUP_TOKEN: 'test-setup-token',
+          /*
+            OAuth の設定。本物のクライアントではなく、テストの中だけの値。
+            wrangler.toml の [vars]（持ち主の本物の ID とアドレス）はここで上書きする
+            ——テストが本物のアカウントを前提にしないように。外への fetch は
+            test/oauth.test.ts が差し替えるので、この ID で提供元に届くことは無い
+          */
+          OWNER_GITHUB_ID: '1001',
+          OWNER_GOOGLE_EMAIL: 'Owner@Example.test',
+          GITHUB_CLIENT_ID: 'test-github-client',
+          GITHUB_CLIENT_SECRET: 'test-github-secret',
+          GOOGLE_CLIENT_ID: 'test-google-client.apps.googleusercontent.com',
+          GOOGLE_CLIENT_SECRET: 'test-google-secret',
         },
+        /*
+          移行のテスト用の空の D1。本来の DB には setup.ts が全部の移行を当ててしまうので、
+          「前の移行まで当てて行を入れ、そのあと新しい移行を当てる」はこちらでやる
+          （test/oauth.test.ts の「移行」）
+        */
+        d1Databases: ['MIGRATION_DB'],
       },
     }),
   ],

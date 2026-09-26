@@ -462,6 +462,11 @@ GitHub / Mail を出さない（本文にボタンがあり、同じ行き先が
 **サイト全体の文言を変える** → `src/site.ts`。管理画面からは変えられない。
 `heroLead` は入口の月の下を通るので、長さを変えたら `npm run check:contrast` も。
 
+**管理画面に入れるアカウントを替える** → `wrangler.toml` の `[vars]`
+（`OWNER_GITHUB_ID` / `OWNER_GOOGLE_EMAIL`。効くのは最初の紐づけだけ）と、
+D1 の `user_identities` の行（外すときは行を消す）。手順は README の「管理画面に入る」。
+コードは触らない。
+
 **入口の月を焼き直す** → `scripts/moon/render.py`（Blender）で **preset `final`** を
 焼き、`scripts/moon/pack.py <in.png> public/assets` で詰める。pack が最後に出す
 `370x574` を `public/app.css` の `--moon-ratio` に書き写す（食い違うと絵だけが
@@ -531,7 +536,17 @@ GitHub / Mail を出さない（本文にボタンがあり、同じ行き先が
   書き方そのものなので、この規則とは相性が悪い）と、`public/assets/**` の
   `noSvgWithoutTitle`（`<img>` で貼るブランド素材であって、文書の中の SVG ではない）
 - スキーマを変えたら `npm run db:generate`。テストは生成された SQL を読むので、
-  二重に書かなくてよい
+  二重に書かなくてよい。**手で書いてよいのは、スキーマの変わらないデータの書き換え
+  だけ**（0004 の構成の行・0007 の平文のセッションの消去）。`npx drizzle-kit
+  generate --custom --name <名前>` で空のファイルを作り、頭に理由を書く
+- **D1 では `PRAGMA foreign_keys=OFF` が効かない。** drizzle-kit が表の作り直し
+  （`__new_<表>` へ写して `DROP TABLE`）を生成したら、そのまま当てないこと。
+  外部キーが止まらないので、`DROP` の時点で子の行が cascade で消えるか、
+  参照が残って失敗する。列を落とすだけなら `ALTER TABLE … DROP COLUMN` で済む
+  （0006 はそうなっている。unique の索引は先に `DROP INDEX`）。作り直しが要る
+  変更は `--custom` で D1 に合う形に書き直す。既存の行を持った D1 に当てたときの
+  形は `test/oauth.test.ts` の「移行」のように、空の `MIGRATION_DB` に前の移行まで
+  流して行を入れ、そのあとで新しい移行を当てて確かめる
 - `compatibility_date` はテスト側の workerd が対応する日付に揃える。片方だけ
   上げると、本番の挙動をテストで確かめられなくなる
 
@@ -562,14 +577,56 @@ GitHub / Mail を出さない（本文にボタンがあり、同じ行き先が
   置かれた「入口つきのページ」が次の訪問者に出る。行き先は同じファイルの
   `blockAdminPath`。`check:fit` は訪問者の姿しか測らないので、柱に手を入れたら
   ログインした状態でも収まりを見ること
-- **`/images/*`** は KV をそのまま読む。同じ KV にログイン試行の記録も入っている
-  ので、キーの形の検査（`src/routes/public.tsx` の `IMAGE_KEY`: `avatars/` か
-  `items/` の下の、英数字で始まり英数字と `. _ -` だけの名前）を外さない・緩めないこと。
-  置き場を足すときは `( | )` に1語足すだけにする
-- **`sameOrigin`** は認証の壁より外側に掛けてある。内側だけにすると、ログインと
-  ログアウトが素通りになる
-- **ログイン** は、ユーザーが居なくても必ずハッシュを1回計算する。居ないときだけ
-  早く返すと、応答時間でアカウントの有無が分かる
-- **PBKDF2 は1回 50ms ほど CPU を使う。** Workers の無料プランは1リクエスト
-  10ms なので、ログインだけがその上限に当たる。反復回数は `src/lib/auth.ts`
-- **試行回数の記録は KV** なので厳密ではない。総当たりを鈍らせるためのもの
+- **`/images/*`** は KV をそのまま読む。いまの KV には画像しか無い（ログイン試行の
+  記録はパスワードのログインと一緒に無くなった）が、キーの形の検査
+  （`src/routes/public.tsx` の `IMAGE_KEY`: `avatars/` か `items/` の下の、英数字で
+  始まり英数字と `. _ -` だけの名前）は外さない・緩めないこと。この URL は KV の
+  キーを外に開く口で、あとから同じ KV に何かを置いた日に、それが黙って読めるように
+  なる（実際、以前は `login:<メール>` が同居していた）。置き場を足すときは `( | )` に
+  1語足すだけにする
+- **`sameOrigin`** は認証の壁より外側に掛けてある。内側だけにすると、壁の外の POST
+  （ログアウト）が素通りになる。見る順は Origin → Sec-Fetch-Site → Referer で、
+  origin（scheme・host・port）ごと比べる。`Origin: null` は 403（以前は
+  `new URL('null')` が例外を投げて 500 だった）。3つとも無い POST は通す——
+  ブラウザ以外からしか来ず、管理画面の POST はどれも Lax のセッションのクッキーが
+  要るので、別のサイトからは成り立たない。**クッキー無しで受ける POST を足すなら**
+  （昔のパスワードのログインのような）、この「3つとも無ければ通す」を見直すこと
+- **ログインは GitHub / Google の OAuth だけ。** 往復は `src/routes/admin.tsx` の
+  `/admin/auth/:provider/start` と `callback`（壁の外・`sameOrigin` の内側。どちらも
+  GET なので Origin は見ない）、提供元との約束は `src/lib/oauth.ts`、誰を通すかは
+  `src/lib/auth.ts` の `userForIdentity`。パスワード・`/admin/setup`・
+  `SETUP_TOKEN`・KV の試行回数は、もう無い
+  - **本人は ID で照合する。** GitHub は数値の id、Google は sub。ログイン名や
+    メールアドレスは本人が変えられる・移るので、使うのは**最初の紐づけだけ**
+    （`OWNER_GITHUB_ID` と一致、または Google が確認済みの `OWNER_GOOGLE_EMAIL` と
+    大小を無視して一致）。紐づいたあとは環境変数を変えても外れない。外すのは
+    `user_identities` の行を消すこと（README）。画面から紐づけ・外しをさせない——
+    盗んだセッションで持ち主のアカウントを外し、締め出せてしまう
+  - **state は D1 で1回きり。** start が `oauth_states` に1行（10分）と、同じ値の
+    クッキーを置く。callback はクッキーと query の**両方の札を、成否にかかわらず
+    先に消して**から比べる。クッキーだけで持つと往復がブラウザの手元の値だけで
+    閉じ、D1 だけで持つと他人の state を踏ませるログイン CSRF が通る
+  - **state のクッキーは `SameSite=Lax`・`Path=/admin/auth`。** コールバックは
+    提供元から戻ってくる別サイトのトップレベル GET なので、Strict にすると
+    クッキーが送られず、毎回食い違う
+  - **トークンを持たない。** アクセストークンは本人の ID を引いたらその場で捨てる。
+    保存しない・ログや例外の文言に入れない（`ProviderError` は提供元の error の
+    種類と HTTP の番号だけ）。外への fetch には `AbortSignal.timeout` を付け、
+    提供元の失敗は 502 の画面にする
+  - **Google の id_token の署名は確かめていない。** トークンエンドポイントから TLS で
+    直接受け取ったもので、OIDC Core 3.1.3.7 の 6 がそれを認めている。iss・aud・exp・
+    nonce は必ず見る。id_token をブラウザ経由で受ける形に変えるなら、JWKS で署名を
+    確かめること
+  - 入口はフォームではなく GET のリンク。POST から外へリダイレクトさせると、CSP の
+    `form-action 'self'` を入れた日にログインごと止まる
+  - **`wrangler dev` の中では `c.req.url` が本番の顔をしている。** `routes` があると
+    Worker に見せる URL が `http://noctifex.dev/…` に書き換わる（Origin も同じく
+    書き換わるので `sameOrigin` は食い違わない）。提供元に渡すコールバックだけは
+    ブラウザの居場所でなければならないので、開発では `.dev.vars` の
+    `OAUTH_REDIRECT_ORIGIN` で渡す（`src/lib/oauth.ts` の `callbackUrl`）。
+    `MF-Original-Hostname` のようなヘッダーから組まないこと——本番でも誰でも
+    付けて送れる
+- **セッションの id は D1 にはハッシュで置く。** クッキーの値を SHA-256 にしてから
+  引く（`src/lib/auth.ts` の `sessionKey`）。D1 の写しだけが漏れても、そこから
+  クッキーは作れない。ログインのたびに前のセッションは捨てて発行し直す。全部を
+  切りたいときは管理画面の「アカウント」→「すべての端末からログアウト」

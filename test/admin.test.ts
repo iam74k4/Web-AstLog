@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { type BlockKey, blockType, MAX_CHARS } from '../src/blocks'
 import * as schema from '../src/db/schema'
 import { chunk } from '../src/lib/paginate'
-import { db, form, get, OWNER, resetDb, seedItem, seedMember, signIn } from './helpers'
+import { db, form, get, resetDb, seedItem, seedMember, signIn } from './helpers'
 
 beforeEach(resetDb)
 
@@ -36,36 +36,50 @@ describe('認証', () => {
     expect(response.status).toBe(403)
   })
 
-  it('ログイン画面への CSRF も止める', async () => {
-    const response = await get('/admin/login', {
+  it('ログアウトへの CSRF も止める（壁の外の POST）', async () => {
+    const signed = await signIn()
+    const response = await signed('/admin/logout', {
       method: 'POST',
-      body: form({ email: OWNER.email, password: OWNER.password }),
       headers: { origin: 'https://evil.example' },
     })
     expect(response.status).toBe(403)
+    expect((await signed('/admin/members')).status).toBe(200)
   })
 
-  it('間違ったパスワードでは入れない', async () => {
-    await signIn()
-    const response = await get('/admin/login', {
-      method: 'POST',
-      body: form({ email: OWNER.email, password: 'wrong' }),
-    })
-    expect(response.status).toBe(401)
-    expect(response.headers.get('set-cookie')).toBeNull()
+  /*
+    SEC-6。Referrer-Policy: no-referrer のページやサンドボックスの iframe からの
+    POST は Origin: null になる。以前は new URL('null') が例外を投げて 500 だった
+  */
+  it('Origin: null の書き込みは 403 で断る（500 にしない）', async () => {
+    const signed = await signIn()
+    for (const path of ['/admin/logout', '/admin/items']) {
+      const response = await signed(path, {
+        method: 'POST',
+        body: form({ type: 'app', title: '侵入' }),
+        headers: { origin: 'null' },
+      })
+      expect(response.status, path).toBe(403)
+    }
+    expect((await signed('/admin/members')).status).toBe(200)
   })
 
-  it('owner は二度作れない', async () => {
-    await signIn()
-    const response = await get('/admin/setup', {
-      method: 'POST',
-      body: form({
-        token: 'test-setup-token',
-        email: 'another@example.test',
-        password: 'x'.repeat(12),
-      }),
-    })
-    expect(response.status).toBe(404)
+  it('Origin が無ければ Sec-Fetch-Site、それも無ければ Referer で見分ける', async () => {
+    const signed = await signIn()
+    const post = (headers: Record<string, string>) =>
+      signed('/admin/items', { method: 'POST', body: form({ type: 'app', title: 'x' }), headers })
+
+    expect((await post({ 'sec-fetch-site': 'cross-site' })).status).toBe(403)
+    expect((await post({ 'sec-fetch-site': 'same-site' })).status).toBe(403)
+    expect((await post({ referer: 'https://evil.example/page' })).status).toBe(403)
+    // 同じ origin でも scheme が違えば別物（host だけを比べていたころは通っていた）
+    expect((await post({ origin: 'http://noctifex.test' })).status).toBe(403)
+
+    // 同じサイトからのもの。保存まで進む（400 は中身の検査。送り元の検査は通っている）
+    expect((await post({ origin: 'https://noctifex.test' })).status).not.toBe(403)
+    expect((await post({ 'sec-fetch-site': 'same-origin' })).status).not.toBe(403)
+    expect((await post({ referer: 'https://noctifex.test/admin/items/new' })).status).not.toBe(403)
+    // 3つとも無い（ブラウザ以外）。セッションのクッキーは Lax なので、別のサイトからは付かない
+    expect((await post({})).status).not.toBe(403)
   })
 
   it('ログアウトするとセッションが即座に切れる', async () => {
@@ -214,7 +228,7 @@ describe('Items', () => {
   カードのサムネイルは同じ画像の飾り）。
 
   画像はアバターと同じ経路（種類と大きさの検査 → KV）で、置き場だけが items/。
-  同じ KV にログイン試行の記録があるので、公開側の /images/* はキーの形で
+  公開側の /images/* は、KV のキーの形（avatars/ と items/ の2つの置き場）で
   縛っている（test/public.test.ts の /images）。
 */
 describe('Items — 本文と画像', () => {

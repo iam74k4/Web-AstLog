@@ -25,6 +25,8 @@ declare namespace Cloudflare {
   interface Env extends Bindings {
     // drizzle-kit が生成した SQL。vitest.config.ts が bindings で渡す
     TEST_MIGRATIONS: import('@cloudflare/vitest-pool-workers').D1Migration[]
+    // 移行を途中から当て直すための空の D1（vitest.config.ts の d1Databases）
+    MIGRATION_DB: D1Database
   }
 }
 

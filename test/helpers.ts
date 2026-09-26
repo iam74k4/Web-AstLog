@@ -1,10 +1,10 @@
 import { env, SELF } from 'cloudflare:test'
+import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import * as schema from '../src/db/schema'
+import { createSession, SESSION_COOKIE } from '../src/lib/auth'
 
 export const db = () => drizzle(env.DB, { schema })
-
-export const OWNER = { email: 'owner@example.test', password: 'correct-horse-battery' }
 
 // テストごとに素の状態から始める。前のテストの残りに引きずられないように
 export async function resetDb() {
@@ -13,6 +13,8 @@ export async function resetDb() {
   await database.delete(schema.itemTags)
   await database.delete(schema.items)
   await database.delete(schema.sessions)
+  await database.delete(schema.userIdentities)
+  await database.delete(schema.oauthStates)
   await database.delete(schema.users)
   await database.delete(schema.members)
   await database.delete(schema.platforms)
@@ -57,28 +59,43 @@ export function form(values: Record<string, string | string[]>) {
   return body
 }
 
-// ログインして Cookie を持った fetch を返す。
-// 管理画面のテストは、毎回ここを通る（認証の壁ごと確かめたいため）
-export async function signIn() {
-  await SELF.fetch('https://noctifex.test/admin/setup', {
-    method: 'POST',
-    body: form({ token: 'test-setup-token', email: OWNER.email, password: OWNER.password }),
-  })
+/*
+  owner の行（と、GitHub のアカウントの紐づけ）。何度呼んでも1人だけ。
+  subject は vitest.config.ts の OWNER_GITHUB_ID と同じ値にしてある
+*/
+export async function ensureOwner() {
+  const found = await db().query.users.findFirst({ where: eq(schema.users.role, 'owner') })
+  if (found) return found
+  const [owner] = await db().insert(schema.users).values({ role: 'owner' }).returning()
+  if (!owner) throw new Error('owner を作れなかった')
+  await db()
+    .insert(schema.userIdentities)
+    .values({ userId: owner.id, provider: 'github', subject: '1001', label: '@owner' })
+  return owner
+}
 
-  const response = await SELF.fetch('https://noctifex.test/admin/login', {
-    method: 'POST',
-    body: form({ email: OWNER.email, password: OWNER.password }),
-    redirect: 'manual',
-  })
-  const cookie = response.headers.get('set-cookie')?.split(';')[0]
-  if (!cookie) throw new Error(`ログインできなかった: ${response.status}`)
-
-  return (path: string, init: RequestInit = {}) =>
+// セッションのクッキー（nx_session=…）を持った fetch
+export const withCookie =
+  (cookie: string) =>
+  (path: string, init: RequestInit = {}) =>
     SELF.fetch(`https://noctifex.test${path}`, {
       ...init,
       redirect: 'manual',
       headers: { ...init.headers, cookie },
     })
+
+/*
+  ログインして Cookie を持った fetch を返す。
+
+  OAuth の往復（提供元への fetch）は通さず、セッションを D1 に直接作る。
+  往復そのものは test/oauth.test.ts が提供元を差し替えて確かめている。ここで
+  毎回通すと、管理画面のどのテストも提供元の偽物に寄りかかることになる。
+  認証の壁（クッキー → D1 のセッション）は、このクッキーで毎回通る。
+*/
+export async function signIn() {
+  const owner = await ensureOwner()
+  const { token } = await createSession(db(), owner.id)
+  return withCookie(`${SESSION_COOKIE}=${token}`)
 }
 
 export const get = (path: string, init: RequestInit = {}) =>

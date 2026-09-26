@@ -24,9 +24,20 @@ database_id = "TO_BE_CREATED"
 migrations_dir = "drizzle"
 
 [[kv_namespaces]]
-# アバター（avatars/）と作品の画像（items/）と、ログイン試行回数（login:<メール>）
+# アバター（avatars/）と作品の画像（items/）だけ
 binding = "MEDIA"
 id = "TO_BE_CREATED"
 
-# SETUP_TOKEN は secret で渡す（最初の owner を作るときだけ使う）
-#   wrangler secret put SETUP_TOKEN
+# 管理画面に最初に owner として紐づけてよいアカウント（src/env.ts）。どちらも公開してよい値。
+# GitHub は数値のユーザー id（ログイン名ではない）、Google は確認済みのメールアドレス。
+# 効くのは最初の紐づけだけで、以後は GitHub の id / Google の sub で照合する。
+# 違うアカウントで入るなら、ここを書き換えてデプロイする（README の「管理画面に入る」）。
+[vars]
+OWNER_GITHUB_ID = "118629892"
+OWNER_GOOGLE_EMAIL = "iam74k4@gmail.com"
+
+# OAuth のクライアントは secret で渡す（開発は .dev.vars）。片方だけでもよい
+#   wrangler secret put GITHUB_CLIENT_ID
+#   wrangler secret put GITHUB_CLIENT_SECRET
+#   wrangler secret put GOOGLE_CLIENT_ID
+#   wrangler secret put GOOGLE_CLIENT_SECRET

@@ -2137,8 +2137,12 @@ describe('/images', () => {
     expect((await get('/images/avatars/ok.png')).status).toBe(200)
   })
 
-  it('ログイン試行の記録は読ませない', async () => {
-    // 同じ KV に置いているので、キーの形を縛らないと漏れる
+  it('置き場の外のキーは読ませない', async () => {
+    /*
+      いまの KV には画像しか無いが、この URL は KV のキーを外に開く口。
+      あとから同じ KV に置いたもの（以前はログイン試行の記録 login:<メール> が
+      同居していた）が黙って読み出せないよう、キーの形で縛る
+    */
     await env.MEDIA.put('login:someone@example.com', '3')
     expect((await get('/images/login:someone@example.com')).status).toBe(404)
   })
@@ -2517,7 +2521,6 @@ describe('文書の外枠', () => {
       '/members/okazaki',
       '/apps/item/appmixer',
       '/admin/login', // 壁の外（AdminBare）
-      '/admin/setup', // 同じく壁の外。owner が居ないうちだけ出る
       '/no-such-page', // 404（ErrorPage）
     ]
     for (const path of paths) {
@@ -2529,7 +2532,13 @@ describe('文書の外枠', () => {
 
   it('ログインした先の管理画面（AdminLayout）も', async () => {
     const signed = await signIn()
-    for (const path of ['/admin/members', '/admin/items', '/admin/blocks', '/admin/appearance']) {
+    for (const path of [
+      '/admin/members',
+      '/admin/items',
+      '/admin/blocks',
+      '/admin/appearance',
+      '/admin/account',
+    ]) {
       const response = await signed(path)
       expect(response.status, path).toBe(200)
       expectDoctype(await response.text(), path)

@@ -28,7 +28,7 @@
 | 以前の一覧 | `GET /apps` `/apps/:page` `/works` `/works/:page` | 同じ区分で絞った `/projects` へ 301（`?member=` は引き継ぐ） | — |
 | クローラへの指示 | `GET /robots.txt` | `text/plain`。`/admin/` だけ外す | — |
 | URL の一覧 | `GET /sitemap.xml` | `application/xml`。公開中の画面を数え上げる | — |
-| 画像 | `GET /images/avatars/…`<br>`GET /images/items/…` | KV に入れたアバターと作品の画像。キーの形（置き場 / 英数字で始まり英数字と `. _ -` だけの名前）に合わないものは読みに行かない（同じ KV にログイン試行の記録がある） | 該当なし・形が合わないものは 404 |
+| 画像 | `GET /images/avatars/…`<br>`GET /images/items/…` | KV に入れたアバターと作品の画像。キーの形（置き場 / 英数字で始まり英数字と `. _ -` だけの名前）に合わないものは読みに行かない（KV のキーを外に開く口なので、置き場の外は読ませない） | 該当なし・形が合わないものは 404 |
 | 画面 | `GET /:screen` | そのブロックの1画面目（`/projects` `/team` …）。1人のサイトの `/team` はプロフィールの1枚目へ 301 | 無い画面名は 404 |
 | 画面の続き | `GET /:screen/:page` | 2画面目から（`/projects/2`）。1人のサイトの `/team/:page` もプロフィールの1枚目へ 301 | 範囲の外は 404。`/projects/1` は `/projects` へ 303 |
 
@@ -356,7 +356,9 @@ Team を置いていないサイトでは、差し込む先が無いので、こ
 
 ## 管理側
 
-`/admin/*`。ログインが要る。書き込みは `Origin` も確認する（ログイン画面を含む）。
+`/admin/*`。ログインが要る。ログインは GitHub / Google の OAuth だけで、パスワードは
+無い。書き込み（POST）は送り元も確かめる——Origin → Sec-Fetch-Site → Referer の順に
+見て、origin が違えば 403（`Origin: null` も 403）。壁の外のログアウトも対象。
 
 公開ページからは、**ログインしているあいだだけ**柱に「管理画面」が出て、いま見ている
 画面を直す場所へ同じタブで送る（行き先の表は [flow.md](./flow.md#公開側)）。訪問者には
@@ -365,10 +367,12 @@ Team を置いていないサイトでは、差し込む先が無いので、こ
 | 画面 | パス | 認証 | 役割 |
 | --- | --- | --- | --- |
 | 入口 | `GET /admin` | 要 | `/admin/members` へ 303 |
-| ログイン | `GET /admin/login` | 不要 | フォーム。`?next=` を hidden で持ち回す |
-| ログイン実行 | `POST /admin/login` | 不要 | 成功で Cookie を発行し、`next` の画面（`/admin/` の中だけ）か `/admin/members` へ |
+| ログイン | `GET /admin/login` | 不要 | 「GitHub でログイン」「Google でログイン」の2つの**リンク**（フォームではない。ID とシークレットがそろった提供元だけ）。`?next=` はリンクの query に持ち回す。`?error=`（`denied` / `expired` / `provider`）と `?out=all` は帯を1本 |
+| ログイン開始 | `GET /admin/auth/:provider/start` | 不要 | `provider` は `github` / `google`（ほかは 404、未設定なら 503）。D1 の `oauth_states` に state・PKCE の verifier・nonce・安全化した `next` を1行（10分）、同じ state をクッキー（`Path=/admin/auth`・`SameSite=Lax`）に置き、提供元へ 302。コールバックはリクエストの origin（開発では `.dev.vars` の `OAUTH_REDIRECT_ORIGIN`）＋ `/admin/auth/:provider/callback`。期限切れの行はここで掃除する |
+| ログインの戻り | `GET /admin/auth/:provider/callback` | 不要 | クッキーと query の state の札を**先に消してから**照合。食い違い・クッキー無し・再利用・期限切れ・提供元の違いは `/admin/login?error=expired`、提供元で断ったら `?error=denied`（どちらも `next` を持ち回す）。成功で前のセッションを捨てて Cookie を発行し、`next` の画面（`/admin/` の中だけ）か `/admin` へ 303。紐づいていないアカウントは 403、提供元との通信の失敗は 502、Google の id_token が合わないものは 400 |
 | ログアウト | `POST /admin/logout` | 要 | セッションを消す |
-| 初期設定 | `GET`/`POST /admin/setup` | 不要 | **users が空で、かつ `SETUP_TOKEN` が一致するときだけ**。owner を1件作り、そのままログインして `/admin/members` へ。以降は 404 |
+| アカウント | `GET /admin/account` | 要 | 紐づいたアカウント（提供元・@ログイン名かメールアドレス・最後のログイン〔日本時間〕）と「すべての端末からログアウト」。左ナビの足元の名前から入る。紐づけ・外しはここではしない |
+| すべての端末からログアウト | `POST /admin/account/logout-all` | 要 | その人のセッションを、いまの端末のものも含めて全部消し、`/admin/login?out=all` へ |
 | Members 一覧 | `GET /admin/members` | 要 | 行に 公開/下書き・並び順・編集・削除。公開中の行には「サイトで見る ↗」 |
 | Member フォーム | `GET /admin/members/new`<br>`GET /admin/members/:id/edit` | 要 | 追加と編集で同じテンプレート |
 | Member 保存 | `POST /admin/members`<br>`POST /admin/members/:id` | 要 | 成功で `?saved=1`（下書きなら `?saved=draft`）を付けて一覧へ |
@@ -387,6 +391,13 @@ Team を置いていないサイトでは、差し込む先が無いので、こ
 | 見た目 | `GET /admin/appearance`<br>`POST` 同 URL（保存） | 要 | 骨格・アクセント色・書体を選ぶ。サイト全体に効く |
 
 どの画面も、左ナビの足元の「サイトを見る ↗」から公開ページを別タブで開ける。
+その下の名前（最後にログインしたアカウントの @ログイン名かメールアドレス）は
+アカウントの画面への入口。
+
+以前の初期設定（`/admin/setup`）とパスワードのログイン（`POST /admin/login`）は無い。
+`/admin/setup` は GET も POST も 404、`POST /admin/login` は壁に当たってログイン画面へ
+303 で戻る（セッションはできない）。最初の owner は、`wrangler.toml` の
+`OWNER_GITHUB_ID` / `OWNER_GOOGLE_EMAIL` と一致するアカウントの初めてのログインで紐づく。
 
 一覧・フォーム・確認の3種類だけで、Members・Items・構成をまかなっている。
 一覧にフォームを同居させないのは、「どの行を編集中か」が読めなくなるため。
@@ -447,8 +458,10 @@ Team を置いていないサイトでは、差し込む先が無いので、こ
 | 状態 | 出る場所 | 出し方 |
 | --- | --- | --- |
 | 入力エラー | フォーム | 項目のそばに1行。**打った内容は残す** |
-| ログイン失敗 | ログイン | 「メールアドレスかパスワードが違います」。どちらが違うかは言わない |
-| 試行回数の制限 | ログイン | 5回失敗で 15 分。429 を返す |
+| ログインのやり直し | ログイン | 提供元で断った（「ログインを取りやめました」）・state が合わない / 切れた / 別のタブで始めた・提供元が断った。`?error=` の決まった札だけを読み、文言はサーバーが持つ |
+| 入れないアカウント | ログインの戻り | 403。そのアカウント自身の提供元 ID と、持ち主なら直す設定の名前（`OWNER_GITHUB_ID` など）を出す。Google で未確認のアドレスはそう言う |
+| 提供元の障害 | ログインの戻り | 502。「GitHub との通信に失敗しました」。トークンは画面にもログにも出さない |
+| すべての端末からログアウトした | ログイン | `?out=all` を読んで帯を1本 |
 | 一覧が空 | 管理の一覧 | 空の表を出さず、「＋ 最初の…を追加」だけ置く |
 | 絞り込みで0件 | Projects の画面 | ピルは残し、1行だけ出す。ピルはリンクなので、遷移した先でも外す手が画面に残る |
 | 保存完了 | 一覧・構成・見た目 | `?saved=1` を読んで帯を1回だけ。下書きの保存（`?saved=draft`）は「サイトにはまだ出ていません」まで言う |

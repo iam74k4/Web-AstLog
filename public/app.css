@@ -2463,13 +2463,24 @@ main {
   gap: var(--sp-4);
 }
 
-.admin-nav__email {
+/*
+  いま誰として入っているか（@ログイン名・メールアドレス）。押すとアカウントの画面。
+  字は小さいまま、押せる高さだけを --tap にそろえる。長いアドレスは … で切る
+  ——切るには箱が block である必要があり、flex にすると text-overflow が効かない
+*/
+.admin-nav__account {
+  display: inline-block;
+  max-width: 22ch;
+  line-height: var(--tap);
   color: var(--ink-weak);
   font-size: var(--fs-meta);
-  max-width: 22ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.admin-nav__account[aria-current='page'] {
+  color: var(--accent);
 }
 
 .admin-main {

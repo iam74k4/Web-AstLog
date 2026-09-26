@@ -1,6 +1,7 @@
 import { relations, sql } from 'drizzle-orm'
-import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { BLOCK_KEYS } from '../blocks'
+import { PROVIDER_KEYS } from '../lib/oauth'
 
 /*
   公開サイトは published = 1 の行だけを読む。
@@ -178,16 +179,18 @@ export const settings = sqliteTable('settings', {
 })
 
 /*
-  管理画面のログイン。
+  管理画面に入る人。
   role と memberId を最初から持たせておく。後から「本人が自分のページだけ
   編集できる」を足すときに、列を増やす移行をしなくて済ませるため。
   ただし MVP で作るのは owner の1件だけ。
+
+  パスワードもメールアドレスも持たない。ログインは GitHub / Google の OAuth
+  だけで、「この人は誰か」は user_identities の（提供元, ID）が決める。
+  以前あった email と password_hash は 0006 で外した（行の id はそのまま残る
+  ので、members や sessions からの参照は切れない）。
 */
 export const users = sqliteTable('users', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  email: text('email').notNull().unique(),
-  // pbkdf2$<iterations>$<salt>$<hash>
-  passwordHash: text('password_hash').notNull(),
   role: text('role', { enum: ['owner', 'member'] })
     .notNull()
     .default('owner'),
@@ -195,8 +198,69 @@ export const users = sqliteTable('users', {
   createdAt: text('created_at').notNull().default(now),
 })
 
-// Cookie に入るのは id だけ。ログアウトで即座に無効にしたいので
-// KV の TTL ではなくこちらに置く（KV は反映まで最大60秒かかる）
+/*
+  users に紐づいた、外のアカウント（GitHub / Google）。
+
+  照合は subject だけで行う。GitHub は数値の id（ログイン名は変えられるので
+  使わない）、Google は sub（メールアドレスは変わりうる）。label は画面に
+  出すための写し（@ログイン名・メールアドレス）で、照合には使わない。
+  ログインのたびに書き直す。
+
+  最初の1行は src/routes/admin.tsx の linkOwner が作る——環境変数の
+  OWNER_GITHUB_ID / OWNER_GOOGLE_EMAIL と一致したときだけ。以後は subject で
+  引くので、環境変数を変えても既に紐づいた行は外れない（外すなら行を消す）。
+*/
+export const userIdentities = sqliteTable(
+  'user_identities',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    provider: text('provider', { enum: PROVIDER_KEYS }).notNull(),
+    subject: text('subject').notNull(),
+    label: text('label').notNull().default(''),
+    createdAt: text('created_at').notNull().default(now),
+    lastLoginAt: text('last_login_at').notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex('user_identities_provider_subject').on(t.provider, t.subject),
+    index('idx_user_identities_user').on(t.userId),
+  ],
+)
+
+/*
+  OAuth の往復のあいだだけ持つ、1回きりの札。
+
+  /admin/auth/:provider/start が1行作り、同じ state をクッキーにも置く。
+  callback は両方が一致したときだけ進み、行は成否にかかわらず必ず消す
+  （同じ state を2度通さない）。期限は10分で、切れた行は start のたびに掃除する。
+  code_verifier（PKCE）と nonce（Google の id_token）もここに持つ——クッキーに
+  置くと、ブラウザ側の値だけで往復が完結してしまう。
+*/
+export const oauthStates = sqliteTable(
+  'oauth_states',
+  {
+    state: text('state').primaryKey(),
+    provider: text('provider', { enum: PROVIDER_KEYS }).notNull(),
+    codeVerifier: text('code_verifier').notNull(),
+    nonce: text('nonce').notNull(),
+    // ログイン後の戻り先。safeNext を通したものだけが入る
+    next: text('next'),
+    expiresAt: text('expires_at').notNull(),
+  },
+  (t) => [index('idx_oauth_states_exp').on(t.expiresAt)],
+)
+
+/*
+  ログイン中の端末。ログアウトで即座に無効にしたいので KV の TTL ではなく
+  こちらに置く（KV は反映まで最大60秒かかる）。
+
+  id はクッキーの値そのものではなく、その SHA-256（16進）。クッキーを受けたら
+  毎回ハッシュしてから引く（src/lib/auth.ts の sessionKey）。D1 のエクスポートや
+  バックアップだけが漏れても、そこにある値はクッキーとして使えない。
+  平文で持っていたころの行は 0007 で消した（全員ログインし直し）。
+*/
 export const sessions = sqliteTable(
   'sessions',
   {
@@ -229,4 +293,5 @@ export type Member = typeof members.$inferSelect
 export type Item = typeof items.$inferSelect
 export type Platform = typeof platforms.$inferSelect
 export type User = typeof users.$inferSelect
+export type UserIdentity = typeof userIdentities.$inferSelect
 export type Block = typeof blocks.$inferSelect

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import * as schema from '../src/db/schema'
-import { db, form, get, OWNER, resetDb, seedItem, seedMember, signIn } from './helpers'
+import { db, form, get, resetDb, seedItem, seedMember, signIn } from './helpers'
 
 /*
   導線。ある画面から次の画面へ、行き止まらずに進めるか。
@@ -117,50 +117,31 @@ describe('トップ → 個人ページ', () => {
 /* ------------------------------------------------------------- 管理側 */
 
 describe('ログインの戻り先', () => {
-  it('弾かれた画面へ、ログイン後に戻る', async () => {
+  it('弾かれた画面は、ログイン画面の提供元のリンクへ持ち回される', async () => {
     const bounced = await get('/admin/appearance')
     expect(bounced.headers.get('location')).toBe('/admin/login?next=%2Fadmin%2Fappearance')
 
-    // 戻り先はログイン画面のフォームに持ち回される
+    // ログイン画面はフォームではなく、提供元ごとの GET のリンク。戻り先はその query に乗る
     const page = await (await get('/admin/login?next=%2Fadmin%2Fappearance')).text()
-    expect(page).toContain('name="next" value="/admin/appearance"')
-
-    await signIn()
-    const response = await get('/admin/login', {
-      method: 'POST',
-      body: form({ email: OWNER.email, password: OWNER.password, next: '/admin/appearance' }),
-    })
-    expect(response.headers.get('location')).toBe('/admin/appearance')
+    expect(page).toContain('href="/admin/auth/github/start?next=%2Fadmin%2Fappearance"')
+    expect(page).toContain('href="/admin/auth/google/start?next=%2Fadmin%2Fappearance"')
+    // 往復のあとで実際にそこへ戻ることは test/oauth.test.ts（next の安全化）
   })
 
-  it('管理画面の外へは戻さない', async () => {
-    await signIn()
+  it('管理画面の外やログインの往復そのものは、リンクに持ち回さない', async () => {
     for (const next of [
       'https://evil.example',
       '//evil.example',
       '/admin/../..//evil',
       '/members/okazaki',
       '/admin/logout',
+      '/admin/auth/github/start',
     ]) {
-      const response = await get('/admin/login', {
-        method: 'POST',
-        body: form({ email: OWNER.email, password: OWNER.password, next }),
-      })
-      expect(response.headers.get('location'), next).toBe('/admin/members')
+      const page = await (await get(`/admin/login?next=${encodeURIComponent(next)}`)).text()
+      expect(page, next).toContain('href="/admin/auth/github/start"')
+      expect(page, next).not.toContain('start?next=')
     }
   })
-})
-
-it('初期設定で owner を作ったら、そのまま管理画面に入れる', async () => {
-  const response = await get('/admin/setup', {
-    method: 'POST',
-    body: form({ token: 'test-setup-token', email: OWNER.email, password: OWNER.password }),
-  })
-  expect(response.status).toBe(303)
-  expect(response.headers.get('location')).toBe('/admin/members')
-
-  const cookie = response.headers.get('set-cookie')?.split(';')[0] ?? ''
-  expect((await get('/admin/members', { headers: { cookie } })).status).toBe(200)
 })
 
 describe('構成', () => {

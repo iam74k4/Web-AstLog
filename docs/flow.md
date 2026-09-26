@@ -172,6 +172,7 @@ flowchart LR
 flowchart TD
     Login["ログイン<br>GET /admin/login"]
     Members["Members 一覧<br>GET /admin/members"]
+    Account["アカウント<br>GET /admin/account"]
     Items["Projects（個人開発 / 業務）<br>GET /admin/items?type="]
     MForm["Member フォーム<br>/members/new ・ /:id/edit"]
     IForm["Item フォーム<br>/items/new ・ /:id/edit"]
@@ -183,7 +184,9 @@ flowchart TD
     Look["見た目<br>GET /admin/appearance"]
     Public["公開ページ<br>/ ・ /all"]
 
-    Login -->|"POST /admin/login<br>成功 → 303（?next= があればそこへ）"| Members
+    Login -->|"GitHub / Google でログイン（認証の節）<br>成功 → 303（?next= があればそこへ）"| Members
+    Members <-->|"左ナビの足元の名前"| Account
+    Account -->|"すべての端末からログアウト<br>POST /admin/account/logout-all → 303 ?out=all"| Login
     Members <-->|"左ナビ"| Items
     Items <-->|"左ナビ"| Blocks
     Blocks <-->|"左ナビ"| Look
@@ -255,51 +258,82 @@ flowchart TD
 
 ## 認証
 
+ログインは GitHub / Google の OAuth だけ（パスワードは無い）。ログイン画面の2つは
+フォームではなく GET のリンクで、往復は `/admin/auth/:provider/start` と `callback`。
+
 ```mermaid
 flowchart TD
     Any["/admin/* を開く"]
-    Check{"Cookie の<br>セッションは有効か"}
-    Login["ログイン画面"]
-    Rate{"直近15分の失敗が<br>5回以上か"}
-    Verify{"メールと<br>パスワードが一致するか"}
-    Admin["管理画面"]
+    Check{"Cookie の<br>セッションは有効か<br>（D1 にはハッシュで引く）"}
+    Login["ログイン画面<br>GET /admin/login"]
+    Start["GET /admin/auth/:provider/start<br>D1 に state・verifier・nonce（10分）<br>同じ state をクッキーに"]
+    Provider["GitHub / Google<br>（本人が許可する）"]
+    Callback["GET /admin/auth/:provider/callback<br>state の札を先に消す"]
+    State{"クッキーと query の state が一致し<br>期限内で、提供元も同じか"}
+    Exchange{"code をトークンに換え<br>本人の ID を引けたか"}
+    Who{"user_identities に<br>（提供元, ID）があるか"}
+    Owner{"OWNER_GITHUB_ID と同じ id か<br>確認済みの OWNER_GOOGLE_EMAIL か"}
+    Link["owner に紐づける<br>（owner の行が無ければ作る）"]
+    Admin["管理画面<br>（前のセッションを捨てて発行し直す）"]
+    Refuse["403<br>このアカウントでは入れません"]
+    Broken["502<br>提供元との通信に失敗"]
 
     Any --> Check
     Check -->|"はい"| Admin
     Check -->|"いいえ → 303 ?next=開いた画面"| Login
-    Login -->|"POST"| Rate
-    Rate -->|"はい → 429"| Login
-    Rate -->|"いいえ"| Verify
-    Verify -->|"はい → Cookie 発行"| Admin
-    Verify -->|"いいえ → 401"| Login
+    Login -->|"GitHub でログイン / Google でログイン"| Start
+    Start -->|"302（PKCE・state。Google は nonce も）"| Provider
+    Provider -->|"断った → ?error=denied"| Login
+    Provider -->|"?code&state"| Callback
+    Callback --> State
+    State -->|"いいえ → ?error=expired"| Login
+    State -->|"はい"| Exchange
+    Exchange -->|"いいえ"| Broken
+    Exchange -->|"はい"| Who
+    Who -->|"はい"| Admin
+    Who -->|"いいえ"| Owner
+    Owner -->|"はい"| Link
+    Link --> Admin
+    Owner -->|"いいえ"| Refuse
     Admin -->|"POST /admin/logout<br>セッションを消す"| Login
 ```
 
-- ユーザーが居ないときも、必ず1回ハッシュを計算してから失敗を返す。応答の速さで
-  アカウントの有無が分からないようにするため
-- 失敗の回数は KV に 15 分の期限付きで置く。厳密な回数制限ではなく、総当たりを
-  鈍らせるためのもの
-- `POST` は Origin も確認する。ログイン・ログアウト・初期設定も対象
+- 本人は提供元の ID で照合する（GitHub は数値の id、Google は sub）。ログイン名や
+  メールアドレスを見るのは、最初の紐づけのときだけ
+- state は D1 で1回きり。成功しても弾いても、差し出された札（クッキーの側と
+  query の側）はその場で消える。同じ URL をもう一度開いてもやり直しになる
+- Google の id_token は iss・aud・exp・nonce を確かめ、合わなければ 400。署名は、
+  トークンエンドポイントから TLS で直接受け取ったものなので確かめない（OIDC Core 3.1.3.7）
+- アクセストークンは本人の ID を引いたら捨てる。保存しない・ログに出さない
+- `POST` は送り元も確認する（Origin → Sec-Fetch-Site → Referer。`Origin: null` は 403）。
+  ログアウトも対象
 - ログインし直したら `?next=` の画面へ戻す。受け付けるのは `/admin/` の中だけで、
-  外の URL・`//`・`..`・ログインやログアウト自身は捨てて `/admin/members` へ送る
+  外の URL・`//`・`..`・ログインの往復やログアウト自身は捨てて `/admin` へ送る
 
-## 初回だけ通る道
+## 最初の紐づけ
 
-owner がまだ1人も居ないときだけ、この入口が開く。
+最初の owner を作る入口（`/admin/setup`）は無い。`wrangler.toml` の `[vars]` と
+一致するアカウントで初めてログインしたとき、そのアカウントが owner に紐づく。
 
 ```mermaid
 flowchart LR
-    Setup["初期設定<br>/admin/setup"]
-    Gate{"users が空、かつ<br>SETUP_TOKEN が一致"}
-    Create["owner を1件作る"]
-    Admin["管理画面<br>/admin/members"]
-    Gone["404"]
+    First["初めてのログイン<br>（user_identities に行が無い）"]
+    Gate{"GitHub: id = OWNER_GITHUB_ID<br>Google: 確認済みで<br>アドレス = OWNER_GOOGLE_EMAIL"}
+    Existing{"owner の行があるか"}
+    Keep["その行に紐づける<br>（id もメンバーも変えない）"]
+    Create["owner を1件作って紐づける"]
+    Admin["管理画面<br>/admin"]
+    Refuse["403"]
 
-    Setup --> Gate
-    Gate -->|"はい"| Create
-    Create -->|"303（そのままログイン）"| Admin
-    Gate -->|"いいえ（2回目以降）"| Gone
+    First --> Gate
+    Gate -->|"はい"| Existing
+    Existing -->|"はい（パスワードの頃から居る）"| Keep
+    Existing -->|"いいえ"| Create
+    Keep --> Admin
+    Create --> Admin
+    Gate -->|"いいえ"| Refuse
 ```
 
-`SETUP_TOKEN` は `wrangler secret put SETUP_TOKEN` で入れる。パスワードを
-リポジトリに置かずに最初の1人を作るための仕掛けで、作った後は通らなくなる。
+GitHub と Google の両方を、同じ owner に紐づけられる（片方で入ったあと、もう片方でも
+一度ログインする）。紐づいたあとは `[vars]` を書き換えても外れない。外すのは
+`user_identities` の行を消すこと（README の「管理画面に入る」）。
