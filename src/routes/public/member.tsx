@@ -17,7 +17,7 @@ import { Band, filterQuery, SiteIdentity } from '../../ui/components'
 import { bandOf, NO_FILTER, soloMember } from './data'
 import { memberHref, memberScreens, memberStep, TEAM_TOC } from './member-screens'
 import { personJsonLd, siteJsonLd } from './meta'
-import { firstOnly, screenPage } from './page'
+import { firstOnly, movedTo, screenPage } from './page'
 import { siteScreens, siteSteps } from './site'
 
 /*
@@ -75,9 +75,7 @@ export async function renderMemberScreen(
   if (!member) {
     const moved = await findMovedMember(db, slug)
     const to = moved ? memberHref(moved, want?.key ?? '', want?.page ?? 1) : null
-    return to && isSafeRedirect(to)
-      ? c.redirect(`${to}${new URL(c.req.url).search}`, 301)
-      : c.notFound()
+    return to && isSafeRedirect(to) ? movedTo(c, `${to}${new URL(c.req.url).search}`) : c.notFound()
   }
 
   const solo = soloMember(members)
@@ -95,7 +93,7 @@ export async function renderMemberScreen(
   */
   if (want?.key === 'contact' && want.page === 1) {
     const contact = siteList.find((step) => step.navKey === 'contact')
-    return contact ? c.redirect(contact.canonical, 301) : c.notFound()
+    return contact ? movedTo(c, contact.canonical) : c.notFound()
   }
 
   /*

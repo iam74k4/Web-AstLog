@@ -34,7 +34,7 @@ import {
   siteJsonLd,
   siteTitle,
 } from './meta'
-import { adminHref, blockAdminPath, firstOnly, screenPage } from './page'
+import { adminHref, blockAdminPath, firstOnly, movedTo, screenPage } from './page'
 import { screenHref, screenRows, siteScreens, siteSteps, stepQuery } from './site'
 
 /*
@@ -152,13 +152,13 @@ export async function renderScreen(
     その人のプロフィールが並ぶ（profileOf）。貼られた /team と /team/<n> は
     死なせずにその人の1枚目へ寄せる。
 
-    2人目を公開した日に /team はまた 200 に戻る。301 はブラウザに覚えられる
-    ので、その日までに一度でも寄せられた人は、しばらくプロフィールへ運ばれ
-    続ける（行き先は生きているので行き止まりにはならない）。
+    2人目を公開した日に /team はまた 200 に戻る。行き先がデータで変わる転送なので、
+    ブラウザには覚えさせない（movedTo）——覚えさせていたころは、2人目を公開した
+    あとも、一度寄せられた人だけが Team へ着けずにプロフィールへ運ばれ続けた。
   */
   const profile = profileOf(blocks, members)
   if (want?.slug === 'team' && profile) {
-    return c.redirect(memberHref(profile.slug, ''), 301)
+    return movedTo(c, memberHref(profile.slug, ''))
   }
 
   const { filter, memberId } = readFilter(c, kindsOf(byKind), members)

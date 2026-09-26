@@ -80,34 +80,60 @@ export async function destroyUserSessions(db: Db, userId: number) {
 
 export type OwnerEnv = { OWNER_GITHUB_ID?: string; OWNER_GOOGLE_EMAIL?: string }
 
+// 比べるアドレスの形。ASCII だけを小文字にする（下の ownerValue の注記）
+const ASCII_EMAIL = /^[\x21-\x7e]+$/
+
 /*
-  まだ誰にも紐づいていないアカウントを、owner に紐づけてよいか。
+  まだ誰にも紐づいていないアカウントが、環境変数のどの値に当たるか。当たらなければ null。
+  返すのは比べた形の値で、owner_claims の value になる（その値を使ったかの記録）。
 
   GitHub は数値の id が OWNER_GITHUB_ID と同じとき。Google はメールアドレスが
   OWNER_GOOGLE_EMAIL と同じ（大小は無視）で、かつ Google がそのアドレスを
   確かめている（email_verified）とき。確かめていないアドレスは、誰でも
   自分のアカウントに名乗らせられる。
 
-  使うのは最初の1回だけ。紐づいたあとは subject で引く（userForIdentity）。
+  大小を無視するのは ASCII のアドレスだけ。ASCII でない字を含むアドレスは当てない
+  ——toLowerCase は「K」（ケルビン記号 U+212A）を「k」にするので、独自ドメインの
+  アドレスに変えた日に、見た目の違うアドレスが同じ値として通りうる。
+
+  使うのは値ごとに1度だけ（userForIdentity と src/db/schema.ts の owner_claims）。
 */
-export function isOwnerIdentity(env: OwnerEnv, identity: Identity): boolean {
+export function ownerValue(env: OwnerEnv, identity: Identity): string | null {
   if (identity.provider === 'github') {
     const want = env.OWNER_GITHUB_ID?.trim()
-    return Boolean(want) && identity.subject === want
+    return want && identity.subject === want ? want : null
   }
   const want = env.OWNER_GOOGLE_EMAIL?.trim().toLowerCase()
-  return Boolean(want) && identity.emailVerified === true && identity.email?.toLowerCase() === want
+  const email = identity.email ?? ''
+  if (!want || identity.emailVerified !== true || !ASCII_EMAIL.test(email)) return null
+  return email.toLowerCase() === want ? want : null
 }
+
+export const isOwnerIdentity = (env: OwnerEnv, identity: Identity) =>
+  ownerValue(env, identity) !== null
 
 /*
   提供元のアカウントから、管理画面の user を引く。通さないなら null。
 
   1. user_identities に（提供元, subject）の行があれば、その user。label と
      最終ログインを書き直す
-  2. 無ければ、isOwnerIdentity に当たったときだけ owner に紐づける。owner の行は
-     既にあればそれ（パスワードの頃から居る owner も id を変えずに引き継ぐ）、
-     無ければ作る
+  2. 無ければ、環境変数の値に当たり（ownerValue）、しかもその値をまだ使って
+     いない（owner_claims に行が無い）ときだけ owner に紐づける。
+     環境変数は「最初の紐づけ」のためのもので、ずっと効く鍵ではない。
+     値を使った記録が残るので、README のとおり紐づけを外す（user_identities の
+     行を消す）と、同じアカウントでもう一度入っても紐づき直らない。同じ確認済みの
+     アドレスを持つ別の Google アカウント（別の sub）も入れない
   3. どれにも当たらなければ null（呼ぶ側が 403 にする）
+
+  2 は1つの batch（D1 ではトランザクション）で書く。
+  - owner の行は ON CONFLICT DO NOTHING で作る。owner は1人の決まりを部分一意索引
+    （users_one_owner）が持つので、既に居れば（パスワードの頃から居る owner も）何も
+    せず、その行に紐づく。「読んでから作る」だったころは、初回のログインが2本同時に
+    来ると owner が2人できた
+  - 記録（owner_claims）を ON CONFLICT DO NOTHING で書き、紐づけ（user_identities）は
+    「記録の ticket がこの往復の乱数であるとき」だけ書く。記録を取れなかった往復は
+    何も紐づけない。記録と紐づけが同じトランザクションなので、同じアカウントで2本
+    同時に来ても、負けた側が読み直すときには勝った側の紐づけがもう見える
 */
 export async function userForIdentity(
   db: Db,
@@ -137,28 +163,48 @@ export async function userForIdentity(
     return found
   }
 
-  if (!isOwnerIdentity(env, identity)) return null
+  const value = ownerValue(env, identity)
+  if (value === null) return null
 
-  const owner =
-    (await db.query.users.findFirst({
-      where: eq(schema.users.role, 'owner'),
-      orderBy: [asc(schema.users.id)],
-    })) ?? (await db.insert(schema.users).values({ role: 'owner' }).returning())[0]
-  if (!owner) return null
-
-  /*
-    同じアカウントで2本同時に来ても、unique に当たった側は黙って下がり、
-    先に入った行の user を読み直して返す（自分が作った owner を返さない）
-  */
-  await db
-    .insert(schema.userIdentities)
-    .values({
-      userId: owner.id,
-      provider: identity.provider,
-      subject: identity.subject,
-      label: identity.label,
-    })
-    .onConflictDoNothing()
+  const ticket = newToken(16)
+  const owner = db
+    .select({ id: schema.users.id })
+    .from(schema.users)
+    .where(eq(schema.users.role, 'owner'))
+    .orderBy(asc(schema.users.id))
+    .limit(1)
+  await db.batch([
+    db.insert(schema.users).values({ role: 'owner' }).onConflictDoNothing(),
+    db
+      .insert(schema.ownerClaims)
+      .values({ provider: identity.provider, value, subject: identity.subject, ticket })
+      .onConflictDoNothing(),
+    // 記録がこの往復の ticket のときだけ、1行が返って紐づく（取れなかった往復は0行）
+    db
+      .insert(schema.userIdentities)
+      .select(
+        db
+          // 列は表の定義の順に全部（drizzle の insert … select の決まり）。id は自動
+          .select({
+            id: sql<number>`null`.as('id'),
+            userId: sql<number>`(${owner})`.as('user_id'),
+            provider: schema.ownerClaims.provider,
+            subject: schema.ownerClaims.subject,
+            label: sql<string>`${identity.label}`.as('label'),
+            createdAt: sql<string>`datetime('now')`.as('created_at'),
+            lastLoginAt: sql<string>`datetime('now')`.as('last_login_at'),
+          })
+          .from(schema.ownerClaims)
+          .where(
+            and(
+              eq(schema.ownerClaims.provider, identity.provider),
+              eq(schema.ownerClaims.value, value),
+              eq(schema.ownerClaims.ticket, ticket),
+            ),
+          ),
+      )
+      .onConflictDoNothing(),
+  ])
   return linked()
 }
 

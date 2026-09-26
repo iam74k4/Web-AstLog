@@ -99,6 +99,20 @@ describe('最初の紐づけ（isOwnerIdentity）', () => {
     expect(google('someone@example.test', true)).toBe(false)
   })
 
+  it('大小を無視するのは ASCII のアドレスだけ（ケルビン記号 K は小文字にすると k になる）', () => {
+    const kim = { OWNER_GOOGLE_EMAIL: 'kim@example.test' }
+    const google = (email: string) =>
+      isOwnerIdentity(kim, {
+        provider: 'google',
+        subject: 's',
+        label: email,
+        email,
+        emailVerified: true,
+      })
+    expect(google('Kim@example.test')).toBe(true)
+    expect(google('\u212Aim@example.test')).toBe(false)
+  })
+
   it('設定が空なら誰も通さない（空の ID と空のアドレスを一致とみなさない）', () => {
     expect(isOwnerIdentity({}, { provider: 'github', subject: '', label: '' })).toBe(false)
     expect(

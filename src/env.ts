@@ -11,7 +11,8 @@ export type Env = {
   /*
     最初に owner へ紐づけてよいアカウント（wrangler.toml の [vars]。公開してよい値）。
     GitHub は数値のユーザー id、Google は確かめ済みのメールアドレス。
-    使うのは最初の1回だけで、紐づいたあとは user_identities の ID で照合する
+    効くのは値ごとに1度だけ（使った記録は D1 の owner_claims）で、紐づいたあとは
+    user_identities の ID で照合する
   */
   OWNER_GITHUB_ID?: string
   OWNER_GOOGLE_EMAIL?: string
@@ -29,6 +30,13 @@ export type Env = {
     noctifex.dev に書き換えるので、リクエストからは組めない（src/lib/oauth.ts の callbackUrl）
   */
   OAUTH_REDIRECT_ORIGIN?: string
+  /*
+    ログインの入口（/admin/auth/:provider/start）の回数の上限。IP ごとに数える
+    Workers の Rate Limiting（wrangler.toml の [[ratelimits]]）。入口は開くたびに
+    D1 へ1行書くので、上限が無いと書き込みの枠を未認証の GET で使い切られる
+    （src/routes/admin/auth.tsx の tooManyStarts）。無い環境では数えない
+  */
+  LOGIN_RATE_LIMIT?: RateLimit
   /*
     いま動いている Worker の版（wrangler.toml の [version_metadata]）。公開ページの
     写しの鍵に入れて、デプロイした日に前のコードの写しを出さない

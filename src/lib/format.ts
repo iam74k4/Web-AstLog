@@ -209,10 +209,15 @@ export const halfWidthDigits = (text: string) =>
   **並びそのものは DB が同じ規則で作る**（src/db/schema.ts の items.year_from。
   生成列）。ここは管理画面が「並びに使われない年」を知らせるための写しで、
   規則を変えるなら2つ一緒に（test/admin.test.ts が2つの答えを突き合わせている）。
-  全角の数字は保存のときに半角へ直るので、ここでも直してから読む。
+
+  **全角の数字は読まない**（DB の glob と同じ ASCII の数字だけ）。全角は保存のときに
+  半角へ直る（readItemForm）ので、アプリを通った行には残らない。ここで全角も読んで
+  いたころは、それより前に「２０２３」のまま入っていた行を DB は年の無い作品として
+  最後に並べるのに、管理画面は「並びに使われません」を出さなかった（その行は
+  0013_halfwidth_year が直した）。知らせは DB と同じ答えでなければ意味が無い。
 */
 export function yearFrom(year: string): number | null {
-  const head = halfWidthDigits(year).match(/^[0-9]{4}/)
+  const head = year.match(/^[0-9]{4}/)
   return head ? Number(head[0]) : null
 }
 

@@ -59,8 +59,9 @@ if (filled.length > 0) {
       `本番の D1 には既に中身があります（${filled.map((table) => `${table} ${row[table]} 行`).join('・')}）。`,
       'seed.sql はこれを全部消してから入れ直すので、流さずに止めました。',
       '中身を変えたいなら管理画面から。どうしても入れ直すなら、先に',
-      '  npx wrangler d1 export noctifex --remote --output=backup.sql',
-      'で写しを取り、テーブルを手で空にしてから、もう一度このコマンドを流してください。',
+      '  npx wrangler d1 export noctifex --remote --no-data --output=schema.sql',
+      '  npx wrangler d1 export noctifex --remote --no-schema --output=data.sql',
+      'で写しを取り（戻せる形は定義と中身の2本。README の「戻す」）、テーブルを手で空にしてから、もう一度このコマンドを流してください。',
     ].join('\n'),
   )
   process.exit(1)

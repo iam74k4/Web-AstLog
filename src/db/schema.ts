@@ -58,8 +58,8 @@ export const members = sqliteTable(
   押せなくする手が無い。遅い回線で2度押すと、同じ中身の行が2つできていた
   （日本語だけの題の作品は slug が毎回乱数で作られるので、slug の unique も効かない。
   メモには自然なキーそのものが無い）。フォームを描くときに札を1枚作って hidden で
-  持ち回し、行と一緒に書く。同じ中身の2度目の送信は同じ札で見つかり、書かずに
-  「保存しました」へ送る（1度目がもう保存している）。
+  持ち回し、行と一緒に書く。2度目の送信は同じ札で見つかり、新しい行を作らずに
+  その行への保存として扱う（src/routes/admin/request.ts の newFormKey の注記）。
 
   null は「札を持たずに作った行」——この列より前の行と、seed と、編集で書いた行。
   SQLite は unique の中の NULL を互いに別物として扱うので、何行あっても通る。
@@ -121,7 +121,8 @@ export const items = sqliteTable(
       誰にも気づかれない。生成列なら、既にある行の移行（埋め直し）も要らない。
       規則を変えるときは src/lib/format.ts の yearFrom（管理画面の「並びに
       使われません」の知らせ）も一緒に。全角の数字は、年の欄を保存するときに
-      半角へ直してある（src/routes/admin/items.tsx の readItemForm）。
+      半角へ直してある（src/routes/admin/items.tsx の readItemForm）。それより前に
+      全角のまま入っていた行は 0013_halfwidth_year が直した。
     */
     yearFrom: integer('year_from').generatedAlwaysAs(
       sql`case when "year" glob '[0-9][0-9][0-9][0-9]*' then cast(substr("year", 1, 4) as integer) end`,
@@ -348,15 +349,26 @@ export const settings = sqliteTable('settings', {
   だけで、「この人は誰か」は user_identities の（提供元, ID）が決める。
   以前あった email と password_hash は 0006 で外した（行の id はそのまま残る
   ので、members や sessions からの参照は切れない）。
+
+  **owner は1人だけ。** それを DB でも持つのが users_one_owner（role = 'owner' の
+  行だけに効く部分一意索引。blocks_fixed_once と同じ手）。owner を作るのは
+  src/lib/auth.ts の userForIdentity の ON CONFLICT DO NOTHING の1文で、作ったか
+  どうかに関わらず読み直す。「読んでから作る」だけだったころは、owner の居ない
+  D1 に初回のログインが2本同時に来ると owner が2人でき、「すべての端末から
+  ログアウト」が片方のセッションしか消さなかった（既にできた2人は 0014 が寄せる）。
 */
-export const users = sqliteTable('users', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  role: text('role', { enum: ['owner', 'member'] })
-    .notNull()
-    .default('owner'),
-  memberId: integer('member_id').references(() => members.id, { onDelete: 'set null' }),
-  createdAt: text('created_at').notNull().default(now),
-})
+export const users = sqliteTable(
+  'users',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    role: text('role', { enum: ['owner', 'member'] })
+      .notNull()
+      .default('owner'),
+    memberId: integer('member_id').references(() => members.id, { onDelete: 'set null' }),
+    createdAt: text('created_at').notNull().default(now),
+  },
+  (t) => [uniqueIndex('users_one_owner').on(t.role).where(sql`${t.role} = 'owner'`)],
+)
 
 /*
   users に紐づいた、外のアカウント（GitHub / Google）。
@@ -367,8 +379,9 @@ export const users = sqliteTable('users', {
   ログインのたびに書き直す。
 
   最初の1行は src/lib/auth.ts の userForIdentity が作る——環境変数の
-  OWNER_GITHUB_ID / OWNER_GOOGLE_EMAIL と一致したときだけ。以後は subject で
-  引くので、環境変数を変えても既に紐づいた行は外れない（外すなら行を消す）。
+  OWNER_GITHUB_ID / OWNER_GOOGLE_EMAIL と一致し、その値がまだ使われていない
+  （owner_claims に行が無い）ときだけ。以後は subject で引くので、環境変数を
+  変えても既に紐づいた行は外れない（外すなら行を消す。消せば紐づき直らない）。
 */
 export const userIdentities = sqliteTable(
   'user_identities',
@@ -387,6 +400,36 @@ export const userIdentities = sqliteTable(
     uniqueIndex('user_identities_provider_subject').on(t.provider, t.subject),
     index('idx_user_identities_user').on(t.userId),
   ],
+)
+
+/*
+  環境変数（OWNER_GITHUB_ID / OWNER_GOOGLE_EMAIL）で owner に紐づけた記録。
+  （提供元, 値）の組ごとに1行で、1つの組が owner を作れるのは1度きり。
+
+  環境変数は「最初の紐づけ」のためのもの。これが無かったころは [vars] が残って
+  いるかぎり何度でも効いた——README のとおり user_identities の行を消して紐づけを
+  外しても、同じアカウントの次のログインで owner に紐づき直り、同じ確認済みの
+  アドレスを持つ別の Google アカウント（別の sub）も並んで入れた。いまは、使った組が
+  ここに残るので、どちらも 403 になる。
+
+  value は比べた形の値（GitHub は id、Google は小文字にしたアドレス）。subject は
+  その組で紐づいたアカウント（調べもの用）。ticket は紐づけた往復だけが知る乱数で、
+  userForIdentity が「この組を取ったのが自分か」を同じ batch の中で確かめるために
+  使う（取った往復だけが user_identities を書く）。
+
+  外したアカウントをまた使うときは、ここの行も消す（README「紐づけを外す」）。
+  環境変数を別の値に書き換えれば、新しい組として1度だけ効く。
+*/
+export const ownerClaims = sqliteTable(
+  'owner_claims',
+  {
+    provider: text('provider', { enum: PROVIDER_KEYS }).notNull(),
+    value: text('value').notNull(),
+    subject: text('subject').notNull(),
+    ticket: text('ticket').notNull(),
+    createdAt: text('created_at').notNull().default(now),
+  },
+  (t) => [primaryKey({ columns: [t.provider, t.value] })],
 )
 
 /*

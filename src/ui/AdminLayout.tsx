@@ -81,7 +81,7 @@ export const AdminLayout = (props: {
             </a>
             <form method="post" action="/admin/logout">
               <button type="submit" class="btn btn--link">
-                Sign out
+                ログアウト
               </button>
             </form>
           </div>

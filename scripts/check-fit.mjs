@@ -27,6 +27,22 @@
                     節の overflow-y が auto、柱が骨格どおりの場所（柱が左に立つ骨格は
                     本文の左、ほかは本文の上）に居ること
     (5) 見出しの錨   同じ骨格・書体・寸法・姿の中で、節の見出しの上端の y
+    (6) 押す手       ページャの手（.pager__go）の高さ ≤ --tap（名前が折れて
+                    縦長のカプセルにならない）
+    (7) 中央の軸     中央寄せの骨格で、Hero の直接の子の中心 x が Hero の中心と
+                    そろう（行いっぱいに伸びた子は、中身の広がりの中心で見る）
+
+  ほかに、読み込み直して測るものが2つある（measureRun の後半）。
+
+    (8) 目次の印     目次が帯になる姿（899 以下の全骨格と、上の帯になる骨格の
+                    900 以上）で、いまの画面の行き先（aria-current）が帯の見えて
+                    いる幅の中にある。帯の最初の位置は読み込んだ時点で決まる
+                    （app.css の scroll-initial-target）ので、属性の差し替えでは
+                    測れない——骨格はサーバーの返す HTML の data-layout を
+                    書き換えて開き直す。書体はサイトの既定のまま
+    (9) 全体ページ   /all がどの骨格・書体・寸法でも横に動かない
+                    （scrollWidth ≤ clientWidth。縦に伸びてよいのは /all だけで、
+                    横はどのページも動かない）
 
   (4) は test/theme.test.ts が CSS を文字列で読んで見ている決まりの、実際に効いた
   姿。文字列の検査は「その規則が書いてあるか」しか見られず、後ろで別のセレクタに
@@ -50,7 +66,7 @@
 
   ## 何の中身で測るか
 
-  3つの中身を、それぞれ使い捨ての D1 に入れて測る（手元の D1 には触らない）。
+  4つの中身を、それぞれ使い捨ての D1 に入れて測る（手元の D1 には触らない）。
 
     seed               seed.sql。本人のサイトそのもの（1人・打ち込むブロック無し）
     fixture（複数人）  scripts/lib/fit-fixture.mjs が src/blocks.ts の上限から作る、
@@ -59,6 +75,9 @@
                        いちばん重いカードの行・本文の画面）
     fixture（1人）     同じ中身で公開中のメンバーを1人にしたもの。Team の位置に
                        プロフィールが入り、柱が名前と長い職種で名乗る姿
+    seed＋ブロック3本  seed.sql に、打ち込むブロックを既定の見出しのまま3本
+                       （fit-fixture.mjs の seedBlocks）。本人がブロックを数本
+                       足しただけで目次の帯が溢れる姿（(8) の相手）
 
   seed だけを測っていたころは、打ち込むブロックも 3人以上の Team も本文の画面も
   一度も測られておらず、src/blocks.ts の maxChars は手で測った数のまま守られて
@@ -76,7 +95,7 @@
 
   ## 手元の dev を測る・絞る
 
-  FIT_ONLY=seed,many,solo で測る中身を絞れる（CI は絞らない）。
+  FIT_ONLY=seed,blocks,many,solo で測る中身を絞れる（CI は絞らない）。
 
   FIT_BASE を渡すと、そこに立っている dev サーバをそのまま測る（中身はその D1 の
   まま・訪問者の姿だけ。セッションを作れないので）。FIT_PORT は自分で立てるときの
@@ -88,7 +107,7 @@ import { readFile } from 'node:fs/promises'
 import process from 'node:process'
 import { chromium } from 'playwright'
 import { devServer, ROOT, scratchState } from './lib/dev-server.mjs'
-import { fixture } from './lib/fit-fixture.mjs'
+import { fixture, seedBlocks } from './lib/fit-fixture.mjs'
 import { keysOf } from './lib/theme.mjs'
 import { DESIGN_SIZES } from './lib/viewports.mjs'
 
@@ -146,6 +165,7 @@ function session() {
   **少なすぎたら止める。** ここが無いと、この検査は黙って空振りする——D1 が空なら
   画面がほとんど生えず、それでも1本ずつは 200 で返るので「✓」で終わる。
   seed は 17 本（1人のサイトでは /team がプロフィールへの 301 で sitemap から外れる）、
+  seed＋ブロック3本は 20 本、
   fixture は作った中身から必ず生える URL（fit-fixture.mjs の expect）を1本ずつ
   突き合わせる。本当に画面を減らしたなら、この数も一緒に下げること——その変更が
   diff に出ることに意味がある。
@@ -286,6 +306,52 @@ const measure = ([layout, typeface, cfg]) => {
     )
   }
 
+  /*
+    (6) ページャの手。名前（行き先の節の見出し）は1行で省く（app.css の
+    .pager__name）。折れると、上限の 10 字で 390 の指の手が 76px（3行）になった
+  */
+  const tap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tap'))
+  for (const hand of document.querySelectorAll('.pager__go')) {
+    const tall = hand.getBoundingClientRect().height
+    if (tall > tap + slack) {
+      problems.push(
+        `ページャの手「${hand.textContent.trim()}」の高さが ${round(tall)}px（--tap は ${tap}px）`,
+      )
+    }
+  }
+
+  /*
+    (7) 中央寄せの Hero の子の中心。自分の幅の子（帯・名札）は箱の中心、行いっぱいに
+    伸びた子（見出し・GitHub / メールの .socials）は中身の広がり（Range）の中心で見る
+    ——伸びた箱の中心はいつも真ん中なので、中身が左に寄っていても見逃す
+  */
+  const hero = layout === 'center' ? document.querySelector('main > .hero') : null
+  if (hero) {
+    const heroStyle = getComputedStyle(hero)
+    const heroBox = hero.getBoundingClientRect()
+    const inner =
+      hero.clientWidth - parseFloat(heroStyle.paddingLeft) - parseFloat(heroStyle.paddingRight)
+    const axis = heroBox.left + hero.clientLeft + parseFloat(heroStyle.paddingLeft) + inner / 2
+    for (const kid of hero.children) {
+      const kidStyle = getComputedStyle(kid)
+      if (kidStyle.position === 'absolute' || kidStyle.display === 'none') continue
+      const box = kid.getBoundingClientRect()
+      if (box.width <= 1 || box.height <= 1) continue
+      let rect = box
+      if (box.width >= inner - slack) {
+        const range = document.createRange()
+        range.selectNodeContents(kid)
+        rect = range.getBoundingClientRect()
+      }
+      const centre = (rect.left + rect.right) / 2
+      if (Math.abs(centre - axis) > slack) {
+        problems.push(
+          `中央寄せの Hero の子 ${nameOf(kid)} の中心が ${round(centre - axis)}px ずれている`,
+        )
+      }
+    }
+  }
+
   // 以前の測り方も残す。標準モードでは scrollingElement が html で、動けば出る
   const scroller = document.scrollingElement ?? document.documentElement
   const page = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
@@ -315,6 +381,116 @@ const measure = ([layout, typeface, cfg]) => {
     anchor,
     page,
   }
+}
+
+/*
+  (8) 目次の印。帯の姿（柱が本文の左に立たない骨格・幅）でだけ測る。
+
+  骨格は属性の差し替えではなく、サーバーの返す HTML の data-layout を書き換えて
+  開き直す。帯の最初のスクロール位置（scroll-initial-target）は読み込んだときに
+  決まるので、開いたあとで骨格を変えても「その骨格で開いた姿」にはならない。
+*/
+const tocMark = ([slack]) => {
+  const toc = document.querySelector('.toc')
+  const mark = toc?.querySelector("a[aria-current='page']")
+  if (!toc || !mark) return null
+  const box = toc.getBoundingClientRect()
+  const left = box.left + toc.clientLeft
+  const right = left + toc.clientWidth
+  const at = mark.getBoundingClientRect()
+  return {
+    inside: at.left >= left - slack && at.right <= right + slack,
+    name: mark.textContent.trim(),
+    overflow: toc.scrollWidth - toc.clientWidth,
+    scrolled: toc.scrollLeft,
+  }
+}
+
+async function tocPass(browser, base, paths, layouts) {
+  const failures = []
+  let checked = 0
+  let scrolled = 0
+  for (const viewport of VIEWPORTS) {
+    for (const layout of layouts) {
+      if (BESIDE[layout] !== undefined && viewport.width >= BESIDE[layout]) continue
+      const context = await browser.newContext({
+        viewport: { width: viewport.width, height: viewport.height },
+        hasTouch: viewport.touch,
+      })
+      const page = await context.newPage()
+      await page.route('**/*', async (route) => {
+        if (route.request().resourceType() !== 'document') return route.continue()
+        const response = await route.fetch()
+        const html = await response.text()
+        const opening = /<body data-layout="[a-z]+"/
+        if (!opening.test(html)) {
+          failures.push(`${route.request().url()} — body の data-layout を書き換えられない`)
+        }
+        const body = html.replace(opening, `<body data-layout="${layout}"`)
+        await route.fulfill({ response, body })
+      })
+      const where = `${layout} ${viewport.width}x${viewport.height}${viewport.touch ? ' 指' : ''}`
+      for (const path of paths) {
+        await page.goto(base + path, { waitUntil: 'load' })
+        await page.evaluate(() => document.fonts.ready.then(() => true))
+        const found = await page.evaluate(tocMark, [SLACK])
+        if (!found) continue
+        checked += 1
+        if (found.scrolled > 0) scrolled += 1
+        if (!found.inside) {
+          failures.push(
+            `${where} ${path} — 目次の印「${found.name}」が帯の見えている幅の外にある（帯は ${found.overflow}px 溢れ、${found.scrolled}px 送って開いた）`,
+          )
+        }
+      }
+      await context.close()
+    }
+  }
+  return { failures, checked, scrolled }
+}
+
+/*
+  (9) 全体ページが横に動かない。/all は縦に伸びてよい唯一のページで、上の
+  測り方（画面に収まるか）には入れていない。横はどのページも動かない。
+*/
+async function wholePass(browser, base, layouts, typefaces) {
+  const failures = []
+  let checked = 0
+  for (const viewport of VIEWPORTS) {
+    const context = await browser.newContext({
+      viewport: { width: viewport.width, height: viewport.height },
+      hasTouch: viewport.touch,
+    })
+    const page = await context.newPage()
+    const response = await page.goto(`${base}/all`, { waitUntil: 'load' })
+    if (response?.status() !== 200) {
+      failures.push(`/all が ${response?.status()} を返した`)
+      await context.close()
+      continue
+    }
+    await page.evaluate(() => document.fonts.ready.then(() => true))
+    for (const layout of layouts) {
+      for (const typeface of typefaces) {
+        const wide = await page.evaluate(
+          ([layout, typeface]) => {
+            document.body.dataset.layout = layout
+            document.body.dataset.typeface = typeface
+            const root = document.documentElement
+            return root.scrollWidth - root.clientWidth
+          },
+          [layout, typeface],
+        )
+        checked += 1
+        if (wide > SLACK) {
+          failures.push(
+            `${layout}/${typeface} ${viewport.width}x${viewport.height} /all — ページが横に ${wide}px 動く`,
+          )
+        }
+      }
+    }
+    await context.close()
+  }
+  return { failures, checked }
 }
 
 /*
@@ -419,6 +595,10 @@ async function measureRun(browser, base, run, layouts, typefaces) {
     }
   }
 
+  const toc = await tocPass(browser, base, paths, layouts)
+  const whole = await wholePass(browser, base, layouts, typefaces)
+  failures.push(...toc.failures, ...whole.failures)
+
   return {
     failures,
     checked,
@@ -426,6 +606,8 @@ async function measureRun(browser, base, run, layouts, typefaces) {
     poses: poses.length,
     closest,
     drift: Math.round(worstDrift * 10) / 10,
+    toc,
+    whole,
   }
 }
 
@@ -436,6 +618,7 @@ async function main() {
 
   const many = fixture()
   const solo = fixture({ solo: true })
+  const blocks = seedBlocks()
   const runs = process.env.FIT_BASE
     ? [{ label: '指定の先', base: process.env.FIT_BASE, least: 5 }]
     : [
@@ -444,6 +627,13 @@ async function main() {
           label: 'seed（1人のサイト）',
           sql: [await readFile(`${ROOT}seed.sql`, 'utf8')],
           least: 17,
+        },
+        {
+          key: 'blocks',
+          label: 'seed＋ブロック3本（1人のサイト・目次が帯から溢れる）',
+          sql: [await readFile(`${ROOT}seed.sql`, 'utf8'), blocks.sql],
+          least: 20,
+          expect: blocks.expect,
         },
         {
           key: 'many',
@@ -465,7 +655,9 @@ async function main() {
   const only = process.env.FIT_ONLY?.split(',')
   const chosen = only ? runs.filter((run) => only.includes(run.key)) : runs
   if (chosen.length === 0)
-    throw new Error(`FIT_ONLY=${process.env.FIT_ONLY} に当たる中身が無い（seed / many / solo）`)
+    throw new Error(
+      `FIT_ONLY=${process.env.FIT_ONLY} に当たる中身が無い（seed / blocks / many / solo）`,
+    )
 
   const browser = await chromium.launch()
   const results = []
@@ -508,7 +700,9 @@ async function main() {
       `✓ ${result.run.label}: ${result.checked} 通り（${result.urls} URL × ${shape}${poses}）。` +
         `ページが動いた画面 0・切られた要素 0・弁が開いた節 0。` +
         `いちばん惜しい節の余り ${result.closest.free}px（${result.closest.where}）。` +
-        `見出しの錨のずれ 最大 ${result.drift}px`,
+        `見出しの錨のずれ 最大 ${result.drift}px。` +
+        `目次の印 ${result.toc.checked} 画面が帯の中（うち ${result.toc.scrolled} 画面は送って開いた）。` +
+        `/all は ${result.whole.checked} 通りとも横に動かない`,
     )
   }
 
@@ -516,7 +710,10 @@ async function main() {
     console.error(
       '\n設計サイズで弁が開いたら、それは弁の不具合ではなく src/blocks.ts の perScreen / maxChars の不具合。まず件数と字数を疑う。' +
         '\n切られた要素・外枠・柱の場所が出たら、app.css の「画面に収める外枠」が効いていない（後ろで上書きされた・条件が外れた）。' +
-        '\n見出しの錨がずれたら、節の寄せ方（app.css の align-content: safe start）か、見出しより前に置いた子を疑う。',
+        '\n見出しの錨がずれたら、節の寄せ方（app.css の align-content: safe start）か、見出しより前に置いた子を疑う。' +
+        '\n目次の印が帯の外なら app.css の scroll-initial-target（帯の姿の2か所）と、帯がスクロール容器か（overflow-x: auto）を見る。' +
+        '\nページャの手が --tap を超えたら .pager__name（1行で省く）、中央の軸がずれたら中央寄せの Hero の子の寄せ方、' +
+        '/all が横に動いたら目次の折り返し（flex-wrap）を見る。',
     )
     process.exitCode = 1
   }

@@ -15,9 +15,11 @@
     両方を置く。見出しも上限の長さ（MAX_CHARS.blockHeading）
   - メンバー6人（Team の1画面ぶん・グリッド）。うち2人は長い肩書き・上限の大見出し・
     上限の紹介文・技術3塊・上限の経歴を、均等に割った形と寄せた形で持つ
-  - 作品5件。1画面目は、画像あり・説明 100 字・実績値・タグ3つ・リンク3本・担当者名の
+  - 作品7件。1画面目は、画像あり・説明 100 字・実績値・タグ3つ・リンク3本・担当者名の
     カード2枚（いちばん重いカードの行）。2画面目は画像の有る無しが混ざる行。
-    本文は上限（300 字・3段落）を2形で持ち、1件は 390 で2行に折れる長い作品名
+    3画面目は実績値の無い軽い行（1人のサイトでは説明が電話の幅でも
+    --card-lines-lean まで出る）。4画面目は1枚だけの行。
+    本文は上限（300 字・3段落）を2形で持ち、1件は作品名も上限ちょうど（MAX_CHARS.itemTitle）
 
   文は実際の文に近い和文（英字まじり）で作る。段落は word-break: auto-phrase で
   文節の切れ目でだけ折れるので、「あ」を並べた文より行末に空きが出て、行が増える。
@@ -302,8 +304,8 @@ function itemRows() {
       id: 2,
       type: 'work',
       category: '金融系基幹システム',
-      // 390 で2行に折れる長さ（24字）。本文の画面の見出しが2行になる姿
-      title: '長い作品名の問い合わせ対応エージェントの刷新計画',
+      // 作品名の上限ちょうど（MAX_CHARS.itemTitle）。カードの題と見出しが2行に折れる姿
+      title: words(MAX_CHARS.itemTitle, 3),
       slug: 'fixture-long-title',
       year: '2026',
       member_id: 2,
@@ -334,7 +336,7 @@ function itemRows() {
       member_id: 3,
       sort_order: 40,
     }),
-    // 3画面目: 1枚だけの行
+    // 4画面目: 1枚だけの行（並びは下の軽い行のあと）
     heavy({
       id: 5,
       type: 'app',
@@ -353,6 +355,33 @@ function itemRows() {
       member_id: 4,
       sort_order: 50,
     }),
+    /*
+      3画面目: 軽い行（実績値の無いカード2枚。components.tsx の leanRow）。説明は
+      上限の 100 字、作品名は上限ちょうどで題が2行に折れる姿。1人のサイト（solo）
+      では担当者名も出ないので、電話の幅で説明が --card-lines-lean まで出る——
+      その行数で収まるかをここで測る。複数人のサイトでは担当者名が出るので重い行。
+      年は 2025 で、並びは 2025 の2件（sort_order 30・40）のあと、2024 の1枚だけの
+      行（上の id 5）の前（src/db/queries.ts の itemOrder）
+    */
+    ...[6, 7].map((id) =>
+      heavy({
+        id,
+        type: 'app',
+        platform_key: 'web',
+        title: id === 6 ? words(MAX_CHARS.itemTitle, 6) : 'Fixture Lean',
+        slug: `fixture-lean-${id}`,
+        year: '2025',
+        // 1枚は画像あり（900 以上で枠の段 --card-lines-shot になる姿）
+        ...(id === 7
+          ? { image_url: null, image_alt: '', image_width: null, image_height: null }
+          : {}),
+        metric_value: null,
+        metric_unit: null,
+        metric_note: null,
+        member_id: id - 1,
+        sort_order: id * 10,
+      }),
+    ),
   ]
 }
 
@@ -391,6 +420,7 @@ function audit(blocks, members, items, tags, links) {
   for (const item of items) {
     const errors = publishErrors({
       kind: 'item',
+      title: item.title,
       summary: item.summary,
       body: item.body,
       imageAlt: item.image_alt,
@@ -464,6 +494,7 @@ export function fixture({ solo = false } = {}) {
     '/projects',
     '/projects/2',
     '/projects/3',
+    '/projects/4',
     // 1人のサイトでは /team はプロフィールへの 301 で、sitemap に載らない
     ...(solo ? [] : ['/team']),
     '/contact',
@@ -478,4 +509,45 @@ export function fixture({ solo = false } = {}) {
     ...items.filter((item) => item.body).map((item) => `${itemPath(item)}/story`),
   ]
   return { sql: text, expect }
+}
+
+/*
+  check:fit の4本目の中身の足し分。**本人のサイト（seed.sql）に、打ち込むブロックを
+  既定の見出しのまま3本**（いま・数字・リンク集。見出しは src/blocks.ts の title）。
+
+  seed は目次が3行（Projects / Profile / Contact）で、どの寸法でも帯に収まる。
+  上限ちょうどの fixture は目次が 12 行で、帯はいつも溢れる。そのあいだの、本人が
+  ブロックを数本足しただけの姿を測る相手が無かった——390 の指ではこの3本で帯が
+  126px 溢れ、連なりの後ろの節（Links・Contact）に着くと、目次の印が帯の外に
+  押し出されていた。中身の字数は上限ではなく、ふつうに書く長さ。
+
+  seed の決まった4本（sort_order 10〜40）の、Team と Contact のあいだに差し込む。
+  id を決めておくのは、生えるはずの URL（expect）を名指しするため。
+*/
+export function seedBlocks() {
+  const rows = [
+    {
+      key: 'now',
+      body: '個人サイトの作り直し | Cloudflare Workers で\nAI エージェントの設定の整理 | 3つの道具',
+    },
+    { key: 'numbers', body: '20 | 人日 | 見込み 40人日から半減\n14 | 画面 | 製造・単体テスト' },
+    {
+      key: 'links',
+      body: 'GitHub | https://github.com/iam74k4 | コード\nZenn | https://zenn.dev/ | 記事',
+    },
+  ].map((row, index) => ({
+    id: 91 + index,
+    type: row.key,
+    title: blockType(row.key).title,
+    body: row.body,
+    published: 1,
+    sort_order: 31 + index,
+  }))
+  return {
+    sql: [
+      '-- scripts/lib/fit-fixture.mjs の seedBlocks: seed.sql に既定の見出しのブロックを3本',
+      insert('blocks', rows),
+    ].join('\n'),
+    expect: rows.map((row) => `/block-${row.id}`),
+  }
 }

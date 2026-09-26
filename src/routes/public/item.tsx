@@ -10,7 +10,7 @@ import {
   publishedBlocks,
 } from '../../db/queries'
 import * as schema from '../../db/schema'
-import type { ItemKind, ItemView } from '../../domain'
+import { type ItemKind, type ItemView, KIND_LABEL } from '../../domain'
 import type { AppEnv } from '../../env'
 import { IMAGE_FORMATS, imageTypeOfPath } from '../../lib/image'
 import { type Sequence, type Step, sequence, stepAt } from '../../lib/sequence'
@@ -27,8 +27,8 @@ import {
 } from '../../ui/components'
 import type { OgImage } from '../../ui/Layout'
 import { NO_FILTER, showMemberOf, soloMember } from './data'
-import { absoluteUrl, describe, pageTitle, siteDescription } from './meta'
-import { screenPage } from './page'
+import { absoluteUrl, describe, joinParts, pageTitle } from './meta'
+import { movedTo, screenPage } from './page'
 import { siteScreens, siteSteps } from './site'
 
 /*
@@ -56,6 +56,19 @@ function itemOgImage(item: ItemView): OgImage | undefined {
       : {}),
   }
 }
+
+/*
+  説明の無い作品の説明文の控え。作品名に、画面の添えと同じ事実（区分・
+  プラットフォームか業界・年）とタグを添える。どれも作品ごとに違うので、
+  説明の無い作品が2つあっても同じ文にならない（作品名は作品ごとに違う）。
+*/
+export const itemFacts = (item: ItemView) =>
+  joinParts(
+    `${item.title}（${[KIND_LABEL[item.type], item.platformLabel ?? item.category, item.year]
+      .filter(Boolean)
+      .join(' · ')}）`,
+    item.tags.join('、'),
+  )
 
 /*
   作品1件のページ。作品同士を横にめくる、自分たちだけの連なり。
@@ -108,17 +121,19 @@ export async function renderItem(
       作品）が残る
 
     どちらも「同じ作品に2つの URL」ではない——開けば必ずいまの1つへ移る。
+    行き先は管理画面の保存で変わる（slug を元に戻す・区分を戻す）ので、ブラウザには
+    覚えさせない（movedTo）。
     本文の画面（…/story）はいまの URL の …/story へ送る（本文が無くなっていれば、
     着いた先が 404）。知らない slug と、下書きの作品（転送先も含めて）は 404 のまま。
   */
   if (!item) {
     const moved = await findMovedItem(db, slug)
     const to = moved ? hrefOf(moved) : null
-    return to ? c.redirect(to, 301) : c.notFound()
+    return to ? movedTo(c, to) : c.notFound()
   }
   const href = hrefOf(item)
   if (!href) return c.notFound()
-  if (item.type !== kind) return c.redirect(href, 301)
+  if (item.type !== kind) return movedTo(c, href)
 
   // 本文の段落。1つも無ければ本文の画面は無い（開く式は src/blocks.ts の itemStory）
   const story = itemStory(item.body)
@@ -260,8 +275,14 @@ export async function renderItem(
         <ItemDetail item={item} links={links} story={story.length ? itemStoryHref(item) : null} />
       </Screen>
     ),
-    // 説明文は要約（summary）のまま。本文は次の画面が自分の説明文にする
-    description: item.summary || siteDescription(solo),
+    /*
+      説明文は要約（summary）のまま。本文は次の画面が自分の説明文にする。
+      説明の無い作品（公開の関門が説明を求める前に公開した作品）は、この画面に
+      出ている作品の事実——作品名・区分・プラットフォームか業界・年・タグ——から
+      組む（itemFacts）。サイトの紹介文に戻すと、入口と同じ説明文の URL が並び、
+      説明の無い作品どうしも同じ文になった
+    */
+    description: item.summary || describe(itemFacts(item)),
     /*
       この URL が何を名指ししているかを、貼った先にも検索にも1つだけ置く。
       サイトの名乗り（Person / Organization）はトップが持っているので、

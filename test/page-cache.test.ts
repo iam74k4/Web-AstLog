@@ -2,7 +2,7 @@ import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:
 import packageJson from 'virtual:repo:package.json'
 import touchScript from 'virtual:repo:scripts/touch-site.mjs'
 import { eq } from 'drizzle-orm'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as schema from '../src/db/schema'
 import app from '../src/index'
 import { SESSION_COOKIE } from '../src/lib/auth'
@@ -10,6 +10,9 @@ import { CACHE_STATE_HEADER, SITE_VERSION_KEY } from '../src/lib/page-cache'
 import { db, form, get, resetDb, seedItem, signIn, touch, uncachedEnv, withCookie } from './helpers'
 
 beforeEach(resetDb)
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 /*
   公開ページの写し（src/lib/page-cache.ts）。
@@ -90,7 +93,13 @@ describe('公開ページの写し', () => {
     const signed = await signIn()
     const saved = await signed(`/admin/items/${item.id}`, {
       method: 'POST',
-      body: form({ type: 'app', title: '保存した題', slug: 'appmixer', published: '1' }),
+      body: form({
+        type: 'app',
+        title: '保存した題',
+        slug: 'appmixer',
+        summary: '説明。',
+        published: '1',
+      }),
     })
     expect(saved.status).toBe(303)
 
@@ -123,20 +132,80 @@ describe('公開ページの写し', () => {
     expect(await env.MEDIA.get(SITE_VERSION_KEY)).toBe(version)
   })
 
-  it('D1 が落ちたら、古い写しを 500 の代わりに出す（版が変わっていても）', async () => {
+  it('D1 が落ちたら、いまの版の写しを 500 の代わりに出す（1時間を過ぎていても）', async () => {
     await seedItem({ title: 'AppMixer', slug: 'appmixer' })
     expect(state(await get('/projects'))).toBe('miss')
-    // 版が上がったあと（写しは古い）に D1 が落ちる
-    await touch()
+    expect(state(await get('/sitemap.xml'))).toBe('miss')
 
+    // 1時間（FRESH_MS）を過ぎた写しは hit にならず、描き直しに行って D1 で落ちる
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 2 * 60 * 60 * 1000 })
     const broken = { DB: undefined as unknown as D1Database }
     const response = await run('/projects', broken)
     expect(response.status).toBe(200)
     expect(state(response)).toBe('stale')
     expect(await response.text()).toContain('AppMixer')
+    const sitemap = await run('/sitemap.xml', broken)
+    expect(sitemap.status).toBe(200)
+    expect(state(sitemap)).toBe('stale')
 
     // 写しの無い URL は今までどおり 500
     expect((await run('/contact', broken)).status).toBe(500)
+    vi.useRealTimers()
+  })
+
+  /*
+    SEC-N2。版が上がったあと（管理画面で何かを書いたあと）の写しは、D1 の障害の間も
+    出さない。以前は版を問わずに出していて、誤って載せた作品を下書きに戻した・消した
+    あとでも、その間に誰も開いていない URL の写しが障害のたびに 200 で戻ってきた
+  */
+  it('下書きに戻した作品の写しは、D1 が落ちても出さない（取り下げが巻き戻らない）', async () => {
+    const item = await seedItem({
+      title: 'AppMixer',
+      slug: 'appmixer',
+      summary: '住所を書いた説明。',
+    })
+    expect(state(await get('/apps/item/appmixer'))).toBe('miss')
+    expect(state(await get('/sitemap.xml'))).toBe('miss')
+
+    const signed = await signIn()
+    const withdrawn = await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: form({
+        type: 'app',
+        title: 'AppMixer',
+        slug: 'appmixer',
+        summary: '住所を書いた説明。',
+      }),
+    })
+    expect(withdrawn.headers.get('location')).toContain('saved=draft')
+
+    const broken = { DB: undefined as unknown as D1Database }
+    for (const path of ['/apps/item/appmixer', '/sitemap.xml']) {
+      const response = await run(path, broken)
+      expect(response.status, path).toBe(500)
+      expect(state(response), path).toBeNull()
+      expect(await response.text(), path).not.toMatch(/住所を書いた説明|apps\/item\/appmixer/)
+    }
+  })
+
+  it('版（KV）を読めないときも、写しを出さない（いまのものか確かめられない）', async () => {
+    await seedItem({ title: 'AppMixer', slug: 'appmixer' })
+    expect(state(await get('/projects'))).toBe('miss')
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const unreadable = new Proxy(env.MEDIA, {
+      get(target, key) {
+        if (key === 'get') return () => Promise.reject(new Error('KV down'))
+        const value = Reflect.get(target, key)
+        return typeof value === 'function' ? value.bind(target) : value
+      },
+    })
+    const response = await run('/projects', {
+      DB: undefined as unknown as D1Database,
+      MEDIA: unreadable,
+    })
+    expect(response.status).toBe(500)
+    expect(state(response)).toBeNull()
+    errors.mockRestore()
   })
 
   it('ログインしている人の画面は写しに置かない（管理画面への入口が訪問者に出ない）', async () => {

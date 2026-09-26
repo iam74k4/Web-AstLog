@@ -181,6 +181,20 @@ describe('スタイルシートの分け方', () => {
     expect(adminSheet).not.toMatch(/\b(rgba?|hsla?)\(/)
   })
 
+  it('作品のリンクの組は、1列に積んでも組の中より組の間を広く空ける', () => {
+    /*
+      600 未満はラベルと URL が1列に積まれる。同じ間隔で6段に並んでいたころは、
+      どの URL がどのラベルの組か見分けられなかった（組の中 --sp-2 = 組の間 --sp-2）
+    */
+    const step = (value: string | undefined) => Number(value?.match(/--sp-(\d)/)?.[1])
+    const inside = step(bodyOf(adminSheet, '.link-row {').match(/row-gap: ([^;]+)/)?.[1])
+    const between = step(
+      bodyOf(adminSheet, '.link-row + .link-row {').match(/margin-top: ([^;]+)/)?.[1],
+    )
+    expect(inside).toBeGreaterThan(0)
+    expect(between).toBeGreaterThan(inside)
+  })
+
   it('admin.css のメディアクエリも 600 / 900 と入力手段だけ', () => {
     const queries = [...new Set(adminSheet.match(/@media[^{]+/g)?.map((q) => q.trim()))].sort()
     expect(queries).toEqual(
@@ -531,15 +545,45 @@ describe('画面に収める外枠', () => {
 
     /*
       画像の枠は 1440x900 で説明の3〜4行ぶんを食う。枠のある行だけ 900 以上で
-      減らす。600 未満では枠が出ないので、素では同じ数（var() で追う）
+      減らす。規則も 900 以上にだけ書く——枠が出ない 600 未満で当てると、軽い行
+      （下の --card-lines-lean）の行数を枠の段で上書きしてしまう
     */
-    expect(bodyOf(sheet, ':root {')).toContain('--card-lines-shot: var(--card-lines)')
     const shot = lines(blockAt(sheet, '@media (min-width: 900px)'), '--card-lines-shot')
     expect(shot).toBeGreaterThanOrEqual(narrow)
     expect(shot).toBeLessThan(wide)
     const frame = blockAt(sheet, '@supports (height: 100svh)')
-    const framed = bodyOf(frame, ':where(body[data-layout]:not([data-whole])) .card__thumb ~ p {')
+    const framed = bodyOf(
+      blockAt(frame, '@media (min-width: 900px)'),
+      ':where(body[data-layout]:not([data-whole])) .card__thumb ~ p {',
+    )
     expect(framed.match(/line-clamp: var\(--card-lines-shot\)/g)).toHaveLength(2)
+    expect(frame.split('.card__thumb ~ p').length).toBe(2)
+  })
+
+  it('電話の幅でも、軽い行（実績値も担当者名も無い）は説明の行を足す', () => {
+    /*
+      2行の根拠（3行で溢れる）は実績値と担当者名を持つ重い行のもの。本人の
+      サイトの /projects は、カード2枚の下に 237px 空いたまま説明を2行で切って
+      いた（= rail @390x844 指）。軽い行かはサーバーが行ごとに決めて
+      .card--lean を付け（components.tsx の leanRow）、行数は :root が持つ
+    */
+    const lines = (block: string, name: string) =>
+      bodyOf(block, ':root {').match(new RegExp(`${name}:\\s*([^;]+)`))?.[1]
+    expect(Number(lines(sheet, '--card-lines-lean'))).toBeGreaterThan(
+      Number(lines(sheet, '--card-lines')),
+    )
+    // 600 以上は --card-lines と同じ数（軽い行でも減らさない）
+    expect(lines(blockAt(sheet, '@media (min-width: 600px)'), '--card-lines-lean')).toBe(
+      'var(--card-lines)',
+    )
+
+    const frame = blockAt(sheet, '@supports (height: 100svh)')
+    const lean = bodyOf(frame, ':where(body[data-layout]:not([data-whole])) .card--lean p {')
+    expect(lean.match(/line-clamp: var\(--card-lines-lean\)/g)).toHaveLength(2)
+    // 素の .card p より後ろ、900 以上の枠の段より前（枠のある軽いカードは 900 以上で枠の段）
+    const at = (text: string) => frame.indexOf(text)
+    expect(at('.card--lean p {')).toBeGreaterThan(at('.card p {'))
+    expect(at('.card--lean p {')).toBeLessThan(at('.card__thumb ~ p {'))
   })
 
   it('行止めは5行そろって初めて効く', () => {
@@ -917,7 +961,7 @@ describe('部品の作法', () => {
   })
 
   it('ページャの「← 前」が列いっぱいに伸びない', () => {
-    // .pager は 1fr auto 1fr。grid の子になった inline-flex は blockify され、
+    // .pager は minmax(0, 1fr) auto minmax(0, 1fr)。grid の子になった inline-flex は blockify され、
     // justify-self の初期値 normal が stretch として効く（1440 で 396px 対 64px）
     expect(ruleWith(sheet, 'justify-self: start').selector).toBe('.pager__go')
     // 「次 →」だけは右端へ。後ろの規則が勝つので、順番を入れ替えないこと
@@ -1364,6 +1408,78 @@ describe('部品の作法', () => {
     const target = ruleWith(coarse, 'min-height: var(--tap)')
     expect(target.selector).toContain('.toc a')
     expect(target.body).toContain('align-items: center')
+  })
+
+  it('指のときは入口の「すべてを1ページで読む →」も --tap の的', () => {
+    // 字の1行ぶん（22px）だった。899 以下では柱の足元の1本を畳むので、指の画面で
+    // 全体ページへ行く手はこれだけになる
+    const coarse = blockAt(sheet, '@media (pointer: coarse)')
+    const whole = bodyOf(coarse, '.hero__whole {')
+    expect(whole).toContain('min-height: var(--tap)')
+    expect(whole).toContain('align-items: center')
+  })
+
+  it('目次のいまの画面は、帯の見えている幅の中で開く（帯のときだけ）', () => {
+    /*
+      JavaScript が無いので、帯は何もしなければいつも左端で開き、連なりの後ろの
+      節に着くと印が帯の外に出ていた。scroll-initial-target は帯の姿（899 以下と、
+      上の帯になる骨格の 900 以上）にだけ掛ける——柱が縦に立つ rail では、
+      いちばん近いスクロール容器が柱そのものになり、柱を縦に送ってしまう
+    */
+    const frame = blockAt(sheet, '@supports (height: 100svh)')
+    const narrow = blockAt(frame, '@media (max-width: 899px)')
+    const wide = blockAt(frame, '@media (min-width: 900px)')
+    for (const block of [narrow, wide]) {
+      const marker = ruleWith(block, 'scroll-initial-target: nearest')
+      expect(marker.selector).toContain(".toc a[aria-current='page']")
+      // 右端のぼかしの下に座らせない
+      expect(marker.body).toContain('scroll-margin-inline: var(--sp-6)')
+    }
+    expect(ruleWith(wide, 'scroll-initial-target: nearest').selector).not.toContain('rail')
+    // 素の外では掛けない（rail の縦の柱に当たる）
+    expect(sheet.split('scroll-initial-target').length).toBe(3)
+    /*
+      900 以上の上の帯は、素の 900 以上の .toc { overflow: visible }（縦の柱のため）を
+      受けたままではスクロール容器にならず、溢れた行き先がぼかしの外で切られていた
+    */
+    expect(ruleWith(wide, 'flex: 1 1 0').body).toContain('overflow-x: auto')
+  })
+
+  it('全体ページの雑誌風の目次は折り返す（ページを横に動かさない）', () => {
+    // 900 以上の雑誌風の .toc は素の overflow: visible を受ける。折り返さないと、
+    // はみ出しが目次の中ではなくページの幅になった（scrollWidth 1550 = @1440x900）
+    const wraps = rulesOf(sheet).filter(
+      (rule) =>
+        rule.selectors.includes("body[data-layout='magazine'] .toc") &&
+        rule.decls.some(([name, value]) => name === 'flex-wrap' && value === 'wrap'),
+    )
+    expect(wraps).toHaveLength(1)
+    expect(wraps[0]?.context).toEqual(['@media (min-width: 900px)'])
+    expectNotOverridden(sheet, wraps[0]?.start ?? -1)
+  })
+
+  it('ページャの手の名前は1行で、入りきらなければ末尾を省く', () => {
+    // 上限（10 字）の見出しで、390 の指の手が「← データベ / ースの移行 / を」と3行に割れた
+    expect(bodyOf(sheet, '.pager {')).toContain(
+      'grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr)',
+    )
+    const name = bodyOf(sheet, '.pager__name {')
+    for (const decl of [
+      'min-width: 0',
+      'overflow: hidden',
+      'text-overflow: ellipsis',
+      'white-space: nowrap',
+    ]) {
+      expect(name).toContain(decl)
+    }
+    expect(bodyOf(sheet, '.pager__go {')).toContain('max-width: 100%')
+  })
+
+  it('中央寄せの Hero では、その人の GitHub / メールも中央に寄る', () => {
+    // .socials は flex の箱で行いっぱいに伸びる。箱ではなく札の並びを寄せる
+    const socials = bodyOf(sheet, "body[data-layout='center'] .hero > .socials {")
+    expect(socials).toContain('justify-content: center')
+    expect(socials).toContain('justify-self: center')
   })
 
   it('読まれない値を :root に置かない', () => {

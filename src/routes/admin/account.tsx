@@ -54,6 +54,9 @@ accountRoutes.get('/account', async (c) => {
           {provider === 'github'
             ? 'OWNER_GITHUB_ID と同じ ID の GitHub アカウントで一度ログインすると紐づきます。'
             : 'OWNER_GOOGLE_EMAIL と同じ、Google が確認済みのアドレスで一度ログインすると紐づきます。'}
+          {/* 環境変数の値は1度きり（src/db/schema.ts の owner_claims）。外したあとは紐づき直らない */}
+          一度外したアカウントは、D1 の owner_claims の行も消すまで紐づきません（README
+          の「紐づけを外す」）。
         </p>
       ))}
       <section class="catalog">

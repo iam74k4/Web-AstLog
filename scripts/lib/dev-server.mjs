@@ -12,6 +12,7 @@
 
 import { spawn } from 'node:child_process'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -19,10 +20,11 @@ import { fileURLToPath } from 'node:url'
 
 export const ROOT = fileURLToPath(new URL('../..', import.meta.url))
 
-// dev サーバが返事をするまで待つ。起動は初回だけ数秒かかる
-async function waitForServer(base, limitMs = 120_000) {
+// dev サーバが返事をするまで待つ。起動は初回だけ数秒かかる。
+// gaveUp() が true を返したら（子が先に終わった）、待つのをやめる
+async function waitForServer(base, gaveUp, limitMs = 120_000) {
   const until = Date.now() + limitMs
-  while (Date.now() < until) {
+  while (Date.now() < until && !gaveUp()) {
     try {
       const response = await fetch(base, { redirect: 'manual' })
       if (response.status < 500) return
@@ -71,8 +73,30 @@ function spawnServer(port, persistTo) {
       return exited.finally(() => clearTimeout(force))
     },
     spill: () => console.error(log.join('')),
+    exited,
   }
 }
+
+/*
+  そのポートで誰かが待ち受けているか。localhost は IPv4 と IPv6 の両方に解ける
+  （fetch がどちらへ行くかは環境しだい）ので、両方を叩く。
+*/
+const listening = (port) =>
+  Promise.all(
+    ['127.0.0.1', '::1'].map(
+      (host) =>
+        new Promise((resolve) => {
+          const socket = connect({ host, port })
+          const done = (answer) => {
+            socket.destroy()
+            resolve(answer)
+          }
+          socket.once('connect', () => done(true))
+          socket.once('error', () => done(false))
+          socket.setTimeout(1_000, () => done(false))
+        }),
+    ),
+  ).then((answers) => answers.includes(true))
 
 /*
   測る相手を決めて、必要なら自分で立てる。返すのは行き先と後始末の2つだけ。
@@ -84,16 +108,45 @@ function spawnServer(port, persistTo) {
   そのときの stop() は何もしない関数なので、呼ぶ側は立てたかどうかを
   覚えておかなくてよい（`dev?.stop()` の ? を忘れる余地を残さない）。
 
+  **測るのは自分が立てたサーバだけ。** ポートが塞がっていると wrangler は
+  「Address already in use」ですぐ終わるが、待つ側（waitForServer）は誰の返事でも
+  受けるので、そのポートを持っている**別のサーバ**（別のワークツリーの dev や検査）を
+  測って緑を出していた——月を壊した作業ツリーの check:contrast が、相手の無傷の
+  画面を測って「✓ 360 通り」を出したことがある。そこで2つ止める。
+  - 立てる前に、そのポートで誰も待ち受けていないことを確かめる（使われていれば止まる）
+  - 準備ができる前に wrangler が終わったら、返事を待たずに止まる（確かめたあとで
+    取られた・移行を忘れた、など）
+
   立ち上がらなかったときだけ、ためてあった出力を吐いてから投げ直す。
-  ポートが塞がっていた・migrate を忘れた、はここに出る。
 */
 export async function devServer(given, port, persistTo) {
   const base = given ?? `http://localhost:${port}`
   if (given) return { base, stop: async () => {} }
 
+  // 前のサーバを落とした直後は、ポートが手放されるまで少しかかることがある
+  const freeBy = Date.now() + 5_000
+  while ((await listening(port)) && Date.now() < freeBy) await sleep(250)
+  if (await listening(port)) {
+    throw new Error(
+      `ポート ${port} はもう使われている。別のサーバを測らないよう、ここで止める` +
+        '（空いているポートを FIT_PORT / CONTRAST_PORT で渡すか、使っているプロセスを止める）',
+    )
+  }
+
   const dev = spawnServer(port, persistTo)
+  let ended = false
+  dev.exited.then(() => {
+    ended = true
+  })
   try {
-    await waitForServer(base)
+    await Promise.race([
+      waitForServer(base, () => ended),
+      dev.exited.then((code) => {
+        throw new Error(
+          `wrangler dev が立ち上がる前に終わった（終了コード ${code}。ポート ${port} が使われていないか、上の出力を見ること）`,
+        )
+      }),
+    ])
   } catch (error) {
     dev.spill()
     await dev.stop()

@@ -21,6 +21,8 @@ export const Field = (props: {
   warning?: string
   required?: boolean
   placeholder?: string
+  // 上限がある欄には付ける（Area の maxlength の注記と同じ）
+  maxlength?: number
 }) => (
   <label class="field">
     <span class="field__label">{props.label}</span>
@@ -31,6 +33,7 @@ export const Field = (props: {
       value={props.value ?? ''}
       required={props.required}
       placeholder={props.placeholder}
+      maxlength={props.maxlength}
     />
     {props.error ? <span class="field__error">{props.error}</span> : null}
     {props.warning ? <span class="field__warn">{props.warning}</span> : null}

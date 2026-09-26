@@ -162,9 +162,11 @@ export const BLOCK_TYPES = [
   溢れる代わりに、書いたぶんが黙って切られる。だから上限は「溢れない長さ」
   ではなく「広い画面ならどこでも切れずに出る長さ」にした。600 以上は 100 字が
   切れずに出る6行で止める（app.css の「600px 以上」の :root。画像のある行だけ
-  900 以上で3行）。600 未満はカードが2枚縦に積まれて2行しか置けず、
-  42 字（和文だけの文。= rail / center @390x844, Hiragino Sans, macOS Chromium）
-  までしか出ないので、書く側にはそれも添える（itemSummaryVisible）。
+  900 以上で3行）。600 未満はカードが2枚縦に積まれ、実績値か担当者名を持つ
+  重い行は2行しか置けず、42 字（和文だけの文。= rail / center @390x844,
+  Hiragino Sans, macOS Chromium）までしか出ないので、書く側にはそれも添える
+  （itemSummaryVisible）。その2つを持たない軽い行は電話でも 100 字が出る
+  （app.css の --card-lines-lean）。
 
   memberBio（紹介文）は個人ページの About 1枚に全段落が出る。件数で割れない
   ので、字数と段落の数の両方で止める。段落の区切りそのものが高さを取るので、
@@ -233,7 +235,24 @@ export const BLOCK_TYPES = [
   経歴（careerText）の上限は、できごと（timeline）の maxChars をそのまま使う
   （memberPublishErrors の注記）。ここには置かない。
 */
+/*
+  itemTitle（作品名）はカードの題（--fs-md。行数で切らない）・作品のページと Story の
+  見出し（--fs-display-xs）に出る。本文の上限（itemBody）は作品名を 24 字までと置いて
+  測った数で、作品名そのものは見ていなかった——60 字の作品名で公開すると、雑誌風の
+  390 の Story で弁が 37px 開き、本文の最後の段落が隠れた。
+  （実測 = check:fit の fixture の2件（本文を均等に割った形と1つに寄せた形）の作品名を
+  その長さにして、Projects・1枚目・Story を 27通り × 訪問者とログイン。いちばん惜しい
+  節の余り @プリセット, 書体, ブラウザ）
+    作品名 30字 / 32字  10.6px @magazine 390x844 指（1枚目。見出しが2行）
+           36字          3.9px @rail 390x844 指（Projects。カードの題が2行）
+           38字        +22px 溢れる @rail / center 390x844 指（Projects。題が3行に折れる）
+           48字        +52px 溢れる @magazine 390x844 指（1枚目）
+    （Hiragino Sans, macOS Chromium。書体3つとも同じ）
+  32 字にした。36 字は閉じるが余りが 4px しかなく、字の段を1つ動かせば溢れる。
+  fixture のいちばん重い作品（fit-fixture.mjs）の作品名はこの上限ちょうど。
+*/
 export const MAX_CHARS = {
+  itemTitle: 32,
   itemSummary: 100,
   itemSummaryVisible: 42,
   itemBody: 300,
@@ -447,6 +466,7 @@ export type PublishTarget =
   | { kind: 'block'; type: BlockType; title: string; body: string }
   | {
       kind: 'item'
+      title: string
       summary: string
       body: string
       imageAlt: string
@@ -517,9 +537,14 @@ function blockPublishErrors(
 }
 
 /*
-  作品。説明文はカードの行数で切られる（--card-lines）。切られても画面からは
-  溢れないが、書いたぶんが黙って消える。上限は 600 以上のカードなら切れずに
-  出る長さ（MAX_CHARS.itemSummary）。
+  作品。作品名はカードの題と作品のページ・Story の見出しに出るので、長さで止める
+  （MAX_CHARS.itemTitle）。
+
+  説明文は公開するときは必須。カードの本文で、作品のページの説明文（description）
+  でもある——空のまま公開すると、そのページの description が入口と同じサイトの
+  紹介文になり、検索結果でも共有カードでもどの作品か見分けられなかった。説明文は
+  カードの行数で切られる（--card-lines）。切られても画面からは溢れないが、書いた
+  ぶんが黙って消える。上限は 600 以上のカードなら切れずに出る長さ（MAX_CHARS.itemSummary）。
 
   本文は本文の画面（Story）1枚に全段落が出る。割らないので、字数と段落の数の
   両方で止める（紹介文と同じ形）。字数は打った文字列そのままで数える（空行も字）。
@@ -532,8 +557,14 @@ function blockPublishErrors(
 */
 function itemPublishErrors(target: Extract<PublishTarget, { kind: 'item' }>) {
   const errors: Record<string, string> = {}
+  const title = chars(target.title)
+  if (title > MAX_CHARS.itemTitle) {
+    errors.title = `1画面に収まりません。作品名は ${MAX_CHARS.itemTitle} 字までです（いま ${title} 字）`
+  }
   const summary = chars(target.summary)
-  if (summary > MAX_CHARS.itemSummary) {
+  if (!summary) {
+    errors.summary = '公開するときは説明文が要ります。カードと作品のページの説明文になります'
+  } else if (summary > MAX_CHARS.itemSummary) {
     errors.summary = `カードに収まりません。説明文は ${MAX_CHARS.itemSummary} 字までです（いま ${summary} 字）`
   }
   const body = chars(target.body)

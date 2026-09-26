@@ -4,7 +4,7 @@ on:
   push:
     branches: ['**']
   pull_request:
-  # deploy.yml が本番へ出す前に、これと同じ門（型・lint・テスト・ビルド・fit・contrast）を
+  # deploy.yml が本番へ出す前に、これと同じ門（型・lint・テスト・写しの戻し・ビルド・fit・contrast）を
   # そのまま呼ぶ。門を2か所に書き写すと、片方だけ弱くなる（以前の deploy は型とテストしか
   # 通していなかった）
   workflow_call:
@@ -17,13 +17,19 @@ concurrency:
   group: check-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
+# 読むだけ。secret も使わない（本番のトークンは deploy.yml の environment の中にだけある）
+permissions:
+  contents: read
+
+# action は commit の SHA で固定する（deploy.yml の頭と同じ理由・同じ引き方）
+
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -39,6 +45,13 @@ jobs:
       # 本物の workerd で動かす。D1 と KV も実体が立つ
       - name: テスト
         run: npm test
+
+      # deploy が残す D1 の写し（定義と中身の2本）が、空の D1 に戻せるか。使い捨ての
+      # D1 に seed と上限ちょうどの fixture を入れ、deploy と同じ形で export して、
+      # README の「戻す」の順で流し、全部の表の全部の行を突き合わせる。
+      # 1本の export は戻せなかった（子の表の行が親の CREATE より前に来る）
+      - name: 写しから戻せるか
+        run: npm run check:restore
 
       # デプロイせずに、束ねられるところまで確かめる
       - name: ビルド
@@ -57,9 +70,9 @@ jobs:
   fit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm

@@ -1276,6 +1276,46 @@ describe('作品1件の恒久リンク', () => {
     expect(card).toContain('href="https://example.test/r"')
   })
 
+  it('実績値も担当者名も無い行のカードは軽い（電話でも説明の行を足す）。どちらかがあれば行ごと重い', async () => {
+    /*
+      電話の幅の2行は、実績値と担当者名を持つ重い行の高さで決めた数。本人の
+      サイト（1人・実績値の無い作品の行）では、カード2枚の下に 237px 空いたまま
+      説明の2文目が切れていた。軽いかは行（1画面ぶん）で決める——同じ行の
+      カードで行数が違うと、題と説明の高さがそろわない
+    */
+    const member = await seedMember()
+    await seedItem({ title: 'A', slug: 'a', memberId: member.id, year: '2026', sortOrder: 10 })
+    await seedItem({ title: 'B', slug: 'b', memberId: member.id, year: '2026', sortOrder: 20 })
+    await seedItem({
+      title: 'C',
+      slug: 'c',
+      memberId: member.id,
+      year: '2025',
+      sortOrder: 30,
+      metricValue: '20',
+    })
+    await seedItem({ title: 'D', slug: 'd', memberId: member.id, year: '2025', sortOrder: 40 })
+
+    const cards = (html: string) => mainOf(html).match(/<article class="[^"]*">/g) ?? []
+    // 1人のサイト（Team を置いている）なので担当者名は出ない。実績値も無い行
+    expect(cards(await okText('/projects'))).toEqual([
+      '<article class="card card--lean">',
+      '<article class="card card--lean">',
+    ])
+    // 1枚が実績値を持てば、同じ行のもう1枚（D）も重い行のまま
+    expect(cards(await okText('/projects/2'))).toEqual([
+      '<article class="card">',
+      '<article class="card">',
+    ])
+
+    // 2人目を公開すると担当者名が出るので、1画面目も重い行になる
+    await seedMember({ slug: 'futari', name: 'もう一人', sortOrder: 20 })
+    expect(cards(await okText('/projects'))).toEqual([
+      '<article class="card">',
+      '<article class="card">',
+    ])
+  })
+
   it('画像のある作品のカードにはサムネイル。飾りなので名前を持たず、遅延読み込み', async () => {
     await seedItem({
       title: 'AppMixer',
@@ -1466,7 +1506,7 @@ describe('作品1件のページの行き来', () => {
     // 端ではリンクそのものを出さない（ScreenPager の決まり）。サイトの列へも抜けない
     expect(first).not.toContain('rel="prev"')
     expect(first).toContain(
-      '<a class="pager__go pager__go--next" href="/apps/item/ni" rel="next">次 →</a>',
+      '<a class="pager__go pager__go--next" href="/apps/item/ni" rel="next"><span class="pager__name">次</span> →</a>',
     )
     // 数えるのは作品の列の中。読み上げには単位を「件」で渡す（一覧の画面の数と取り違えない）
     expect(first).toContain('<span class="pager__section">Projects</span>')
@@ -1474,12 +1514,18 @@ describe('作品1件のページの行き来', () => {
     expect(first).toContain('Projects の 3 件のうち 1 件目')
 
     const middle = pagerOf(await okText('/apps/item/ni'))
-    expect(middle).toContain('<a class="pager__go" href="/apps/item/ichi" rel="prev">← 前</a>')
-    expect(middle).toContain('href="/apps/item/san" rel="next">次 →</a>')
+    expect(middle).toContain(
+      '<a class="pager__go" href="/apps/item/ichi" rel="prev">← <span class="pager__name">前</span></a>',
+    )
+    expect(middle).toContain(
+      'href="/apps/item/san" rel="next"><span class="pager__name">次</span> →</a>',
+    )
     expect(middle).toContain('<span class="pager__of">2 / 3</span>')
 
     const last = pagerOf(await okText('/apps/item/san'))
-    expect(last).toContain('href="/apps/item/ni" rel="prev">← 前</a>')
+    expect(last).toContain(
+      'href="/apps/item/ni" rel="prev">← <span class="pager__name">前</span></a>',
+    )
     expect(last).not.toContain('rel="next"')
     expect(last).toContain('<span class="pager__of">3 / 3</span>')
   })
@@ -1645,14 +1691,18 @@ describe('作品の本文の画面（Story）', () => {
 
     const first = pagerOf(await okText('/apps/item/ichi'))
     expect(first).toContain(
-      '<a class="pager__go pager__go--next" href="/apps/item/ichi/story" rel="next">次 →</a>',
+      '<a class="pager__go pager__go--next" href="/apps/item/ichi/story" rel="next"><span class="pager__name">次</span> →</a>',
     )
     expect(first).toContain('<span class="pager__of">1 / 2</span>')
 
     const story = pagerOf(await okText('/apps/item/ichi/story'))
     // 同じ作品の中の移動なので名乗らない。次の作品へ出る手も「Projects →」とは言わない
-    expect(story).toContain('<a class="pager__go" href="/apps/item/ichi" rel="prev">← 前</a>')
-    expect(story).toContain('href="/apps/item/ni" rel="next">次 →</a>')
+    expect(story).toContain(
+      '<a class="pager__go" href="/apps/item/ichi" rel="prev">← <span class="pager__name">前</span></a>',
+    )
+    expect(story).toContain(
+      'href="/apps/item/ni" rel="next"><span class="pager__name">次</span> →</a>',
+    )
     // 作品1件の2枚目。3 / 4 のような画面の数にしない
     expect(story).toContain('<span class="pager__section">Projects</span>')
     expect(story).toContain('<span class="pager__of">1 / 2</span>')
@@ -1660,7 +1710,9 @@ describe('作品の本文の画面（Story）', () => {
 
     // 次の作品の「←」は、前の作品の本文の画面（列の中の1つ前）
     const next = pagerOf(await okText('/apps/item/ni'))
-    expect(next).toContain('href="/apps/item/ichi/story" rel="prev">← 前</a>')
+    expect(next).toContain(
+      'href="/apps/item/ichi/story" rel="prev">← <span class="pager__name">前</span></a>',
+    )
     expect(next).toContain('<span class="pager__of">2 / 2</span>')
   })
 
@@ -1841,16 +1893,20 @@ describe('個人ページを画面に分ける', () => {
     await seedMember({ slug: 'hoshino', name: '星野', sortOrder: 20 })
 
     const first = await okText('/members/okazaki')
-    expect(first).toContain('<a class="pager__go" href="/team" rel="prev">← Team</a>')
-    expect(first).toContain('href="/members/okazaki/about" rel="next">About →')
+    expect(first).toContain(
+      '<a class="pager__go" href="/team" rel="prev">← <span class="pager__name">Team</span></a>',
+    )
+    expect(first).toContain(
+      'href="/members/okazaki/about" rel="next"><span class="pager__name">About</span> →',
+    )
 
     // 1枚目へ戻る手は「← 前」ではなく名前を名乗る（別の節へ出るので）
     const about = await okText('/members/okazaki/about')
-    expect(about).toContain('rel="prev">← 岡崎 昂功</a>')
+    expect(about).toContain('rel="prev">← <span class="pager__name">岡崎 昂功</span></a>')
 
     const career = await okText('/members/okazaki/career')
     expect(career).toContain(
-      '<a class="pager__go pager__go--next" href="/contact" rel="next">Contact →</a>',
+      '<a class="pager__go pager__go--next" href="/contact" rel="next"><span class="pager__name">Contact</span> →</a>',
     )
 
     // Team の画面自身の「次」は変えない。個人ページはカードから入る脇の道
@@ -1908,6 +1964,35 @@ describe('個人ページを画面に分ける', () => {
     const other = mainOf(await okText('/members/tanaka'))
     expect(other).toContain('href="https://github.com/tanaka-example"')
     expect(other).toContain('href="mailto:tanaka@example.test"')
+  })
+
+  it('その人の GitHub / メールは、読み上げの名前でその人のものだと名乗る', async () => {
+    /*
+      2人以上のサイトの個人ページには、柱にサイトの GitHub / メール、Hero に
+      その人の GitHub / メールが並ぶ。同じ「GitHub」の名前が別の行き先を指すと、
+      読み上げのリンクの一覧ではどちらがこの人のものか分からない。見た目の札の
+      字（GitHub / メール）は名前に含める（WCAG 2.5.3）
+    */
+    await seedMember()
+    await seedMember({
+      slug: 'tanaka',
+      name: '田中 未来',
+      sortOrder: 20,
+      github: 'https://github.com/tanaka-example',
+      email: 'tanaka@example.test',
+    })
+
+    const html = await okText('/members/tanaka')
+    const own = mainOf(html)
+    expect(own).toMatch(
+      /<a href="https:\/\/github.com\/tanaka-example"[^>]* aria-label="田中 未来の GitHub">/,
+    )
+    expect(own).toContain('<a href="mailto:tanaka@example.test" aria-label="田中 未来のメール">')
+    // 柱のサイトの行き先は名乗らない（サイトの行き先で、誰か1人のものではない）
+    const rail = html.slice(html.indexOf('<aside'), html.indexOf('<main'))
+    const siteSocials = rail.slice(rail.indexOf('<div class="socials">'))
+    expect(siteSocials.slice(0, siteSocials.indexOf('</div>'))).toContain(`href="${SITE.github}"`)
+    expect(siteSocials.slice(0, siteSocials.indexOf('</div>'))).not.toContain('aria-label="')
   })
 
   it('画面ごとに canonical と題が変わる', async () => {
@@ -1971,17 +2056,27 @@ describe('1人のサイトの連なり', () => {
     await seedItem({ type: 'app' })
 
     const projects = await okText('/projects')
-    expect(projects).toContain('href="/members/okazaki" rel="next">岡崎 昂功 →</a>')
+    expect(projects).toContain(
+      'href="/members/okazaki" rel="next"><span class="pager__name">岡崎 昂功</span> →</a>',
+    )
 
     const first = await okText('/members/okazaki')
-    expect(first).toContain('<a class="pager__go" href="/projects" rel="prev">← Projects</a>')
-    expect(first).toContain('href="/members/okazaki/about" rel="next">About →</a>')
+    expect(first).toContain(
+      '<a class="pager__go" href="/projects" rel="prev">← <span class="pager__name">Projects</span></a>',
+    )
+    expect(first).toContain(
+      'href="/members/okazaki/about" rel="next"><span class="pager__name">About</span> →</a>',
+    )
 
     const career = await okText('/members/okazaki/career')
-    expect(career).toContain('href="/contact" rel="next">Contact →</a>')
+    expect(career).toContain(
+      'href="/contact" rel="next"><span class="pager__name">Contact</span> →</a>',
+    )
 
     const contact = await okText('/contact')
-    expect(contact).toContain('href="/members/okazaki/career" rel="prev">← Career</a>')
+    expect(contact).toContain(
+      'href="/members/okazaki/career" rel="prev">← <span class="pager__name">Career</span></a>',
+    )
   })
 
   it('目次は「Profile」の1行。行き先は1枚目で、どの画面でもその行に印', async () => {
@@ -2110,7 +2205,9 @@ describe('1人のサイトの連なり', () => {
     const first = await okText('/members/okazaki')
     // 差し込む先が無いので、前は無く、次はこの人の About
     expect(first).not.toContain('rel="prev"')
-    expect(first).toContain('href="/members/okazaki/about" rel="next">About →</a>')
+    expect(first).toContain(
+      'href="/members/okazaki/about" rel="next"><span class="pager__name">About</span> →</a>',
+    )
     // 目次はサイトのもの。Profile の行も印も無い
     expect(tocOf(first)).not.toContain('Profile')
     expect(first).not.toContain('aria-current="page"')
@@ -2174,7 +2271,7 @@ describe('個人ページを件数で割る', () => {
     */
     expect(first).toContain('Career の 2 画面のうち 1 画面目')
     // 同じ節の中の移動なので、次は行き先を名乗らない
-    expect(first).toContain('次 →')
+    expect(first).toContain('<span class="pager__name">次</span> →')
     // 3画面目は無い
     expect((await get('/members/okazaki/career/3')).status).toBe(404)
   })
@@ -2778,6 +2875,31 @@ describe('共有カードと画面ごとの説明文', () => {
     expect(new Set(found).size).toBe(paths.length)
   })
 
+  /*
+    COR-5。説明の無い作品（関門が説明を求める前に公開した作品）の説明文は、入口の
+    サイトの紹介文に戻さず、作品の事実から組む。戻していたころは、説明の無い作品の
+    ページが入口と同じ説明文になり、そうした作品どうしも同じ文になった
+  */
+  it('説明の無い作品の説明文は、入口とも、ほかの説明の無い作品とも重ならない', async () => {
+    await seedMember()
+    await seedItem({
+      type: 'work',
+      title: 'NoSumA',
+      slug: 'nosuma',
+      summary: '',
+      category: '製造業',
+      year: '2024',
+    })
+    await seedItem({ type: 'work', title: 'NoSumB', slug: 'nosumb', summary: '', year: '2025' })
+
+    const top = descriptionOf(await okText('/'))
+    const a = descriptionOf(await okText('/works/item/nosuma'))
+    const b = descriptionOf(await okText('/works/item/nosumb'))
+    expect(a).toBe('NoSumA（業務 · 製造業 · 2024）')
+    expect(b).toBe('NoSumB（業務 · 2025）')
+    expect(new Set([top, a, b]).size).toBe(3)
+  })
+
   it('一覧の説明文は、件数とピルと、その画面に出ているカードから作る', async () => {
     await seedItem({ type: 'app', title: 'ひとつめ', sortOrder: 10 })
     await seedItem({ type: 'app', title: 'ふたつめ', sortOrder: 20 })
@@ -3173,7 +3295,13 @@ describe('前の URL', () => {
     const signed = await signIn()
     await signed(`/admin/items/${item.id}`, {
       method: 'POST',
-      body: form({ type: 'app', title: 'AppMixer', slug: 'app-mixer', published: '1' }),
+      body: form({
+        type: 'app',
+        title: 'AppMixer',
+        slug: 'app-mixer',
+        summary: '説明。',
+        published: '1',
+      }),
     })
     const moved = await get('/apps/item/appmixer')
     expect(moved.status).toBe(301)
@@ -3202,6 +3330,62 @@ describe('前の URL', () => {
       expect(response.headers.get('location'), from).toBe(to)
     }
     expect((await get('/members/nobody')).status).toBe(404)
+  })
+})
+
+/*
+  COR-1。行き先がデータで変わる転送（slug の転送表・区分を変えた作品・1人のサイトの
+  /team・個人ページの Contact）は、ブラウザに覚えさせない（Cache-Control: no-cache）。
+  覚えさせていたころは、slug を変えて前の URL を開いたブラウザが「前 → 新」を覚え、
+  slug を元に戻すと「新 → 前」とのあいだでリダイレクトの無限ループになった。
+  行き先が動かない転送（/apps → /projects）は素の 301 のまま（長く覚えてよい）。
+*/
+describe('転送をブラウザに覚えさせるか', () => {
+  const noCache = async (path: string, location: string) => {
+    for (const round of ['miss', 'hit']) {
+      const response = await get(path)
+      expect(response.status, `${path} ${round}`).toBe(301)
+      expect(response.headers.get('location'), `${path} ${round}`).toBe(location)
+      // 写しから返すとき（hit）も、同じ cache-control を付け直す
+      expect(response.headers.get('cache-control'), `${path} ${round}`).toBe('no-cache')
+      expect(response.headers.get('x-noctifex-cache'), path).toBe(round)
+    }
+  }
+
+  it('slug の転送・区分を変えた作品の転送は no-cache。戻したあとは前の URL が 200', async () => {
+    const item = await seedItem({ title: 'AppMixer', slug: 'appmixer', summary: '説明。' })
+    const signed = await signIn()
+    const rename = (slug: string) =>
+      signed(`/admin/items/${item.id}`, {
+        method: 'POST',
+        body: form({ type: 'app', title: 'AppMixer', slug, summary: '説明。', published: '1' }),
+      })
+    await rename('mixer2')
+    await noCache('/apps/item/appmixer', '/apps/item/mixer2')
+    await noCache('/works/item/mixer2', '/apps/item/mixer2')
+
+    // 元に戻す。サーバーは逆向きに送る（ブラウザが前の転送を覚えていなければループしない）
+    await rename('appmixer')
+    expect((await get('/apps/item/appmixer')).status).toBe(200)
+    await noCache('/apps/item/mixer2', '/apps/item/appmixer')
+  })
+
+  it('メンバーの slug の転送・1人のサイトの /team・個人ページの Contact も no-cache', async () => {
+    const member = await seedMember()
+    await noCache('/team', '/members/okazaki')
+    await noCache('/members/okazaki/contact', '/contact')
+    const signed = await signIn()
+    await signed(`/admin/members/${member.id}`, {
+      method: 'POST',
+      body: form({ name: member.name, slug: 'okazaki-k', published: '1' }),
+    })
+    await noCache('/members/okazaki', '/members/okazaki-k')
+  })
+
+  it('行き先が動かない転送（/apps → /projects）は素の 301 のまま', async () => {
+    const response = await get('/apps')
+    expect(response.status).toBe(301)
+    expect(response.headers.get('cache-control')).toBeNull()
   })
 })
 

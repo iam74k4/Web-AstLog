@@ -114,7 +114,7 @@ export const screenHref = (screen: { slug: string; page: number }, query = '') =
 /*
   その画面に効く絞り込みだけを URL に残す（data.ts の filterApplies）。
   絞り込みが画面をまたいで残ること自体は意図どおり（test/public.test.ts の
-  「絞り込みは、めくっても目次から移っても外れない」）。落とすのは、その画面では
+  「絞り込みは、めくっても外れない。一覧の無い画面には付けて回らない」）。落とすのは、その画面では
   何の意味も持たない項目だけ。
 */
 export const stepQuery = (slug: string, filter: ItemFilter): string =>

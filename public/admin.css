@@ -432,6 +432,21 @@
   gap: var(--sp-2);
 }
 
+/*
+  作品のリンクの組（ラベルと URL）。600 未満は1列に積まれるので、組の中を詰め
+  （--sp-1）、組と組のあいだを空ける（fieldset の --sp-2 に --sp-4 を足す）。
+  同じ間隔で6段に並べていたころは、どの URL がどのラベルの組か見分けられず、
+  ラベルだけ・URL だけを別の行に書き換えやすかった（片方だけの行は保存で 400）。
+  600 以上は組が横1行に並ぶので、段の間隔は素のまま（下の「600px 以上」）。
+*/
+.link-row {
+  row-gap: var(--sp-1);
+}
+
+.link-row + .link-row {
+  margin-top: var(--sp-4);
+}
+
 .form-foot {
   display: flex;
   flex-direction: column;
@@ -946,6 +961,10 @@
 
   .link-row {
     grid-template-columns: 160px minmax(0, 1fr);
+  }
+
+  .link-row + .link-row {
+    margin-top: 0;
   }
 
   .metric-row {

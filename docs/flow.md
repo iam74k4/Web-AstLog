@@ -138,6 +138,9 @@ flowchart LR
 管理画面で slug を変えた作品・メンバーの前の URL と、区分を変えた作品の前の区分の URL は、
 いまの URL へ 301 で寄せる（前の slug は `item_slug_redirects` / `member_slug_redirects`
 に残っている）。変えた日に名刺や SNS に貼ったリンクが切れる、を起こさない。
+この 301（と1人のサイトの `/team`・個人ページの Contact の 301）は行き先がデータで
+変わるので、`Cache-Control: no-cache` でブラウザに覚えさせない——slug を元に戻した
+日に、前の転送を覚えたブラウザがリダイレクトの無限ループにならないように。
 
 個人開発と業務は、公開ページでは Projects の1つの一覧（新しい順）。以前の一覧の URL
 （`/apps` `/works` とその続き）は、同じ区分で絞った `/projects` へ 301 で寄せる
@@ -250,9 +253,10 @@ flowchart TD
 
 保存が必ず 303 リダイレクトで終わるので、リロードしても二重に登録されない。
 送信ボタンの2度押し（遅い回線・送り直し）は、追加のフォームが描くときに持つ
-一度きりの札（`formKey`）で止める——同じ札で同じ中身の2度目は書かずに「保存しました」へ
-送る（1度目がもう書いている）。同じ札で中身が違う（「戻る」で開き直したフォームから
-別のものを書いた）なら、新しい札で書く。JavaScript が無いので、押したあとにボタンを押せなくする
+一度きりの札（`formKey`）で止める——同じ札の2度目は新しい行を作らず、1度目がその札で
+作った行への保存になる（編集と同じ道。中身が同じなら書き直すだけ、「戻る」で開き直して
+直した・公開に印を付けたなら、それを反映して公開の関門も通す。知らせは
+「1度目に作ったものに書きました」まで言う）。JavaScript が無いので、押したあとにボタンを押せなくする
 手が無い。「この並びから始める」は1文の INSERT で、決まった中身のブロックは DB の
 部分一意索引で、同時に来た2本目を止める。
 
@@ -324,13 +328,14 @@ flowchart TD
     Check{"Cookie の<br>セッションは有効か<br>（D1 にはハッシュで引く）"}
     Login["ログイン画面<br>GET /admin/login"]
     Start["GET /admin/auth/:provider/start<br>D1 に state・verifier・nonce（10分）<br>同じ state をクッキーに"]
+    Busy["429<br>ログインの試行が多すぎます"]
     Provider["GitHub / Google<br>（本人が許可する）"]
     Callback["GET /admin/auth/:provider/callback<br>state の札を先に消す"]
     State{"クッキーと query の state が一致し<br>期限内で、提供元も同じか"}
     Exchange{"code をトークンに換え<br>本人の ID を引けたか"}
     Who{"user_identities に<br>（提供元, ID）があるか"}
-    Owner{"OWNER_GITHUB_ID と同じ id か<br>確認済みの OWNER_GOOGLE_EMAIL か"}
-    Link["owner に紐づける<br>（owner の行が無ければ作る）"]
+    Owner{"OWNER_GITHUB_ID と同じ id か<br>確認済みの OWNER_GOOGLE_EMAIL か<br>その値はまだ使っていないか（owner_claims）"}
+    Link["owner に紐づける<br>（owner の行が無ければ作る。owner は1人）"]
     Admin["管理画面<br>（前のセッションを捨てて発行し直す）"]
     Refuse["403<br>このアカウントでは入れません"]
     Broken["502<br>提供元との通信に失敗"]
@@ -339,6 +344,7 @@ flowchart TD
     Check -->|"はい"| Admin
     Check -->|"いいえ → 303 ?next=開いた画面"| Login
     Login -->|"GitHub でログイン / Google でログイン"| Start
+    Start -->|"同じ IP から 60 秒に 10 回を超えた<br>（D1 に書かない）"| Busy
     Start -->|"302（PKCE・state。Google は nonce も）"| Provider
     Provider -->|"断った → ?error=denied"| Login
     Provider -->|"?code&state"| Callback
@@ -357,6 +363,8 @@ flowchart TD
 
 - 本人は提供元の ID で照合する（GitHub は数値の id、Google は sub）。ログイン名や
   メールアドレスを見るのは、最初の紐づけのときだけ
+- ログインの入口は、同じ IP から 60 秒に 10 回まで（Workers の Rate Limiting）。
+  超えたぶんは D1 に書かずに 429
 - state は D1 で1回きり。成功しても弾いても、差し出された札（クッキーの側と
   query の側）はその場で消える。同じ URL をもう一度開いてもやり直しになる
 - Google の id_token は iss・aud・exp・nonce を確かめ、合わなければ 400。署名は、
@@ -371,11 +379,13 @@ flowchart TD
 
 最初の owner を作る入口（`/admin/setup`）は無い。`wrangler.toml` の `[vars]` と
 一致するアカウントで初めてログインしたとき、そのアカウントが owner に紐づく。
+`[vars]` の値が効くのは値ごとに1度だけ（使った値は `owner_claims` に残る）。
 
 ```mermaid
 flowchart LR
     First["初めてのログイン<br>（user_identities に行が無い）"]
     Gate{"GitHub: id = OWNER_GITHUB_ID<br>Google: 確認済みで<br>アドレス = OWNER_GOOGLE_EMAIL"}
+    Used{"その値はもう使ったか<br>（owner_claims に行があるか）"}
     Existing{"owner の行があるか"}
     Keep["その行に紐づける<br>（id もメンバーも変えない）"]
     Create["owner を1件作って紐づける"]
@@ -383,7 +393,9 @@ flowchart LR
     Refuse["403"]
 
     First --> Gate
-    Gate -->|"はい"| Existing
+    Gate -->|"はい"| Used
+    Used -->|"いいえ（記録を残す）"| Existing
+    Used -->|"はい"| Refuse
     Existing -->|"はい（パスワードの頃から居る）"| Keep
     Existing -->|"いいえ"| Create
     Keep --> Admin
@@ -392,5 +404,8 @@ flowchart LR
 ```
 
 GitHub と Google の両方を、同じ owner に紐づけられる（片方で入ったあと、もう片方でも
-一度ログインする）。紐づいたあとは `[vars]` を書き換えても外れない。外すのは
-`user_identities` の行を消すこと（README の「管理画面に入る」）。
+一度ログインする。同時に初めて入っても owner は1人——部分一意索引 `users_one_owner`）。
+紐づいたあとは `[vars]` を書き換えても外れない。外すのは `user_identities` の行を
+消すこと（README の「管理画面に入る」）。外したアカウントは、同じアカウントで入り直しても
+紐づき直らない（その値はもう使ってある）。また使うときは `owner_claims` の行も消す。
+同じ確認済みのアドレスを持つ別の Google アカウント（別の sub）も、同じ値では紐づかない。

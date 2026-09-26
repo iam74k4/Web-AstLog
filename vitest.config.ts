@@ -100,12 +100,14 @@ const repoPlugin = (): Plugin => ({
   嘘になる）のを、ここで落とす。
 
   files は置いてあるファイルの一覧（在るかどうかを見るだけ）、texts は読む相手の中身。
-  読む相手は src・scripts・public の CSS・文書（CLAUDE.md・README.md・docs/）。
+  読む相手は src・scripts・public の CSS・文書（CLAUDE.md・README.md・docs/）と test/。
+  test/ を読むのは、コメントと文書が名指しするテストの名前（「<テストのパス> の『…』」）が
+  そのファイルに実在するかを見るため。
 */
 const SOURCES = 'virtual:sources'
 const TREE = ['src', 'scripts', 'public', 'docs', 'test', 'drizzle', '.github']
 const TEXT =
-  /^(?:src\/.*\.tsx?|scripts\/.*\.mjs|public\/[^/]+\.css|docs\/.*\.md|CLAUDE\.md|README\.md)$/
+  /^(?:src\/.*\.tsx?|scripts\/.*\.mjs|public\/[^/]+\.css|docs\/.*\.md|test\/.*\.ts|CLAUDE\.md|README\.md)$/
 
 const walk = (dir: string): string[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

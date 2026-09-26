@@ -19,6 +19,7 @@
     "test:watch": "vitest",
     "check:fit": "node scripts/check-fit.mjs",
     "check:contrast": "node scripts/check-contrast.mjs",
+    "check:restore": "node scripts/check-restore.mjs",
     "check:ids": "node scripts/check-ids.mjs"
   },
   "devDependencies": {

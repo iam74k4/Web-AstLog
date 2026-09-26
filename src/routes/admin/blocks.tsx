@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { Hono } from 'hono'
+import { type Context, Hono } from 'hono'
 import {
   BLOCK_TYPES,
   type BlockType,
@@ -476,19 +476,18 @@ blockRoutes.post('/blocks', async (c) => {
   const saved = (id: number) =>
     c.redirect(`/admin/blocks?saved=${savedParam(values ? values.published : 1)}#block-${id}`, 303)
 
-  // 同じ札で書いた、同じ中身の行（newFormKey の注記）
+  // 同じ札で書いた行（newFormKey の注記）。札を持つのは打ち込むものだけ
   const twinOf = (key: string | null) =>
     key ? database.query.blocks.findFirst({ where: eq(schema.blocks.formKey, key) }) : undefined
-  const same = (row: schema.Block | undefined) =>
-    row !== undefined &&
-    row.type === type?.key &&
-    row.title === values?.title &&
-    row.body === values?.body
-  // 同じフォームの2度目の送信。1度目がもう書いている
+  /*
+    同じフォームの2度目の送信は、1度目が作った行への保存（作品の POST /items と同じ。
+    中身が違えば・公開に印を付けていれば、編集として反映し、公開の関門も通す）
+  */
   const sent = formKeyOf(form)
-  const twin = await twinOf(sent)
-  if (twin && same(twin)) return saved(twin.id)
-  const formKey = twin ? newFormKey() : sent
+  const twin = values ? await twinOf(sent) : undefined
+  const twinType = twin ? blockType(twin.type) : undefined
+  if (twin && values && twinType) return saveBlock(c, twin, twinType, values, true)
+  const formKey = sent
 
   const stored = await listBlocks(database)
   // 0件のときサイトに出ているのは既定の並び。重複かどうかもそれで判断する
@@ -559,9 +558,9 @@ blockRoutes.post('/blocks', async (c) => {
     .onConflictDoNothing()
     .returning({ id: schema.blocks.id })
   if (!added) {
-    // 打ち込むものなら1度目の送信が書いている。決まった中身なら、もう置いてある
-    const first = await twinOf(formKey)
-    return first && same(first) ? saved(first.id) : placedAlready(type.label)
+    // 打ち込むものなら1度目の送信が書いている（その行への保存）。決まった中身なら、もう置いてある
+    const first = values ? await twinOf(formKey) : undefined
+    return first && values ? saveBlock(c, first, type, values, true) : placedAlready(type.label)
   }
 
   /*
@@ -595,8 +594,27 @@ blockRoutes.post('/blocks/:id', async (c) => {
   const type = block ? blockType(block.type) : undefined
   if (!block || !type) return c.notFound()
 
-  const values = readBlockForm(await c.req.formData())
+  return saveBlock(c, block, type, readBlockForm(await c.req.formData()), false)
+})
+
+/*
+  既にある行への保存。編集フォームの送信と、追加のフォームの2度目の送信（again。
+  同じ札で1度目が作った行）の両方がここを通る（作品の saveItem と同じ）。
+*/
+async function saveBlock(
+  c: Context<AppEnv>,
+  block: schema.Block,
+  type: BlockType,
+  values: ReturnType<typeof readBlockForm>,
+  again: boolean,
+) {
+  const id = block.id
   const updatedAt = new Date().toISOString()
+  const done = () =>
+    c.redirect(
+      `/admin/blocks?saved=${savedParam(values.published)}${again ? '&again=1' : ''}#block-${id}`,
+      303,
+    )
 
   // 決まった中身のものは、出す・出さないしか変えられない
   if (type.kind === 'fixed') {
@@ -604,7 +622,7 @@ blockRoutes.post('/blocks/:id', async (c) => {
       .update(schema.blocks)
       .set({ published: values.published, updatedAt })
       .where(eq(schema.blocks.id, id))
-    return c.redirect(`/admin/blocks?saved=${savedParam(values.published)}#block-${id}`, 303)
+    return done()
   }
 
   /*
@@ -634,8 +652,8 @@ blockRoutes.post('/blocks/:id', async (c) => {
     .update(schema.blocks)
     .set({ ...values, updatedAt })
     .where(eq(schema.blocks.id, id))
-  return c.redirect(`/admin/blocks?saved=${savedParam(values.published)}#block-${id}`, 303)
-})
+  return done()
+}
 
 /*
   一覧から公開・下書きだけを切り替える。中身は触らない。

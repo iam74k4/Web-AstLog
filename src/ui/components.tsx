@@ -472,14 +472,36 @@ const hasShot = (item: Pick<Item, 'imageUrl'>) => Boolean(item.imageUrl)
 
 export const shotRow = (items: Pick<Item, 'imageUrl'>[]) => items.some(hasShot)
 
+/*
+  カードの説明を、電話の幅でも何行か多く出してよい行か（ItemCard の lean）。
+  行（1画面ぶんのカードの並び）のどのカードも実績値を持たず、担当者名も
+  出さないときに軽い。呼ぶ側が行ごとに数えて渡す（framed と同じ）。
+
+  電話の幅（600 未満）はカードが1列に2枚積まれ、説明を2行で止めていた
+  （--card-lines）。2行の根拠は、実績値と担当者名を持つ重いカード2枚の行が
+  3行で溢れたことで、その2つを持たない行には当てはまらない——本人のサイト
+  （1人・実績値の無い作品の行）では、2枚の下に 237px 空いたまま「何をしたか」の
+  2文目が切れていた（= rail @390x844 指）。軽い行は --card-lines-lean まで出す。
+  重い行は今までどおり2行。
+
+  数えるのは描くものそのもの（Metric は metricValue があれば、担当者名は
+  showMember と名前と slug がそろえば出る）。条件を写すと片方だけ変わる。
+*/
+export const leanRow = (
+  items: Pick<ItemView, 'metricValue' | 'memberName' | 'memberSlug'>[],
+  showMember: boolean,
+) => items.every((item) => !item.metricValue && !(showMember && item.memberName && item.memberSlug))
+
 export const ItemCard = ({
   item,
   showMember,
   framed,
+  lean,
 }: {
   item: ItemView
   showMember?: boolean
   framed?: boolean
+  lean?: boolean
 }) => {
   /*
     カードのどこを押しても、その作品のページ（恒久リンク）へ行く。
@@ -507,7 +529,7 @@ export const ItemCard = ({
   */
   const href = itemHref(item)
   return (
-    <article class="card">
+    <article class={lean ? 'card card--lean' : 'card'}>
       {/*
         サムネイル。600 以上でだけ出す（app.css の .card__thumb）。狭い画面では
         カードが1列に縦に積まれ、1画面の高さの予算に画像1枚ぶんの余りが無い。
@@ -1054,6 +1076,11 @@ export const Empty = ({ children }: { children: Child }) => <p class="empty">{ch
   リンクを置くと、キーボードで送る手が1回空振りする。ますだけは残すので、
   めくっても真ん中の数字が左右に動かない。
 
+  手の名前（行き先の節の名前、または「前」「次」）は .pager__name に入れ、矢印は
+  その外に置く。名前は1行で、入りきらなければ末尾を省く（app.css の .pager__name）
+  ——省くのは見た目だけで、読み上げの名前は字のまま全部。矢印を名前の中に入れると、
+  「次 →」側の矢印が省略記号に食われて向きが消える。
+
   unit は数える単位で、読み上げにだけ出る（目に見えるのは「3 / 7」だけ）。
   ふつうは「画面」。作品1件のページ同士をめくるときは作品1件（1枚目と本文の
   画面 Story の2枚でも1件）を数えるので「件」——「Projects の 7 画面のうち
@@ -1093,7 +1120,7 @@ export const ScreenPager = ({
     <nav class="pager" aria-label="画面の移動">
       {prev ? (
         <a class="pager__go" href={prev} rel="prev">
-          {prevSection ? `← ${prevSection}` : '← 前'}
+          ← <span class="pager__name">{prevSection ?? '前'}</span>
         </a>
       ) : (
         <span class="pager__end" />
@@ -1120,7 +1147,7 @@ export const ScreenPager = ({
       )}
       {next ? (
         <a class="pager__go pager__go--next" href={next} rel="next">
-          {nextSection ? `${nextSection} →` : '次 →'}
+          <span class="pager__name">{nextSection ?? '次'}</span> →
         </a>
       ) : (
         <span class="pager__end" />
@@ -1333,16 +1360,33 @@ export const ProfileWhole = ({
 
   メールの札は「メール」。押す手の言葉は日本語（CLAUDE.md「文言」）で、GitHub は
   サービスの固有名なのでそのまま。
+
+  owner は「誰の行き先か」。サイトの行き先（柱と Contact）は渡さず、その人だけの
+  行き先（OwnSocials）が名前を渡す。読み上げの名前が「青木 春香の GitHub」になる
+  （見た目の札は「GitHub」のまま。名前は見た目の字を含む——WCAG 2.5.3）。
 */
-export const Socials = ({ github, email }: { github?: string | null; email?: string | null }) => (
+export const Socials = ({
+  github,
+  email,
+  owner,
+}: {
+  github?: string | null
+  email?: string | null
+  owner?: string
+}) => (
   <div class="socials">
     {isHttpsUrl(github) ? (
-      <a href={github} rel="me noreferrer" target="_blank">
+      <a
+        href={github}
+        rel="me noreferrer"
+        target="_blank"
+        aria-label={owner ? `${owner}の GitHub` : undefined}
+      >
         <GithubIcon /> GitHub
       </a>
     ) : null}
     {email ? (
-      <a href={`mailto:${email}`}>
+      <a href={`mailto:${email}`} aria-label={owner ? `${owner}のメール` : undefined}>
         <MailIcon /> メール
       </a>
     ) : null}
@@ -1352,11 +1396,18 @@ export const Socials = ({ github, email }: { github?: string | null; email?: str
 /*
   その人だけの連絡先。サイトと違う行き先を持つ人のぶんだけ出す（同じ行き先を
   2つ置かない）。個人ページの1枚目と、全体ページ（/all）のプロフィールの節で使う。
+
+  札にはその人の名前を添える（読み上げの名前「青木 春香の GitHub」）。2人以上の
+  サイトの個人ページには、柱のサイトの GitHub / メールと、この人の GitHub / メールが
+  同じ画面に並ぶ——同じ名前の札が別の行き先を指すと、読み上げの一覧では
+  どちらがこの人のものか分からない（同じ行き先を2つ置かない、の裏返し）。柱の
+  ほうを外さないのは、柱がどの画面でも同じサイトの柱だから（個人ページ専用の柱に
+  入れ替えない。CLAUDE.md「個人ページはサイトの連なりの一部」）。
 */
 export const OwnSocials = ({ member }: { member: Member }) => {
   const github = isHttpsUrl(member.github) && member.github !== SITE.github ? member.github : null
   const email = member.email && member.email !== SITE.email ? member.email : null
-  return github || email ? <Socials github={github} email={email} /> : null
+  return github || email ? <Socials github={github} email={email} owner={member.name} /> : null
 }
 
 /*

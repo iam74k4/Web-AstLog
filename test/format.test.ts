@@ -179,8 +179,10 @@ describe('yearFrom', () => {
     expect(yearFrom('2026')).toBe(2026)
     expect(yearFrom('2024 — 現在')).toBe(2024)
     expect(yearFrom('2019.04 — 2021')).toBe(2019)
-    // 全角の数字は保存のときに半角へ直るので、知らせる側も直して読む
-    expect(yearFrom('２０２４')).toBe(2024)
+  })
+
+  it('全角の数字は読まない（DB の year_from と同じ ASCII の規則。保存のときに半角へ直る）', () => {
+    expect(yearFrom('２０２４')).toBeNull()
   })
 
   it('頭が数字4桁でなければ null（並びでは最後に回る）', () => {

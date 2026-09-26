@@ -48,13 +48,22 @@ import { DESIGN_SIZES, SHORT_WIDE } from './lib/viewports.mjs'
 
 /*
   設計サイズ3つ（scripts/lib/viewports.mjs。check:fit と同じ電話・板・机）に、
-  背の低い窓（SHORT_WIDE）を足して幅の順に並べる。指（touch）の印はまだ使って
-  いない（細いポインタの姿で測っている）。指で測るように変えるなら、柱の帯が
-  伸びたぶん月と字の位置が動くので、全部の組を測り直すこと。
+  背の低い窓（SHORT_WIDE）を足して幅の順に並べる。電話と板は指で測る（touch。
+  check:fit と同じ）。指では押す手が --tap の 44px になり、柱の帯と入口の
+  「すべてを1ページで読む →」（.hero__whole）が伸びる。入口の字は画面の下に
+  寄せてある（app.css の main > .hero:has(> .moon)）ので、下の1本が伸びたぶん
+  見出し・リード文・帯が月のほうへ上がる——細いポインタの姿だけを測っていたころは、
+  実物の電話の位置を一度も測っていなかった。
 */
 const VIEWPORTS = [...DESIGN_SIZES, SHORT_WIDE]
-  .map(({ width, height }) => ({ width, height }))
+  .map(({ width, height, touch }) => ({ width, height, touch: Boolean(touch) }))
   .sort((a, b) => a.width - b.width)
+
+// newPage に渡す形（touch は hasTouch へ）
+const pageOptions = ({ width, height, touch }) => ({
+  viewport: { width, height },
+  hasTouch: touch,
+})
 
 /*
   月が出る画面。サイトの連なりの最初（入口）と最後（Contact）の2枚だけ——
@@ -394,8 +403,8 @@ async function main() {
   try {
     for (const viewport of VIEWPORTS) {
       for (const screen of SCREENS) {
-        const page = await browser.newPage({ viewport, reducedMotion: 'reduce' })
-        const size = `${viewport.width}x${viewport.height}`
+        const page = await browser.newPage({ ...pageOptions(viewport), reducedMotion: 'reduce' })
+        const size = `${viewport.width}x${viewport.height}${viewport.touch ? ' 指' : ''}`
         const where = `${screen.name} ${size}`
         const response = await page.goto(base + screen.path, { waitUntil: 'load' })
         if ((response?.status() ?? 0) !== 200) {
@@ -508,7 +517,7 @@ async function main() {
         動きを止めずに開き、月の animation だけを止めて途中の時刻へ送る。
         字の浮かび上がりは先に終わらせる——行ボックスを止まった位置で読むため。
       */
-        const moving = await browser.newPage({ viewport })
+        const moving = await browser.newPage(pageOptions(viewport))
         await moving.goto(base + screen.path, { waitUntil: 'load' })
         await moving.evaluate(() => document.fonts.ready.then(() => true))
         const end = await moving.evaluate(holdMoon)

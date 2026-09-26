@@ -43,10 +43,22 @@ migrations_dir = "drizzle"
 binding = "MEDIA"
 id = "TO_BE_CREATED"
 
+# ログインの入口（/admin/auth/:provider/start）の回数の上限。IP ごとに 60 秒で 10 回。
+# 入口は開くたびに D1 へ1行書く（OAuth の state）ので、上限が無いと未認証の GET だけで
+# D1 の書き込みの枠を使い切られ、管理画面の保存も持ち主のログインも止まる。IP ごとに
+# 数えるのは、別の IP から叩かれても持ち主が締め出されないようにするため
+# （src/routes/admin/auth.tsx の tooManyStarts）。namespace_id はこのアカウントの中で
+# 上限を分ける番号で、秘密でも、事前に作るものでもない。
+[[ratelimits]]
+name = "LOGIN_RATE_LIMIT"
+namespace_id = "1001"
+simple = { limit = 10, period = 60 }
+
 # 管理画面に最初に owner として紐づけてよいアカウント（src/env.ts）。どちらも公開してよい値。
 # GitHub は数値のユーザー id（ログイン名ではない）、Google は確認済みのメールアドレス。
-# 効くのは最初の紐づけだけで、以後は GitHub の id / Google の sub で照合する。
-# 違うアカウントで入るなら、ここを書き換えてデプロイする（README の「管理画面に入る」）。
+# 効くのは値ごとに最初の紐づけ1度だけ（使った記録は D1 の owner_claims）。以後は
+# GitHub の id / Google の sub で照合する。違うアカウントで入るなら、ここを書き換えて
+# デプロイする（README の「管理画面に入る」）。
 [vars]
 OWNER_GITHUB_ID = "118629892"
 OWNER_GOOGLE_EMAIL = "iam74k4@gmail.com"

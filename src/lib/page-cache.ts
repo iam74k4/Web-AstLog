@@ -25,9 +25,18 @@ import { SESSION_COOKIE } from './auth'
   - 写しの鍵には Worker の版（version_metadata の id）も入れる。デプロイで
     マークアップや src/site.ts の文言が変わった日に、前のコードの写しを出さない
 
-  **D1 が例外を投げたら、古い写しを返す**（stale-if-error）。版が変わった写しも、
-  1時間を過ぎた写しも、KEEP_SECONDS（7日）までは残してあり、500 の代わりに
-  それを出す。写しが1つも無ければ今までどおり 500。
+  **D1 が例外を投げたら、写しで持ちこたえる**（stale-if-error）。ただし出すのは
+  **写しの版がいまの版と同じとき**だけ（1時間を過ぎていてもよい。KEEP_SECONDS＝7日
+  までは残してある）。中身が変わっていない画面は、D1 が落ちていても前の姿で出る。
+  版が変わった写し——管理画面で何かを書いたあとの写し——は、障害の間も出さない
+  （500 のまま）。以前は版を問わずに出していたので、誤って載せた作品を下書きに
+  戻した・消したあとでも、その間に誰も開いていない URL の写しが D1 の障害のたびに
+  200 で戻ってきた（取り下げが巻き戻る）。書き込みのあとの写しを出さないのは、
+  どの書き込みが取り下げかを写しの側では見分けられないため。
+  - 版（KV）が読めないときも出さない。写しがいまのものかを確かめられないので
+  - 版の読みは KV のエッジのキャッシュ（60秒）を通すので、書き込みから 60 秒ほどは、
+    そのデータセンターでは前の版がいまの版に見える（写しの hit と同じ遅れ）
+  - 写しを確実に全部外すのはデプロイ（鍵に Worker の版が入っている）
 
   写しを通らないもの:
   - セッションのクッキーを持つ要求（有効かどうかは問わない）。ログインしている人の
@@ -37,8 +46,13 @@ import { SESSION_COOKIE } from './auth'
     /robots.txt（D1 を引かない固定の文）、最後の語に「.」を含む URL
     （/sitemap.xml を除く。画面の URL に「.」は無く、/wp-login.php や /.env の
     ような探し回る要求のために KV を読まない）
-  - 応答が cache-control か set-cookie を持つもの（ログイン中の private, no-store）、
-    200・301・302・404 以外のもの（303 は D1 を引かない URL の読み替え、500 は失敗）
+  - 応答が set-cookie を持つもの、cache-control に private か no-store を持つもの
+    （ログイン中の private, no-store）、200・301・302・404 以外のもの（303 は D1 を
+    引かない URL の読み替え、500 は失敗）
+
+  応答が自分の cache-control を持っていれば（行き先がデータで変わる転送の no-cache。
+  src/routes/public/page.tsx の movedTo）、写しから返すときもそれを付け直す。
+  写しの側の cache-control（Cache API に置いておく長さ）は訪問者に渡さない。
 
   404 も持つのは、形の合う名前（/members/<slug> など）を探し回る要求が、
   写しがあれば D1 を引かずに済むから。形の合わない名前は、写しより前に
@@ -59,6 +73,8 @@ const CACHEABLE = new Set([200, 301, 302, 404])
 // 写しに付けて置く印（訪問者に返すときは外す）
 const VERSION_HEADER = 'x-noctifex-version'
 const STORED_HEADER = 'x-noctifex-stored'
+// 応答がもともと持っていた cache-control（返すときに付け直す）
+const ORIGINAL_CACHE_CONTROL = 'x-noctifex-cache-control'
 // 訪問者に返す、写しをどう使ったか（hit / miss / stale）。テストと調べもの用
 export const CACHE_STATE_HEADER = 'x-noctifex-cache'
 
@@ -94,12 +110,25 @@ export async function touchSite(kv: KVNamespace): Promise<void> {
 
 const served = (copy: Response, state: 'hit' | 'stale') => {
   const response = new Response(copy.body, copy)
-  for (const name of [VERSION_HEADER, STORED_HEADER, 'cache-control', 'age', 'cf-cache-status']) {
+  const own = copy.headers.get(ORIGINAL_CACHE_CONTROL)
+  for (const name of [
+    VERSION_HEADER,
+    STORED_HEADER,
+    ORIGINAL_CACHE_CONTROL,
+    'cache-control',
+    'age',
+    'cf-cache-status',
+  ]) {
     response.headers.delete(name)
   }
+  if (own) response.headers.set('cache-control', own)
   response.headers.set(CACHE_STATE_HEADER, state)
   return response
 }
+
+// 写しにしてはいけない応答（その人だけのもの・どこにも置いてはいけないもの）
+const personal = (response: Response) =>
+  /\b(?:private|no-store)\b/i.test(response.headers.get('cache-control') ?? '')
 
 const isFresh = (copy: Response, version: string) =>
   copy.headers.get(VERSION_HEADER) === version &&
@@ -131,14 +160,17 @@ export const pageCache = createMiddleware<AppEnv>(async (c, next) => {
   await next()
 
   if (c.error) {
-    if (copy) c.res = served(copy, 'stale')
+    // いまの版の写しだけ（上の注記）。版が読めなければ出さない
+    if (copy && version !== null && copy.headers.get(VERSION_HEADER) === version) {
+      c.res = served(copy, 'stale')
+    }
     return
   }
   const response = c.res
   if (
     version === null ||
     !CACHEABLE.has(response.status) ||
-    response.headers.has('cache-control') ||
+    personal(response) ||
     response.headers.has('set-cookie')
   ) {
     return
@@ -146,6 +178,8 @@ export const pageCache = createMiddleware<AppEnv>(async (c, next) => {
 
   const body = await response.arrayBuffer()
   const stored = new Response(body, response)
+  const own = response.headers.get('cache-control')
+  if (own) stored.headers.set(ORIGINAL_CACHE_CONTROL, own)
   stored.headers.set(VERSION_HEADER, version)
   stored.headers.set(STORED_HEADER, String(Date.now()))
   stored.headers.set('cache-control', `public, max-age=${KEEP_SECONDS}`)

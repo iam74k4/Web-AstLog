@@ -18,6 +18,7 @@ export async function resetDb() {
   await database.delete(schema.items)
   await database.delete(schema.sessions)
   await database.delete(schema.userIdentities)
+  await database.delete(schema.ownerClaims)
   await database.delete(schema.oauthStates)
   await database.delete(schema.users)
   await database.delete(schema.members)

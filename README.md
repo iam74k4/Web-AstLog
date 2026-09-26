@@ -68,7 +68,9 @@ OAuth クライアントが要る。作り方と `.dev.vars` の書き方は下�
 
 そのアカウントで一度ログインすると D1 の `user_identities` に紐づき、以後は
 提供元の ID（GitHub の id / Google の sub）で照合する。ログイン名やアドレスを
-変えても入れる。どちらにも当たらないアカウントは「このアカウントでは入れません」
+変えても入れる。`[vars]` の値が効くのは**値ごとに1度だけ**で、使った値は D1 の
+`owner_claims` に残る（同じ確認済みアドレスを持つ別の Google アカウントも、外したあとの
+同じアカウントも、その値ではもう紐づかない）。どちらにも当たらないアカウントは「このアカウントでは入れません」
 （403）になり、その画面にそのアカウント自身の ID が出る——設定を間違えたときは、
 それを `[vars]` に写せばよい。
 
@@ -123,11 +125,26 @@ npx wrangler secret put GOOGLE_CLIENT_SECRET
 ### 紐づけを外す・端末を締め出す
 
 紐づいたアカウントは、`[vars]` を書き換えても外れない（ID で照合しているため）。
-外すときは D1 の行を消す。
+外すときは D1 の行を消す。`[vars]` がそのままでも、同じアカウントで入り直して紐づき
+直ることは無い（その値はもう使ってある。`owner_claims`）。
 
 ```bash
 npx wrangler d1 execute noctifex --remote --command "DELETE FROM user_identities WHERE provider = 'github'"
+npx wrangler d1 execute noctifex --remote --command "DELETE FROM sessions"
 ```
+
+外したアカウントを**また使う**ときは、使った記録の行も消してから、そのアカウントで
+ログインする（`[vars]` の値がそのアカウントのものであること）。
+
+```bash
+npx wrangler d1 execute noctifex --remote --command "DELETE FROM owner_claims WHERE provider = 'github'"
+```
+
+別のアカウントに替えるなら、`[vars]` をそのアカウントの値に書き換えてデプロイする
+（新しい値として1度だけ効く）。
+
+ログインの入口（`/admin/auth/<提供元>/start`）は、同じ IP から 60 秒に 10 回まで
+（`wrangler.toml` の `[[ratelimits]]`。作っておくものは無い）。超えると 1 分ほど 429 になる。
 
 端末を失くした・共用の端末でログアウトし忘れたときは、管理画面の「アカウント」
 （左ナビの足元の名前）→「すべての端末からログアウト」。管理画面に入れないときは、
@@ -144,6 +161,7 @@ npm run lint      # 警告も落とす（--error-on-warnings）。直すなら n
 npm test          # workerd 上で D1・KV ごと動かす
 npm run check:fit # 画面に収まっているか（ブラウザで実測）
 npm run check:contrast # 入口の月の上で文字が読めるか（ブラウザで実測）
+npm run check:restore  # deploy が残す D1 の写しを、空の D1 に戻せるか
 ```
 
 `check:fit` と `check:contrast` の2つだけは毛色が違う。`npm test` は workerd の中で動くので版面を組む
@@ -151,7 +169,8 @@ npm run check:contrast # 入口の月の上で文字が読めるか（ブラウ�
 スクロールしない**——を1行も測れない。そこで `wrangler dev` を自分で立て、
 3骨格 × 3書体 × 3ビューポート（390x844 / 768x1024 / 1440x900。電話と板の2つは指＝
 `pointer: coarse` で）× 訪問者とログインした姿（柱に「管理画面」が出る）×
-`/sitemap.xml` に載った全 URL を Chromium で開いて測る。`/all` だけは縦に伸びてよいので測らない。
+`/sitemap.xml` に載った全 URL を Chromium で開いて測る。`/all` だけは縦に伸びてよいので
+画面に収まるかは測らない（横に動かないことだけを 3骨格 × 3書体 × 3寸法で測る）。
 初回は実体のブラウザが要る（Node は 22.18 以降。上限の数を `src/blocks.ts` から
 そのまま読むのに、Node の型の読み飛ばしを使う）。
 
@@ -159,33 +178,44 @@ npm run check:contrast # 入口の月の上で文字が読めるか（ブラウ�
 見えている要素が画面の下端より下に出ていないか（`overflow: clip` で黙って切られて
 いないか）、節の弁が開いていないか、`html` / `body` が `clip`・節が `auto` に解けて
 いるか、柱が骨格どおりの場所（左か上）に居るか、**見出しの錨**（めくっても節の
-見出しが同じ高さに居るか）。
+見出しが同じ高さに居るか）。あわせて、ページャの手が1行（`--tap` の高さ）に収まるか、
+中央寄せの Hero の子が同じ軸に立つか、**目次の印**（いまの画面の行き先）が帯の見えて
+いる幅の中にあるか——帯の最初の位置は読み込んだときに決まるので、ここだけは骨格ごとに
+開き直して測る。
 
-中身は3つで、どれも使い捨ての D1 に入れて測る（手元の D1 には触らない。migrate や
+中身は4つで、どれも使い捨ての D1 に入れて測る（手元の D1 には触らない。migrate や
 seed を先に流さなくてよい）。
 
 | 中身 | 何か | URL |
 |---|---|---|
 | seed | `seed.sql`。本人のサイトそのもの | 17 |
-| fixture（複数人） | `scripts/lib/fit-fixture.mjs` が `src/blocks.ts` の上限から作る、上限ちょうどのサイト。打ち込むブロック6種を均等に割った形と1つに寄せた形で・6人の Team・長い肩書き・上限の大見出し / 紹介文 / 経歴・いちばん重いカードの行・本文の画面 | 41 |
-| fixture（1人） | 同じ中身で公開中のメンバーを1人にしたもの（Team の位置にプロフィール・柱が名前と長い職種で名乗る） | 28 |
+| seed＋ブロック3本 | seed に既定の見出しのブロックを3本（いま・数字・リンク集。`fit-fixture.mjs` の `seedBlocks`）。目次の帯が溢れる、ふつうの姿 | 20 |
+| fixture（複数人） | `scripts/lib/fit-fixture.mjs` が `src/blocks.ts` の上限から作る、上限ちょうどのサイト。打ち込むブロック6種を均等に割った形と1つに寄せた形で・6人の Team・長い肩書き・上限の大見出し / 紹介文 / 経歴・いちばん重いカードの行・実績値の無い軽い行・本文の画面・上限の作品名 | 44 |
+| fixture（1人） | 同じ中身で公開中のメンバーを1人にしたもの（Team の位置にプロフィール・柱が名前と長い職種で名乗る。軽い行は電話でも説明が5行） | 31 |
 
 成功行は中身ごとに1行出る。
 
 ```
 ✓ seed（1人のサイト）: 918 通り（17 URL × 3骨格 × 3書体 × 3寸法 × 2姿）。ページが動いた画面 0・
-  切られた要素 0・弁が開いた節 0。いちばん惜しい節の余り 29.3px（…）。見出しの錨のずれ 最大 0px
+  切られた要素 0・弁が開いた節 0。いちばん惜しい節の余り 29.3px（…）。見出しの錨のずれ 最大 0px。
+  目次の印 128 画面が帯の中（うち 0 画面は送って開いた）。/all は 27 通りとも横に動かない
 ```
 
 読むのは3つ。**URL の数**（上の表より減っていたら、測れていない。検査は seed が 17 本
 より少ないとき・fixture から生えるはずの画面が1本でも欠けたときに自分で止まる）、
 **いちばん惜しい節の余り**（どこがいちばん窮屈か。数 px なら次の変更で溢れる）、
-**見出しの錨のずれ**（1px を超えたら落ちる）。
+**見出しの錨のずれ**（1px を超えたら落ちる）。「目次の印 N 画面が帯の中（うち M 画面は送って
+開いた）」の M が 0 の中身は、帯が溢れていない（seed）。
+
+測り方は箱の位置そのもので、`scrollHeight` には頼らない。`html` / `body` は `overflow: clip` なので、
+外枠が外れて中身が画面の下で切られても `scrollHeight` は伸びないことがあり、前の測り方はそれを
+0px と報告した。fixture の中身が上限ちょうどでない（超える・足りない）と、作る時点で公開の関門
+（`publishErrors`）に照らして止まる。上限を変えれば fixture も新しい数で作られる。
 
 `check:contrast` も同じ理由でブラウザが要る。入口と締め（Contact）の画面の背景には
 点で焼いた三日月があり、いちばん明るい所は白、見出しも `#f2f2f4` なので、置き方を間違えると
 白の上の白になる（実際そうなっていて、リード文が明るい縁に載って **1.00:1** ——
-その字は背景と同じ明るさで、完全に消えていた）。4寸法 × 3骨格 × 6アクセント＝
+その字は背景と同じ明るさで、完全に消えていた）。4寸法（電話と板は指で）× 3骨格 × 6アクセント＝
 72通りを画面ごとに描き、月の上に乗る字の行ボックスの下の画素を読んで WCAG 1.4.3 に
 照らす。入口の月は着いたときに一度だけ降りてきて焦点が合うので、その途中の3コマも
 同じ72通りで測る（入口 72 × 4姿 + 締め 72 × 1姿＝360通り）。あわせて**月が出ていること**も見る（三日月だけを消した絵との差分で、
@@ -194,7 +224,7 @@ seed を先に流さなくてよい）。
 
 ```bash
 npx playwright install chromium   # 一度だけ
-FIT_ONLY=many,solo npm run check:fit                     # 中身を絞って測る（seed / many / solo）
+FIT_ONLY=many,solo npm run check:fit                     # 中身を絞って測る（seed / blocks / many / solo）
 FIT_BASE=http://localhost:8787 npm run check:fit        # 立てっぱなしの dev に向けて測る（その D1 のまま・訪問者の姿だけ）
 CONTRAST_BASE=http://localhost:8787 npm run check:contrast
 ```
@@ -202,7 +232,20 @@ CONTRAST_BASE=http://localhost:8787 npm run check:contrast
 `check:contrast` は手元の D1（`--local` の既定の置き場）をそのまま読むので、新しい
 ワークツリーでは `npm run db:migrate:local` と `npm run db:seed:local` を先に通すこと。
 
-push すると GitHub Actions が同じものを走らせる（`check` と `fit` の2つの job）。
+2つとも `wrangler dev` を自分で立てる（ポートは `FIT_PORT` / `CONTRAST_PORT`。既定は
+8788 / 8789）。**そのポートを誰かが使っていたら、立てずに止まる**。wrangler は
+「Address already in use」ですぐ終わるのに、待つ側がそのポートの別のサーバ（別の
+ワークツリーの dev や検査）の返事を受け、相手の画面を測って緑を出していたため。
+いくつものワークツリーで並べて回すときは、ポートを分けること。準備ができる前に
+wrangler が終わったときも同じく止まる（`scripts/lib/dev-server.mjs`）。
+
+`check:restore` は、deploy が本番の D1 から取る写しと同じ形（定義と中身の2本）を、
+使い捨ての D1（seed と check:fit の fixture と、ログインまわり・転送表の行を入れたもの）
+から取り、別の空の D1 に下の「戻す」の順で流して、全部の表の全部の行・表と索引の定義・
+当たった移行の記録が元と同じかを突き合わせる。手元の D1 には触らない。
+
+push すると GitHub Actions が同じものを走らせる（`check` と `fit` の2つの job。
+`check:restore` は `check` の job で）。
 
 ## 本番に出す
 
@@ -238,11 +281,13 @@ npm run db:seed:remote:destroys-prod     # 移行前の index.html の中身
 ふだんは Actions の **deploy** ワークフロー（手動実行）から出す。やることは決まっていて、
 選ぶものは無い。
 
-1. main から実行しているか、`wrangler.toml` の id が入っているかを見る（違えば止まる）
-2. check と同じ門を通す（型・lint・テスト・ビルド・`check:fit`・`check:contrast`。
-   `check.yml` をそのまま呼ぶ）
-3. 本番 D1 の写し（`wrangler d1 export`）と Time Travel の栞（bookmark）を取り、
-   artifact `d1-backup-<run id>` に残す（30日）
+1. main から実行しているか、`wrangler.toml` の id が入っているかを見る（違えば止まる。
+   ただし main だけを通す守りは、下の environment の設定のほう）
+2. check と同じ門を通す（型・lint・テスト・`check:restore`・ビルド・`check:fit`・
+   `check:contrast`。`check.yml` をそのまま呼ぶ）
+3. 本番 D1 の写し（`wrangler d1 export` の定義 `schema-<sha>.sql` と中身
+   `data-<sha>.sql` の2本）と Time Travel の栞（`bookmark.json`）を取り、
+   artifact `d1-backup-<run id>` に残す（90日）
 4. **マイグレーションを流す**（`wrangler d1 migrations apply --remote`。当てた移行は D1 に
    記録されていて、未適用のものだけが当たる。何も無ければ何もしない）
 5. `wrangler deploy`
@@ -252,19 +297,36 @@ npm run db:seed:remote:destroys-prod     # 移行前の index.html の中身
 あとでは作品の画面が「no such column」で 500 になる——drizzle は列を名指しで読むので、
 前の D1 のままでは今のコードが動かない（`test/deploy.test.ts` がこの事実を確かめている）。
 
-使う前に、リポジトリの設定で2つ用意する。
+使う前に、リポジトリの設定を用意する。**どれも必須で、最初に deploy を実行するより前に**
+済ませる（environment が無いまま実行すると、GitHub は保護の無い `production` を自動で作る。
+承認も「main だけ」も、YAML ではなくこの設定が守っている）。
 
-- secret の `CLOUDFLARE_API_TOKEN`（D1 の編集・Workers のデプロイができるトークン）
-- Settings → Environments に `production` を作り、承認者（Required reviewers）を付ける。
-  deploy の最後の job はこの environment で動くので、承認するまで本番に触れない。
-  secret は environment の側に置いてもよい
+1. Settings → Environments → New environment で `production` を作る
+2. Deployment protection rules で **Required reviewers** に自分を付ける。deploy の最後の
+   job はこの environment で動くので、承認するまで本番に触れない
+3. **Deployment branches and tags** を「Selected branches and tags」にし、`main` だけを
+   足す。承認と同じく GitHub の側で効く——deploy.yml の「main から実行しているか」は、
+   実行したブランチ自身の YAML に書いてあるので、そのブランチで消せる（分かりやすく
+   止めるための1段で、守りではない）
+4. `CLOUDFLARE_API_TOKEN`（D1 の編集・Workers のデプロイができるトークン）を、この
+   environment の **Environment secrets にだけ**置く。**リポジトリの secret
+   （Settings → Secrets and variables → Actions → Repository secrets）には置かない**——
+   そこに置くと、environment を外した workflow をどのブランチにでも書けば、承認も
+   ブランチの制限も通らずに読める。前にリポジトリの secret に置いていたなら、
+   environment の側に置き直してからリポジトリの側を消す
+5. Settings → Branches で `main` をブランチ保護する（直接の push を止め、check を必須に）
+
+deploy.yml の中でも、トークンは wrangler を呼ぶ step にだけ渡し（`npm ci` や action からは
+読めない。deploy の job の `npm ci` は `--ignore-scripts`）、`permissions: contents: read`、
+action は commit の SHA で固定してある（上げるときは `git ls-remote --tags
+https://github.com/actions/<名前>` で引き直し、行末のタグ名も直す）。
 
 続けて2回押しても並んでは走らない（2本目は1本目が終わるまで待つ）。
 
 手元から出すなら `npm run db:migrate && npm run deploy`（どちらも先に id の番兵を通る）。
 門は通らないので、先に `npm run typecheck` `npm run lint` `npm test`
-`npm run check:fit` `npm run check:contrast` を自分で通すこと。写しも自分で取る
-（下の `d1 export`）。
+`npm run check:restore` `npm run check:fit` `npm run check:contrast` を自分で通すこと。
+写しも自分で取る（下の「戻す」の2本の `d1 export`）。
 
 ### 公開ページの写し
 
@@ -277,6 +339,11 @@ npm run db:seed:remote:destroys-prod     # 移行前の index.html の中身
   通すので、**保存から最大 60 秒ほど**、ほかの場所の訪問者には前の画面が出る。
   ログインしている自分にはすぐ見える
 - **デプロイすると、写しは全部外れる**（鍵に Worker の版が入っている）
+- **D1 が落ちている間に出すのは、いまの版の写しだけ。** 管理画面で何かを書いたあと
+  （下書きに戻した・消した、を含む）の写しは、障害の間も出さない——取り下げた作品が
+  障害のたびに戻ってくることは無い。版（KV）が読めないときも出さない。保存から 60 秒
+  ほどは版の読みがエッジのキャッシュを通るので、その間だけは前の版の写しが出うる。
+  すぐに全部を確実に外したいときは、デプロイし直す
 - **D1 を管理画面の外から変えたら、版を自分で上げる。** D1 を手で直した・Time Travel で
   戻した、のあとに
 
@@ -291,35 +358,68 @@ npm run db:seed:remote:destroys-prod     # 移行前の index.html の中身
 ### 戻す
 
 コードは `npx wrangler rollback`（前の版の Worker に戻す）。D1 は戻らないので、
-移行が中身を書き換えていたら、D1 も移行の前へ戻す。
+移行が中身や列を変えていたら、D1 も移行の前へ戻す（下の「前の版の Worker へ戻すときの
+注意」）。D1 を戻したら `npm run site:touch`（公開ページの写しの版を上げる。上の
+「公開ページの写し」）。
+
+Time Travel で戻すのがふつう。deploy が残した artifact の `bookmark.json` の
+`"bookmark"` を使う。
 
 ```bash
-# deploy が残した artifact の bookmark.json の "bookmark" を使う
 npx wrangler d1 time-travel restore noctifex --bookmark=<bookmark>
-# 栞が無ければ時刻で（30日以内）
+# 栞が無ければ時刻で
 npx wrangler d1 time-travel restore noctifex --timestamp=2026-09-27T09:00:00Z
 ```
 
-Time Travel は D1 に最初から入っていて、過去30日の任意の時点に戻せる（戻すこと自体も
-取り消せる——restore は戻す直前の bookmark を出す）。30日より前へ戻すなら、artifact の
-`noctifex-<sha>.sql`（`d1 export` の写し）を新しい D1 に流し込む。
+Time Travel は D1 に最初から入っていて、過去の任意の時点に戻せる（Workers の有料プランで
+30日、無料で7日まで。戻すこと自体も取り消せる——restore は戻す直前の bookmark を出す）。
+それより前へ戻す・別の D1 に写す（ステージングを作る・別のアカウントへ移す）なら、
+artifact の写し（90日残る）を**新しい空の D1 に、定義 → 中身の順で**流す。
 
 ```bash
 npx wrangler d1 create noctifex-restore
-npx wrangler d1 execute noctifex-restore --remote --file=noctifex-<sha>.sql
+npx wrangler d1 execute noctifex-restore --remote --file=schema-<sha>.sql   # 表と索引・移行の記録の表
+npx wrangler d1 execute noctifex-restore --remote --file=data-<sha>.sql     # 行（d1_migrations の行も）
 # 中身を確かめてから、wrangler.toml の database_id をこちらへ差し替えて出す
 ```
 
-手元で写しを取るのは `npx wrangler d1 export noctifex --remote --output=backup.sql`。
+**1つの SQL にまとめた写し（`d1 export` を `--no-data` / `--no-schema` なしで取ったもの）は
+流せない。** 写しは表を作った順に書くので、先に作った子の表（`item_links`・`item_tags`）の
+行が親の `items` の CREATE TABLE より前に来て、`no such table: main.items` で止まる（D1 は
+外部キーをいつも効かせる）。この手順は `npm run check:restore` が CI で毎回通している。
+写しには `d1_migrations` の行も入るので、戻した D1 にはそのとき当たっていた移行が記録
+されたままになる（次の deploy は、そのあとの移行だけを当てる）。
+
+手元で写しを取るのも同じ2本。
+
+```bash
+npx wrangler d1 export noctifex --remote --no-data --output=schema.sql
+npx wrangler d1 export noctifex --remote --no-schema --output=data.sql
+```
+
 写しにはメンバーの連絡先とログインの紐づけ（セッションの id は D1 にもハッシュでしか
 無い）が入るので、置き場所に気をつけること。
 
-**前の版の Worker へ戻すときの注意。** 構成の行の書き換え（`0004_merge_apps_works`。
-Apps と Works を Projects に畳む）を流したあとの D1 は、Projects を知らない版（それより
-前のコード）では作品の一覧が出ない。その版まで戻すなら D1 も上の手順で 0004 の前へ
-戻す。D1 を戻したら `npm run site:touch`（公開ページの写しの版を上げる。上の「公開ページの写し」）。いまのコードは逆向き——0004 を流す前の D1（`apps` / `works` の行）——も Projects
-として読めるので、移行が途中で止まっても一覧は消えない。この先、データを書き換える
-移行は2回のリリースに分ける（先に読む側を広げ、次に書き換える。`CLAUDE.md`）。
+**前の版の Worker へ戻すときの注意。** 移行を流したあとの D1 の上で、その移行より前の
+コードが動くと壊れるものがある。前の版へ `wrangler rollback` するなら、D1 もその版の
+deploy が残した栞（その移行を流す**前**に取ったもの）まで戻す。**D1 を戻すと、その栞から
+あとに管理画面で書いたものは消える**（戻す前に上の2本で写しを取っておけば、あとで手で
+拾える）。戻さずに直すなら、前へ進める（直したコードをもう一度 deploy する）ほうが
+何も失わない。
+
+- `0006_oauth_identities` と `0007_hash_sessions`（パスワードのログインから OAuth へ）。
+  0006 は `users` から `email` と `password_hash` の列を落とし、0007 はセッションを全部
+  消す。この2本を流したあとの D1 の上で、それより前のコード（5627c08 まで。`users` を
+  メールアドレスで引き、行を丸ごと読む）へ rollback すると、**管理画面はログインもできずに
+  500 になる**（公開ページは出続ける）。移行と `wrangler deploy` のあいだ・deploy の失敗の
+  あとも同じ姿になる。どちらも、今の版を deploy し直せば直る
+- `0004_merge_apps_works`（Apps と Works を Projects に畳む構成の行の書き換え）。流した
+  あとの D1 は、Projects を知らない版（それより前のコード）では作品の一覧が出ない。
+  いまのコードは逆向き——0004 を流す前の D1（`apps` / `works` の行）——も Projects と
+  して読めるので、移行が途中で止まっても一覧は消えない
+
+この先、データを書き換える移行は2回のリリースに分ける（先に読む側を広げ、次に
+書き換える。`CLAUDE.md` の「移行」）。
 
 `items.slug`（作品の恒久リンク `/apps/item/<slug>`）だけは、マイグレーションでは
 埋まらない。SQLite の `ALTER TABLE ADD COLUMN` は `NOT NULL` に定数の既定値を
@@ -340,7 +440,7 @@ Apps と Works を Projects に畳む）を流したあとの D1 は、Projects 
 
 seed に本文が無いので、seed の `check:fit` は本文の画面を1枚も測らない（URL は 17 の
 まま）。本文の画面は `check:fit` の fixture（上限ちょうどの本文を均等に割った形と
-1つに寄せた形の2件。1件は 390 で2行に折れる作品名）が測る。
+1つに寄せた形の2件。1件は作品名も上限ちょうど）が測る。
 
 `items.image_width` / `image_height`（画像の寸法。共有カードの `og:image:width` /
 `height` と `twitter:card` の大きさにだけ使う）は `0008_item_image_size` で入る。
@@ -362,6 +462,18 @@ seed に本文が無いので、seed の `check:fit` は本文の画面を1枚�
 - `form_key`（追加のフォームの一度きりの札。members・items・blocks）は既にある行では
   `null` のまま（札を持たない行は何行でも入る）
 
+`0013_halfwidth_year` 〜 `0016_owner_claims_backfill` で入るもの。
+
+- 0013 は作品の年（`items.year`）の全角の数字を半角に直す。年の欄を保存するときに半角へ
+  直すより前に「２０２４」と保存した作品は、並べる年（`year_from`）が無く一覧の最後に
+  落ちていた。数字以外の字には触らない
+- 0014 は owner（`users.role = 'owner'`）が2人いる D1 を、いちばん古い1人に寄せる
+  （もう1人の紐づけとセッションを移してから消す。どちらのアカウントでも同じ1人として
+  入れる）。そのあと 0015 が「owner は1人」の部分一意索引 `users_one_owner` を張る。
+  この順は崩さないこと（2人のまま索引を張ると移行ごと止まる）
+- 0015 は `owner_claims`（`[vars]` の値を使った記録）も作り、0016 が、既に owner に
+  紐づいているアカウントの記録を書き戻す（GitHub は id、Google は紐づけたアドレス）
+
 受け取る画像は中身の先頭のバイトで決めた PNG・JPEG・WebP・AVIF・GIF だけで、
 SVG と HEIC は弾く。この検査より前に上げた SVG / HEIC が KV に残っていても、
 `/images/*` は画像としてではなく添付（`application/octet-stream`）で返すので、
@@ -374,7 +486,8 @@ SVG と HEIC は弾く。この検査より前に上げた SVG / HEIC が KV に
 ハッシュで置くようになったため）。owner の行は id もメンバーとの紐づけもそのまま
 残り、`[vars]` と一致するアカウントで最初にログインしたときに、その行へ紐づく。
 前に入れた `SETUP_TOKEN` はもう使わないので `npx wrangler secret delete SETUP_TOKEN`
-で消してよい。
+で消してよい。この2本は前のコードが読む列を同じリリースで落とすので、流したあとで
+前の版へ戻すときは、上の「前の版の Worker へ戻すときの注意」を読むこと。
 
 プラットフォームの選択肢（`platforms`）は `0011_platforms_reference` が入れる
 （`INSERT OR IGNORE`。前に seed で入った行・運用で直した表示名や並び順は書き換えない）。
@@ -469,6 +582,7 @@ public/
 scripts/
   check-fit.mjs      npm run check:fit の中身。ブラウザで寸法を測る（seed と、上限ちょうどの fixture）
   check-contrast.mjs npm run check:contrast の中身。月の上の文字を画素で測る
+  check-restore.mjs  npm run check:restore の中身。deploy の写し（定義と中身の2本）を空の D1 に戻して突き合わせる
   check-ids.mjs      本番に触れる前の番兵。wrangler.toml の id がプレースホルダなら止める
   seed-remote.mjs    npm run db:seed:remote:destroys-prod の中身。本番が空のときだけ流す
   touch-site.mjs     公開ページの写しの版を上げる（npm run site:touch / db:seed:local の最後）

@@ -6,8 +6,8 @@ name: deploy
 #
 # 本番へ出す道はこれ1本で、順序はこう決めてある。
 #   1. main か・id が入っているか（guard）——どちらも満たさなければ何もせず止まる
-#   2. check.yml と同じ門（型・lint・テスト・ビルド・fit・contrast）
-#   3. 本番 D1 の写しと Time Travel の栞を artifact に残す
+#   2. check.yml と同じ門（型・lint・テスト・写しの戻し・ビルド・fit・contrast）
+#   3. 本番 D1 の写し（定義と中身の2本）と Time Travel の栞を artifact に残す
 #   4. マイグレーションを流す（いつも。未適用のものだけが当たる）
 #   5. Worker を出す
 #
@@ -19,24 +19,37 @@ name: deploy
 on:
   workflow_dispatch:
 
+# GITHUB_TOKEN に持たせるのは、リポジトリを読むことだけ（既定の書き込み権を渡さない）
+permissions:
+  contents: read
+
 # 続けて2回押しても、移行と出す作業が並んで走らない。後から押したほうは待つ
 # （取り消さない——途中まで流した移行を止めると、どこまで当たったか追えなくなる）
 concurrency:
   group: deploy-production
   cancel-in-progress: false
 
+# action は commit の SHA で固定する（タグは付け替えられる。付け替えられた action は、
+# 承認のあとの本番の job の中で動く）。SHA は公式リポジトリのタグを
+# `git ls-remote --tags https://github.com/actions/<名前>` で引いたもの。上げるときは
+# 同じ手で引き直し、行末のタグ名も一緒に直す
 jobs:
   guard:
     runs-on: ubuntu-latest
     steps:
-      # Actions の画面ではどのブランチからでも実行できる。本番に出すのは main だけ
+      # Actions の画面ではどのブランチからでも実行できる。本番に出すのは main だけ。
+      # ただしこの if は**実行したブランチの** deploy.yml に書いてあるので、そのブランチで
+      # 消せる——守りとしては数えない（分かりやすく止めるための1段）。守りは GitHub の
+      # 側にある: environment の production の Deployment branches を main だけにし、
+      # 承認者を付け、CLOUDFLARE_API_TOKEN はその environment の secret にだけ置く
+      # （README の「本番に出す」）
       - name: main から実行しているか
         if: github.ref != 'refs/heads/main'
         run: |
           echo "::error::本番へ出せるのは main だけです（いまは ${GITHUB_REF}）"
           exit 1
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # TO_BE_CREATED のままでは、移行も deploy も API に拒まれる。そうなる前に、
       # 何を直せばいいかを言って止まる（check の dry-run は id を見ないので緑のまま）
@@ -50,48 +63,69 @@ jobs:
   deploy:
     needs: check
     runs-on: ubuntu-latest
-    # 承認者はリポジトリの Settings → Environments → production で付ける（README）
+    # 承認者と「main だけ」は Settings → Environments → production で付ける（README）。
+    # トークンはその environment の secret にだけ置く——リポジトリの secret に置くと、
+    # environment を外した workflow（どのブランチにでも書ける）から承認なしで読める
     environment: production
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    # トークンは job の env に置かない。wrangler を呼ぶ step にだけ渡す——job に置くと、
+    # npm ci（依存の install スクリプト）も action も読める
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      # deploy と d1 に要るのは wrangler の JavaScript と、プラットフォームごとの
+      # optionalDependencies（esbuild・workerd の実体）だけで、install スクリプトは要らない
+      # （--ignore-scripts のまま `wrangler deploy --dry-run` と d1 が動くことを確かめてある）
+      - run: npm ci --ignore-scripts
 
       - name: API トークンがあるか
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "::error::secret の CLOUDFLARE_API_TOKEN がありません（README の「本番に出す」）"
+            echo "::error::environment production の secret に CLOUDFLARE_API_TOKEN がありません（README の「本番に出す」）"
             exit 1
           fi
 
       # 移行を当てる前の本番を、戻せる形で残す。
-      # - export は D1 まるごとの SQL（別の D1 に流し込めば、その時点の中身が再現できる）
-      # - 栞（bookmark）は Time Travel でこの時点へ戻すための印（30日まで）
-      # どちらも取れなければ、移行を流さずに止まる
+      # - 写しは定義（--no-data）と中身（--no-schema）の2本。空の D1 に定義 → 中身の順で
+      #   流せば、その時点の中身が再現できる（README の「戻す」）。1本の export は戻せない
+      #   ——表を作った順に書くので、子の表の行が親の表の CREATE より前に来る。戻せることは
+      #   check の `npm run check:restore` が毎回確かめている
+      # - 栞（bookmark）は Time Travel でこの時点へ戻すための印（Workers の有料プランで30日、
+      #   無料で7日まで）
+      # どれかが取れなければ、移行を流さずに止まる
       - name: 本番 D1 の写しを取る
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           mkdir -p backup
           npx wrangler d1 time-travel info noctifex --json > backup/bookmark.json
-          npx wrangler d1 export noctifex --remote --output="backup/noctifex-${GITHUB_SHA}.sql"
+          npx wrangler d1 export noctifex --remote -y --no-data --output="backup/schema-${GITHUB_SHA}.sql"
+          npx wrangler d1 export noctifex --remote -y --no-schema --output="backup/data-${GITHUB_SHA}.sql"
 
       # 中身はメンバーの連絡先・ログインの紐づけ（セッションは D1 にもハッシュでしか無い）を
-      # 含む。リポジトリを読める人は誰でも落とせるので、置いておくのは短く
-      - uses: actions/upload-artifact@v4
+      # 含み、リポジトリを読める人は誰でも落とせる。それでも Time Travel より長く置く——
+      # 栞の期限（30日・無料なら7日）を過ぎてから壊れに気づいたときの、最後の控えなので。
+      # 90日は公開リポジトリの上限（私的リポジトリなら Settings で 400日まで延ばせる。
+      # 上限を超えた値は上限に丸められる）
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: d1-backup-${{ github.run_id }}
           path: backup/
-          retention-days: 30
+          retention-days: 90
           if-no-files-found: error
 
       - name: マイグレーション（未適用のものだけ）
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: npx wrangler d1 migrations apply noctifex --remote
 
       - name: デプロイ
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: npx wrangler deploy

@@ -282,8 +282,7 @@ memberRoutes.get('/members/:id/edit', async (c) => {
   return c.html(<MemberForm account={c.get('account')} member={member} />)
 })
 
-async function readMemberForm(c: Context<AppEnv>, existing?: schema.Member) {
-  const form = await c.req.formData()
+function readMemberForm(form: FormData, existing?: schema.Member) {
   const name = str(form.get('name'))
   const slug = readSlug(str(form.get('slug')), existing?.slug, name) ?? `member-${newToken(3)}`
   const sortOrder = readSortOrder(form, existing?.sortOrder)
@@ -388,21 +387,26 @@ function memberSlugMoves(
 
 memberRoutes.post('/members', async (c) => {
   const database = db(c)
-  const { form, values, errors: unreadable, typed } = await readMemberForm(c)
-  const account = c.get('account')
+  const form = await c.req.formData()
   const sent = formKeyOf(form)
+  // 同じ札で書いた行（newFormKey の注記）
+  const twinOf = (key: string | null) =>
+    key ? database.query.members.findFirst({ where: eq(schema.members.formKey, key) }) : undefined
+  /*
+    同じフォームの2度目の送信は、1度目が作った人への保存（作品の POST /items と同じ。
+    中身が違えば編集として反映し、公開の関門も通す）
+  */
+  const twin = await twinOf(sent)
+  if (twin) return saveMember(c, twin, form, true)
+
+  const { values, errors: unreadable, typed } = readMemberForm(form)
+  const account = c.get('account')
   const saved = () => c.redirect(`/admin/members?saved=${savedParam(values.published)}`, 303)
-  // 同じフォームの2度目の送信。1度目がもう書いている（newFormKey の注記）
-  const twin = sent
-    ? await database.query.members.findFirst({ where: eq(schema.members.formKey, sent) })
-    : undefined
-  if (twin?.name === values.name) return saved()
-  const formKey = twin ? newFormKey() : sent
   const back = (errors: Record<string, string>) =>
     c.html(
       <MemberForm
         account={account}
-        formKey={formKey}
+        formKey={sent}
         errors={imageNotKept(form, 'avatar', errors)}
         values={{ ...asValues(values), ...typed }}
       />,
@@ -432,12 +436,15 @@ memberRoutes.post('/members', async (c) => {
     : null
   try {
     await commitWithImage(c.env.MEDIA, avatarUrl, () =>
-      database.insert(schema.members).values({ ...values, avatarUrl, formKey }),
+      database.insert(schema.members).values({ ...values, avatarUrl, formKey: sent }),
     )
   } catch (error) {
     // 検査のあとに同じ札・同じ slug が先に書かれた（同時に来た2本の送信）
-    if (uniqueViolation(error, 'members.form_key')) return saved()
-    if (uniqueViolation(error, 'members.slug')) return back({ slug: SLUG_TAKEN })
+    if (uniqueViolation(error, 'members.')) {
+      const first = await twinOf(sent)
+      if (first) return saveMember(c, first, form, true)
+      if (uniqueViolation(error, 'members.slug')) return back({ slug: SLUG_TAKEN })
+    }
     throw error
   }
   return saved()
@@ -446,11 +453,24 @@ memberRoutes.post('/members', async (c) => {
 memberRoutes.post('/members/:id', async (c) => {
   const id = parseId(c.req.param('id'))
   if (!id) return c.notFound()
-  const database = db(c)
-  const member = await database.query.members.findFirst({ where: eq(schema.members.id, id) })
+  const member = await db(c).query.members.findFirst({ where: eq(schema.members.id, id) })
   if (!member) return c.notFound()
+  return saveMember(c, member, await c.req.formData(), false)
+})
 
-  const { form, values, errors: unreadable, typed } = await readMemberForm(c, member)
+/*
+  既にある人への保存。編集フォームの送信と、追加のフォームの2度目の送信（again）の
+  両方がここを通る（作品の saveItem と同じ）。
+*/
+async function saveMember(
+  c: Context<AppEnv>,
+  member: schema.Member,
+  form: FormData,
+  again: boolean,
+) {
+  const id = member.id
+  const database = db(c)
+  const { values, errors: unreadable, typed } = readMemberForm(form, member)
   const account = c.get('account')
   const back = (errors: Record<string, string>) =>
     c.html(
@@ -498,8 +518,11 @@ memberRoutes.post('/members/:id', async (c) => {
   }
   if (avatarUrl) await removeImage(c.env.MEDIA, member.avatarUrl)
   const moved = member.slug !== values.slug ? '&moved=1' : ''
-  return c.redirect(`/admin/members?saved=${savedParam(values.published)}${moved}`, 303)
-})
+  return c.redirect(
+    `/admin/members?saved=${savedParam(values.published)}${moved}${again ? '&again=1' : ''}`,
+    303,
+  )
+}
 
 memberRoutes.get('/members/:id/delete', async (c) => {
   const id = parseId(c.req.param('id'))

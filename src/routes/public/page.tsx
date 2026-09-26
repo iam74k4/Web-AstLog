@@ -18,8 +18,8 @@ import { Layout, type OgImage } from '../../ui/Layout'
   クッキーが無ければ D1 には聞きに行かない（訪問者のリクエストは1本も増えない）。
   ログインしている人に返すページは、共有のキャッシュに置かせない（private）。
   置かれると、次に来た訪問者に管理画面への入口が出る。公開ページの写し
-  （src/lib/page-cache.ts）も、セッションのクッキーを持つ要求と cache-control を
-  持つ応答を通さない——この約束をそちらでも守っている。
+  （src/lib/page-cache.ts）も、セッションのクッキーを持つ要求と private / no-store の
+  応答を通さない——この約束をそちらでも守っている。
 */
 export async function adminHref(c: Context<AppEnv>, to: string): Promise<string | undefined> {
   const sessionId = getCookie(c, SESSION_COOKIE)
@@ -28,6 +28,31 @@ export async function adminHref(c: Context<AppEnv>, to: string): Promise<string 
   if (!user) return undefined
   c.header('cache-control', 'private, no-store')
   return to
+}
+
+/*
+  行き先がデータで変わる転送（301）。slug の転送表・区分を変えた作品・1人のサイトの
+  /team → プロフィール・個人ページの Contact → サイトの Contact。
+
+  **ブラウザに覚えさせない**（Cache-Control: no-cache）。301 は既定でキャッシュして
+  よい応答で、Chromium は期限なしで覚える。行き先は管理画面の保存で変わる——slug を
+  mixer2 に変えて前の URL を開いたブラウザは「appmixer → mixer2」を覚え、そのあと
+  slug を appmixer に戻すと、サーバーは「mixer2 → appmixer」を返すのに、ブラウザは
+  覚えた転送で appmixer から mixer2 へ飛び、リダイレクトの無限ループになった
+  （貼ってあった正の URL が「リダイレクトが多すぎます」になる。キャッシュを消すまで直らない）。
+  no-cache なら、ブラウザは毎回サーバーに聞き直す。
+
+  301 のままにするのは検索エンジンのため（「移転」として前の URL の評価を継ぐ）。
+  検索エンジンは cache-control に関わらず 301 を移転として扱う。公開ページの写し
+  （src/lib/page-cache.ts）はこの応答も置き、返すときに no-cache を付け直す——写しは
+  管理画面の保存で版ごと外れるので、行き先が変わった日に古い転送は出ない。
+
+  行き先が動かない転送（/apps・/works → /projects）は、素の 301 のままでよい
+  （長く覚えられても、同じ所へ送るだけ）。
+*/
+export function movedTo(c: Context<AppEnv>, to: string) {
+  c.header('cache-control', 'no-cache')
+  return c.redirect(to, 301)
 }
 
 /*

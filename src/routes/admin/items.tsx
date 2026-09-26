@@ -1,6 +1,6 @@
 import { and, asc, eq, ne, type SQL, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
-import { Hono } from 'hono'
+import { type Context, Hono } from 'hono'
 import { MAX_CHARS, publishErrors } from '../../blocks'
 import { type Db, itemOrder } from '../../db/queries'
 import * as schema from '../../db/schema'
@@ -279,11 +279,17 @@ const ItemForm = (props: ItemFormData) => {
         <input type="hidden" name="type" value={props.type} />
         <FormKey value={props.formKey} />
         <div class="form-grid">
+          {/*
+            作品名はカードの題・作品のページと Story の見出しに出る。長さは公開する
+            ときにだけ見る（MAX_CHARS.itemTitle。数と測り方は src/blocks.ts）
+          */}
           <Field
             label="タイトル"
             name="title"
             value={d.title}
             required
+            maxlength={MAX_CHARS.itemTitle}
+            hint={`${MAX_CHARS.itemTitle} 字まで（カードの題と作品のページの見出しに出る）`}
             error={props.errors?.title}
           />
           {/*
@@ -365,7 +371,8 @@ const ItemForm = (props: ItemFormData) => {
             rows={3}
             /*
               カードは行数で切る（--card-lines。600 以上は上限の 100 字が切れずに
-              出る6行、電話の幅は2行）。長く書いても画面から溢れはしない代わりに、
+              出る6行、電話の幅は2行。実績値も担当者名も無い軽い行だけは電話でも
+              5行で、100 字が切れずに出る——--card-lines-lean）。長く書いても画面から溢れはしない代わりに、
               溢れたぶんが黙って消える。電話の幅の字数（itemSummaryVisible）を
               添えるのは、上限まで書けばどの画面でも全部読まれる、と読めてしまわない
               ようにするため。
@@ -375,7 +382,7 @@ const ItemForm = (props: ItemFormData) => {
               次の画面（本文）へ続けて読まれるので、文体で目録と本文を分ける
               （CLAUDE.md「文言」）
             */
-            hint={`「何であるか。何をしたか。」の2文を常体で（〜する。〜した。）· ${MAX_CHARS.itemSummary} 字まで（電話の幅のカードは2行で、${MAX_CHARS.itemSummaryVisible} 字までしか出ません）`}
+            hint={`「何であるか。何をしたか。」の2文を常体で（〜する。〜した。）· ${MAX_CHARS.itemSummary} 字まで（電話の幅では、実績値か担当者名のあるカードの行は2行で、${MAX_CHARS.itemSummaryVisible} 字までしか出ません。公開するときは必須——カードと作品のページの説明文になる）`}
             maxlength={MAX_CHARS.itemSummary}
             error={props.errors?.summary}
           />
@@ -693,7 +700,8 @@ function submittedItem(form: FormData): Record<string, string> {
     memberId: str(form.get('memberId')),
     platformKey: str(form.get('platformKey')),
     category: str(form.get('category')),
-    year: str(form.get('year')),
+    // 保存と同じく半角に直して返す（年の欄の知らせが、保存したときと同じ答えを出す）
+    year: halfWidthDigits(str(form.get('year'))),
     summary: str(form.get('summary')),
     body: str(form.get('body')),
     imageAlt: str(form.get('imageAlt')),
@@ -828,25 +836,21 @@ itemRoutes.post('/items', async (c) => {
   const database = db(c)
   const form = await c.req.formData()
   const context = await formContext(c)
+  // 同じ札で書いた行（newFormKey の注記）
+  const twinOf = (key: string | null) =>
+    key ? database.query.items.findFirst({ where: eq(schema.items.formKey, key) }) : undefined
+  /*
+    同じフォームの2度目の送信。1度目が作った行への保存として扱う——中身が同じなら
+    同じ値を書き直すだけ、違えば（「戻る」で開き直して直した・公開に印を付けた）
+    その行の編集として反映し、公開の関門も通す。黙って捨てて「保存しました」と言わない
+  */
+  const sent = formKeyOf(form)
+  const twin = await twinOf(sent)
+  if (twin) return saveItem(c, twin, form, context, true)
+
   const { values, tags, errors: unreadable } = readItemForm(form, context)
   const saved = () =>
     c.redirect(`/admin/items?type=${values.type}&saved=${savedParam(values.published)}`, 303)
-  // 同じ札で書いた行（newFormKey の注記）
-  const twinOf = (key: string | null) =>
-    key
-      ? database.query.items.findFirst({
-          where: eq(schema.items.formKey, key),
-          columns: { title: true, type: true },
-        })
-      : undefined
-  const same = (row: { title: string; type: string } | undefined) =>
-    row?.title === values.title && row.type === values.type
-  // 同じフォームの2度目の送信。1度目がもう書いている
-  const sent = formKeyOf(form)
-  const twin = await twinOf(sent)
-  if (same(twin)) return saved()
-  const formKey = twin ? newFormKey() : sent
-
   const back = (errors: Record<string, string>) =>
     c.html(
       <ItemForm
@@ -854,7 +858,7 @@ itemRoutes.post('/items', async (c) => {
         type={values.type}
         members={context.members}
         platforms={context.platforms}
-        formKey={formKey}
+        formKey={sent}
         submitted={submittedItem(form)}
         errors={imageNotKept(form, 'image', errors)}
       />,
@@ -872,6 +876,7 @@ itemRoutes.post('/items', async (c) => {
     values.published
       ? publishErrors({
           kind: 'item',
+          title: values.title,
           summary: values.summary,
           body: values.body,
           imageAlt: values.imageAlt,
@@ -893,7 +898,7 @@ itemRoutes.post('/items', async (c) => {
       database.batch([
         database
           .insert(schema.items)
-          .values({ ...values, ...imageColumns(imageUrl, picked.image), formKey }),
+          .values({ ...values, ...imageColumns(imageUrl, picked.image), formKey: sent }),
         ...childWrites(database, values.slug, tags, links.links),
       ]),
     )
@@ -901,10 +906,11 @@ itemRoutes.post('/items', async (c) => {
     /*
       検査のあとに同じ札か同じ slug が先に書かれた（同時に来た2本の送信）。
       同じ札の行があれば、それは1度目の送信——英字の題なら slug も同じなので、
-      どちらの制約が先に当たっても「保存済み」に寄せる
+      どちらの制約が先に当たっても、その行への保存に寄せる
     */
     if (uniqueViolation(error, 'items.')) {
-      if (same(await twinOf(formKey))) return saved()
+      const first = await twinOf(sent)
+      if (first) return saveItem(c, first, form, context, true)
       if (uniqueViolation(error, 'items.slug')) return back({ slug: SLUG_TAKEN })
     }
     throw error
@@ -915,14 +921,27 @@ itemRoutes.post('/items', async (c) => {
 itemRoutes.post('/items/:id', async (c) => {
   const id = parseId(c.req.param('id'))
   if (!id) return c.notFound()
-  const database = db(c)
   // 先に存在を確かめる。無い id のまま進むと、タグの差し替えが外部キーで
   // 落ちて 500 になるか、何も変わっていないのに「保存しました」と出る
-  const existing = await database.query.items.findFirst({ where: eq(schema.items.id, id) })
+  const existing = await db(c).query.items.findFirst({ where: eq(schema.items.id, id) })
   if (!existing) return c.notFound()
+  return saveItem(c, existing, await c.req.formData(), await formContext(c), false)
+})
 
-  const form = await c.req.formData()
-  const context = await formContext(c)
+/*
+  既にある作品への保存。編集フォームの送信と、追加のフォームの2度目の送信
+  （again。同じ札で1度目が作った行）の両方がここを通る。again のときは、知らせで
+  「1度目に作った行に書いた」ことまで言う（request.ts の flashFor）。
+*/
+async function saveItem(
+  c: Context<AppEnv>,
+  existing: schema.Item,
+  form: FormData,
+  context: { members: schema.Member[]; platforms: schema.Platform[] },
+  again: boolean,
+) {
+  const id = existing.id
+  const database = db(c)
   const { values, tags, errors: unreadable } = readItemForm(form, context, existing)
   const back = (errors: Record<string, string>) =>
     c.html(
@@ -955,6 +974,7 @@ itemRoutes.post('/items/:id', async (c) => {
     values.published
       ? publishErrors({
           kind: 'item',
+          title: values.title,
           summary: values.summary,
           body: values.body,
           imageAlt: values.imageAlt,
@@ -996,10 +1016,10 @@ itemRoutes.post('/items/:id', async (c) => {
   const moved =
     existing.slug !== null && (existing.slug !== values.slug || existing.type !== values.type)
   return c.redirect(
-    `/admin/items?type=${values.type}&saved=${savedParam(values.published)}${moved ? '&moved=1' : ''}`,
+    `/admin/items?type=${values.type}&saved=${savedParam(values.published)}${moved ? '&moved=1' : ''}${again ? '&again=1' : ''}`,
     303,
   )
-})
+}
 
 itemRoutes.get('/items/:id/delete', async (c) => {
   const id = parseId(c.req.param('id'))

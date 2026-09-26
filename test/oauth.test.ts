@@ -602,13 +602,164 @@ describe('パスワードのログインは無い', () => {
 })
 
 /*
+  SEC-N1。環境変数（OWNER_GITHUB_ID / OWNER_GOOGLE_EMAIL）で owner に紐づけるのは、
+  その値ごとに1度きり（使った記録は owner_claims）。以前は [vars] が残っているかぎり
+  ずっと効き、README のとおり紐づけを外しても次のログインで紐づき直り、同じ確認済みの
+  アドレスを持つ別の Google アカウント（別の sub）も並んで入れた。
+*/
+describe('環境変数で紐づけるのは値ごとに1度きり', () => {
+  const claims = () => db().select().from(schema.ownerClaims)
+
+  it('README のとおり紐づけを外すと、同じアカウントでもう一度入っても紐づき直らない', async () => {
+    expect((await signInWith('github', github().handlers)).status).toBe(303)
+    expect(await claims()).toEqual([
+      expect.objectContaining({ provider: 'github', value: '1001', subject: '1001' }),
+    ])
+
+    // README「紐づけを外す」: user_identities の行とセッションを消す
+    await env.DB.prepare("DELETE FROM user_identities WHERE provider = 'github'").run()
+    await env.DB.prepare('DELETE FROM sessions').run()
+    vi.restoreAllMocks()
+    const again = await signInWith('github', github().handlers)
+    expect(again.status).toBe(403)
+    expect(sessionCookie(again)).toBeUndefined()
+    expect(await identities()).toHaveLength(0)
+
+    // また使うときは記録の行も消す（README）
+    await env.DB.prepare("DELETE FROM owner_claims WHERE provider = 'github'").run()
+    vi.restoreAllMocks()
+    expect((await signInWith('github', github().handlers)).status).toBe(303)
+    expect(await identities()).toHaveLength(1)
+  })
+
+  it('同じ確認済みのアドレスでも、別の Google アカウント（別の sub）は入れない', async () => {
+    const first = await start('google')
+    providers(google(googleClaims(first.nonce)).handlers)
+    const linked = await callback('google', { code: 'g', state: first.state }, first.cookie)
+    expect(linked.status).toBe(303)
+
+    vi.restoreAllMocks()
+    const next = await start('google')
+    providers(
+      google(
+        googleClaims(next.nonce, { sub: '220000000000000000002', email: 'OWNER@example.test' }),
+      ).handlers,
+    )
+    const other = await callback('google', { code: 'g', state: next.state }, next.cookie)
+    expect(other.status).toBe(403)
+    expect((await identities()).map((one) => one.subject)).toEqual(['110000000000000000001'])
+  })
+
+  it('環境変数を別の値に書き換えれば、新しい値として1度だけ効く', async () => {
+    const google1 = { provider: 'google' as const, label: 'a@example.test', emailVerified: true }
+    const envA = { OWNER_GOOGLE_EMAIL: 'a@example.test' }
+    const envB = { OWNER_GOOGLE_EMAIL: 'b@example.test' }
+    const a = await userForIdentity(db(), envA, {
+      ...google1,
+      subject: 'A',
+      email: 'a@example.test',
+    })
+    expect(a?.role).toBe('owner')
+    // 同じ値の2つ目は通らない。書き換えた値の最初の1つは通る
+    expect(
+      await userForIdentity(db(), envA, { ...google1, subject: 'A2', email: 'A@example.test' }),
+    ).toBeNull()
+    const b = await userForIdentity(db(), envB, {
+      ...google1,
+      subject: 'B',
+      email: 'b@example.test',
+    })
+    expect(b?.id).toBe(a?.id)
+  })
+})
+
+/*
+  SEC-N4。owner は1人。owner の居ない D1 に初回のログインが2本同時に来ても、owner の
+  行は1つで、どちらの紐づけもその1人に付く（users_one_owner と ON CONFLICT DO NOTHING）。
+  「読んでから作る」だったころは owner が2人でき、「すべての端末からログアウト」が
+  片方のセッションしか消さなかった。
+*/
+describe('owner は1人', () => {
+  const owners = async () =>
+    (await users()).filter((one) => one.role === 'owner').map((one) => one.id)
+  const ownerEnv = { OWNER_GITHUB_ID: '1001', OWNER_GOOGLE_EMAIL: 'owner@example.test' }
+  const githubOwner = { provider: 'github' as const, subject: '1001', label: '@owner' }
+  const googleOwner = {
+    provider: 'google' as const,
+    subject: 'g-sub',
+    label: 'owner@example.test',
+    email: 'owner@example.test',
+    emailVerified: true,
+  }
+
+  it('GitHub と Google の初回のログインが同時に来ても、owner は1人', async () => {
+    const [a, b] = await Promise.all([
+      userForIdentity(db(), ownerEnv, githubOwner),
+      userForIdentity(db(), ownerEnv, googleOwner),
+    ])
+    const ids = await owners()
+    expect(ids).toHaveLength(1)
+    expect([a?.id, b?.id]).toEqual([ids[0], ids[0]])
+    expect((await identities()).map((one) => one.userId)).toEqual([ids[0], ids[0]])
+  })
+
+  it('同じアカウントの初回が2本同時に来ても、owner も紐づけも1つで、どちらも入れる', async () => {
+    const [a, b] = await Promise.all([
+      userForIdentity(db(), ownerEnv, githubOwner),
+      userForIdentity(db(), ownerEnv, githubOwner),
+    ])
+    const ids = await owners()
+    expect(ids).toHaveLength(1)
+    expect([a?.id, b?.id]).toEqual([ids[0], ids[0]])
+    expect(await identities()).toHaveLength(1)
+  })
+
+  it('2人目の owner の行は DB が受け付けない（users_one_owner）', async () => {
+    await db().insert(schema.users).values({ role: 'owner' })
+    await expect(db().insert(schema.users).values({ role: 'owner' })).rejects.toThrow()
+    // member は何人でも
+    await db()
+      .insert(schema.users)
+      .values([{ role: 'member' }, { role: 'member' }])
+  })
+})
+
+/*
+  SEC-N3。ログインの入口は開くたびに D1 へ書くので、IP ごとに回数の上限を持つ
+  （Workers の Rate Limiting。wrangler.toml の [[ratelimits]]: 60 秒で 10 回）。
+  止めた要求は D1 に書かない。ほかの IP（持ち主）は止まらない。
+*/
+describe('ログインの入口の回数', () => {
+  it('同じ IP から続けて開くと 429 で止め、D1 に書かない。ほかの IP は入れる', async () => {
+    const from = (ip: string) => ({ headers: { 'cf-connecting-ip': ip } })
+    const statuses: number[] = []
+    // 窓（60 秒）の境をまたいでも必ず上限を超える数（上限 10 の2倍 + 1）
+    for (let i = 0; i < 21; i += 1) {
+      statuses.push((await get('/admin/auth/github/start', from('203.0.113.7'))).status)
+    }
+    const passed = statuses.filter((status) => status === 302).length
+    expect(statuses).toContain(429)
+    expect(passed).toBeLessThanOrEqual(20)
+    expect(await states()).toHaveLength(passed)
+
+    const refused = await get('/admin/auth/github/start', from('203.0.113.7'))
+    expect(refused.status).toBe(429)
+    expect(refused.headers.get('retry-after')).toBe('60')
+    expect(await refused.text()).toContain('ログインの試行が多すぎます')
+
+    // 叩いている IP だけが止まる。持ち主の IP からは入口が開く
+    expect((await get('/admin/auth/github/start', from('198.51.100.1'))).status).toBe(302)
+  })
+})
+
+/*
   0006（users から email と password_hash を外し、user_identities と oauth_states を
   足す）と 0007（平文のセッションを消す）を、パスワードの頃の D1 に当てる。
 
   本来の DB には setup.ts が全部の移行を当ててしまうので、空の MIGRATION_DB に
   0005 までを流して行を入れ、そのあとで新しい移行を当てる。
 */
-describe('移行（パスワードから OAuth へ）', () => {
+describe('移行', () => {
   const d1 = () => env.MIGRATION_DB
   const run = async (names: (name: string) => boolean) => {
     for (const migration of env.TEST_MIGRATIONS.filter((one) => names(one.name))) {
@@ -616,15 +767,18 @@ describe('移行（パスワードから OAuth へ）', () => {
     }
   }
 
-  it('パスワードの頃の owner を、id と member を保ったまま引き継ぐ。平文のセッションは消える', async () => {
-    // 前の実行の残りを片付ける（後から作った表から消す）
+  // 前の実行の残りを片付ける（後から作った表から消す）
+  const clear = async () => {
     const { results } = await d1()
       .prepare(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY rowid DESC",
       )
       .all<{ name: string }>()
     for (const { name } of results) await d1().prepare(`DROP TABLE \`${name}\``).run()
+  }
 
+  it('パスワードの頃の owner を、id と member を保ったまま引き継ぐ。平文のセッションは消える', async () => {
+    await clear()
     await run((name) => name < '0006')
     await d1().batch([
       d1().prepare("INSERT INTO members (id, slug, name) VALUES (3, 'okazaki', '岡崎')"),
@@ -657,6 +811,71 @@ describe('移行（パスワードから OAuth へ）', () => {
       { provider: 'github', subject: '1001', label: '@owner' },
     )
     expect(user?.id).toBe(7)
+  })
+
+  /*
+    0013〜0016 を、その前の D1 に当てる。
+    - 0013: 全角の数字で書かれた年を半角に直す（COR-3。year_from が付く）
+    - 0014: owner が2人いる D1 を1人に寄せる（SEC-N4。紐づけとセッションを残す owner へ）
+    - 0015: owner_claims と users_one_owner（2人のままだと索引を作れずに止まる）
+    - 0016: 既に紐づいた owner のアカウントの記録を埋める（SEC-N1。外したら紐づき直らない）
+  */
+  it('0013〜0016: 全角の年を直し、owner を1人に寄せ、紐づけの記録を埋める', async () => {
+    await clear()
+    await run((name) => name < '0013')
+    await d1().batch([
+      d1().prepare("INSERT INTO members (id, slug, name) VALUES (4, 'okazaki', '岡崎')"),
+      d1().prepare("INSERT INTO users (id, role) VALUES (3, 'owner')"),
+      d1().prepare("INSERT INTO users (id, role, member_id) VALUES (5, 'owner', 4)"),
+      d1().prepare(
+        "INSERT INTO user_identities (user_id, provider, subject, label) VALUES (3, 'github', '1001', '@owner')",
+      ),
+      d1().prepare(
+        "INSERT INTO user_identities (user_id, provider, subject, label) VALUES (5, 'google', 'g-sub', 'Owner@Example.test')",
+      ),
+      d1().prepare(
+        "INSERT INTO sessions (id, user_id, expires_at) VALUES ('s3', 3, '2099-01-01T00:00:00.000Z'), ('s5', 5, '2099-01-01T00:00:00.000Z')",
+      ),
+      d1().prepare(
+        "INSERT INTO items (type, title, slug, year) VALUES ('app', 'A', 'a', '２０２３'), ('app', 'B', 'b', '２０２４ — 現在'), ('app', 'C', 'c', '令和6')",
+      ),
+    ])
+
+    await run((name) => name >= '0013')
+
+    const years = await d1()
+      .prepare('SELECT year, year_from FROM items ORDER BY id')
+      .all<{ year: string; year_from: number | null }>()
+    expect(years.results).toEqual([
+      { year: '2023', year_from: 2023 },
+      { year: '2024 — 現在', year_from: 2024 },
+      { year: '令和6', year_from: null },
+    ])
+
+    const owners = await d1().prepare('SELECT id, role, member_id FROM users').all()
+    expect(owners.results).toEqual([{ id: 3, role: 'owner', member_id: 4 }])
+    const linked = await d1().prepare('SELECT user_id FROM user_identities').all()
+    expect(linked.results).toEqual([{ user_id: 3 }, { user_id: 3 }])
+    const sessions = await d1().prepare('SELECT user_id FROM sessions ORDER BY id').all()
+    expect(sessions.results).toEqual([{ user_id: 3 }, { user_id: 3 }])
+    const claims = await d1()
+      .prepare('SELECT provider, value, subject FROM owner_claims ORDER BY provider')
+      .all()
+    expect(claims.results).toEqual([
+      { provider: 'github', value: '1001', subject: '1001' },
+      { provider: 'google', value: 'owner@example.test', subject: 'g-sub' },
+    ])
+
+    // 移行の前に紐づいたアカウントも、外したら紐づき直らない
+    await d1().prepare("DELETE FROM user_identities WHERE provider = 'github'").run()
+    const migrated = drizzle(d1(), { schema })
+    expect(
+      await userForIdentity(
+        migrated,
+        { OWNER_GITHUB_ID: '1001' },
+        { provider: 'github', subject: '1001', label: '@owner' },
+      ),
+    ).toBeNull()
   })
 
   it('0006 は表を作り直さない（D1 では PRAGMA foreign_keys=OFF が効かない）', () => {

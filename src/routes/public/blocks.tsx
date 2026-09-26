@@ -22,6 +22,7 @@ import {
   ItemStories,
   LinkList,
   langOf,
+  leanRow,
   MemberCardCompact,
   MemberCardWide,
   MoonField,
@@ -274,14 +275,22 @@ export function renderBlock(
               */
               <div class="grid" style={`--cols:${perScreen}`}>
                 {/*
-                  サムネイルの枠は行ごとに決める（ItemCard の framed）。行は
+                  サムネイルの枠と説明の行数は行ごとに決める（ItemCard の framed と
+                  lean）。行は
                   perScreen 件ずつ——割られた画面では1画面がちょうど1行、
                   全体ページ（/all）では同じ grid に perScreen 件ずつの行が並ぶ
                 */}
                 {chunk(projects.rows, perScreen).flatMap((row) => {
                   const framed = shotRow(row)
+                  const lean = leanRow(row, showMember)
                   return row.map((item) => (
-                    <ItemCard key={item.id} item={item} showMember={showMember} framed={framed} />
+                    <ItemCard
+                      key={item.id}
+                      item={item}
+                      showMember={showMember}
+                      framed={framed}
+                      lean={lean}
+                    />
                   ))
                 })}
               </div>

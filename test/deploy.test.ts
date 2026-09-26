@@ -250,6 +250,58 @@ describe('本番へ出す道', () => {
     expect(migrated).toBeLessThan(deployed)
   })
 
+  it('写しは戻せる形（定義と中身の2本）で取り、Time Travel より長く置く', () => {
+    // 1本の export は、子の表の行が親の CREATE TABLE より前に来て空の D1 に戻せない
+    expect(deploy).toMatch(/wrangler d1 export noctifex --remote[^\n]*--no-data/)
+    expect(deploy).toMatch(/wrangler d1 export noctifex --remote[^\n]*--no-schema/)
+    expect(deploy).not.toMatch(/wrangler d1 export noctifex --remote(?![^\n]*--no-(?:data|schema))/)
+    // 栞（Time Travel）は30日まで。控えがそれと同じ日に消えては、30日より前へ戻せない
+    const days = Number(deploy.match(/retention-days: (\d+)/)?.[1])
+    expect(days).toBeGreaterThan(30)
+    // 戻せることは check の門が毎回確かめる
+    expect(uncommented(checkYml)).toContain('npm run check:restore')
+    expect(scripts['check:restore']).toBe('node scripts/check-restore.mjs')
+  })
+
+  /*
+    本番のトークンは、wrangler を呼ぶ step にだけ渡す。job の env に置くと、npm ci
+    （依存の install スクリプト）や action からも読める。action はタグではなく
+    commit の SHA で固定し、GITHUB_TOKEN は読むだけにする。
+  */
+  it('本番のトークンは wrangler を呼ぶ step にだけある。action は SHA で固定する', () => {
+    const job = deploy.slice(deploy.search(/^ {2}deploy:/m))
+    const [head = '', ...steps] = job.split(/\n(?= {6}- )/)
+    const secret = /CLOUDFLARE_API_TOKEN: \$\{\{ secrets\.CLOUDFLARE_API_TOKEN \}\}/
+    expect(head).not.toMatch(secret)
+    expect(steps.length).toBeGreaterThan(5)
+    for (const step of steps) {
+      const usesWrangler = /npx wrangler (?:d1|deploy)/.test(step)
+      const checksToken = /\$CLOUDFLARE_API_TOKEN/.test(step)
+      expect(secret.test(step), step).toBe(usesWrangler || checksToken)
+    }
+    // トークンの無い install でも、install スクリプトは走らせない
+    expect(job).toMatch(/run: npm ci --ignore-scripts/)
+    // 秘密はここ（step の env）にしか書かない
+    expect(deployYml.match(/secrets\.CLOUDFLARE_API_TOKEN/g)?.length).toBe(
+      steps.filter((step) => secret.test(step)).length,
+    )
+
+    for (const yml of [deploy, uncommented(checkYml)]) {
+      expect(yml).toMatch(/^permissions:\s*\n\s+contents: read\s*$/m)
+      const uses = [...yml.matchAll(/uses: (\S+)/g)].map(([, target = '']) => target)
+      expect(uses.length).toBeGreaterThan(1)
+      for (const target of uses.filter((one) => !one.startsWith('./'))) {
+        expect(target).toMatch(/^[\w-]+\/[\w-]+@[0-9a-f]{40}$/)
+      }
+    }
+    // 固定した SHA には、どのタグかを行末に残す（上げるときに引き直す手がかり）
+    for (const yml of [deployYml, checkYml]) {
+      for (const line of yml.split('\n').filter((one) => /uses: [\w-]+\/[\w-]+@/.test(one))) {
+        expect(line).toMatch(/@[0-9a-f]{40} # v\d+\.\d+\.\d+$/)
+      }
+    }
+  })
+
   it('本番の seed は短い名前で打てない。打てる名前は件数を見るラッパーを通る', () => {
     for (const [name, command] of Object.entries(scripts)) {
       if (!/--file=\.\/seed\.sql/.test(command)) continue

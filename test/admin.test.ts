@@ -92,6 +92,15 @@ describe('認証', () => {
     await signed('/admin/logout', { method: 'POST' })
     expect((await signed('/admin/members')).headers.get('location')).toMatch(/^\/admin\/login/)
   })
+
+  it('ログアウトの手は日本語。同じ画面の「すべての端末からログアウト」と同じ言葉で言う', async () => {
+    // 操作の言葉は日本語（CLAUDE.md「文言」）。「Sign out」と並ぶと別の操作に見えた
+    const signed = await signIn()
+    const html = await (await signed('/admin/account')).text()
+    const logout = html.slice(html.indexOf('action="/admin/logout"'))
+    expect(logout.slice(0, logout.indexOf('</form>'))).toContain('>ログアウト</button>')
+    expect(html).not.toContain('Sign out')
+  })
 })
 
 describe('Members', () => {
@@ -152,6 +161,7 @@ describe('Items', () => {
         type: 'app',
         title: 'テスト用アプリ',
         platformKey: 'web',
+        summary: '説明。',
         published: '1',
         tags: 'Swift, SwiftUI',
         linkLabel: ['Repository', ''],
@@ -210,7 +220,13 @@ describe('Items', () => {
     const signed = await signIn()
     await signed('/admin/items', {
       method: 'POST',
-      body: form({ type: 'app', title: '入れ替え', published: '1', tags: '古いタグ' }),
+      body: form({
+        type: 'app',
+        title: '入れ替え',
+        summary: '説明。',
+        published: '1',
+        tags: '古いタグ',
+      }),
     })
     const id = (await (await signed('/admin/items?type=app')).text()).match(
       /\/admin\/items\/(\d+)\/edit/,
@@ -218,7 +234,13 @@ describe('Items', () => {
 
     await signed(`/admin/items/${id}`, {
       method: 'POST',
-      body: form({ type: 'app', title: '入れ替え', published: '1', tags: '新しいタグ' }),
+      body: form({
+        type: 'app',
+        title: '入れ替え',
+        summary: '説明。',
+        published: '1',
+        tags: '新しいタグ',
+      }),
     })
 
     const html = await okText('/all')
@@ -316,6 +338,7 @@ describe('Items — 本文と画像', () => {
         type: 'app',
         title: 'AppMixer',
         body: '残ってほしい本文',
+        summary: '説明。',
         published: '1',
       }),
     })
@@ -342,7 +365,14 @@ describe('Items — 本文と画像', () => {
 
     const kept = await signed(`/admin/items/${item.id}`, {
       method: 'POST',
-      body: form({ type: 'app', title: 'AppMixer', slug: 'kept', imageAlt: '', published: '1' }),
+      body: form({
+        type: 'app',
+        title: 'AppMixer',
+        slug: 'kept',
+        imageAlt: '',
+        summary: '説明。',
+        published: '1',
+      }),
     })
     expect(kept.status).toBe(400)
     expect(await kept.text()).toContain('代替テキストが要ります')
@@ -355,6 +385,7 @@ describe('Items — 本文と画像', () => {
         slug: 'kept',
         imageAlt: '',
         removeImage: '1',
+        summary: '説明。',
         published: '1',
       }),
     })
@@ -384,6 +415,7 @@ describe('Items — 本文と画像', () => {
         type: 'app',
         title: '長い本文',
         body: 'あ'.repeat(MAX_CHARS.itemBody + 1),
+        summary: '説明。',
         published: '1',
       }),
     })
@@ -437,6 +469,7 @@ describe('Items — 本文と画像', () => {
         title: 'AppMixer',
         slug: 'gone',
         removeImage: '1',
+        summary: '説明。',
         published: '1',
       }),
     })
@@ -463,6 +496,7 @@ describe('Items — 本文と画像', () => {
         title: 'AppMixer',
         slug: 'swap',
         imageAlt: '新しい画像',
+        summary: '説明。',
         published: '1',
       }),
     })
@@ -821,6 +855,7 @@ describe('URL の検査（保存）', () => {
         type: 'app',
         title: 'AppMixer',
         slug: 'appmixer',
+        summary: '説明。',
         published: '1',
         ...links([
           ['', 'https://only-url.example'],
@@ -911,7 +946,7 @@ describe('Items — 恒久リンクの slug', () => {
 
     await signed('/admin/items', {
       method: 'POST',
-      body: form({ type: 'app', title: 'App Mixer', published: '1' }),
+      body: form({ type: 'app', title: 'App Mixer', summary: '説明。', published: '1' }),
     })
 
     // 貼るための URL なので、探しに行かずに読めるところに出す
@@ -923,7 +958,7 @@ describe('Items — 恒久リンクの slug', () => {
     const signed = await signIn()
     await signed('/admin/items', {
       method: 'POST',
-      body: form({ type: 'work', title: '開発工程の効率化', published: '1' }),
+      body: form({ type: 'work', title: '開発工程の効率化', summary: '説明。', published: '1' }),
     })
 
     // toSlug は空を返す。読めない代わりに重ならない名前にする
@@ -937,7 +972,13 @@ describe('Items — 恒久リンクの slug', () => {
     const signed = await signIn()
     await signed('/admin/items', {
       method: 'POST',
-      body: form({ type: 'app', title: 'AppMixer', slug: 'appmixer', published: '1' }),
+      body: form({
+        type: 'app',
+        title: 'AppMixer',
+        slug: 'appmixer',
+        summary: '説明。',
+        published: '1',
+      }),
     })
 
     const response = await signed('/admin/items', {
@@ -972,7 +1013,7 @@ describe('Items — 恒久リンクの slug', () => {
     // 編集画面を開いて、slug の欄に何も足さずに保存し直すだけ
     await signed(`/admin/items/${item.id}`, {
       method: 'POST',
-      body: form({ type: 'app', title: 'AppMixer', published: '1' }),
+      body: form({ type: 'app', title: 'AppMixer', summary: '説明。', published: '1' }),
     })
     expect((await get('/apps/item/appmixer')).status).toBe(200)
   })
@@ -989,7 +1030,13 @@ describe('Items — 恒久リンクの slug', () => {
     const signed = await signIn()
     await signed('/admin/items', {
       method: 'POST',
-      body: form({ type: 'app', title: 'AppMixer', slug: 'appmixer', published: '1' }),
+      body: form({
+        type: 'app',
+        title: 'AppMixer',
+        slug: 'appmixer',
+        summary: '説明。',
+        published: '1',
+      }),
     })
     const id = (await (await signed('/admin/items?type=app')).text()).match(
       /\/admin\/items\/(\d+)\/edit/,
@@ -997,7 +1044,13 @@ describe('Items — 恒久リンクの slug', () => {
 
     const response = await signed(`/admin/items/${id}`, {
       method: 'POST',
-      body: form({ type: 'app', title: 'AppMixer 2', slug: 'appmixer', published: '1' }),
+      body: form({
+        type: 'app',
+        title: 'AppMixer 2',
+        slug: 'appmixer',
+        summary: '説明。',
+        published: '1',
+      }),
     })
     expect(response.status).toBe(303)
     expect(await okText('/apps/item/appmixer')).toContain('AppMixer 2')
@@ -1510,7 +1563,8 @@ describe('項目とメンバー — 書く場所の上限', () => {
     const html = await (await signed('/admin/items/new?type=app')).text()
     expect(html).toContain(`maxlength="${MAX_CHARS.itemSummary}"`)
     expect(html).toContain(`${MAX_CHARS.itemSummary} 字まで`)
-    // 電話の幅のカードは2行で切る。上限まで書けばどこでも全部読まれる、とは書かない
+    // 電話の幅の重い行（実績値か担当者名がある）のカードは2行で切る。上限まで書けば
+    // どこでも全部読まれる、とは書かない
     expect(html).toContain(`${MAX_CHARS.itemSummaryVisible} 字までしか出ません`)
     // 説明は目録の文なので常体、本文は「です・ます」。同じ作品のページに続けて出る
     expect(html).toContain('2文を常体で')
@@ -1888,7 +1942,7 @@ describe('作品の保存は、全部書けるか何も書かないか', () => {
 /*
   二重送信（ADM-5）。管理画面は JavaScript を持たないので、押したあとにボタンを
   押せなくする手が無い。追加のフォームは描くときに一度きりの札（formKey）を持ち、
-  同じ札の2度目は書かずに「保存しました」へ送る。
+  同じ札の2度目は新しい行を作らず、1度目がその札で作った行への保存になる。
 */
 describe('二重送信', () => {
   const keyOf = (html: string) => {
@@ -1964,19 +2018,84 @@ describe('二重送信', () => {
     expect(await db().select().from(schema.members)).toHaveLength(1)
   })
 
-  it('同じ札でも中身が違えば別の行として書く（「戻る」で開き直したフォームから、別のものを書いた）', async () => {
+  /*
+    COR-2。同じ札の2度目の送信は、1度目がその札で作った行への保存。下書きで保存した
+    あと「戻る」で開き直し、直して「公開する」に印を付けて送ると、その行が直って公開に
+    なる（関門に当たれば理由が出る）。以前は題・名前が同じなら中身を比べずに何も
+    書かず、公開したと知らせたのに下書きのまま残った
+  */
+  it('作品: 同じ札で直して公開に印を付けた送信は、1度目の行を直して公開する', async () => {
     const signed = await signIn()
     const key = keyOf(await (await signed('/admin/items/new?type=app')).text())
-    for (const title of ['AppMixer', 'AllTasks']) {
-      const response = await signed('/admin/items', {
+    const send = (values: Record<string, string>) =>
+      signed('/admin/items', {
         method: 'POST',
-        body: form({ type: 'app', title, formKey: key }),
+        body: form({ type: 'app', formKey: key, ...values }),
       })
-      expect(response.status).toBe(303)
-    }
-    const titles = (await db().select().from(schema.items)).map((row) => row.title).sort()
-    // 黙って捨てて「保存しました」と言わない
-    expect(titles).toEqual(['AllTasks', 'AppMixer'])
+
+    const draft = await send({ title: 'AppMixer', summary: '誤字あり。' })
+    expect(draft.headers.get('location')).toContain('saved=draft')
+
+    // 関門に当たる送り直し（説明が空）は、その行の編集フォームに理由を出す
+    const blocked = await send({ title: 'AppMixer', summary: '', published: '1' })
+    expect(blocked.status).toBe(400)
+    const html = await blocked.text()
+    expect(html).toContain('説明文が要ります')
+    const [row] = await db().select().from(schema.items)
+    expect(html).toContain(`action="/admin/items/${row?.id}"`)
+
+    const again = await send({ title: 'AppMixer', summary: '誤字を直した。', published: '1' })
+    expect(again.status).toBe(303)
+    const location = again.headers.get('location') ?? ''
+    expect(location).toContain('saved=1')
+    expect(await (await signed(location)).text()).toContain('1度目に作ったものに書きました')
+    const rows = await db().select().from(schema.items)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ summary: '誤字を直した。', published: 1 })
+    expect(await okText('/apps/item/appmixer')).toContain('誤字を直した。')
+  })
+
+  it('メンバー: 同じ札で直して公開に印を付けた送信は、1度目の人を直して公開する', async () => {
+    const signed = await signIn()
+    const key = keyOf(await (await signed('/admin/members/new')).text())
+    const send = (values: Record<string, string>) =>
+      signed('/admin/members', { method: 'POST', body: form({ formKey: key, ...values }) })
+
+    expect((await send({ name: '星野', bio: '古い紹介' })).headers.get('location')).toContain(
+      'saved=draft',
+    )
+    const blocked = await send({ name: '星野', bio: 'あ'.repeat(401), published: '1' })
+    expect(blocked.status).toBe(400)
+    expect(await blocked.text()).toContain('400 字まで')
+
+    const again = await send({ name: '星野', bio: '新しい紹介', published: '1' })
+    expect(again.headers.get('location')).toContain('saved=1')
+    expect(again.headers.get('location')).toContain('again=1')
+    const rows = await db().select().from(schema.members)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ bio: '新しい紹介', published: 1 })
+  })
+
+  it('ブロック: 同じ札で公開に印だけを付けた送信は、1度目の行を公開する', async () => {
+    const signed = await signIn()
+    await signed('/admin/blocks/init', { method: 'POST' })
+    const key = keyOf(await (await signed('/admin/blocks/new?type=note')).text())
+    const send = (values: Record<string, string>) =>
+      signed('/admin/blocks', {
+        method: 'POST',
+        body: form({ type: 'note', title: '', formKey: key, ...values }),
+      })
+
+    expect((await send({ body: '段落です' })).headers.get('location')).toContain('saved=draft')
+    const blocked = await send({ body: 'あ'.repeat(1000), published: '1' })
+    expect(blocked.status).toBe(400)
+    expect(await blocked.text()).toContain('1画面に収まりません')
+
+    const again = await send({ body: '段落です', published: '1' })
+    expect(again.headers.get('location')).toContain('saved=1')
+    const notes = await db().select().from(schema.blocks).where(eq(schema.blocks.type, 'note'))
+    expect(notes).toHaveLength(1)
+    expect(notes[0]).toMatchObject({ body: '段落です', published: 1 })
   })
 
   it('札の無い送信は今までどおり書く（札は重複を止めるためのもので、書いてよいかは決めない）', async () => {
@@ -2296,7 +2415,13 @@ describe('恒久リンクの slug を変える', () => {
 
     const response = await signed(`/admin/items/${item.id}`, {
       method: 'POST',
-      body: form({ type: 'app', title: 'AppMixer', slug: 'app-mixer', published: '1' }),
+      body: form({
+        type: 'app',
+        title: 'AppMixer',
+        slug: 'app-mixer',
+        summary: '説明。',
+        published: '1',
+      }),
     })
     expect(response.headers.get('location')).toContain('moved=1')
     const list = await (await signed(response.headers.get('location') ?? '')).text()
@@ -2330,12 +2455,78 @@ describe('恒久リンクの slug を変える', () => {
 })
 
 /*
+  作品名の上限（COR-4）と説明の必須（COR-5）。どちらも公開するときにだけ見る
+  （下書きに戻す保存では長さを見ない決まり）。
+*/
+describe('作品の公開の関門（作品名・説明）', () => {
+  it(`作品名が ${MAX_CHARS.itemTitle} 字を超えたら公開させない。下書きなら通る。欄にも上限を出す`, async () => {
+    const signed = await signIn()
+    const form0 = await (await signed('/admin/items/new?type=app')).text()
+    expect(form0).toContain(`maxlength="${MAX_CHARS.itemTitle}"`)
+    const long = 'あ'.repeat(MAX_CHARS.itemTitle + 1)
+    const refused = await signed('/admin/items', {
+      method: 'POST',
+      body: form({ type: 'app', title: long, summary: '説明。', published: '1' }),
+    })
+    expect(refused.status).toBe(400)
+    expect(await refused.text()).toContain(`作品名は ${MAX_CHARS.itemTitle} 字までです`)
+
+    const draft = await signed('/admin/items', {
+      method: 'POST',
+      body: form({ type: 'app', title: long, summary: '説明。' }),
+    })
+    expect(draft.status).toBe(303)
+    const ok = await signed('/admin/items', {
+      method: 'POST',
+      body: form({
+        type: 'app',
+        title: 'い'.repeat(MAX_CHARS.itemTitle),
+        summary: '説明。',
+        published: '1',
+      }),
+    })
+    expect(ok.status).toBe(303)
+  })
+
+  it('説明が空なら公開させない（下書きなら通る）', async () => {
+    const signed = await signIn()
+    const refused = await signed('/admin/items', {
+      method: 'POST',
+      body: form({ type: 'app', title: 'AppMixer', published: '1' }),
+    })
+    expect(refused.status).toBe(400)
+    expect(await refused.text()).toContain('説明文が要ります')
+    const draft = await signed('/admin/items', {
+      method: 'POST',
+      body: form({ type: 'app', title: 'AppMixer' }),
+    })
+    expect(draft.status).toBe(303)
+  })
+})
+
+/*
   作品の並び（PUB-4 / SYS-9）。並べる年（items.year_from）は DB が year から作り、
   管理画面の知らせは同じ規則の yearFrom が出す。2つの答えがずれないことを見る。
 */
 describe('作品の並べる年', () => {
+  /*
+    アプリを通らずに入った行（seedItem・D1 を手で直した行・readItemForm が全角を直す
+    より前に保存した行）でも同じ答え。全角の年を管理画面は 2024 と読むのに DB は null、
+    と食い違っていたころは、一覧の最後に落ちた作品に「並びに使われません」が出なかった（COR-3）
+  */
   it('DB が作る年（year_from）と、管理画面の知らせ（yearFrom）は同じ答え', async () => {
-    const years = ['2026', '2024 — 現在', '2019.04 — 2021', '令和6', '〜2023', 'FY2024', '24', '']
+    const years = [
+      '2026',
+      '2024 — 現在',
+      '2019.04 — 2021',
+      '令和6',
+      '〜2023',
+      'FY2024',
+      '24',
+      '',
+      '２０２４',
+      '２０２４ — 現在',
+    ]
     for (const [index, year] of years.entries()) {
       await seedItem({ title: `t${index}`, slug: `t${index}`, year })
     }

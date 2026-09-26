@@ -154,11 +154,47 @@ authRoutes.get('/login', (c) =>
   ),
 )
 
+/*
+  ログインの入口の回数の上限。
+
+  入口は開くたびに D1 へ書く（期限切れの掃除と state の1行）。ログインしていない
+  GET なので、上限が無いとボットが提供元に何も送らずに叩き続けられ、D1 の書き込みの
+  枠（無料のプランは1日 10 万行）を使い切られる——そうなると管理画面の保存も
+  持ち主のログインも UTC 0 時まで止まる。
+
+  数えるのは Workers の Rate Limiting（wrangler.toml の [[ratelimits]]。IP ごとに
+  60 秒で 10 回）で、D1 に書く前に止める。IP ごとにしたのは、持ち主を締め出す道を
+  作らないため。全体の上限（有効な state の行数など）にすると、叩く側がその数を
+  埋め続けるだけで、別の場所から入ろうとする持ち主まで 429 になる。IP ごとなら、
+  止まるのは叩いている IP だけ。多くの IP から叩かれる場合は Cloudflare の WAF の
+  レート制限（/admin/auth/ の下の start）で外から止める（CLAUDE.md「ログイン」）。
+
+  IP（cf-connecting-ip）は Cloudflare が付けるもので、訪問者には書き換えられない。
+  付いていない要求（テストの中）と、binding が無い環境は数えない。
+*/
+async function tooManyStarts(c: Context<AppEnv>): Promise<boolean> {
+  const limiter = c.env.LOGIN_RATE_LIMIT
+  const ip = c.req.header('cf-connecting-ip')
+  if (!limiter || !ip) return false
+  const { success } = await limiter.limit({ key: `login-start:${ip}` })
+  return !success
+}
+
 authRoutes.get('/auth/:provider/start', async (c) => {
   const provider = c.req.param('provider')
   if (!isProviderKey(provider)) return c.notFound()
   const client = clientFor(c.env, provider)
   if (!client) return notConfigured(c, provider)
+  if (await tooManyStarts(c)) {
+    c.header('retry-after', '60')
+    return c.html(
+      <AuthProblem
+        title="ログインの試行が多すぎます"
+        detail="1分ほど待ってから、もう一度お試しください。"
+      />,
+      429,
+    )
+  }
 
   const state = newToken()
   const nonce = newToken()
