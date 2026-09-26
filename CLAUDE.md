@@ -228,10 +228,17 @@ GitHub / Mail・著作権表示）。「ひとこと」ブロックとは別物�
 
 **入口の月を焼き直す** → `scripts/moon/render.py`（Blender）で **preset `final`** を
 焼き、`scripts/moon/pack.py <in.png> public/assets` で詰める。pack が最後に出す
-`373x574` を `public/app.css` の `--moon-ratio` に書き写す（食い違うと絵だけが
+`370x574` を `public/app.css` の `--moon-ratio` に書き写す（食い違うと絵だけが
 箱の中で潰れ、光暈が元の形のまま残る）。マークアップ側に寸法は無い——
 絵は `<img>` ではなく CSS の mask なので、`src/ui/components.tsx` には
-空の `<span class="moon__mark">` しか無い。
+空の `<span class="moon__mark">` しか無い。Blender を入れられない環境では
+`pip install bpy` で同じ `render.py` を `python` から動かせる（手順は `docs/moon.md` の4）。
+
+**入口の月の輪郭はロゴの多角形ではない。** ロゴの7点が乗っている2つの円で
+切り抜いた、なめらかな三日月（`render.py` の `OUTER` / `INNER`）。ロゴ
+（`MARK_POINTS`）は多角形のままで、両端の尖りの位置だけが両者で同じ。
+画面の 1/3 を占める大きさでは、弦の折れ目がそのまま角に見えて「折れ曲がった板」に
+読まれていた。
 
 そのあと必ず `npm run check:contrast`。点の分布が変われば文字の下に来る
 明るさも変わるし、**素材と `--moon-ratio` の突き合わせもあの検査がやっている**

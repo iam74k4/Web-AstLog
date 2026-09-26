@@ -1,5 +1,5 @@
 """
-入口に敷く三日月を、**折った面の上に並べた点**としてレンダリングする。
+入口に敷く三日月を、**点**としてレンダリングする（いまの final は球として照らした点）。
 ここが本番。詰めるのは scripts/moon/pack.py、設計の経緯は docs/moon.md。
 
   blender -b -P scripts/moon/render.py -- <out.png> <res> <samples> [preset] [fstop]
@@ -12,7 +12,8 @@
 ## 作り
 
   1. 面は**厚みゼロ**。うねらせるのは Y（＝カメラの視線方向）だけで、
-     X/Z には1ミリも動かさない。だからカメラから見た輪郭はロゴの多角形のまま。
+     X/Z には1ミリも動かさない。だからカメラから見た輪郭は、2つの円で切り抜いた
+     三日月のまま（ロゴの7点が乗っている円。下の OUTER / INNER）。
      さらに縁から TAPER で折りを 0 に落とすので、境界の点は必ず y=0 に乗る。
   2. 点は**面上の弧長**で刻む。ここが要点。画面の (x,z) で等間隔に置くと、
      いくら折っても投影は等間隔のままで、**折りは絵に1画素も現れない**。
@@ -23,6 +24,12 @@
      点の直径を割り、点の列が**白い筋に溶ける**（実際そうなった）。
   4. 間隔と点の大きさは**配信される実画素**で持つ（px / dot）。ワールド単位で
      持つと、解像度や pack.py の丈を変えた瞬間に意味が変わる。
+  5. 点は外周と同心の輪に並べる（rings）。斜めの格子では、細っていく尖りを
+     行が斜めに横切って、切れ端が段々に残る。
+
+**いまの final は 1〜3 の「折った面」を使っていない。** 外周の円を球の輪郭と
+みなし、球として照らしている（sphere。陰影・輪の間隔の遠近・点のつぶれ）。
+折った面の版は preset rings / d / g などに比較のために残してある。
 
 ## 測って捨てたもの
 
@@ -113,7 +120,6 @@ MARK = [
 ]
 
 L = 12.0
-PX_PER_BU = 362.0  # 配信 392x574 での実画素 / Blender 単位
 
 
 def to_bu(p):
@@ -122,30 +128,72 @@ def to_bu(p):
 
 POLY = [to_bu(p) for p in MARK]
 
+"""
+三日月の形。**ロゴの多角形ではなく、ロゴの7点が乗っている2つの円で描く。**
+
+ロゴの7点は、外周の5点が1つの円に、内周の4点（両端の尖りを含む）がもう
+1つの円に、どちらも残差 0.001 以下で乗っている。つまりロゴは「2つの円で
+切り抜いた三日月」を7点の弦で近似したもの。小さく出るロゴではその角が
+締まりになるが、画面の 1/3 を占める入口の月では弦の折れ目がそのまま角に
+見え、三日月ではなく折れ曲がった板に読まれていた。
+
+円は「両端の尖り＋いちばん外（内）に張り出した点」の3点から決める。
+尖りを両方の円に通すので、尖りの位置はロゴと1点も変わらない。外周の円は
+尖りより少し下まで膨らむ（丈がロゴの 19.0 から 19.49 になる）ので、
+PX_PER_BU は下で円の丈から出し直している。
+
+ロゴそのもの（src/ui/icons.tsx の MARK_POINTS）は多角形のまま。ここで
+変えているのは入口の月の輪郭だけ。
+"""
+
+
+def circle_through(a, b, c):
+    (ax, ay), (bx, by), (cx, cy) = a, b, c
+    d = 2.0 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by))
+    ux = ((ax * ax + ay * ay) * (by - cy) + (bx * bx + by * by) * (cy - ay) + (cx * cx + cy * cy) * (ay - by)) / d
+    uy = ((ax * ax + ay * ay) * (cx - bx) + (bx * bx + by * by) * (ax - cx) + (cx * cx + cy * cy) * (bx - ax)) / d
+    return ux, uy, math.hypot(ax - ux, ay - uy)
+
+
+TOP, BOTTOM = POLY[0], POLY[4]
+OUTER = circle_through(TOP, POLY[2], BOTTOM)  # 外周（明るい縁）
+INNER = circle_through(TOP, POLY[6], BOTTOM)  # 内周（明暗の境目）
+
+
+def dist_out(x, z):
+    """外周の円までの距離。内側が正。"""
+    return OUTER[2] - math.hypot(x - OUTER[0], z - OUTER[1])
+
+
+def dist_in(x, z):
+    """内周の円までの距離。三日月の側（円の外）が正。"""
+    return math.hypot(x - INNER[0], z - INNER[1]) - INNER[2]
+
 
 def inside(x, z):
-    hit = False
-    n = len(POLY)
-    for i in range(n):
-        x1, z1 = POLY[i]
-        x2, z2 = POLY[(i + 1) % n]
-        if (z1 > z) != (z2 > z):
-            if x < x1 + (z - z1) * (x2 - x1) / (z2 - z1):
-                hit = not hit
-    return hit
+    return dist_out(x, z) > 0.0 and dist_in(x, z) > 0.0
 
 
 def edge_dist(x, z):
-    best = 1e9
-    n = len(POLY)
-    for i in range(n):
-        x1, z1 = POLY[i]
-        x2, z2 = POLY[(i + 1) % n]
-        dx, dz = x2 - x1, z2 - z1
-        ll = dx * dx + dz * dz
-        t = 0.0 if ll == 0 else max(0.0, min(1.0, ((x - x1) * dx + (z - z1) * dz) / ll))
-        best = min(best, math.hypot(x - (x1 + t * dx), z - (z1 + t * dz)))
-    return best
+    # 縁までの距離。外では負になる（smoothstep が 0 に落とす）
+    return min(dist_out(x, z), dist_in(x, z))
+
+
+# 輪郭をなぞった点列。格子の範囲と、三日月の丈を測るのに使う
+OUTLINE = [TOP, BOTTOM]
+for i in range(1440):
+    t = 2.0 * math.pi * i / 1440
+    for cx, cz, r in (OUTER, INNER):
+        p = (cx + r * math.cos(t), cz + r * math.sin(t))
+        if dist_out(*p) >= -1e-9 and dist_in(*p) >= -1e-9:
+            OUTLINE.append(p)
+
+"""
+配信 1px が何 BU か。pack.py が丈を PACK_H にそろえるので、三日月の丈から出す。
+多角形のころは 362.0 と手で書いてあった（丈 19.0/12 BU のときだけ正しい数）。
+"""
+PACK_H = 574.0
+PX_PER_BU = PACK_H / (max(z for _, z in OUTLINE) - min(z for _, z in OUTLINE))
 
 
 def smoothstep(e0, e1, v):
@@ -159,7 +207,7 @@ def smoothstep(e0, e1, v):
 # 参照（ElevenLabs）は 520x470 を占めるので細かい格子が成立するが、
 # こちらは 392x574 しか無い。同じ密度を真似ると点が1画素を割って砂に戻る。
 TAPER = 0.045  # 縁からこの幅（BU）で折りを 0 に落とす。輪郭を守るため
-FADE = 0.075  # 縁からこの幅で明るさを 0 に落とす。外周が消えていくように
+FADE = 0.075  # 縁からこの幅で明るさを落とす（rings では内周からだけ。外周はくっきり残す）
 
 """
 弧長で刻むと、面が寝ている所では du がいくらでも小さくなる。
@@ -212,11 +260,20 @@ PRESETS = {
         dict(px=10.5, amp=0.0005, k1=3.6, k2=4.2, rot=1.38, ph=2.3, gain=0.50, dot=2.0, seed=2, back=0.16,
              tilt_ref=1.2, tilt_lo=0.40, tilt_hi=1.70, lx_lo=1.15, lx_hi=0.70),
     ],
-    # 設計書が最終的に採った構成。1層・点を粗く（配信で読めるように）。
-    # d の折り（amp/k1/k2/rot）に g の「傾きで明暗」と「左が濃い」を足し、
-    # 間隔と点を配信実画素で 9.4 / 2.8 まで開いたもの
+    # 本番。外周の円を球の輪郭とみなし、球として照らす（sphere）。
+    # 間隔と点は配信実画素で 9.4 / 2.8 のまま。折りは使わない——球の陰影と
+    # 遠近が立体を受け持つので、面のうねりを重ねると濃淡が二重になる
     "final": [
-        dict(px=9.4, amp=0.38, k1=6.0, k2=2.6, rot=0.28, ph=0.0, gain=1.05, dot=2.8, seed=1,
+        dict(layout="sphere", px=9.4, gain=1.05, dot=2.8, seed=1),
+    ],
+    # 1つ前の final。折った面の点を外周と同心の輪に並べたもの。
+    # d の折り（amp/k1/k2/rot）に g の「傾きで明暗」と「左が濃い」を足し、
+    # 間隔と点を配信実画素で 9.4 / 2.8 まで開いてある。折りは 0.38 から
+    # 0.26 へ浅くした——輪に並べると等高線が輪を横切る細い筋になり、0.38 では
+    # 下の尖りの内側が毛羽立って見えた。0.16 まで下げると筋はほぼ消えるが、
+    # 点の濃淡も消えて平らな網になる。点の大きさが一様で、平らな板に見えた
+    "rings": [
+        dict(layout="rings", px=9.4, amp=0.26, k1=6.0, k2=2.6, rot=0.28, ph=0.0, gain=1.05, dot=2.8, seed=1,
              tilt_ref=1.5, tilt_lo=0.45, tilt_hi=1.95, lx_lo=1.15, lx_hi=0.70),
     ],
     # e より粗い。点がもっと大きく、間隔も開く
@@ -250,7 +307,7 @@ def lattice(cfg):
 
     us, vs = [], []
     c, s = math.cos(cfg["rot"]), math.sin(cfg["rot"])
-    for x, z in POLY:
+    for x, z in OUTLINE:
         us.append(x * c + z * s)
         vs.append(-x * s + z * c)
     u0, u1 = min(us) - step, max(us) + step
@@ -268,30 +325,174 @@ def lattice(cfg):
             y2, _, _ = h(u + du, v)
             slope = (y2 - y) / du
             if inside(x, z):
-                d = edge_dist(x, z)
-                # 手前ほど明るい。折りの山と谷で明暗が分かれ、起伏が読める
-                depth = 1.55 - 1.17 * smoothstep(-cfg["amp"], cfg["amp"], y)
-                # 面の傾き。寝ている所（|slope| 大）は点が詰まる上に明るく、
-                # カメラに正対している所（|slope| 小）は疎で暗い。
-                # 参照の「明るい等高線 / 地が透ける所」はこの2つの積で出る。
-                # 密度だけでは足りなかった——詰まりに下限を置いたぶん、
-                # 明暗で差をつけ直す必要がある。
-                t = min(1.0, abs(slope) / cfg.get("tilt_ref", 1.6))
-                tilt = cfg.get("tilt_lo", 0.62) + (cfg.get("tilt_hi", 1.85) - cfg.get("tilt_lo", 0.62)) * t
-                fade = smoothstep(0.0, FADE, d)
+                fade = smoothstep(0.0, FADE, edge_dist(x, z))
                 jit = 0.78 + 0.44 * rnd.random()
-                # 三日月の質量は左（膨らんだ側）にある。左を濃く、右の尖りへ向けて
-                # 落とすと、記号ではなく照らされた立体に見える
-                lit_x = cfg.get("lx_lo", 1.0) + (cfg.get("lx_hi", 1.0) - cfg.get("lx_lo", 1.0)) * smoothstep(
-                    -0.55, 0.55, x
-                )
-                b = cfg["gain"] * depth * tilt * fade * jit * lit_x
+                b = cfg["gain"] * light(cfg, x, y, slope) * fade * jit
                 if b > 0.012:
                     pts.append((x, y + cfg.get('back', 0.0), z, b, half * (0.75 + 0.45 * fade)))
             u += max(step * DU_MIN, step / math.sqrt(1.0 + slope * slope))
         v += step
         row += 1
     return pts
+
+
+def light(cfg, x, y, slope):
+    """1点の明るさのうち、折りと位置で決まるぶん（縁の減光と揺らぎは呼ぶ側）。"""
+    # 手前ほど明るい。折りの山と谷で明暗が分かれ、起伏が読める
+    depth = 1.55 - 1.17 * smoothstep(-cfg["amp"], cfg["amp"], y)
+    # 面の傾き。寝ている所（|slope| 大）は点が詰まる上に明るく、
+    # カメラに正対している所（|slope| 小）は疎で暗い。
+    # 参照の「明るい等高線 / 地が透ける所」はこの2つの積で出る。
+    # 密度だけでは足りなかった——詰まりに下限を置いたぶん、
+    # 明暗で差をつけ直す必要がある。
+    t = min(1.0, abs(slope) / cfg.get("tilt_ref", 1.6))
+    tilt = cfg.get("tilt_lo", 0.62) + (cfg.get("tilt_hi", 1.85) - cfg.get("tilt_lo", 0.62)) * t
+    # 三日月の質量は左（膨らんだ側）にある。左を濃く、右の尖りへ向けて
+    # 落とすと、記号ではなく照らされた立体に見える
+    lit_x = cfg.get("lx_lo", 1.0) + (cfg.get("lx_hi", 1.0) - cfg.get("lx_lo", 1.0)) * smoothstep(-0.55, 0.55, x)
+    return depth * tilt * lit_x
+
+
+"""
+点を外周の円と同心の輪に並べる（final はこちら）。
+
+斜めの格子（lattice）のままでは、輪郭を円にしても尖りがきれいに閉じない。
+格子の行は決まった向き（rot）に走るので、細くなっていく尖りを斜めに横切り、
+行の切れ端が段々に残る——上の尖りが、階段状に途切れた破線の束に見えていた。
+輪に並べると、いちばん外の輪がそのまま外周になり（縁が1本の点の弧になる）、
+内側の輪ほど早く内周に当たって終わるので、尖りは輪が1本ずつ抜けながら
+自然に細っていく。
+
+輪の上は今までどおり**面上の弧長**で刻む（折りが寝ている所で点が詰まる）。
+輪と輪の間隔は点の間隔の √3/2（六方の行の間隔）で、1本おきに半歩ずらす。
+歩き始めは2つの円の中心を結ぶ線の上（三日月はこの線について対称で、
+いちばん太い所）で、そこから上下へ歩く。
+
+内周（明暗の境目）へ近づくほど点を細らせる（TERM / DOT_LO）。外周は
+くっきり、境目はやわらかく——月の縁と明暗境界の見え方そのもので、
+尖りの先でも点が細って消えていく。明るさの減光も内周からだけ掛ける。
+外周に掛けると、いちばん外の輪がまるごと消えて縁が1本内側へ下がる。
+"""
+TERM = 0.10  # 内周からこの幅（BU ≒ 配信 35px）で点を細らせる
+DOT_LO = 0.35  # 内周での点の大きさ（奥の 1.2 に対して）
+
+
+def rings(cfg):
+    """外周と同心の輪に、面上の弧長で刻んだ点。戻すのは (x, y, z, 明るさ, 半径)。"""
+    h = make_height(cfg)
+    step = cfg["px"] / PX_PER_BU
+    rnd = random.Random(cfg["seed"])
+    half = (cfg["dot"] / 2.0) / PX_PER_BU
+    ox, oz, big_r = OUTER
+    axis = math.atan2(oz - INNER[1], ox - INNER[0])
+    c, s = math.cos(cfg["rot"]), math.sin(cfg["rot"])
+
+    def at(r, a):
+        x, z = ox + r * math.cos(a), oz + r * math.sin(a)
+        y, _, _ = h(x * c + z * s, -x * s + z * c)
+        return x, y, z
+
+    pts = []
+    r, ring = big_r - 1.2 * half, 0
+    # いちばん太い所で内周に届かない輪は、どこでも三日月に掛からない
+    while r > 0.0 and dist_in(ox + r * math.cos(axis), oz + r * math.sin(axis)) > 0.0:
+        start = axis + (0.5 * step / r if ring % 2 else 0.0)
+        for sign in (1.0, -1.0):
+            a = start if sign > 0 else start - step / r
+            while abs(a - axis) < math.pi:
+                x, y, z = at(r, a)
+                d_in = dist_in(x, z)
+                if d_in <= 0.0:
+                    break  # 内周に着いた。この向きはここまで
+                _, y2, _ = at(r, a + sign * 1e-3)
+                slope = (y2 - y) / (r * 1e-3)
+                fade = max(0.25, smoothstep(0.0, FADE, d_in))
+                jit = 0.78 + 0.44 * rnd.random()
+                b = cfg["gain"] * light(cfg, x, y, slope) * fade * jit
+                if b > 0.012:
+                    pts.append((x, y, z, b, half * (DOT_LO + (1.2 - DOT_LO) * smoothstep(0.0, TERM, d_in))))
+                a += sign * max(step * DU_MIN, step / math.sqrt(1.0 + slope * slope)) / r
+        r -= step * math.sqrt(3.0) / 2.0
+        ring += 1
+    return pts
+
+
+"""
+球として照らす（final はこちら）。
+
+rings の月は、点の大きさも並び方も一様だった。三日月の形はしていても、
+平らな板に打った点に見える。外周の円を**球の輪郭**とみなし、立体の手がかりを
+3つ足した。どれも点の位置と大きさだけで作る——pack.py が点の本体を不透明に
+飽和させるので、明るさの階調は画面まで届かない（届くのは面積だけ）。
+
+  1. **陰影。** 光は三日月の軸の向き（左）から、奥へ alpha だけ回した所に置く。
+     alpha は「明暗の境目が、軸の上でちょうど内周と交わる」角度。点の大きさは
+     その光の量（ランバート）で決め、外縁の真ん中がいちばん大きく、明暗の境目と
+     尖りへ向けて細る。物理どおりだと尖りの先（軸から 98°）は影に入って消える
+     ので、WRAP だけ光を回り込ませて、尖りを細い点で残す。
+  2. **輪の間隔の遠近。** 輪を球面の上で等間隔に置く。画面では縁に近いほど
+     輪が詰まる（球の緯線が縁で混むのと同じ）。詰まりの下限は DU_MIN。
+  3. **点の遠近。** 点は球面に貼った小片なので、縁に近いほど輪の向きに
+     つぶれて見える。つぶれは SQUASH で止める（止めないと縁の点が線に溶ける）。
+
+明暗の境目の先（内周より内側）は描かない。そこは CSS の光暈が受け持っていて、
+欠けた側の暗い球に見える。
+
+点は奥行きを持たせず y=0 の面に置く。球面の奥行きどおりに置くと、透視で
+手前（中央寄り）の点ほど最大 18% 大きく写り、三日月の輪郭が崩れる。
+立体は「位置・大きさ・つぶれ」の計算で作り、輪郭は2つの円のまま守る。
+
+点を小さくしたぶん、画面での明るさの中央値が下がる。1024x768 では
+check:contrast の下限 45 すれすれ（46.3）になったので、app.css の --moon-ink を
+0.52 → 0.58 に上げて戻してある。
+"""
+WRAP = 0.30  # 光の回り込み。0 だと尖りの先が影に入って消える
+SQUASH = 0.60  # 縁での点のつぶれの下限（球面に正対した点を 1 として）
+DOT_SPAN = (0.40, 1.80)  # 点の大きさ（最も暗い所・最も明るい所。dot/2 に対する倍率）
+
+
+def sphere(cfg):
+    """球面上で等間隔の輪に、光の量で大きさを決めた点。戻すのは (x, y, z, 明るさ, 輪を横切る半径, 輪に沿う半径, 角度)。"""
+    step = cfg["px"] / PX_PER_BU
+    half = (cfg["dot"] / 2.0) / PX_PER_BU
+    ox, oz, big_r = OUTER
+    ix, iz, ir = INNER
+    axis = math.atan2(oz - iz, ox - ix)
+    ax, az = math.cos(axis), math.sin(axis)
+    alpha = math.asin((ir - math.hypot(ox - ix, oz - iz)) / big_r)
+    lx, ly, lz = math.cos(alpha) * ax, math.sin(alpha), math.cos(alpha) * az
+
+    # 輪の半径。球面の上で行の間隔ずつ内へ進む（画面では縁ほど詰まる）
+    row = step * math.sqrt(3.0) / 2.0
+    radii = []
+    r = big_r - 1.2 * half
+    while r > 0.0 and dist_in(ox + r * ax, oz + r * az) > 0.0:
+        radii.append(r)
+        phi = math.acos(r / big_r)
+        r = min(big_r * math.cos(phi + row / big_r), r - DU_MIN * step)
+
+    lo, hi = DOT_SPAN
+    pts = []
+    for ring, r in enumerate(radii):
+        start = axis + (0.5 * step / r if ring % 2 else 0.0)
+        for sign in (1.0, -1.0):
+            a = start if sign > 0 else start - step / r
+            while abs(a - axis) < math.pi:
+                x, z = ox + r * math.cos(a), oz + r * math.sin(a)
+                d_in = dist_in(x, z)
+                if d_in <= 0.0:
+                    break  # 内周に着いた。この向きはここまで
+                # 球面の法線。y は手前（カメラ側）が負
+                nx, nz = (x - ox) / big_r, (z - oz) / big_r
+                ny = -math.sqrt(max(0.0, 1.0 - nx * nx - nz * nz))
+                lit = max(0.0, min(1.0, (nx * lx + ny * ly + nz * lz + WRAP) / (1.0 + WRAP)))
+                size = half * (lo + (hi - lo) * lit * smoothstep(0.0, TERM, d_in))
+                pts.append((x, 0.0, z, cfg["gain"] * max(0.35, lit), size * max(SQUASH, -ny), size, a))
+                a += sign * step / r
+    return pts
+
+
+LAYOUTS = {"sphere": sphere, "rings": rings}
 
 
 # ---------------------------------------------------------------- 組み立て
@@ -316,13 +517,27 @@ nt.links.new(emit.outputs["Emission"], out.inputs["Surface"])
 
 stats = {"preset": PRESET, "layers": []}
 for i, cfg in enumerate(LAYERS):
-    pts = lattice(cfg)
-    stats["layers"].append({"i": i, "count": len(pts), "px": cfg["px"], "amp": cfg["amp"]})
+    pts = LAYOUTS.get(cfg.get("layout"), lattice)(cfg)
+    stats["layers"].append({"i": i, "count": len(pts), "px": cfg["px"], "layout": cfg.get("layout", "lattice")})
 
     verts, faces, cols = [], [], []
-    for x, y, z, b, s in pts:
+    for pt in pts:
         j = len(verts)
-        verts += [(x - s, y, z - s), (x + s, y, z - s), (x + s, y, z + s), (x - s, y, z + s)]
+        if len(pt) == 5:
+            # 正方形（lattice / rings）
+            x, y, z, b, s = pt
+            verts += [(x - s, y, z - s), (x + s, y, z - s), (x + s, y, z + s), (x - s, y, z + s)]
+        else:
+            # 輪に沿わせた長方形（sphere）。sr は輪を横切る向き（縁でつぶれる）、st は輪に沿う向き
+            x, y, z, b, sr, st, ang = pt
+            rx, rz = math.cos(ang) * sr, math.sin(ang) * sr
+            tx, tz = -math.sin(ang) * st, math.cos(ang) * st
+            verts += [
+                (x - rx - tx, y, z - rz - tz),
+                (x + rx - tx, y, z + rz - tz),
+                (x + rx + tx, y, z + rz + tz),
+                (x - rx + tx, y, z - rz + tz),
+            ]
         faces.append((j, j + 1, j + 2, j + 3))
         cols += [(b / 4.0, b / 4.0, b / 4.0, 1.0)] * 4
 
