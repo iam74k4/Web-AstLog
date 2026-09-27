@@ -1,4 +1,5 @@
-import { isSafeUrl, paragraphs, parseLines } from './lib/format'
+import type { Block, Member } from './db/schema'
+import { isSafeUrl, paragraphs, parseLines, parseSkills } from './lib/format'
 
 /*
   トップページを組むブロックの一覧。
@@ -8,74 +9,43 @@ import { isSafeUrl, paragraphs, parseLines } from './lib/format'
   components.tsx と app.css の :root だけで決まるので、どう並べても
   同じ設計の中に収まる。
 
-  種類はここが正。ブロックを1つ足すには、ここに1行 → components.tsx に
-  部品 → public.tsx の renderBlock に1分岐 → admin.tsx の blockScreens に
-  1分岐（何画面になるかの知らせ）。4か所とも要る。後ろの2つは switch に
-  default を置いていないので、足し忘れると TS2366 で落ちる。
+  種類はここが正。ブロックを1つ足すには、ここに1行 → このファイルの blockShown に
+  1分岐（公開ページに出るか。公開ページと管理画面の「出る / 出ない」が読む）→
+  components.tsx に部品 → src/routes/public/blocks.tsx の renderBlock に1分岐。4か所とも
+  要る。2つの分岐は switch に default を置いていないので、足し忘れると TS2366 で落ちる。
 
-  perScreen は「1画面に何件まで出すか」。CSS の値ではなく件数で、サーバーが
-  画面を割る（src/lib/paginate.ts）のに使うので :root ではなくここに置く。
-  管理画面には出さない。見た目を変える口にはしない。
-
-  maxChars は「1画面に出せる字数」。件数と対で1画面ぶんを決める（下の注記）。
-*/
-
-/*
-  1画面に出せる字数。件数（perScreen）の隣に置くのは、2つで1つの決まりだから。
-
-  件数で割れるものは、入りきらないぶんを次の画面に回せる。回せないのは割った
-  「あと」の1画面で、そこに何字入るかは件数では決まらない。前は「メモは1段落
-  400 字」と割る前の単位で見ていたが、1画面には3段落出るので、規則どおり空行で
-  分けた 1200 字がそのまま通っていた。数えるのは割ったあとの画面ぶんにする。
-
-  数えるのは「その画面に文字として出るもの」。見出し（名詞ひとつ）は数えず、
-  リンク集の URL も数えない——href であって、本文としては出ない。
-
-  数は実測で決める。測り方は「節の弁（overflow: auto）が1pxも開かない」で、
-  骨格3 × 書体3 × 設計サイズ3（390x844 / 768x1024 / 1440x900）の27通り。
-  同じ字数でも1行に寄せたほうが高くなるので、均等に割った形と1行に寄せた形の
-  両方で測り、通ったほうではなく厳しいほうを採った。
-  （実測 = 上限 / 最初に開く量 @プリセット, 書体, ブラウザ）
-    メモ     400 / 600 で +3px @rail 390x844, Hiragino Sans, macOS Chromium
-    いま     250 / 400 で +31px @rail 390x844, Hiragino Sans, macOS Chromium
-    数字     160 / 200 で +2px @center 1440x900, Hiragino Sans, macOS Chromium
-    リンク集 160 / 180 で +5px @center 1440x900, Hiragino Sans, macOS Chromium
-    できごと 250 / 400 で +12px @rail 390x844, Hiragino Sans, macOS Chromium
-    ひとこと 300 / 一文と添え書きの合計。362 字まで閉じているぶんを余白にした
-
-  ここを上げるときは、CSS を触るのではなく、この27通りを測り直すこと。
-  設計サイズで弁が開いたら、それは弁の不具合ではなく件数か字数の不具合。
+  ブロック1つが公開ページの1ページ（/projects・/block-3 …）で、中身は全部そのページに
+  並ぶ（ページは縦にスクロールする。CLAUDE.md の「公開ページは縦に読む」）。以前は
+  1画面に収まる件数と字数を種類ごとに持ち、入りきらないぶんを次の URL に割って
+  いたが、節ごとに1ページにしたのでその数は要らなくなった。残した上限は、名前と
+  目録の文の長さ（MAX_CHARS）とひとことの一文（MAX_STATEMENT_SENTENCE）だけ。
 */
 
 export const BLOCK_TYPES = [
   // 決まった中身を持つもの。1つだけ置ける
-  // hero と contact は画面まるごとなので perScreen を持たない
   { key: 'hero', label: 'Hero', note: '大見出しとリード。文言は src/site.ts', kind: 'fixed' },
   /*
-    個人開発（app）と業務（work）を1つの一覧に並べる。以前は Apps と Works の
-    2つの節だったが、見る側にとってはどちらも「つくったもの」で、節が分かれて
-    いると目次もページャも2倍に伸びるだけだった。区分はデータに残り、カードの
-    札（プラットフォーム / 業界）と絞り込みのピル（すべて・個人開発・業務）で
-    見分ける。並びは新しい順（src/db/queries.ts の publicOrder）
+    個人開発（app）と業務（work）を1つの一覧に並べる。見る側にとってはどちらも
+    「つくったもの」で、節を分けると目次が2倍に伸びる。区分はデータに
+    残り（src/domain.ts の ITEM_KINDS）、カードの札（プラットフォーム / 業界）と
+    絞り込みのピル（すべて・個人開発・業務）で見分ける。並びは新しい順
+    （src/db/queries.ts の itemOrder）
   */
   {
     key: 'projects',
     label: 'Projects',
     note: '個人開発と業務の一覧。公開中の項目が0件なら出ない',
     kind: 'fixed',
-    perScreen: 2,
   },
   {
     key: 'team',
     label: 'Team',
-    note: 'メンバー。1〜2人は横長、3人以上はグリッド',
+    note: 'メンバー。2人は横長、3人以上はグリッド。公開中が1人ならその人のプロフィールに置き換わる',
     kind: 'fixed',
-    perScreen: 6,
   },
   { key: 'contact', label: 'Contact', note: '連絡先。文言は src/site.ts', kind: 'fixed' },
 
   // 中身を打ち込むもの。いくつでも置ける
-  // statement は画面まるごとなので perScreen を持たない
   {
     key: 'statement',
     label: 'ひとこと',
@@ -83,8 +53,6 @@ export const BLOCK_TYPES = [
     kind: 'free',
     title: '',
     hint: '見出しに一文。本文は添え書き（無くてよい）',
-    // 画面まるごと1枚。数えるのは一文と添え書きの合計
-    maxChars: 300,
   },
   {
     key: 'now',
@@ -93,8 +61,6 @@ export const BLOCK_TYPES = [
     kind: 'free',
     title: 'Now',
     hint: '1行に1件。「何を | 補足」',
-    perScreen: 10,
-    maxChars: 250,
   },
   {
     key: 'numbers',
@@ -103,8 +69,6 @@ export const BLOCK_TYPES = [
     kind: 'free',
     title: '数字で見る',
     hint: '1行に1件。「値 | 単位 | 説明」',
-    perScreen: 6,
-    maxChars: 160,
   },
   {
     key: 'links',
@@ -113,8 +77,6 @@ export const BLOCK_TYPES = [
     kind: 'free',
     title: 'Links',
     hint: '1行に1件。「ラベル | URL | 補足」',
-    perScreen: 10,
-    maxChars: 160,
   },
   {
     key: 'timeline',
@@ -123,8 +85,6 @@ export const BLOCK_TYPES = [
     kind: 'free',
     title: 'Timeline',
     hint: '1行に1件。「年月 | 何を | 補足」',
-    perScreen: 5,
-    maxChars: 250,
   },
   {
     key: 'note',
@@ -133,32 +93,42 @@ export const BLOCK_TYPES = [
     kind: 'free',
     title: '',
     hint: '空行で段落を分ける',
-    perScreen: 3,
-    maxChars: 400,
   },
 ] as const
 
 /*
-  ブロックではない「書く場所」の上限。同じ実測の並びなので、ここに一緒に置く。
+  Projects のカードを1行に何枚並べるか（600 以上。600 未満は1列）。CSS の値ではなく
+  サーバーが決める数で、src/routes/public/blocks.tsx が style="--cols:2" で渡し、
+  app.css は repeat(var(--cols), minmax(0, 1fr)) と書くだけ。
 
-  itemSummary（作品カードの説明）だけは性質が違う。カードの高さは
-  --card-lines（2行）で止めてあるので、長く書いても画面からは溢れない——
-  溢れる代わりに、書いたぶんが黙って切られる。だから上限は「溢れない長さ」
-  ではなく「どの画面でも誰にも届かない長さ」にした。いちばん広く出る
-  雑誌風でも2行は 100 字（= magazine @1440x900, Hiragino Sans, macOS Chromium）。
-  いちばん狭い設計サイズでは 46 字（= rail @768x1024 と @390x844、同条件）
-  までしか出ないので、書く側にはそれも添える。
+  auto-fill にしないのは、画面が広いほど列が増えて本文が細るため（ある骨格の 1440 では
+  3列 229px——電話 390 の 308px より狭かった）。同じ数で行を数え、画像の枠をそろえる
+  （components.tsx の shotRow。同じ行に画像の有る無しが混ざったら空の枠を置く）。
+*/
+export const PROJECT_COLUMNS = 2
 
-  memberBio（紹介文）は個人ページの About 1枚に全段落が出る。件数で割れない
-  ので、字数と段落の数の両方で止める。実測（27通り）: 450 字・6段落は弁が
-  1pxも開かないが、同じ 450 字でも8段落に割ると +83px @rail 390x844。
-  段落の区切りそのものが高さを取るため。
+/*
+  書く場所の上限。どれも「名前」か「目録の1文」の長さで、ページの高さの都合ではない
+  （ページは縦にスクロールするので、段落や行の数には上限を置かない）。
+
+    itemTitle       作品名。カードの題・作品のページの見出し・<title> と共有カードの題に
+                    出る名前。32 字は、カードの題が 390 の電話で2行に収まる長さ
+    itemSummary     カードの説明（目録の文。「何であるか。何をしたか。」の2文）。カードは
+                    説明を行数で切らずに全部出すので、長いと同じ行のカードがその高さまで
+                    伸びる。2文ぶんの 100 字で止める
+    memberHeadline  個人ページの大見出し。連動の大きな段で出る1つの文で、長いと見出しが
+                    ページの頭を何行も食う
+    blockHeading    打ち込むブロックの見出し（ひとことを除く）。目次の1行の名前で、目次は
+                    899 以下では1行の横帯に並ぶ。10 字を超える名前が並ぶと、帯の見えている
+                    幅に行き先が1つか2つしか入らない
+
+  下書きでは見ない。公開になるときだけ（publishErrors）。
 */
 export const MAX_CHARS = {
+  itemTitle: 32,
   itemSummary: 100,
-  itemSummaryVisible: 46,
-  memberBio: 450,
-  memberBioParagraphs: 6,
+  memberHeadline: 80,
+  blockHeading: 10,
 } as const
 
 export type BlockType = (typeof BLOCK_TYPES)[number]
@@ -167,37 +137,64 @@ type FixedBlockKey = Extract<BlockType, { kind: 'fixed' }>['key']
 
 export const BLOCK_KEYS = BLOCK_TYPES.map((type) => type.key) as [BlockKey, ...BlockKey[]]
 
+/*
+  決まった中身の種類（hero / projects / team / contact）。サイトに1つずつしか置けない。
+
+  「1つだけ」はページの並びの前提。同じ種類が2行あると、公開ページの並びに同じ
+  URL（/projects）が2度並び、目次に同じ行き先が2行出る（二重送信で実際に2行できた。
+  当時は画面の底の「次」が自分自身を指して入口から先へ進めなくなった）。だから
+  3か所で守る——
+  DB の部分一意索引（src/db/schema.ts の blocks_fixed_once。この一覧から作る）、
+  書く側の1文（src/db/queries.ts の initBlocks と src/routes/admin/blocks.tsx の
+  「置く」の onConflictDoNothing）、読む側の重複落とし（publishedBlocks）。
+*/
+export const FIXED_BLOCK_KEYS = BLOCK_TYPES.filter((type) => type.kind === 'fixed').map(
+  (type) => type.key,
+) as FixedBlockKey[]
+
 export function blockType(key: string): BlockType | undefined {
   return BLOCK_TYPES.find((type) => type.key === key)
+}
+
+/*
+  前の版の種類の名前（読む側だけが知っている別名）。
+
+  Apps と Works を Projects に畳んだとき、行の書き換え（drizzle/0004_merge_apps_works）
+  と読む側の変更を同じリリースに入れていた。書き換えを流さずに出す（手元の
+  npm run deploy・移行の失敗・移行より先に出た版）と、apps / works の行は「知らない
+  種類」として落ち、作品の一覧・入口の帯・/apps と /works の 301 先がどれも 404 に
+  なって、500 ではないので誰も気づかない。
+
+  だから読む側を先に広げる（expand）。構成の行を読むところ（src/db/queries.ts の
+  listBlocks と findBlock）が、この表で前の名前をいまの名前に読み替え、apps と works
+  の2行は 0004 と同じ形の1行に畳む（先に並んでいたほうの位置、どちらかが公開中なら
+  公開）。書き換え（contract）が済んだ D1 でも済んでいない D1 でも、同じ画面になる
+  （test/deploy.test.ts が2つを描き比べている）。
+
+  書く側（「置く」・isBlockKey）はこの名前を受け取らない。新しい行はいつもいまの名前で
+  入る。ここから外してよいのは、どの環境の D1 にも 0004 が当たったあと。
+*/
+export const LEGACY_BLOCK_KEYS: Readonly<Record<string, BlockKey>> = {
+  apps: 'projects',
+  works: 'projects',
 }
 
 export function isBlockKey(key: string): key is BlockKey {
   return blockType(key) !== undefined
 }
 
-// その種類の1画面あたりの件数。持たない種類（hero・contact・ひとこと）は画面まるごと
-export function blockPerScreen(key: BlockKey): number {
-  const type = blockType(key)
-  return type && 'perScreen' in type ? type.perScreen : 1
-}
-
 /*
-  ブロックの中身を「画面に割る単位」の列に開く。
+  ブロックの中身を行・段落の列に開く。
 
-  公開ページ（renderBlock）はこの列をそのまま描き、管理画面（blockScreens と
-  screenChars）は数えるだけ。同じ式を2か所に書くと、片方だけ直した日に管理画面の
-  「N 画面」が静かに古い数を出し続ける——あの表示は「13件目を公開したら画面が1枚
-  増えた」と気づかせるためにあるので、いちばん要るときに嘘をつくことになる。
-
-  種類を足し忘れる方向は型が守っている（switch に default を置かない判断で、
-  ここに1つ足すと renderBlock と blockScreens の両方が TS2366 で落ちる）。
-  既存の分岐の中身がずれる方向は、開く式をここに寄せる以外に守りようが無い。
+  公開ページ（renderBlock）はこの列をそのまま描き、公開ページに出るか（blockShown）と
+  公開の関門（blockValueErrors）もここを読む。同じ式を2か所に書くと、片方だけ直した日に
+  「公開中なのにサイトに出ない」ブロックが管理画面からは「出る」に見える。
 */
 
 // 1行1件のもの（いま・数字・リンク集・できごと）の行
 export function blockLines(key: BlockKey, body: string): string[][] {
   const rows = parseLines(body)
-  // 通らない URL の行は公開ページが落とす。落ちた行は画面にもならない
+  // 通らない URL の行は公開ページが落とす。落ちた行はページにも出ない
   return key === 'links' ? rows.filter(([, url]) => isSafeUrl(url)) : rows
 }
 
@@ -207,50 +204,273 @@ export function blockTexts(body: string): string[] {
 }
 
 /*
-  1行のうち、本文として出る列だけを残す。
+  1行のうち、本文として出る列だけを残す。リンク集の2列目は URL で、href には
+  なるが本文には出ないので外す（説明文に畳むとき。src/routes/public/meta.ts の
+  lineDigest）。
 
-  リンク集の2列目は URL で、href にはなるが本文には出ない。だから
-  説明文に畳むとき（public.tsx の lineDigest）も字数を数えるとき
-  （admin.tsx の screenChars）も、そこは外す。その規則が2か所に別々に
-  書いてあった——このファイルは「開く式は blockLines / blockTexts /
-  blockUnitCount が1本の正」と宣言しているのに、ここだけ漏れていた。
-
-  **つなぐ文字は共有しない。** 説明文は ' ' で、字数は '' で畳む。
-  ここで持つのは「どの列が本文か」までで、そこから先は呼ぶ側の都合。
+  **つなぐ文字は持たない。** ここで持つのは「どの列が本文か」までで、そこから先は
+  呼ぶ側の都合。
 */
 export function blockVisibleParts(key: BlockKey, parts: string[]): string[] {
   return key === 'links' ? parts.filter((_, index) => index !== 1) : parts
 }
 
-// その中身が何単位あるか。画面の数を数えるだけの側（管理画面）はこれで足りる
+// その中身が何単位あるか。0 ならページに出すものが無い（blockShown）
 export function blockUnitCount(key: BlockKey, body: string): number {
   return key === 'note' ? blockTexts(body).length : blockLines(key, body).length
 }
 
+/* ------------------------------------------------------------- 公開の関門 */
+
+// 「字」で数える。絵文字や異体字を2字と数えないように、コードポイントで数える
+export const chars = (text: string) => [...text].length
+
 /*
-  個人ページの1画面あたりの件数。トップの perScreen と同じ置き場に置く。
-
-  ここに無いと、個人ページだけが「1画面に何件」の軸を持たない連なりになる。
-  次の人は perScreen を探して見つけられず、入りきらない画面を CSS で縮めに
-  いく——このリポジトリがいちばん禁じている方向。
-
-  数は増やすためではなく、増やせる場所を1か所に決めるために置いてある。
-  どれも今日の中身（紹介 3段落 / 技術 3塊19項目 / 経歴 3行）では1画面のままで、
-  書き足したぶんだけ次の画面に回る。
-
-    about   紹介文の段落。書く側の上限（MAX_CHARS.memberBioParagraphs）と
-            同じ数にしてある——あの 6 は「6段落なら弁が1pxも開かない」という
-            実測そのものなので、上限を上げた日に画面が割れて追いつく
-    skills  小見出しひとそろい（.skill-group）。塊は割らない。3 は app.css が
-            「技術の3つの塊」と呼んでいる今日の姿で、27通りの実測はしていない
-            保守的な数（割るほうへ外れても溢れない）
-    career  できごとの行。同じ <Timeline> と .career で描く timeline ブロックの
-            perScreen をそのまま読む。同じ形のものを2つの数で割らない
+  ひとことの一文の長さ。大きな段で1文だけ出る見出しで、120 字を超えると
+  「大きな一文」ではなく段落になる（文言の決まり。ページの高さの話ではない）。
 */
-export const MEMBER_PER_SCREEN = {
-  about: MAX_CHARS.memberBioParagraphs,
-  skills: 3,
-  career: blockPerScreen('timeline'),
+export const MAX_STATEMENT_SENTENCE = 120
+
+/*
+  リンク集の中で、公開ページが落とす行。
+
+  **全部の行が通るときだけ保存させる。** 以前は「通る URL が1行でもあれば」
+  保存を通し、残りの行は「保存しました」のあとで公開ページから黙って消えた
+  （https:// を付け忘れた行・URL を書き忘れた行）。「公開なのにサイトに出ない行」
+  がいちばん分かりにくい、の行の単位版。
+
+  落ちるかどうかは blockLines そのものに聞く（isSafeUrl の条件をここに写さない。
+  写すと、公開側の条件を変えた日にここだけ古いまま残る）。1行ずつ渡して、
+  列から消えたら落ちる行。行の番号は欄の中の行（空行も数える）で言う——書いた
+  人が見ているのはその番号なので。
+*/
+export function droppedLinkLines(body: string): string[] {
+  return body.split('\n').flatMap((line, index) => {
+    const [parts] = parseLines(line)
+    if (!parts || blockLines('links', line).length > 0) return []
+    const [label, url] = parts
+    const where = `${index + 1} 行目${label ? `（${label}）` : ''}`
+    return [
+      url
+        ? `${where}の URL は https:// か mailto: か / で始めてください`
+        : `${where}に URL がありません（「ラベル | URL | 補足」）`,
+    ]
+  })
+}
+
+/*
+  書くブロックの、下書きでも止める中身（受け取れない値）。
+
+  - 中身が空。ひとことは一文が、それ以外は中身が要る。空の行は下書きでも
+    作らせない（何も書いていないブロックを一覧に増やさない）
+  - リンク集の、公開ページが落とす行（droppedLinkLines）。長さの話ではなく、
+    公開ページがどう描いても落とすもの——作品のリンクやメンバーの GitHub と
+    同じ扱い（CLAUDE.md「URL の検査は保存と描画の2か所」）
+
+  名前の長さは、ここでは見ない。公開になるときだけ（publishErrors）。
+*/
+export function blockValueErrors(
+  type: BlockType,
+  values: { title: string; body: string },
+): Record<string, string> | null {
+  if (type.kind !== 'free') return null
+  if (type.key === 'statement') return values.title ? null : { title: '一文を入れてください' }
+  if (!values.body) return { body: '中身を入れてください' }
+  if (type.key !== 'links') return null
+  const dropped = droppedLinkLines(values.body)
+  return dropped.length ? { body: `${dropped.join('。')}。` } : null
+}
+
+/*
+  公開の関門。**published が 1 になる書き込みは、どれもこの1本を通す**——
+  ブロックの編集フォーム・新しく書くブロック・構成の一覧の「公開する」・
+  作品の保存・メンバーの保存。下書きに戻す方向（published が 0 になる書き込み）
+  は通さない。
+
+  関門が入口ごとに書いてあったころは、2本の入口のうち1本でしか守られて
+  いなかった。構成の一覧の「公開する」は検査を通らず、一文を空にしたひとことが
+  「公開」になり、公開ページでは節ごと消えた。逆に、下書きの保存でも長さを
+  見ていた欄は、上限より前に保存された長い中身の行が「公開を外すことすらできない」
+  行き止まりになった。検査を入口ではなく状態の変わり目に付ければ、どちらも起きない。
+
+  止める理由は全部まとめて返す（1つずつ返すと、直すたびに次の理由が出る）。
+  下書きでも止める「受け取れない値」（題が空・通らない URL・画像の種類）は
+  それぞれの保存の側が見る（ブロックだけは blockValueErrors をここでも
+  もう一度見る。一覧の「公開する」は保存を通らないので）。
+*/
+export type PublishTarget =
+  | { kind: 'block'; type: BlockType; title: string; body: string }
+  | {
+      kind: 'item'
+      title: string
+      summary: string
+      imageAlt: string
+      // 保存したあとに画像が残るか（新しく選んだ・いまの画像を外さずに残す）
+      hasImage: boolean
+    }
+  | { kind: 'member'; headline: string }
+
+export function publishErrors(target: PublishTarget): Record<string, string> | null {
+  const errors =
+    target.kind === 'block'
+      ? blockPublishErrors(target.type, target)
+      : target.kind === 'item'
+        ? itemPublishErrors(target)
+        : memberPublishErrors(target)
+  return errors && Object.keys(errors).length ? errors : null
+}
+
+/*
+  ブロック。出せない中身は公開させない——下書きでも止める中身（blockValueErrors。
+  空・リンク集の通らない行）をもう一度見る。一覧の「公開する」は保存を通らない
+  ので、この関門より前に保存された下書き（空にしたひとこと、など）がここに来る。
+
+  長さで見るのは名前だけ。見出し（ひとこと以外）は目次の1行の名前
+  （MAX_CHARS.blockHeading）、ひとことは大きく出る一文（MAX_STATEMENT_SENTENCE）。
+  行の数や段落の長さは見ない（ページは縦に読む）。
+*/
+function blockPublishErrors(
+  type: BlockType,
+  values: { title: string; body: string },
+): Record<string, string> | null {
+  if (type.kind !== 'free') return null
+  const invalid = blockValueErrors(type, values)
+  if (invalid) return invalid
+  if (type.key === 'statement') {
+    return chars(values.title) > MAX_STATEMENT_SENTENCE
+      ? { title: `大きく出る一文です。${MAX_STATEMENT_SENTENCE} 字までにしてください` }
+      : null
+  }
+  return chars(values.title) > MAX_CHARS.blockHeading
+    ? {
+        title: `見出しは ${MAX_CHARS.blockHeading} 字までです（いま ${chars(values.title)} 字）。目次に1行で並ぶ名前です`,
+      }
+    : null
+}
+
+/*
+  作品。作品名と説明は長さで止める（MAX_CHARS の itemTitle / itemSummary）。
+
+  説明文は公開するときは必須。カードの本文で、作品のページの説明文（description）
+  でもある——空のまま公開すると、そのページの description が入口と同じサイトの
+  紹介文になり、検索結果でも共有カードでもどの作品か見分けられなかった。
+
+  画像があるのに代替テキストが空なら止める。作品のページではこの画像が
+  作品の見た目を伝える唯一の手段で、名前の無い画像は読み上げでは「画像」と
+  しか言えない。
+*/
+function itemPublishErrors(target: Extract<PublishTarget, { kind: 'item' }>) {
+  const errors: Record<string, string> = {}
+  const title = chars(target.title)
+  if (title > MAX_CHARS.itemTitle) {
+    errors.title = `作品名は ${MAX_CHARS.itemTitle} 字までです（いま ${title} 字）`
+  }
+  const summary = chars(target.summary)
+  if (!summary) {
+    errors.summary = '公開するときは説明文が要ります。カードと作品のページの説明文になります'
+  } else if (summary > MAX_CHARS.itemSummary) {
+    errors.summary = `説明文は ${MAX_CHARS.itemSummary} 字までです（いま ${summary} 字）。カードに出る2文です`
+  }
+  if (target.hasImage && !target.imageAlt) {
+    errors.imageAlt = '画像を公開するときは、代替テキストが要ります'
+  }
+  return errors
+}
+
+/*
+  メンバー。大見出しは個人ページの頭に大きく出る1つの文（MAX_CHARS.memberHeadline）。
+  止める理由は全部まとめて返す（publishErrors の決まり）。
+*/
+function memberPublishErrors(target: Extract<PublishTarget, { kind: 'member' }>) {
+  const errors: Record<string, string> = {}
+  const headline = chars(target.headline)
+  if (headline > MAX_CHARS.memberHeadline) {
+    errors.headline = `大見出しは ${MAX_CHARS.memberHeadline} 字までです（いま ${headline} 字）`
+  }
+  return errors
+}
+
+/*
+  個人ページの中身を開く。紹介は段落、技術は塊（小見出しひとそろい）、経歴は行。
+  公開ページ（src/routes/public/member-page.tsx の memberPage と、全体ページの
+  ProfileWhole）はこの列を描く。開き方を2か所に書くと、個人ページと全体ページで
+  同じ人の中身が違って見える。
+*/
+export function memberUnits(member: Pick<Member, 'bio' | 'skillsText' | 'careerText'>) {
+  return {
+    bio: paragraphs(member.bio),
+    skills: parseSkills(member.skillsText),
+    career: parseLines(member.careerText),
+  }
+}
+
+/*
+  作品の本文（items.body）を段落の列に開く。段落が1つでもあれば、作品のページに
+  小節「Story」（#story）が付く。
+
+  開く式はこの1本——公開ページ（src/routes/public/ の item.tsx と、全体ページの
+  blocks.tsx）が小節を出すかどうかを決めるのも、前の本文の URL（…/story）を
+  #story へ送るか作品のページの頭へ送るかを決めるのも、ここを読む。空白と空行だけの
+  本文は0段落で、小節を作らない（見出しだけ残さない）。
+*/
+export function itemStory(body: string): string[] {
+  return paragraphs(body)
+}
+
+/*
+  公開ページに出るかを決める、サイトの件数。公開ページは描く中身から、管理画面は
+  DB を数えて作る（src/routes/admin/blocks.tsx の siteCounts）。
+*/
+export type SiteCounts = {
+  // 公開中の項目の数（絞り込む前）
+  items: number
+  // 公開中のメンバーの数
+  members: number
+}
+
+/*
+  そのブロックが公開ページに出るか。false なら節ごと出さない（URL も目次の行も
+  生まれない）。
+
+  **公開ページと管理画面が同じこの1本を読む。** 公開ページ（src/routes/public/blocks.tsx
+  の renderBlock）はこれで節を出すかどうかを決め、管理画面の構成は「出る / 出ない」を
+  そのまま出す。「節を出す条件」を2本の switch に書いていたころは、片方だけ直した日に
+  管理画面の知らせが実際の公開ページから静かにずれる形だった。
+
+  種類を足し忘れる方向は型が守る（switch に default を置かないので TS2366 で落ちる）。
+
+  - 下書き（published が 1 でない）は出ない。公開ページは publishedBlocks が先に落とす
+  - Projects は、公開中が0件なら出ない。絞り込んで0件になっただけなら出す（ピルを
+    残して絞り込みを外す手をページに置く。こちらは件数を絞り込む前で数える）
+  - 1人のサイトの Team は、その人のプロフィールのページに置き換わって出る
+    （src/routes/public/site.ts の pageList）
+*/
+export function blockShown(
+  block: Pick<Block, 'type' | 'title' | 'body' | 'published'>,
+  counts: SiteCounts,
+): boolean {
+  const type = blockType(block.type)
+  if (!type || block.published !== 1) return false
+
+  switch (type.key) {
+    case 'hero':
+    case 'contact':
+      return true
+    case 'statement':
+      return block.title !== ''
+    case 'projects':
+      return counts.items > 0
+    case 'team':
+      return counts.members > 0
+
+    // 行は body に入っている（通らない URL は数に入らない）
+    case 'links':
+    case 'note':
+    case 'now':
+    case 'numbers':
+    case 'timeline':
+      return blockUnitCount(type.key, block.body) > 0
+  }
 }
 
 /*

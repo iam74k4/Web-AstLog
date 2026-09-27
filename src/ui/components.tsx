@@ -1,12 +1,109 @@
+import { raw } from 'hono/html'
 import type { Child } from 'hono/jsx'
+import adminCss from '../../public/admin.css'
+import appCss from '../../public/app.css'
 import type { Item, Member } from '../db/schema'
-import { initials } from '../lib/format'
-import { MarkIcon, PencilIcon } from './icons'
+import {
+  ITEM_KIND_KEYS,
+  type ItemFilter,
+  type ItemKind,
+  type ItemView,
+  KIND_LABEL,
+  KIND_PATH,
+  type KindCounts,
+} from '../domain'
+import { initials, isHttpsUrl, isSafeUrl, type SkillGroup, skillRows } from '../lib/format'
+import { SITE } from '../site'
+import { GithubIcon, MailIcon, MarkIcon, PencilIcon } from './icons'
 
 /*
   画面はこの部品だけで組む。新しい見た目が要るときは、まずここに足してから使う。
   ここに無い形をその場で書くと、同じものが少しずつ違う姿で増える。
 */
+
+/*
+  HTML の文書そのもの。<!DOCTYPE html> と <html lang="ja"> の2つだけを持つ。
+
+  このサイトが返す HTML は4つの外枠から出る——公開ページ（Layout）、
+  管理画面の壁の中と外（AdminLayout / AdminBare）、404 と 500（src/index.tsx の
+  ErrorPage）。どれも自分で <html> を書いていて、4つとも DOCTYPE が無かった。
+  JSX は <!DOCTYPE> を書けないので、書かないまま誰も気づかなかった。
+
+  DOCTYPE が無いと、ブラウザは**互換モード（quirks mode）**で組む。
+  CSS はそのつもりで書いていないのに、互換モードの挙動に黙って合わせていた——
+    - document.scrollingElement が html ではなく body になり、
+      documentElement.clientHeight が画面の高さではなく中身の高さを返す
+      （check:fit を documentElement で書いていたら、/all でさえ差が 0 と出た）
+    - form に下の余白 1em が付く
+    - 字を持たない行（アイコンだけの行など）が、行の高さの支え（strut）を持たない
+    - 表の中で書体の大きさが継がれない、など
+  どれも「今日はたまたま崩れていない」だけで、足した規則が標準の挙動と違う
+  姿で出たときに、原因を CSS の側から辿れない。
+
+  標準モードへ移した日に測った差（Chromium）——
+    - 公開ページ: 19 URL × 3骨格 × 5寸法のどの要素も 1px も動かなかった
+    - 管理画面: form の余白 14px ぶん詰まった。構成の行では、隣の form の
+      余白に引き伸ばされて 50px になっていた編集・外すのアイコンボタンが
+      36px に戻った（= 構成 @1440x900）
+    - 404: ロゴの箱だけが strut で 28 → 35.8px に伸びた（.oops__mark を
+      flex にして 28px に戻した）
+
+  hono/jsx には <!DOCTYPE> を出す構文が無いので、hono/html の raw で1行だけ
+  前置きする（jsx-renderer の docType と同じやり方。あちらはミドルウェア1つの
+  ために c.html の呼び方を全部変えることになるので使わない）。
+
+  外枠はこの部品を通して <html> を開く。<html> を直に書く外枠を1つ足すと、
+  その画面だけが互換モードに戻る——test/public.test.ts の「文書の外枠」が
+  公開・管理・404 の本文の先頭を見ている。
+*/
+export const HtmlDocument = ({ children }: { children: Child }) => (
+  <>
+    {raw('<!DOCTYPE html>')}
+    <html lang="ja">{children}</html>
+  </>
+)
+
+/*
+  スタイルシートの <link>。公開ページ（Layout）と 404（ErrorPage）は app.css だけ、
+  管理画面（AdminLayout / AdminBare）は app.css のあとに admin.css を読む
+  （管理画面の部品の規則は admin.css にしか無い。公開ページの訪問者に配らない）。
+
+  URL には中身から作った版（?v=…）を付け、public/_headers が2つの CSS を
+  1年・immutable で配る。ブラウザは同じ版のあいだ一度も取り直さず、CSS を
+  1字でも変えてデプロイすれば URL が変わるので、新しい HTML は新しい CSS を読む。
+  既定（max-age=0, must-revalidate）のままだったころは、ページを移るたびに
+  描画を止めて CSS を条件付き GET で取り直していた（ページの移動は普通の
+  フルページ遷移なので、1ページごとに1往復）。
+
+  版は Worker に同梱した CSS の文字列から、読み込みのときに1度だけ作る
+  （wrangler.toml の [[rules]] が *.css を文字列として同梱する。テストでは
+  vitest.config.ts の cssTextPlugin が同じ形で渡す）。デプロイの版（Worker の
+  version id）にしないのは、CSS を変えていないデプロイで全員に取り直させない
+  ためと、wrangler dev で CSS を直した瞬間に URL が変わる（開発中に immutable の
+  古い写しを掴まない）ため。静的なファイルの配り手は query を見ずにパスで
+  返すので、?v= は URL を分けるためだけのもの。
+*/
+const cssVersion = (text: string) => {
+  // FNV-1a（32bit）。改ざんを見る値ではなく、変わったかどうかの印
+  let hash = 0x811c9dc5
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(36)
+}
+
+export const STYLESHEETS = {
+  app: `/app.css?v=${cssVersion(appCss)}`,
+  admin: `/admin.css?v=${cssVersion(adminCss)}`,
+} as const
+
+export const Stylesheets = ({ admin = false }: { admin?: boolean }) => (
+  <>
+    <link rel="stylesheet" href={STYLESHEETS.app} />
+    {admin ? <link rel="stylesheet" href={STYLESHEETS.admin} /> : null}
+  </>
+)
 
 /*
   柱の頭のロゴ。大きさは1つだけ。
@@ -24,8 +121,8 @@ export const Brand = () => (
 
 /*
   公開ページから管理画面への入口。ログインしている人にだけ柱に出る
-  （出すかどうかと行き先は src/routes/public.tsx の adminHref が決める）。
-  行き先は「いま見ている画面を直す場所」——/projects なら項目の一覧、
+  （出すかどうかと行き先は src/routes/public/page.tsx の adminHref が決める）。
+  行き先は「いま見ているページを直す場所」——/projects なら項目の一覧、
   作品1件のページならその作品の編集。
 
   同じタブで開く。管理画面の側には「サイトを見る ↗」が別タブで付いているので、
@@ -71,77 +168,99 @@ export const Avatar = ({
 /*
   節の見出しと添え。
 
-  h1 は「この節だけで1つの画面（= 1つのドキュメント）になっている」とき。
-  画面ごとに URL を分けた以上、見出しはその画面の中で完結していなければ
+  h1 は「この節が1つのページ（= 1つのドキュメント）になっている」とき。
+  ページごとに URL を分けた以上、見出しはそのページの中で完結していなければ
   ならない——h2 から始まるドキュメントでは、読み上げの見出し移動で骨格を
   掴めず、検索から直接着いた人も「ここは何のページか」を見出しから取れない。
   縦に積んだ全体ページ（/all）だけは1つのドキュメントに節が並ぶので、
-  そちらは今までどおり h2（h1 は Hero が1つ持つ）。
+  そちらは h2（h1 は Hero が1つ持つ）。
 
-  出し分けの元は renderBlock が受け取る page: number | null で、
-  page !== null が「割られた画面」を意味する。ここで数えない。
+  出し分けの元は renderBlock が受け取る whole（全体ページの節として描くか）で、
+  ここでは数えない。
+
+  note（添え）は見出しに無い情報のときだけ渡す——作品のページの「業界 · 年」、
+  全体ページの作品の本文の「Story」、区分のピルが並ばない Projects の区分名。
+  見出しの訳語（About の「紹介」、Team の「メンバー」…）は渡さない。同じ見出しを
+  2つの言語で2度言うだけになる（CLAUDE.md「文言」）。
+
+  sub は「ページの中の小節」で、その段（2 か 3）の見出しを小さい組（.head--sub）で
+  出す。作品のページの本文の小節「Story」（h1 の作品名の下の h2。ItemStory）と、
+  全体ページの Profile の節の中の About / Skills / Career と作品の本文（Profile・
+  Projects の h2 の下の h3）。
+
+  chapter は個人ページの About / Skills / Career（.head--chapter）。ページの中の
+  章で、main の子の section の h2。節の見出しと同じ線と段（--fs-display-xs）で
+  章の切れ目を見せるが、頭の大見出し（h1。--fs-display-sm）より大きくはしない
+  ——雑誌風で節の見出しを1段上げる規則からも外す（上げると h1 と同じ大きさで、
+  字の重さでは h1 を越える）。章の上は1段空ける（前の章の本文と地続きに見せない）。
 */
 export const SectionHead = ({
   title,
   note,
   h1,
+  sub,
+  chapter,
 }: {
   title: string
   note?: string
   h1?: boolean
+  sub?: 2 | 3
+  chapter?: boolean
 }) => (
-  <div class="head">
-    {h1 ? <h1>{title}</h1> : <h2>{title}</h2>}
+  <div class={sub ? 'head head--sub' : chapter ? 'head head--chapter' : 'head'}>
+    {h1 ? <h1>{title}</h1> : sub === 3 ? <h3>{title}</h3> : <h2>{title}</h2>}
     {note ? <span class="note">{note}</span> : null}
   </div>
 )
 
 /*
-  画面1枚ぶんの箱。main の直接の子になるものは、ここか Hero が作る。
+  読み上げのためだけに置く見出し（.sr-only）。目に見える見出しを持たないページが
+  使う——締めの Contact（ボタンの言葉が見出しの代わり）と、見出しを空けた
+  メモ（段落がページの全部）。
 
-  この箱そのものが「弁」——app.css の `main > :is(.hero, section)` に付いた
-  `overflow: auto` で、拡大 200% 以上・画面高 400px 未満・書体差の3つでだけ
-  開く最後の受け。開いたときに中身を読む手段が要るのに、WebKit（macOS Safari と
-  iOS の全ブラウザ）ではスクロール箱そのものにキーボードでフォーカスできない。
-  逃げ道は「箱の中のフォーカス可能な要素へ Tab すれば scroll-into-view が働く」
-  ことだが、紹介・技術・経歴・ひとこと・メモの画面には止まれる子が1つも無い。
-  だから tabindex を明示する（WCAG 2.1.1）。
+  ページは h1 をちょうど1つ持つ決まり（CLAUDE.md「1ページ = 1ドキュメント」、
+  WCAG 1.3.1）。見出しの無いページは、見出しで移動する人にとって「何も無い」
+  ページになる。全体ページ（/all）では節の見出しの段（h2）。
 
-  1画面あたりタブ停止が1つ増えるのは承知のうえ。どの節が「止まれる子を持つか」を
-  1つずつ判断すると、これから足す節が必ず漏れるので、例外は作らない。
-  （弁を節そのものに付ける判断も同じ形で、クラスを列挙していない）
+  目に見える見出しを置かない理由は呼ぶ側にある（Contact・メモの注記）。ここは
+  見出しの段と見えなさだけを持つ。月の節（.moonlit）の直下には置かないこと
+  ——「中身を月より前に出す」規則（position: relative）に .sr-only の
+  position: absolute が負けて、1px の段が1つ増える（Contact は .contact の中に置く）。
+*/
+export const HiddenHeading = ({ text, h1 }: { text: string; h1?: boolean }) =>
+  h1 ? <h1 class="sr-only">{text}</h1> : <h2 class="sr-only">{text}</h2>
 
-  whole は「縦に積んだ全体ページ（/all）の節」。あちらは body[data-whole] で
-  外枠ごと外れていて弁が無い（ページ自身が動く）ので、tabindex も付けない
-  ——止まる理由が無い箱にタブ停止を置くと、いちばん長いページで数だけ増える。
-  出し分けの元は renderBlock の split（page !== null）1つで、節ごとの判断ではない。
+/*
+  節1つぶんの箱。main の直接の子になるものは、ここか Hero が作る。
+
+  tabindex は付けない。ページそのものが縦にスクロールするので、節は
+  スクロール箱ではなく、キーボードではページごと動かせる（以前は節そのものが
+  溢れの弁で、WebKit では弁にフォーカスできないために tabindex="0" を付けていた）。
+  「本文へスキップ」の行き先は main（Layout.tsx の tabindex="-1"）。
 
   label を渡すと、その名前の付いた region として読み上げに出る。名前の無い
   region は読み上げに現れないので、見出しを持たない箱（ひとこと・帯）には
   付けない。渡す文字列は見出しと同じ変数から取ること。
 
   moonlit は「背景に月（MoonField）を敷く節」。月は節いっぱいに絶対配置で
-  貼るので、節が位置の基準になり、中身は入口と同じく画面の下に寄る
+  貼るので、節が位置の基準になり、中身は入口と同じく表紙の下に寄る
   （app.css の .moonlit）。月を置くときは必ず一緒に立てること——立てないと
   月の基準が外枠まで抜け、ページ全体に光暈が広がる。
 */
 export const Screen = ({
   id,
   label,
-  whole,
   moonlit,
   children,
 }: {
   id?: string
   label?: string
-  whole?: boolean
   moonlit?: boolean
   children: Child
 }) => (
   <section
     id={id}
     class={moonlit ? 'moonlit' : undefined}
-    tabindex={whole ? undefined : 0}
     role={label ? 'region' : undefined}
     aria-label={label}
   >
@@ -150,15 +269,16 @@ export const Screen = ({
 )
 
 /*
-  入口の画面。<header class="hero">。
+  入口のページ（と、個人ページの頭の名札）。<header class="hero">。
 
-  節と同じく弁の付く箱なので、tabindex はこちらにも要る——大見出しとリードしか
-  無く、Tab で止まれる子が1つも無い画面の代表がこれ。
+  profile は個人ページの頭（名札・大見出し）。入口は表紙で、中央寄せの骨格では
+  中央に組むが、個人ページの頭はすぐ下に About・Skills・Career の本文が続く
+  読み物の頭なので、中央寄せでも本文の列と同じ左の軸に立てる（app.css の
+  「骨格: 中央寄せ」の .hero:not(.hero--profile)）。頭だけ中央だと、読む目が
+  大見出しの中心から About の左端へ斜めに飛ぶ。
 */
-export const Hero = ({ whole, children }: { whole?: boolean; children: Child }) => (
-  <header class="hero" tabindex={whole ? undefined : 0}>
-    {children}
-  </header>
+export const Hero = ({ profile, children }: { profile?: boolean; children: Child }) => (
+  <header class={profile ? 'hero hero--profile' : 'hero'}>{children}</header>
 )
 
 /*
@@ -169,8 +289,17 @@ export const Hero = ({ whole, children }: { whole?: boolean; children: Child }) 
   して inline-block にし、塊の中では折らせない。塊が行より長いときだけ、その
   中で折れる（inline-block は行の幅を超えない）。
 
-  word-break: auto-phrase が同じことをブラウザにやらせる指定だが、Chromium に
-  しか無い。句読点で切るのは粗いが、どのブラウザでも同じ所で折れる。
+  使うのは短い一文だけ——入口の大見出しとリード文、個人ページの大見出し、
+  締めの誘いの1文。どれもどのブラウザでも同じ所で折れてほしい場所（大見出しは
+  塊を1行ずつに積み、リード文と誘いの1文は月の光暈の上の位置を
+  npm run check:contrast が測る）。
+
+  打ち込む中身（節の見出し・カードの説明・段落）には使わない。長い段落を
+  句読点の塊に切ると、行に入りきらない塊が丸ごと次の行へ落ちて、行末に大きな
+  空きが残る。あちらは CSS の word-break: auto-phrase（ブラウザが文節で折る。
+  いまは Chromium だけで、知らないブラウザは字の間で折る）に任せてある
+  （app.css の .phrase のすぐ下）。大見出しには両方が掛かっていて、塊が1行より
+  長くなったときだけ、塊の中を文節で折る。
 
   --i は塊の順番。入口の大見出しは、これで1塊ずつ遅らせて浮かび上がる
   （app.css の .hero h1 .phrase）。
@@ -189,12 +318,13 @@ export const Phrases = ({ text }: { text: string }) => (
 )
 
 /*
-  入口の背景に敷く月。ロゴの三日月を立体にして粒子を散らし、Blender で
-  焼いた1枚（作り直しは scripts/moon/render.py → scripts/moon/pack.py）。
+  入口の背景に敷く月。ロゴの三日月を球として照らし、点の並びで Blender で
+  焼いた1枚（作り直しは scripts/moon/render.py → scripts/moon/pack.py。
+  経緯は docs/moon.md）。
 
   ここだけが、このサイトで唯一のラスターの装飾。CSS の幾何では出せない
-  ものを持っているから、その代償として置いている——粒の立ち方と、縁が
-  粒に散っていくこと。
+  ものを持っているから、その代償として置いている——点の1つずつの明るさで
+  立体を描くこと。
 
   **絵は色も光暈も持たない。** 運ぶのはアルファ1面だけで、そこに
   「どこがどれだけ光っているか」が入っている。色は app.css が --accent から
@@ -219,9 +349,9 @@ export const Phrases = ({ text }: { text: string }) => (
   埋めないのは、この部品を個人ページの名乗りでも使っているため——埋めると
   全員のページに月が出る。
 
-  closing は連なりの最後の画面（Contact）に置く月。入口の月を左右に返し、
+  closing はサイトの最後のページ（Contact）に置く月。入口の月を左右に返し、
   ひとまわり小さく、動かさずに置く（app.css の .moon--closing）。最初と最後の
-  画面が同じ構図の裏表になる。置く側は Contact 部品で、受ける節には
+  ページが同じ構図の裏表になる。置く側は Contact 部品で、受ける節には
   Screen の moonlit を立てる。
 */
 export const MoonField = ({ closing }: { closing?: boolean }) => (
@@ -231,117 +361,359 @@ export const MoonField = ({ closing }: { closing?: boolean }) => (
 )
 
 /*
-  画面1つぶんの節。中身を「見出しの箱」と「本文の箱」の2つに畳む。
+  見出しの下に絞り込みを持つ節（Projects）。中身を「見出しの箱」と「本文の箱」の
+  2つに畳む。
 
-  節は画面の高さの中で中身を上下中央に寄せる（app.css の「画面に収める外枠」）。
-  子が4つ（見出し・絞り込み・一覧・0件の知らせ）に散っていると、入りきらなく
-  なったときに、どれを縮めるかを毎回選ぶことになる。2つに畳んでおけば、
-  手を入れる先は本文の箱ひとつに決まる。
-
-  見出し側には、めくっても動かないもの（見出しと絞り込みのピル）を入れる。
+  節は中身を上端から置く（上揃え。どのページでも見出しが同じ高さに居る錨。app.css の
+  「ページの外枠」）。子を2つに畳んでおけば、見出しの側と本文の側の境目が1つに
+  決まる。見出し側には、見出しと絞り込みのピルを入れる。
 */
 export const ScreenSection = ({
   id,
   label,
-  whole,
   head,
   children,
 }: {
   id: string
   label?: string
-  whole?: boolean
   head: Child
   children: Child
 }) => (
-  <Screen id={id} label={label} whole={whole}>
+  <Screen id={id} label={label}>
     <div class="screen-head">{head}</div>
     <div class="screen-body">{children}</div>
   </Screen>
 )
 
+/*
+  日本語のページ（<html lang="ja">）に素で置いた英語の塊に印を付ける。
+
+  LANGUAGES や PRACTICE のような普通名詞は、印が無いと日本語の音声エンジンが
+  ローマ字読みするか読み飛ばす。ただし小見出しは打ち込んだ文字列なので、
+  日本語が1文字も混じっていないものだけを英語と見なす——「言語」と書いた人の
+  見出しに lang="en" を付けると、今度はそちらが読めなくなる。
+
+  見た目もこの印で分ける。等幅の書体は英字の札（技術の小見出し・タグ・入口の
+  肩書き）にだけ掛け、app.css はそれを :lang(en) で選ぶ——打ち込んだ字が
+  和文なら、等幅の字間も 11px の段も付かない（app.css の :root の --font-mono）。
+  使うのは SkillGroups・Tags と、入口の肩書き（src/routes/public/blocks.tsx の case 'hero'）。
+*/
+const LATIN_ONLY = /^[ -~]+$/
+export const langOf = (text: string) => (LATIN_ONLY.test(text) ? 'en' : undefined)
+
+// タグ。英字だけの札にだけ lang="en"（等幅になる。langOf を見ること）
 export const Tags = ({ tags }: { tags: string[] }) =>
   tags.length ? (
     <ul class="tags">
       {tags.map((tag) => (
-        <li key={tag}>{tag}</li>
+        <li key={tag} lang={langOf(tag)}>
+          {tag}
+        </li>
       ))}
     </ul>
   ) : null
 
-export type ItemView = Item & {
-  tags: string[]
-  links: { label: string; url: string }[]
-  platformLabel: string | null
-  memberName: string | null
-  memberSlug: string | null
-}
-
 /*
-  作品1件の恒久リンク。1語目は種類（apps / works）、3語目が slug。
+  作品1件の恒久リンク。1語目は区分の URL の語（src/domain.ts の ITEM_KINDS。
+  apps / works）、3語目が slug。
 
   3語にしてあるのは、1語・2語の URL を何でも拾う catch-all（/:screen と
-  /:screen/:page）と取り合わせないため。/apps/2 は数字だけの2語のまま残る。
+  /:screen/:page）と取り合わせないため（前の一覧の /apps/2 は、routes.ts が 301 で寄せる2語）。
 
   slug の無い行（この列より前からある作品）は null を返す。呼ぶ側は
   「恒久リンクがまだ無い」として、リンクそのものを出さない——中身の当てに
   ならない URL を出すくらいなら、出さないほうがよい。
 */
-export const itemHref = (item: { type: 'app' | 'work'; slug: string | null }) =>
-  item.slug ? `/${item.type === 'app' ? 'apps' : 'works'}/item/${item.slug}` : null
+export const itemHref = (item: { type: ItemKind; slug: string | null }) =>
+  item.slug ? `/${KIND_PATH[item.type]}/item/${item.slug}` : null
 
-export const ItemCard = ({ item, showMember }: { item: ItemView; showMember?: boolean }) => {
+/*
+  一覧のカードの id（/projects#item-<slug>）。作品のページの「← 一覧に戻る」が、
+  一覧の頭ではなくそのカードへ戻る的（src/routes/public/item.tsx の renderItem）。
+  一覧は全件を1ページに並べるので、戻った人は開いたカードの所から読み続けられる。
+
+  頭に item- を付けるのは、同じページの節の id（projects・block-3 …）と取り合わない
+  ため。slug の無い行（恒久リンクがまだ無い作品）は id を持たない——戻ってくる
+  作品のページが無い。
+*/
+export const itemCardId = (item: { slug: string | null }) =>
+  item.slug ? `item-${item.slug}` : undefined
+
+/*
+  カードのサムネイルの枠を取るか。作品に画像があるか、同じ行（grid の1行ぶんの
+  カードの並び。src/blocks.ts の PROJECT_COLUMNS 件）のどれかに画像があるときに
+  取る——呼ぶ側（src/routes/public/blocks.tsx の projects）が行ごとに数えて渡す。
+
+  画像の無いカードにも枠だけを置くのは、同じ行のカードの題をそろえるため。
+  行のカードは grid の既定（stretch）でいちばん高いカードの高さにそろうので、
+  枠を置かなくても行の高さは1pxも縮まない。変わるのは空きの置き場所だけで、
+  置かないと画像の無いカードの題が上に浮き、空きがカードの真ん中に残る
+  （左は画像の下から、右は上端から字が始まる行になる）。枠を置けば、
+  空きは画像の場所に集まり、題・札・説明が行の中で同じ高さに並ぶ。
+
+  行に1枚も画像が無ければ枠を取らない。そろえる相手が居ないのに空の枠を
+  並べると、画像の読み込みに失敗した一覧に見える。
+*/
+const hasShot = (item: Pick<Item, 'imageUrl'>) => Boolean(item.imageUrl)
+
+export const shotRow = (items: Pick<Item, 'imageUrl'>[]) => items.some(hasShot)
+
+export const ItemCard = ({
+  item,
+  showMember,
+  framed,
+}: {
+  item: ItemView
+  showMember?: boolean
+  framed?: boolean
+}) => {
   /*
-    題を恒久リンクにする。カード自体をリンクにはできない（中に外へのリンクが
-    あり、入れ子の <a> は作れない）ので、名指しできるものの名前そのものを
-    リンクにする。見た目は変えない——@media (hover: hover) の .card:hover が
-    既にカードごと浮くので、触れる合図はそこで出ている
+    カードのどこを押しても、その作品のページ（恒久リンク）へ行く。
+
+    カードそのものを <a> にはできない。中に外へのリンク（.links の Repository ↗
+    など）と担当者名（.card__member）があり、<a> は入れ子にできない。click を
+    拾う JavaScript も公開ページには置かない。だから題のリンク（.card__link）の
+    ::after をカードいっぱい（inset: 0）に広げ、カードの面を押すと題のリンクを
+    押したことになるようにする（stretched link。規則は app.css の .card__link）。
+    カードの中のほかのリンクは重ねの順でその上に出してあるので、押せばそれぞれの
+    行き先へ行く。
+
+    以前は題の字だけがリンクで、見た目は本文と同じだった。そのうえ
+    @media (hover: hover) の .card:hover がカードごと浮かせていたので、浮いた
+    カードの説明を押しても何も起きなかった——触れる合図はカード全体に出して
+    おきながら、押せる場所は題の字幅しか無かった。
+
+    リンクの数は増やさない。読み上げでもキーボードでも、止まるのは題の1本で、
+    名前は作品名のまま（::after は字を持たない）。フォーカスの輪郭はその ::after
+    に描くので、カード全体を囲む。
+
+    slug の無い行（恒久リンクがまだ無い作品）は題を素の字のまま出し、押せる面も
+    浮きも付かない——ホバーで持ち上げるのは題にリンクを持つカードだけ
+    （app.css の .card:has(.card__link)）。押しても何も起きないカードを浮かせない。
   */
   const href = itemHref(item)
   return (
-    <article class="card">
+    // id は作品のページの「← 一覧に戻る」の着地点（itemCardId）
+    <article class="card" id={itemCardId(item)}>
+      {/*
+        サムネイル。どの幅でも出す（app.css の .card__thumb）。行の高さをそろえる
+        空の枠（framed）は、カードが1列に積まれる 600 未満では出さない
+        （中身の無い span なので、CSS が :empty で選ぶ。空白も入れないこと）。
+
+        ここの画像は飾り（alt=""・aria-hidden）。カードの名前は題のリンクが
+        持っていて、同じ絵に2つ目の名前を付けると読み上げが作品を2度名乗る。
+
+        loading="lazy" は、一覧が縦に長いため。画面に入るまで取りに行かない
+        （作品の数だけの画像を、開いた瞬間に全部取りに行かせない）。枠の縦横比は
+        CSS が決めているので、読み込みを待っても高さは動かない。
+      */}
+      {item.imageUrl || framed ? (
+        <span class="card__thumb" aria-hidden="true">
+          {item.imageUrl ? (
+            <img src={item.imageUrl} alt="" loading="lazy" decoding="async" />
+          ) : null}
+        </span>
+      ) : null}
       <div class="card__head">
-        <h3>{href ? <a href={href}>{item.title}</a> : item.title}</h3>
+        <h3>
+          {href ? (
+            <a class="card__link" href={href}>
+              {item.title}
+            </a>
+          ) : (
+            item.title
+          )}
+        </h3>
         {item.year ? <span class="year">{item.year}</span> : null}
       </div>
       {item.platformLabel || item.category ? (
         <span class="chip">{item.platformLabel ?? item.category}</span>
       ) : null}
       {item.summary ? <p>{item.summary}</p> : null}
-      {item.metricValue ? (
-        <div class="metric">
-          <span class="metric__value">{item.metricValue}</span>
-          {item.metricUnit ? <span class="metric__unit">{item.metricUnit}</span> : null}
-          {item.metricNote ? <span class="metric__note">{item.metricNote}</span> : null}
-        </div>
-      ) : null}
+      <Metric item={item} />
       <Tags tags={item.tags} />
       {showMember && item.memberName && item.memberSlug ? (
         <a class="card__member" href={`/members/${item.memberSlug}`}>
           {item.memberName}
         </a>
       ) : null}
-      {item.links.length ? (
-        <div class="links">
-          {item.links.map((link) => (
-            <a key={link.url} href={link.url} rel="noreferrer" target="_blank">
-              {link.label}
-            </a>
-          ))}
-        </div>
-      ) : null}
+      <LinkRow links={item.links} />
     </article>
   )
 }
 
-// 1〜2人のときは横長。4列のグリッドに1人だけ置くと、未完成の一覧に見える
 /*
-  個人ページの1枚目に置く名札。顔・名前・肩書きと所在地を、Team のカード
+  実績値（値・単位・添え）を1行に。カードと作品のページで同じものを描く。
+  トップの「数字」ブロック（Numbers）の箱とは別物——あちらは数字そのものが
+  主役の節で、こちらは作品の中の1行。
+
+  並びは値・単位・添えのまま。書いた人の数字の意味を並べ替えで変えない
+  （src/routes/public/meta.ts の metricDigest と同じ決まり）。添えは値のあとに続けて読まれる
+  ので、そう読んで意味が通る形で書いてもらう（「20 人日 見込み 40人日から半減」。
+  管理画面の実績値の欄にヒントがある）。
+*/
+export const Metric = ({
+  item,
+}: {
+  item: Pick<Item, 'metricValue' | 'metricUnit' | 'metricNote'>
+}) =>
+  item.metricValue ? (
+    <div class="metric">
+      <span class="metric__value">{item.metricValue}</span>
+      {item.metricUnit ? <span class="metric__unit">{item.metricUnit}</span> : null}
+      {item.metricNote ? <span class="metric__note">{item.metricNote}</span> : null}
+    </div>
+  ) : null
+
+/*
+  行き先を1行に並べる（.links）。カードの底と、作品のページの行き先。
+
+  矢印は CSS が付ける——外へ出る行き先は ↗、サイトの中（/ で始まる URL。
+  作品のページの「担当」）は →（app.css の .links a）。別タブで開くか（target）
+  と rel も同じ1つの条件で決める（LinkList と同じ決まり。↗ は「外へ出る・
+  別タブで開く」の印で、同じタブで開くサイトの中の続きには付けない）。
+
+  URL の形はこの部品が自分で見る（isSafeUrl）。通らない行は描かない。保存でも
+  弾いている（src/routes/admin/items.tsx の readLinks）が、その検査より前に入った行を呼ぶ側の
+  検査に頼らずに落とす。javascript: が同じオリジンの href に載るのを、
+  target="_blank" の副作用で止まっているだけにしない。
+*/
+export const LinkRow = ({ links }: { links: { label: string; url: string }[] }) => {
+  const safe = links.filter((link) => link.label && isSafeUrl(link.url))
+  return safe.length ? (
+    <div class="links">
+      {safe.map((link) => {
+        const inside = link.url.startsWith('/')
+        return (
+          <a
+            key={link.url}
+            href={link.url}
+            rel={inside ? undefined : 'noreferrer'}
+            target={inside ? undefined : '_blank'}
+          >
+            {link.label}
+          </a>
+        )
+      })}
+    </div>
+  ) : null
+}
+
+/*
+  作品のスクリーンショット。作品1件のページの figure。
+
+  代替テキストは管理画面で書いたもの（items.image_alt）。空のまま公開させない
+  （src/blocks.ts の publishErrors。公開の関門）——このページではこの画像がその作品の
+  見た目を伝える唯一の手段で、カードのサムネイル（飾り）とは役目が違う。
+
+  枠の高さは CSS が決め（:root の --shot-h。900 以上では文の列と同じ高さ）、
+  絵はその中に object-fit: contain で縮めて収める（切らない）。寸法は共有カードの
+  ためにだけ持っていて（items.image_width / image_height。この列より前の画像には
+  無い）、枠には使わない。絵に合わせて枠を伸び縮みさせると、読み込んだ瞬間に下の
+  文の列が押し下げられ（読み始めた字が動く）、縦長の絵が1枚でページの頭を
+  何画面ぶんも食う。
+
+  遅延読み込みにしない。このページの主役で、開いた時点で画面の中にある。
+*/
+export const Shot = ({ src, alt }: { src: string; alt: string }) => (
+  <figure class="shot">
+    <img src={src} alt={alt} decoding="async" />
+  </figure>
+)
+
+/*
+  作品1件のページの、見出し（SectionHead）の下。**カードを開いたもの**として
+  組む——説明・実績値・タグ・行き先はカードと同じ部品（Note の段落・Metric・
+  Tags・LinkRow）。足すのは画像（Shot）だけで、本文はこの下の小節（ItemStory）。
+
+  カードと同じ部品にしたのは、カードから開いた先で同じ形に着く続き方のため。
+  以前は実績値をトップの「数字」の箱（Numbers）で、行き先をリンク集の行
+  （LinkList）で出していて、説明 100 字・実績値・行き先3本の作品では、それだけで
+  画像の上に画面1枚ぶんの高さを取っていた。
+
+  並びは 画像 → 文の列（説明・実績値・タグ・行き先）。900 未満では縦に、900 以上
+  では文の列を左・画像を右に並べる（app.css の .detail--shot）。画像を先に置くのは、
+  縦に積んだとき見出しのすぐ下に来るように。横に並べたときは左から読み始める
+  文の頭を見出しにそろえたいので、画像は右へ回す。
+
+  links は行き先（作品のリンクと、複数人のサイトなら「担当」）。呼ぶ側が
+  組む——担当を出す条件（showMemberOf）はサイトの構成を知っている側にしかない。
+*/
+export const ItemDetail = ({
+  item,
+  links,
+}: {
+  item: ItemView
+  links: { label: string; url: string }[]
+}) => (
+  <div class={item.imageUrl ? 'detail detail--shot' : 'detail'}>
+    {item.imageUrl ? <Shot src={item.imageUrl} alt={item.imageAlt} /> : null}
+    <div class="detail__text">
+      {item.summary ? <Note paragraphs={[item.summary]} /> : null}
+      <Metric item={item} />
+      <Tags tags={item.tags} />
+      <LinkRow links={links} />
+    </div>
+  </div>
+)
+
+/*
+  作品のページの本文の小節「Story」（#story）。ItemDetail のすぐ下に置く
+  （src/routes/public/item.tsx の renderItem）。見出しは h1 の作品名の下の h2。
+
+  本文（背景・やったこと・結果）は「です・ます」の段落で、説明（目録の2文・常体）の
+  続きとして読まれる——文体の変わる所が目録と本文の境目（CLAUDE.md「文言」）。
+  以前は次の画面（…/story）に分けていて、前の URL はここへ 301 で来る（id="story"）。
+
+  本文の無い作品では出さない（見出しだけ残さない）。
+*/
+export const ItemStory = ({ paragraphs }: { paragraphs: string[] }) =>
+  paragraphs.length ? (
+    <div class="story" id="story">
+      <SectionHead title="Story" sub={2} />
+      <Note paragraphs={paragraphs} />
+    </div>
+  ) : null
+
+/*
+  全体ページ（/all）の Projects の節に置く、作品の本文の列。カードの grid の下。
+
+  全体ページは中身を全部載せる場所（印刷・Ctrl-F・翻訳の宛先）なので、作品の
+  ページの小節にある本文も、ここで読めなければならない。カードの中には入れない
+  ——カードは面ごと作品のページへのリンクで（題の ::after が覆う）、覆いの下の
+  段落は選べも読み上げの移動もしにくい。2列の grid の片方だけが本文の長さぶん
+  伸びるのも避ける。
+
+  見出しは作品名に「Story」の添え（全体ページには作品名の見出しがほかに無い）で、
+  段は節の中の小節の h3（SectionHead の sub。/all の Profile の About と同じ段）。
+  本文の無い作品は並べない（見出しだけ残さない）。1つも無ければ列ごと出さない。
+*/
+export const ItemStories = ({
+  stories,
+}: {
+  stories: { key: number; title: string; paragraphs: string[] }[]
+}) =>
+  stories.length ? (
+    <div class="stories">
+      {stories.map((story) => (
+        <div key={story.key}>
+          <SectionHead title={story.title} note="Story" sub={3} />
+          <Note paragraphs={story.paragraphs} />
+        </div>
+      ))}
+    </div>
+  ) : null
+
+/*
+  個人ページの頭に置く名札。顔・名前・肩書きと所在地を、Team のカード
   （MemberCardWide）と同じ並びで出す——カードを押した先で、同じ顔と名前に着く。
 
-  個人ページの柱はサイトの柱のまま（Team の続きとして読ませる）なので、
-  その人の顔と名前はここにしか出ない。heading は「名前がこの画面の見出しか」。
+  個人ページの柱はサイトの柱のまま。1人のサイトなら柱にも名前は出る
+  （入口以外のどのページでも。SiteIdentity）が、
+  顔が出るのはここだけ。heading は「名前がこのページの見出しか」。
   大見出し（headline）を書いていない人では名前が h1 になる——書いている人では
-  大見出しが h1 で、名前は添え。
+  大見出しが h1 で、名前は添え。全体ページ（/all）の Profile の節でも使い、
+  そこでは見出しは節の h2 なので、名前は添えのまま。
 */
 export const Nameplate = ({ member, heading }: { member: Member; heading?: boolean }) => (
   <div class="nameplate">
@@ -362,9 +734,86 @@ export const Nameplate = ({ member, heading }: { member: Member; heading?: boole
 )
 
 /*
+  技術の塊（小見出しひとそろい）の列。個人ページの Skills の節と、全体ページ
+  （/all）の Profile の節の2か所で描く。
+
+  小見出しは段落ではなく見出し。見た目は mono の小見出しとして組んであるのに
+  要素が <p> だと、読み上げの見出し移動で塊に降りられない（個人ページでいちばん
+  密度が高い節）。要素の段は置かれる場所の階層で変わる——個人ページでは
+  ページの h1 → Skills の h2 の下なので h3、/all では Profile（h2）→ Skills（h3）の
+  下なので h4。見た目はどちらも同じ .side-head。
+
+  塊の中は、経験の添え（「3年以上」）ごとの行に並べる（src/lib/format.ts の
+  skillRows）。添えは行の頭に1度だけ置く——項目ごとに付けていたころは、同じ
+  「3年以上」がページに11回並び、項目の名前より添えのほうが目に入っていた。
+
+  添えのある行は <dl> の1組（dt が添え、dd がその行の項目の列）。読み上げで
+  「3年以上」が項目の列に結び付くのは、この2つが dt / dd の組だから。見た目だけ
+  横に並べた span と ul では、添えは直前の字として読まれて終わり、どの項目の
+  添えなのかが耳からは分からない。行ごとに <div> で包むのは、1行を1つの
+  flex の行にするため（dl の子に div を置くのは HTML の許す形）。
+
+  添えの無い項目は最後の1行で、dl の外の素の ul。dt を持たない dd は置けず、
+  無い添えを字で埋める（「その他」）と、書いた人が付けていない分類をこちらが
+  足すことになる。
+*/
+const SkillList = ({ labels }: { labels: string[] }) => (
+  <ul class="skill-list">
+    {labels.map((label) => (
+      <li key={label}>{label}</li>
+    ))}
+  </ul>
+)
+
+export const SkillGroups = ({ groups, level }: { groups: SkillGroup[]; level: 3 | 4 }) => (
+  <div class="skills">
+    {groups.map((group) => {
+      const rows = skillRows(group.skills)
+      const noted = rows.filter((row) => row.note !== '')
+      const bare = rows.find((row) => row.note === '')
+      return (
+        <div class="skill-group" key={group.heading}>
+          {group.heading ? (
+            level === 3 ? (
+              <h3 class="side-head" lang={langOf(group.heading)}>
+                {group.heading}
+              </h3>
+            ) : (
+              <h4 class="side-head" lang={langOf(group.heading)}>
+                {group.heading}
+              </h4>
+            )
+          ) : null}
+          {noted.length ? (
+            <dl class="skill-rows">
+              {noted.map((row) => (
+                <div class="skill-row" key={row.note}>
+                  <dt class="skill-row__note">{row.note}</dt>
+                  <dd>
+                    <SkillList labels={row.labels} />
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+          {bare ? <SkillList labels={bare.labels} /> : null}
+        </div>
+      )
+    })}
+  </div>
+)
+
+// 2人のときは横長。4列のグリッドに2人だけ置くと、未完成の一覧に見える（1人なら Team そのものが無い）
+/*
   Team のカード。押すと個人ページ（同じタブ、サイトの枠のまま）へ入る。
   矢印は → にする。↗ はこのサイトでは「外へ出る・別タブ」の印（リンク集・
   作品のリンク・サイトを見る ↗）で、同じサイトの中の続きには使わない。
+
+  「プロフィール →」は操作の言葉なので日本語（CLAUDE.md「文言」）。英語で
+  書くのは節の名前（目次・見出しの Profile / About …）だけ。
+  「Profile →」と英語で書いていたころは、同じページの「一覧で見る →」
+  「メールを送る →」と押す手の言葉だけが言語を変えていた（lang="en" を
+  付けて読み上げを直していたが、印を要する英語そのものが要らなかった）。
 */
 export const MemberCardWide = ({ member }: { member: Member }) => (
   <a class="member member--wide" href={`/members/${member.slug}`}>
@@ -379,10 +828,7 @@ export const MemberCardWide = ({ member }: { member: Member }) => (
       </span>
       {member.headline ? <span class="member__lead">{member.headline}</span> : null}
     </span>
-    {/* 日本語のページに素で置いた英語。印を付けないと、読み上げがローマ字読みする */}
-    <span class="member__go" lang="en">
-      Profile →
-    </span>
+    <span class="member__go">プロフィール →</span>
   </a>
 )
 
@@ -391,42 +837,41 @@ export const MemberCardCompact = ({ member }: { member: Member }) => (
     <Avatar src={member.avatarUrl} name={member.name} size={44} />
     <strong>{member.name}</strong>
     <span class="member__role">{member.role}</span>
-    <span class="member__go" lang="en">
-      Profile →
-    </span>
+    <span class="member__go">プロフィール →</span>
   </a>
 )
 
 /*
-  一覧への帯。件数を添えて、めくる前に「ここに何件あるか」を見せる。
+  一覧への帯。件数を添えて、押す前に「ここに何件あるか」を見せる。
 
-  使うのは2か所——トップの入口（Hero の画面）と、個人ページの1枚目。どちらも
-  「作品そのものは別の URL にある」画面なので、そこに何があるかを数で示して
-  から送り出す。行き先は呼ぶ側が決める（項目のある側へ送ること。0件の側へ
-  送ると、0件の知らせだけの画面に着く）。
+  使うのは2か所——トップの入口（Hero のページ）と、2人以上のサイトの個人ページの
+  名札の下。どちらも「作品そのものは別の URL にある」ページなので、そこに何が
+  あるかを数で示してから送り出す。行き先は呼ぶ側が決める（項目のある側へ送ること。
+  0件の側へ送ると、0件の知らせだけのページに着く）。
 
   置く先は Hero の中、リード文のすぐ下。画面の底に横いっぱいの帯として置いて
   いたころは、見出しと帯のあいだに画面の半分ほどの空白ができ、帯そのものも
   入力欄のように見えていた。大見出しから続けて読める位置に、押せる形で置く。
+
+  題（label）は「何が入っているか」、右端は「どうするか（一覧で見る）」で、言葉を
+  分ける。「つくったものの一覧」と書くと、1枚の札の中で「一覧」を2度言う。
 */
 export const Band = ({
   href,
   label,
-  app,
-  work,
+  counts,
 }: {
   href: string
   label: string
-  app: number
-  work: number
+  counts: KindCounts
 }) => (
   <a class="band" href={href}>
     <span class="band__body">
       <strong>{label}</strong>
       {/* 0件の区分は数えない。呼ぶ側は、一覧を置いていないサイトでは帯ごと出さない */}
       <span class="band__meta">
-        {[app ? `${KIND_LABEL.app} ${app}` : null, work ? `${KIND_LABEL.work} ${work}` : null]
-          .filter((part) => part !== null)
+        {ITEM_KIND_KEYS.filter((kind) => counts[kind] > 0)
+          .map((kind) => `${KIND_LABEL[kind]} ${counts[kind]}`)
           .join(' · ')}
       </span>
     </span>
@@ -441,25 +886,34 @@ export const Band = ({
 )
 
 /*
-  項目の区分。データでは app / work、画面では「個人開発 / 業務」。
-  Projects の絞り込みのピルと、一覧への帯の件数で同じ言葉を使う。
-*/
-export type ItemKind = 'app' | 'work'
-export const KIND_LABEL: Record<ItemKind, string> = { app: '個人開発', work: '業務' }
-const KINDS: ItemKind[] = ['app', 'work']
+  入口から全体ページ（/all）への控えめな1本。Hero の帯のすぐ下に置く
+  （src/routes/public/blocks.tsx の case 'hero'。入口のページにだけ出し、/all 自身には
+  出さない——自分への行き先になる）。
 
-/*
-  いま効いている絞り込み。区分（個人開発 / 業務）とメンバーの2軸で、
-  効いていない軸は null。
+  柱の足元の「全体を1ページで見る →」は 899 以下の帯で畳まれる（.rail__footer は
+  帯に入らない）。電話で開いた人には全体ページへの道がどこにも無く、印刷・
+  Ctrl-F・翻訳の宛先に辿り着けなかった。入口の本文に1本置けば、幅で消えない。
+
+  控えめに置く。このページの主役は名乗りと帯（一覧へ送る手）で、こちらは脇の道。
+  丸い札にせず、柱の足元と同じ下線の文字リンクにする——札を2つ並べると、
+  どちらが本筋か分からなくなる。字は --ink-mid（月の光暈の上に乗るので、
+  小さい字の 4.5:1 が要る。npm run check:contrast が測っている）。
+
+  矢印は飾りなので読み上げには流さない（帯の → と同じ）。サイトの中の続きなので
+  ↗ ではなく →。
 */
-export type ItemFilter = { kind: ItemKind | null; member: string | null }
+export const WholeLink = () => (
+  <a class="hero__whole" href="/all">
+    すべてを1ページで読む <span aria-hidden="true">→</span>
+  </a>
+)
 
 /*
   絞り込みを URL の query にする。付けるのは効いている軸だけ。
 
-  絞り込みは画面をまたいで効くので、ピルだけでなく、めくる先（ページャ）と
-  目次の行き先にも同じものを付ける。付け忘れると、次の画面へ移った瞬間に
-  絞り込みだけが静かに外れる。
+  絞り込みはページをまたいで残るので、ピルだけでなく目次の行き先（Projects）にも
+  同じものを付ける。付け忘れると、目次から一覧へ戻った瞬間に絞り込みだけが
+  静かに外れる。
 */
 export const filterQuery = (filter: ItemFilter) => {
   const params = new URLSearchParams()
@@ -472,20 +926,16 @@ export const filterQuery = (filter: ItemFilter) => {
 /*
   絞り込みのピル。
 
-  ボタンではなくリンクで、押すと絞り込んだ一覧の1画面目へ移る。絞り込みを
+  ボタンではなくリンクで、押すと絞り込んだ一覧のページへ移る。絞り込みを
   持っているのはサーバーで、公開ページは JavaScript を1バイトも持たない。
-
-  行き先は必ずそのブロックの1画面目。3画面目で絞り込むと、絞ったあとの
-  3画面目が無いことがある。
 
   2つの軸は独立に効く。いま効いているピルをもう一度押すと、その軸だけ外れる。
   「すべて」は両方外す。
 
   区分のピルは、公開中の項目が両方の区分にあるときだけ並べる（kinds は
   絞り込む前に実在する区分）。片方しか無いサイトで「業務」を置いても、押した
-  先は0件の知らせだけになる。以前はプラットフォーム（macOS / iOS …）で絞って
-  いたが、Apps と Works を1つにしたときに区分の軸へ替えた。プラットフォームは
-  カードの札に残っている。
+  先は0件の知らせだけになる。プラットフォーム（macOS / iOS …）は絞り込みの
+  軸ではなく、カードの札。
 */
 export const FilterLinks = ({
   base,
@@ -508,7 +958,7 @@ export const FilterLinks = ({
         すべて
       </a>
       {kinds.length > 1
-        ? KINDS.filter((kind) => kinds.includes(kind)).map((kind) => {
+        ? ITEM_KIND_KEYS.filter((kind) => kinds.includes(kind)).map((kind) => {
             const on = filter.kind === kind
             return (
               <a
@@ -543,88 +993,23 @@ export const FilterLinks = ({
 export const Empty = ({ children }: { children: Child }) => <p class="empty">{children}</p>
 
 /*
-  画面と画面を行き来する帯。main の2行目（本文の下）に置く。
+  一覧へ戻る道。作品1件のページの頭（見出しの上）に1本置く
+  （src/routes/public/item.tsx の renderItem）。行き先は一覧のその作品のカード
+  （/projects#item-<slug>。itemCardId）。
 
-  数えるのは**節の中**（Projects 2 / 4）。全体の通し番号にしない理由は
-  src/lib/sequence.ts の Sequence.pager に書いてある。
+  作品のページから戻る道が目次の「Projects」しか無いと、一覧の頭へ戻ってしまい、
+  開いたカードの所から読み続けられない。ブラウザの「戻る」は、検索や貼られた
+  リンクから直接着いた人には一覧へ戻る手にならない。
 
-  節をまたぐ手は、行き先を名乗る（「Team →」）。兼ねていたころは
-  /apps/3 で「次」を押すと予告なく Works に出ていた。名乗らせるだけで
-  驚きが消え、押す前に決められる。
-
-  数はサーバーが数えて渡す。CSS の counter で数えると、印刷にも読み上げにも
-  数が出ず、「いま何枚目か」だけが落ちる。
-
-  端（最初と最後）ではリンクそのものを出さない。押しても何も起きない
-  リンクを置くと、キーボードで送る手が1回空振りする。ますだけは残すので、
-  めくっても真ん中の数字が左右に動かない。
+  見た目は丸い札で、当たり判定は --tap（pointer: coarse では 44px）。矢印は飾り
+  なので読み上げには流さない（帯の → と同じ）。
 */
-export const ScreenPager = ({
-  prev,
-  prevSection,
-  next,
-  nextSection,
-  section,
-  index,
-  total,
-}: {
-  prev: string | null
-  prevSection: string | null
-  next: string | null
-  nextSection: string | null
-  section: string | null
-  index: number
-  total: number
-}) => {
-  /*
-    読み上げに渡す言い方。節の名前があるときは「Projects の 4 画面のうち 2 画面目」、
-    無いとき（Hero・ひとこと）は画面が1枚しかないので位置を言わない。
-  */
-  const spoken = section
-    ? total > 1
-      ? `${section} の ${total} 画面のうち ${index} 画面目`
-      : section
-    : null
-
-  return (
-    <nav class="pager" aria-label="画面の移動">
-      {prev ? (
-        <a class="pager__go" href={prev} rel="prev">
-          {prevSection ? `← ${prevSection}` : '← 前'}
-        </a>
-      ) : (
-        <span class="pager__end" />
-      )}
-      {/*
-        名前を持たない節（Hero・ひとこと）では言うことが無い。それでも枠は
-        残す——3つの枡で組んであるので、落とすと左右の手が真ん中へ寄り、
-        めくるたびにボタンの位置が動く。
-      */}
-      {spoken ? (
-        <span class="pager__count">
-          <span class="sr-only">{spoken}</span>
-          <span aria-hidden="true">
-            <span class="pager__section">{section}</span>
-            {total > 1 ? (
-              <span class="pager__of">
-                {index} / {total}
-              </span>
-            ) : null}
-          </span>
-        </span>
-      ) : (
-        <span class="pager__count" />
-      )}
-      {next ? (
-        <a class="pager__go pager__go--next" href={next} rel="next">
-          {nextSection ? `${nextSection} →` : '次 →'}
-        </a>
-      ) : (
-        <span class="pager__end" />
-      )}
-    </nav>
-  )
-}
+export const BackLink = ({ href, label }: { href: string; label: string }) => (
+  <a class="back" href={href}>
+    <span aria-hidden="true">←</span>
+    {label}
+  </a>
+)
 
 export const StatusPill = ({ published }: { published: number }) =>
   published ? (
@@ -641,7 +1026,7 @@ export const StatusPill = ({ published }: { published: number }) =>
   足りないまま出す（空欄で落とさない）。書いた人が一覧で気づけるように。
 */
 
-// 一文だけの画面。その一文がその画面の見出しなので、割られた画面では h1
+// 一文だけのページ。その一文がそのページの見出しなので、ページごとの URL では h1
 export const Statement = ({ text, notes, h1 }: { text: string; notes: string[]; h1?: boolean }) => (
   <div class="statement">
     {h1 ? <h1 class="statement__text">{text}</h1> : <p class="statement__text">{text}</p>}
@@ -678,18 +1063,39 @@ export const Numbers = ({ rows }: { rows: string[][] }) => (
   </ul>
 )
 
-// URL の形は呼ぶ側（renderBlock）で isSafeUrl を通してある
+/*
+  行き先を並べる列。トップのリンク集で使う。URL の形はこの部品でも見る
+  （isSafeUrl。通らない行は描かない）。呼ぶ側（blockLines）も同じ検査で
+  落としていて、ページに出るかはそちらの行数で決まる——ここで落とすのは、呼ぶ側が
+  掛け忘れたときの最後の受け。作品1件のページの行き先は、カードと同じ1行の
+  LinkRow（ItemDetail を見ること）。
+
+  矢印は行き先で変える。↗ はこのサイトでは「外へ出る・別タブで開く」の印
+  （カードの .links、管理画面の「サイトを見る ↗」）で、サイトの中の続き——
+  / で始まる URL——には → を付ける（Team のカードの「プロフィール →」、帯の
+  「一覧で見る →」、LinkRow の「担当」と同じ）。
+  中の行き先にも ↗ を付けていたころは、同じタブで開くのに「外へ出る」と
+  言っていた。別タブで開くか（target）と rel も同じ1つの条件で決める。
+*/
 export const LinkList = ({ rows }: { rows: string[][] }) => (
   <ul class="linklist">
-    {rows.map(([label, url, note]) => (
-      <li key={url}>
-        <a href={url} rel="noreferrer" target={url?.startsWith('/') ? undefined : '_blank'}>
-          <span class="linklist__label">{label}</span>
-          {note ? <span class="linklist__note">{note}</span> : null}
-          <span class="linklist__go">↗</span>
-        </a>
-      </li>
-    ))}
+    {rows.map(([label, url, note]) => {
+      if (!isSafeUrl(url)) return null
+      const inside = url.startsWith('/')
+      return (
+        <li key={url}>
+          <a
+            href={url}
+            rel={inside ? undefined : 'noreferrer'}
+            target={inside ? undefined : '_blank'}
+          >
+            <span class="linklist__label">{label}</span>
+            {note ? <span class="linklist__note">{note}</span> : null}
+            <span class="linklist__go">{inside ? '→' : '↗'}</span>
+          </a>
+        </li>
+      )
+    })}
   </ul>
 )
 
@@ -718,3 +1124,224 @@ export const Note = ({ paragraphs, children }: { paragraphs: string[]; children?
     {children}
   </div>
 )
+
+/*
+  全体ページ（/all）に置く、1人のサイトのプロフィールの節の中身。
+
+  1人のサイトでは Team のページを作らず、その人のページ（/members/<slug>）が
+  サイトの並びに入る（src/routes/public/data.ts の profileOf）。/all は並びを
+  1つの文書に積んだものなので、Team のカード1枚ではなく、プロフィールそのものを
+  1つの節として置く。見出しの段は
+  Hero の h1 → Profile の h2（節の SectionHead）→ About / Skills / Career の h3
+  （SectionHead の sub）→ 技術の小見出しの h4（SkillGroups の level）。
+
+  新しい見た目はほとんど持たない——名札（Nameplate）、大見出しは大きな一文
+  （Statement）、紹介（Note）、技術（SkillGroups）、経歴（Timeline）。どれも個人
+  ページと同じ部品。足したのは小節を縦に並べる .profile の間隔と、h3 の段だけ。
+
+  中身の無い小節は出さない（見出しだけ残さない）。個人ページの About は空でも
+  「準備中です」を出すが、あれは名札の下に何も無いページを作らないためで、
+  ほかの節が続く1つの文書の中では要らない。children はその人だけの連絡先
+  （サイトと違う行き先を持つ人のぶん。呼ぶ側が決める）。
+*/
+export const ProfileWhole = ({
+  member,
+  bio,
+  skills,
+  career,
+  children,
+}: {
+  member: Member
+  bio: string[]
+  skills: SkillGroup[]
+  career: string[][]
+  children?: Child
+}) => (
+  <div class="profile">
+    <Nameplate member={member} />
+    {member.headline ? <Statement text={member.headline} notes={[]} /> : null}
+    {children}
+    {bio.length ? (
+      <div>
+        <SectionHead title="About" sub={3} />
+        <Note paragraphs={bio} />
+      </div>
+    ) : null}
+    {skills.length ? (
+      <div>
+        <SectionHead title="Skills" sub={3} />
+        <SkillGroups groups={skills} level={4} />
+      </div>
+    ) : null}
+    {career.length ? (
+      <div>
+        <SectionHead title="Career" sub={3} />
+        <Timeline rows={career} />
+      </div>
+    ) : null}
+  </div>
+)
+
+/* ------------------------------------------------------------- 連絡先と柱 */
+
+/*
+  GitHub とメールの行き先。GitHub は https:// の絶対 URL だけを描く（isHttpsUrl。
+  保存でも同じ検査で弾いている——src/routes/admin/members.tsx の memberErrors）。
+  部品の側でも見るのは、その検査より前に保存された行を、呼ぶ側に頼らずに落とすため。
+
+  メールの札は「メール」。押す手の言葉は日本語（CLAUDE.md「文言」）で、GitHub は
+  サービスの固有名なのでそのまま。
+
+  owner は「誰の行き先か」。サイトの行き先（柱と Contact）は渡さず、その人だけの
+  行き先（OwnSocials）が名前を渡す。読み上げの名前が「青木 春香の GitHub」になる
+  （見た目の札は「GitHub」のまま。名前は見た目の字を含む——WCAG 2.5.3）。
+*/
+export const Socials = ({
+  github,
+  email,
+  owner,
+}: {
+  github?: string | null
+  email?: string | null
+  owner?: string
+}) => (
+  <div class="socials">
+    {isHttpsUrl(github) ? (
+      <a
+        href={github}
+        rel="me noreferrer"
+        target="_blank"
+        aria-label={owner ? `${owner}の GitHub` : undefined}
+      >
+        <GithubIcon /> GitHub
+      </a>
+    ) : null}
+    {email ? (
+      <a href={`mailto:${email}`} aria-label={owner ? `${owner}のメール` : undefined}>
+        <MailIcon /> メール
+      </a>
+    ) : null}
+  </div>
+)
+
+/*
+  その人だけの連絡先。サイトと違う行き先を持つ人のぶんだけ出す（同じ行き先を
+  2つ置かない）。個人ページの名札の下と、全体ページ（/all）のプロフィールの節で使う。
+
+  札にはその人の名前を添える（読み上げの名前「青木 春香の GitHub」）。2人以上の
+  サイトの個人ページには、柱のサイトの GitHub / メールと、この人の GitHub / メールが
+  同じページに並ぶ——同じ名前の札が別の行き先を指すと、読み上げの一覧では
+  どちらがこの人のものか分からない（同じ行き先を2つ置かない、の裏返し）。柱の
+  ほうを外さないのは、柱がどのページでも同じサイトの柱だから（個人ページ専用の柱に
+  入れ替えない。CLAUDE.md「個人ページはサイトの並びの一部」）。
+*/
+export const OwnSocials = ({ member }: { member: Member }) => {
+  const github = isHttpsUrl(member.github) && member.github !== SITE.github ? member.github : null
+  const email = member.email && member.email !== SITE.email ? member.email : null
+  return github || email ? <Socials github={github} email={email} owner={member.name} /> : null
+}
+
+/*
+  連絡先のページ。サイトの並びの最後で、入口と対になる締め。
+
+  ページに出すのは月と、誘う1文（SITE.contactLead）と、ボタン2つ（メール・GitHub）。
+  月を右上に、字とボタンを表紙の下に寄せる（入口と同じ組み方）。月は入口の
+  三日月を左右に返し、ひとまわり小さく置く（MoonField の closing）。
+
+  - 誘いの1文は、何の相談なら送ってよいかを言う唯一の言葉なので置く。目に
+    見える見出しは置かない（「Contact」と書いてもボタンと同じことを言うだけ）
+  - 字は --ink-mid。締めの月の光暈の上に乗る小さい字なので 4.5:1 が要る
+    （npm run check:contrast が測る）
+  - 見出しは読み上げ用の h1「Contact」（HiddenHeading）。ページは h1 を
+    ちょうど1つ持つ（WCAG 1.3.1）。全体ページ（/all）では、ほかの節と同じ
+    見出しを目に見える形で置き、アドレスも字で残す（印刷の宛先。紙の上では
+    ボタンの行き先が読めない）
+  - メールは「送る」操作なので塗りのピル、GitHub は外へ出る脇の道なので柱と
+    同じ .socials
+  - GitHub はここに常設する。柱の .socials は 899 以下で畳むので、ここが
+    899 以下の唯一の道（WCAG 1.4.10）。このページでは柱の GitHub / メールを出さない
+    （SiteIdentity の contact。同じ行き先が2組並ぶ）
+
+  whole は「全体ページ（/all）の1節として描くか」。全体ページでは見出しを目に見える
+  h2 で置き、締めの月は敷かない（印刷・Ctrl-F・翻訳の宛先）。
+*/
+export const Contact = ({
+  email,
+  github,
+  whole,
+}: {
+  email: string
+  github?: string | null
+  whole?: boolean
+}) => (
+  <Screen id="contact" label="Contact" moonlit={!whole}>
+    {whole ? null : <MoonField closing />}
+    {/*
+      全体ページの見出しは節の直下に置く（ほかの節と同じ位置）。.contact の中に
+      入れると、左寄せの縦積みに縮められて下線が「Contact」の字幅で切れる。
+      読み上げ用の h1 は .contact の中——節の直下に置くと、月の受け皿の
+      「中身を月より前に出す」規則（position: relative）に .sr-only の
+      position: absolute が負けて、1px の段が1つ増える
+    */}
+    {whole ? <SectionHead title="Contact" /> : null}
+    <div class="contact">
+      {whole ? null : <HiddenHeading text="Contact" h1 />}
+      {/* 句読点までの塊で折る（入口のリード文と同じ Phrases）。語の途中で折らない */}
+      <p class="contact__lead">
+        <Phrases text={SITE.contactLead} />
+      </p>
+      <div class="contact__actions">
+        <a class="pill-cta" href={`mailto:${email}`}>
+          <MailIcon /> メールを送る →
+        </a>
+        <Socials github={github} />
+      </div>
+      {whole ? <p class="contact__address">{email}</p> : null}
+    </div>
+  </Screen>
+)
+
+/*
+  サイトの柱（名札）。どのページにも出るので、ここに載せたものは全ページに載る。
+
+  solo は1人のサイトのその人（src/routes/public/data.ts の soloMember）。1人の
+  サイトなら名前と職種を載せる——入口の外（Projects・個人ページ・作品・Contact・
+  /all）には、ほかに誰のサイトかを言うものが無い（検索や貼られたリンクから
+  直接着くページ）。
+
+  entrance は「Hero のページか」。入口では名乗らない。Hero の h1 が名乗っていて、
+  柱にも置くと同じ名前が2度並ぶ（899 以下ではロゴの隣に来て、見出しの前置きの
+  ように重なる）。並びの何番目かでは決めない——名乗っているのは Hero の h1 なので、
+  Hero を2番目に置いた構成でも、そこでだけ外す。
+
+  899 以下の帯では名前を残し、ワードマーク（NOCTIFEX）と職種を畳む（app.css の
+  .identity--named）。畳むのは見た目だけで、ロゴのリンクの読み上げには
+  「NOCTIFEX」が残る。
+
+  2人以上のサイトでは名前を出さない。誰か1人の名前を柱に置くと、その人の
+  サイトに見える。
+
+  contact は「Contact のページか」。本文にメールと GitHub のボタンがあるので、
+  柱の GitHub / メールは出さない（同じ行き先を2組置かない）。全体ページ（/all）
+  では出す（あそこの Contact は節の1つで、柱は全体の柱）。
+*/
+export const SiteIdentity = ({
+  solo,
+  entrance,
+  contact,
+}: {
+  solo?: Member
+  entrance?: boolean
+  contact?: boolean
+}) => {
+  const named = entrance ? undefined : solo
+  return (
+    <div class={named ? 'identity identity--named' : 'identity'}>
+      <Brand />
+      {named ? <span class="identity__name">{named.name}</span> : null}
+      {named?.role ? <span class="identity__role">{named.role}</span> : null}
+      <span class="identity__tagline">{SITE.tagline}</span>
+      {contact ? null : <Socials github={SITE.github} email={SITE.email} />}
+    </div>
+  )
+}

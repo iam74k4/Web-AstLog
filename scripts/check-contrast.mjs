@@ -1,12 +1,12 @@
 /*
   月の上で、文字が読めるか（WCAG 1.4.3）を実際にブラウザで測る。
 
-  月が出るのはサイトの連なりの最初と最後——入口と、締めの Contact（入口の
-  三日月を左右に返して小さく置く。画面に出る字はボタン2つだけ）。どちらも
-  字の後ろに光暈が回る。
+  月が出るのはサイトの並びの最初と最後——入口と、締めの Contact（入口の
+  三日月を左右に返して小さく置く。ページに出る字は誘いの1文とボタン2つ）。
+  どちらも字の後ろに光暈が回る。
   測る画面と字の一覧は下の SCREENS。
 
-  月は入口の画面の h1 とリード文の後ろを通る。粒子はいちばん明るい所が白
+  月は入口の画面の h1 とリード文の後ろを通る。月の点はいちばん明るい所が白
   （255）で、見出しも #f2f2f4 なので、置き方を間違えると白の上の白になる。
   実際にそうなっていた——リード文が明るい縁に載って **1.00:1**、つまり
   その字は背景と同じ明るさで、完全に消えていた。
@@ -23,9 +23,11 @@
 
   名前の上の肩書き（小さい字なので 4.5:1 が要る）も同じく測る。
   帯（一覧への丸い札）も同じ Hero の中にあって光暈の上に乗るので、その字
-  （何の一覧か・件数）も測る。帯は半透明の面を持つので、隠すのは字だけで
+  （題・件数）も測る。帯の下の「すべてを1ページで読む →」（全体
+  ページへの控えめな1本）も同じ。帯は半透明の面を持つので、隠すのは字だけで
   面は残す——面ごと隠すと、実際より暗い地で測ることになる。締めの画面の
-  メールと GitHub のピルも同じで、字の色だけを抜いて面を残す。
+  メールと GitHub のピルも同じで、字の色だけを抜いて面を残す。締めの
+  誘いの1文（リード）は面を持たないので、入口のリード文と同じく丸ごと隠す。
 
   動きは止めて測る（reducedMotion）。入口の見出しは浮かび上がって出てくるので、
   止めないと、動いている途中の姿を測ることがある。そのうえで月の出（月が
@@ -42,23 +44,29 @@ import process from 'node:process'
 import { chromium } from 'playwright'
 import { devServer } from './lib/dev-server.mjs'
 import { keysOf } from './lib/theme.mjs'
+import { DESIGN_SIZES, SHORT_WIDE } from './lib/viewports.mjs'
 
 /*
-  設計サイズ3つ（check-fit.mjs と同じ電話・板・机）に 1024x768 を足す。
-
-  1024x768 は「幅は広いのに背が低い」窓で、パネルがいちばん短くなる
-  （center で 810x366）。月と文字の間隔がいちばん詰まるのがここなので、
-  収まりの検査には入れていなくても、重なりの検査には要る。
+  設計サイズ3つ（scripts/lib/viewports.mjs。check:fit と同じ電話・板・机）に、
+  背の低い窓（SHORT_WIDE）を足して幅の順に並べる。電話と板は指で測る（touch。
+  check:fit と同じ）。指では押す手が --tap の 44px になり、柱の帯と入口の
+  「すべてを1ページで読む →」（.hero__whole）が伸びる。入口の字は画面の下に
+  寄せてある（app.css の main > .hero:has(> .moon)）ので、下の1本が伸びたぶん
+  見出し・リード文・帯が月のほうへ上がる——細いポインタの姿だけを測っていたころは、
+  実物の電話の位置を一度も測っていなかった。
 */
-const VIEWPORTS = [
-  { width: 390, height: 844 },
-  { width: 768, height: 1024 },
-  { width: 1024, height: 768 },
-  { width: 1440, height: 900 },
-]
+const VIEWPORTS = [...DESIGN_SIZES, SHORT_WIDE]
+  .map(({ width, height, touch }) => ({ width, height, touch: Boolean(touch) }))
+  .sort((a, b) => a.width - b.width)
+
+// newPage に渡す形（touch は hasTouch へ）
+const pageOptions = ({ width, height, touch }) => ({
+  viewport: { width, height },
+  hasTouch: touch,
+})
 
 /*
-  月が出る画面。サイトの連なりの最初（入口）と最後（Contact）の2枚だけ——
+  月が出るページ。サイトの並びの最初（入口）と最後（Contact）の2つだけ——
   /all にも個人ページにも出さない。
 
   panel はその画面の節。targets は測る字（selector は panel の中で探す）で、
@@ -86,9 +94,11 @@ const SCREENS = [
       { selector: ':scope > p:not(.hero__role)', name: 'リード文', required: true },
       { selector: '.band .band__body strong', name: '帯の題' },
       { selector: '.band .band__meta', name: '帯の件数' },
+      // 入口のページには必ず出る（帯の有無に依らない）。出ていなければ落とす
+      { selector: ':scope > .hero__whole', name: '全体ページへの1本', required: true },
     ],
     // 帯は字の子だけを隠せば面が残る（面ごと隠すと実際より暗い地で測る）
-    hide: 'main > .hero > :is(h1, p), main > .hero > .band .band__body > *',
+    hide: 'main > .hero > :is(h1, p, .hero__whole), main > .hero > .band .band__body > *',
     ink: null,
     minPixels: 8000,
     motion: true,
@@ -97,12 +107,14 @@ const SCREENS = [
     name: '締め',
     path: '/contact',
     panel: 'main > .moonlit',
-    // 画面に出る字はボタン2つだけ（見出しは読み上げ用の .sr-only で、描かれない）
+    // 画面に出る字は誘いの1文とボタン2つ（見出しは読み上げ用の .sr-only で、描かれない）
     targets: [
+      { selector: '.contact__lead', name: 'リード文', required: true },
       { selector: '.contact__actions .socials a', name: 'GitHub のピル', required: true },
       { selector: '.contact__actions .pill-cta', name: 'メールのピル', required: true },
     ],
-    hide: null,
+    // リードは面を持たないので丸ごと隠す。ピルは面を残して字の色だけ抜く（ink）
+    hide: 'main > .moonlit .contact__lead',
     ink: 'main > .moonlit .contact__actions a',
     minPixels: 4500,
     motion: false,
@@ -391,8 +403,8 @@ async function main() {
   try {
     for (const viewport of VIEWPORTS) {
       for (const screen of SCREENS) {
-        const page = await browser.newPage({ viewport, reducedMotion: 'reduce' })
-        const size = `${viewport.width}x${viewport.height}`
+        const page = await browser.newPage({ ...pageOptions(viewport), reducedMotion: 'reduce' })
+        const size = `${viewport.width}x${viewport.height}${viewport.touch ? ' 指' : ''}`
         const where = `${screen.name} ${size}`
         const response = await page.goto(base + screen.path, { waitUntil: 'load' })
         if ((response?.status() ?? 0) !== 200) {
@@ -488,7 +500,7 @@ async function main() {
         await sweep(page, where, screen)
         await page.close()
 
-        // 締めの月は動かさない。途中の姿が無いので、ここで次の画面へ
+        // 締めの月は動かさない。途中の姿が無いので、ここで次のページへ
         if (!screen.motion) continue
 
         /*
@@ -505,7 +517,7 @@ async function main() {
         動きを止めずに開き、月の animation だけを止めて途中の時刻へ送る。
         字の浮かび上がりは先に終わらせる——行ボックスを止まった位置で読むため。
       */
-        const moving = await browser.newPage({ viewport })
+        const moving = await browser.newPage(pageOptions(viewport))
         await moving.goto(base + screen.path, { waitUntil: 'load' })
         await moving.evaluate(() => document.fonts.ready.then(() => true))
         const end = await moving.evaluate(holdMoon)

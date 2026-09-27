@@ -1,26 +1,31 @@
 import { env } from 'cloudflare:test'
 import markSvg from 'virtual:asset:noctifex-mark.svg'
 import { eq } from 'drizzle-orm'
-import { beforeEach, describe, expect, it } from 'vitest'
-import { MEMBER_PER_SCREEN } from '../src/blocks'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { PROJECT_COLUMNS } from '../src/blocks'
 import * as schema from '../src/db/schema'
-import { publicRoutes } from '../src/routes/public'
+import { ITEM_KINDS } from '../src/domain'
+import { publicRoutes } from '../src/routes/public/routes'
 import { SITE } from '../src/site'
-import { splitPhrases } from '../src/ui/components'
+import { itemHref, LinkList, LinkRow, splitPhrases } from '../src/ui/components'
 import { MARK_POINTS } from '../src/ui/icons'
-import { db, get, resetDb, seedItem, seedMember, signIn } from './helpers'
+import { db, form, get, okText, resetDb, seedItem, seedMember, signIn, touch } from './helpers'
 
 beforeEach(resetDb)
 
 /*
   main の中だけを見る。柱（.rail）には同じ行き先のリンクが常に出ているので、
   ページ全体を見ると「本文にある」ことを確かめられない。
-  開きタグを正規表現で読むのは、main が属性（tabindex）を持つため。
+  開きタグを正規表現で読むのは、main が属性（id と tabindex="-1"）を持つため。
 */
 const mainOf = (html: string) => html.split(/<main[^>]*>/)[1] ?? ''
 
-// 目次（柱の中）だけを見る。同じ文字列は見出しにもページャにも出る
+// 目次（柱の中）だけを見る。同じ文字列は見出しにも本文のリンクにも出る
 const tocOf = (html: string) => html.split('<nav class="toc"')[1]?.split('</nav>')[0] ?? ''
+
+// 柱だけを見る。名前や連絡先は本文にも出るので、ページ全体では確かめられない
+const railOf = (html: string) =>
+  html.slice(html.indexOf('<aside class="rail"'), html.indexOf('</aside>'))
 
 describe('全体ページ', () => {
   it('置いたブロックを1ページに出す。canonical は自分自身', async () => {
@@ -47,9 +52,12 @@ describe('全体ページ', () => {
     await seedMember()
     await seedItem({ type: 'app' })
 
-    const html = await (await get('/all')).text()
-    // 固定の一覧を書くと、節を1つ外した日にここだけ古い名前を出し続ける
-    expect(html).toContain('content="Projects · Team · Contact を1ページにまとめた全体版です。')
+    const html = await okText('/all')
+    /*
+      固定の一覧を書くと、節を1つ外した日にここだけ古い名前を出し続ける。
+      公開中が1人なので、Team の位置はプロフィール（Profile）
+    */
+    expect(html).toContain('content="Projects · Profile · Contact を1ページにまとめた全体版です。')
   })
 })
 
@@ -63,7 +71,7 @@ describe('トップページ', () => {
     await seedItem({ title: '公開のアプリ', memberId: member.id, platformKey: 'web' })
     await seedItem({ title: '下書きのアプリ', memberId: member.id, published: 0 })
 
-    const html = await (await get('/all')).text()
+    const html = await okText('/all')
     expect(html).toContain('公開のアプリ')
     expect(html).not.toContain('下書きのアプリ')
   })
@@ -72,11 +80,11 @@ describe('トップページ', () => {
     await seedItem({ type: 'app', platformKey: 'web' })
 
     // 個人開発しか無いサイトで「業務」を置いても、押した先は0件の知らせだけ
-    const only = await (await get('/all')).text()
+    const only = await okText('/all')
     expect(only).not.toContain('kind=')
 
     await seedItem({ type: 'work', title: '業務の実績' })
-    const both = await (await get('/all')).text()
+    const both = await okText('/all')
     expect(both).toContain('href="/projects?kind=app"')
     expect(both).toContain('href="/projects?kind=work"')
     // プラットフォームでは絞らない（カードの札には残る）
@@ -85,31 +93,35 @@ describe('トップページ', () => {
 
   it('個人開発と業務を1つの一覧に、新しい順で並べる', async () => {
     await seedItem({ type: 'app', title: '古いアプリ', year: '2023', sortOrder: 10 })
-    await seedItem({ type: 'work', title: '続いている業務', year: '2024 —', sortOrder: 10 })
+    await seedItem({ type: 'work', title: '続いている業務', year: '2024 — 現在', sortOrder: 10 })
     await seedItem({ type: 'app', title: '新しいアプリ', year: '2026', sortOrder: 20 })
     await seedItem({ type: 'work', title: '年の無い業務', year: '', sortOrder: 20 })
 
-    const html = await (await get('/all')).text()
+    const html = await okText('/all')
     const order = ['新しいアプリ', '続いている業務', '古いアプリ', '年の無い業務'].map((title) =>
       html.indexOf(title),
     )
     expect(order.every((at) => at > 0)).toBe(true)
-    // 年は頭の4桁で比べる（「2024 —」は 2024）。年を書いていない行は最後
+    /*
+      年は頭の4桁で比べる（「2024 — 現在」は 2024）。続いているものを経歴と
+      同じ「— 現在」で書くようにしても、並びは変わらない。年を書いていない行は最後
+    */
     expect(order).toEqual([...order].sort((a, b) => a - b))
   })
 
-  it('メンバーが1〜2人なら横長、3人以上ならグリッドにする', async () => {
+  it('メンバーが2人なら横長、3人以上ならグリッドにする', async () => {
+    // 1人のサイトでは Team そのものが無い（プロフィールに置き換わる）
     await seedMember()
-    expect(await (await get('/all')).text()).toContain('member--wide')
-
     await seedMember({ slug: 'b', name: 'B' })
+    expect(await okText('/all')).toContain('member--wide')
+
     await seedMember({ slug: 'c', name: 'C' })
-    expect(await (await get('/all')).text()).toContain('member--compact')
+    expect(await okText('/all')).toContain('member--compact')
   })
 
   it('アバターは遅延読み込みにしない（空の丸のまま見えてしまう）', async () => {
     await seedMember({ avatarUrl: '/assets/avatar.png' })
-    const html = await (await get('/all')).text()
+    const html = await okText('/all')
     expect(html).toContain('src="/assets/avatar.png"')
     expect(html).not.toContain('loading="lazy"')
   })
@@ -120,7 +132,7 @@ describe('トップページ', () => {
     await seedMember({ slug: 'shown2', name: 'もう一人' })
     await seedItem({ title: '担当者が下書きのアプリ', memberId: draft.id })
 
-    const html = await (await get('/all')).text()
+    const html = await okText('/all')
     expect(html).toContain('担当者が下書きのアプリ')
     expect(html).not.toContain('/members/draft')
     expect(html).not.toContain('下書きの人')
@@ -139,7 +151,7 @@ describe('名乗り', () => {
     await seedMember({ name: '岡崎 昂功', role: 'System Engineer' })
     await seedItem()
 
-    const html = await (await get('/')).text()
+    const html = await okText('/')
     expect(html).toContain('"@type":"Person"')
     expect(html).toContain('"jobTitle":"System Engineer"')
     // 器として名乗ると、人の名前も職種も構造化データに1つも出ない
@@ -153,7 +165,7 @@ describe('名乗り', () => {
     // 「つくる人たちの、置き場所。」「メンバーごとにまとめています」は、
     // 1人のサイトが自分を器として紹介していた言い方。src/site.ts が正
     for (const path of ['/', '/all']) {
-      const html = await (await get(path)).text()
+      const html = await okText(path)
       expect(html, path).not.toContain('つくる人たち')
       expect(html, path).not.toContain('メンバーごとに')
     }
@@ -164,42 +176,61 @@ describe('名乗り', () => {
     await seedMember({ slug: 'hoshino', name: '星野' })
     await seedItem()
 
-    const html = await (await get('/')).text()
+    const html = await okText('/')
     expect(html).toContain('"@type":"Organization"')
     // 中の member の列はそのまま。Team ブロックも members テーブルも生きている
     expect(html).toContain('"url":"https://noctifex.dev/members/hoshino"')
   })
 
-  it('Team の添えは分類の名詞ひとつ。人数は数えない', async () => {
+  it('Team の見出しに添えを置かない。訳語も人数も', async () => {
     await seedMember()
-    const one = await (await get('/team')).text()
-    expect(one).toContain('<span class="note">メンバー</span>')
-    // 複数いる前提の器に1人しか入っていないことを、自分で数えて告知していた
-    expect(one).not.toContain('1 member')
-
     await seedMember({ slug: 'hoshino', name: '星野' })
-    expect(await (await get('/team')).text()).not.toContain('2 members')
+    const html = await okText('/team')
+    // 「メンバー」は Team の訳語でしかなく、見出しを2つの言語で2度言うだけだった
+    expect(html).toContain('<div class="head"><h1>Team</h1></div>')
+    expect(html).not.toContain('<span class="note">')
+    // 複数いる前提の器に1人しか入っていないことを、自分で数えて告知していた
+    expect(html).not.toContain('2 members')
   })
 
-  it('名乗りは入口の1画面だけ。めくった先には載せない', async () => {
+  it('名乗りは入口のページだけ。ほかのページには載せない', async () => {
     await seedMember()
     await seedItem()
 
-    // 同じサイトの名乗りが画面の数だけ並ぶと、どれが本体か決められない
-    expect(await (await get('/')).text()).toContain('application/ld+json')
-    expect(await (await get('/apps')).text()).not.toContain('application/ld+json')
-    expect(await (await get('/members/okazaki')).text()).toContain('application/ld+json')
-    expect(await (await get('/members/okazaki/about')).text()).not.toContain('application/ld+json')
+    // 同じサイトの名乗りがページの数だけ並ぶと、どれが本体か決められない
+    expect(await okText('/')).toContain('application/ld+json')
+    expect(await okText('/projects')).not.toContain('application/ld+json')
+    /*
+      1人のサイトの個人ページは、サイトの並びの途中（Team の位置）。
+      入口と同じ人をもう一度名乗らない
+    */
+    expect(await okText('/members/okazaki')).not.toContain('application/ld+json')
+
+    // 2人以上のサイトの個人ページは、Team から入る脇のページ。その人の Person を名乗る
+    await seedMember({ slug: 'hoshino', name: '星野' })
+    expect(await okText('/members/okazaki')).toContain('application/ld+json')
   })
 
   it('個人ページは、1人のあいだ worksFor を名乗らない', async () => {
     await seedMember()
+    /*
+      Team を置かない1人のサイト。個人ページは並びの外のページで、Person を
+      名乗る（Team を置くと並びの途中になり、名乗り自体を載せない）
+    */
+    await db()
+      .insert(schema.blocks)
+      .values([
+        { type: 'hero' as const, published: 1, sortOrder: 10 },
+        { type: 'contact' as const, published: 1, sortOrder: 20 },
+      ])
+    const solo = await okText('/members/okazaki')
+    expect(solo).toContain('"@type":"Person"')
     // トップが同じ URL を Person として名乗っているので、
     // ここで同じ URL の Organization を書くと1つの URL が2つの型を持つ
-    expect(await (await get('/members/okazaki')).text()).not.toContain('worksFor')
+    expect(solo).not.toContain('worksFor')
 
     await seedMember({ slug: 'hoshino', name: '星野' })
-    expect(await (await get('/members/okazaki')).text()).toContain('worksFor')
+    expect(await okText('/members/okazaki')).toContain('worksFor')
   })
 
   it('ロゴの7点は1か所が正。配り先がずれたら落とす', async () => {
@@ -211,7 +242,7 @@ describe('名乗り', () => {
 
       ずれても型は黙るし、画面も一見それらしく出る（形が少し違うだけ）。
     */
-    const html = await (await get('/')).text()
+    const html = await okText('/')
     // favicon は data URI なので、点の列がそのまま入っている
     expect(html).toContain(MARK_POINTS)
 
@@ -239,28 +270,31 @@ describe('名乗り', () => {
       正しい url を受け取っているかをここで留める。
     */
     const solo = await seedMember()
-    const home = await (await get('/')).text()
+    const home = await okText('/')
     // 1人：サイト自身がその人。url はサイトの origin
     expect(home).toContain(`"@type":"Person","name":"${solo.name}"`)
     expect(home).toContain('"url":"https://noctifex.dev"')
     expect(home).not.toContain('"url":"https://noctifex.dev/members/okazaki"')
 
-    // 個人ページ：その人の URL
-    const mine = await (await get('/members/okazaki')).text()
-    expect(mine).toContain('"url":"https://noctifex.dev/members/okazaki"')
-
     // 2人目が公開されると器に戻り、member[] の中では各自の URL を名乗る
     await seedMember({ slug: 'hoshino', name: '星野' })
-    const org = await (await get('/')).text()
+    const org = await okText('/')
     expect(org).toContain('"@type":"Organization"')
     expect(org).toContain('"url":"https://noctifex.dev/members/okazaki"')
     expect(org).toContain('"url":"https://noctifex.dev/members/hoshino"')
+
+    /*
+      個人ページ：その人の URL。1人のサイトの個人ページは並びの途中なので
+      名乗り自体を載せない（上の「名乗りは入口のページだけ」）。見るのは2人以上のとき
+    */
+    const mine = await okText('/members/okazaki')
+    expect(mine).toContain('"url":"https://noctifex.dev/members/okazaki"')
   })
 })
 
 /*
-  入口（/）は、このサイトがいちばん仕事をする画面。名前・職種・数がここに
-  無いと、最初の1画面から持ち帰れるものが何も無い。
+  入口（/）は、このサイトがいちばん仕事をするページ。名前・職種・数がここに
+  無いと、最初に開いたページから持ち帰れるものが何も無い。
 */
 describe('入口の画面', () => {
   it('句読点の直後でだけ区切る。語の途中（「置いてお / く。」）では切らない', () => {
@@ -277,12 +311,13 @@ describe('入口の画面', () => {
     await seedMember({ name: '岡崎 昂功', role: 'System Engineer' })
     await seedItem()
 
-    const html = await (await get('/')).text()
+    const html = await okText('/')
     const hero = html.slice(html.indexOf('<header class="hero"'), html.indexOf('</header>'))
     // 標語は置かない。何も伝えないまま画面でいちばん大きな字になっていた
     expect(hero).not.toContain('つくったものを、置いておく。')
     expect(hero.match(/<h1>(.*?)<\/h1>/)?.[1]?.replace(/<[^>]+>/g, '')).toBe('岡崎 昂功')
-    expect(hero).toContain('<p class="hero__role">System Engineer</p>')
+    // 英字だけの肩書きには lang="en"（読み上げの発音と、等幅の札にする印）
+    expect(hero).toContain('<p class="hero__role" lang="en">System Engineer</p>')
     for (const part of splitPhrases(SITE.heroLead)) {
       expect(hero).toContain(`>${part}</span>`)
     }
@@ -293,32 +328,103 @@ describe('入口の画面', () => {
     expect(hero).toContain('class="band"')
   })
 
+  it('和文の肩書きには lang を付けない。等幅の札にしない', async () => {
+    /*
+      等幅は英字の札にだけ掛ける（app.css は .hero__role:lang(en)）。和文の
+      肩書きに lang="en" を付けると、読み上げが英語の発音で読み、字も等幅の
+      字間で組まれる
+    */
+    await seedMember({ role: 'システムエンジニア' })
+
+    const html = await okText('/')
+    expect(html).toContain('<p class="hero__role">システムエンジニア</p>')
+  })
+
   it('公開中が2人以上なら、見出しはサイトの名前。肩書きは添えない', async () => {
     await seedMember()
     await seedMember({ slug: 'tanaka', name: '田中 未来', sortOrder: 20 })
 
-    const html = await (await get('/')).text()
+    const html = await okText('/')
     const hero = html.slice(html.indexOf('<header class="hero"'), html.indexOf('</header>'))
     expect(hero.match(/<h1>(.*?)<\/h1>/)?.[1]?.replace(/<[^>]+>/g, '')).toBe(SITE.name)
     expect(hero).not.toContain('hero__role')
   })
 })
 
+/*
+  柱の名乗り。入口では Hero の h1 が名乗るので柱は黙り、入口の外では柱が名乗る。
+
+  柱に名前を置かないと決めていたころは、奥の画面（検索や貼られたリンクから
+  直接着く /projects や /members/… ）を開いた人に、誰のサイトかがどこにも
+  出ていなかった。入口だけは今も置かない——同じ名前が2度並ぶ。
+*/
 describe('入口の名乗り', () => {
-  it('名乗るのは入口の見出しだけ。柱に名前を置かない（入口で2度並ぶ）', async () => {
+  it('入口の柱は名前も職種も出さない。名乗るのは Hero の h1（2度並べない）', async () => {
     await seedMember({ name: '岡崎 昂功', role: 'System Engineer' })
     await seedItem()
 
-    const top = await (await get('/')).text()
+    const top = await okText('/')
     expect(top.match(/<h1>(.*?)<\/h1>/)?.[1]?.replace(/<[^>]+>/g, '')).toBe('岡崎 昂功')
 
-    // 柱はどの画面にも出る。職種は残し、名前だけを外す
-    for (const path of ['/', '/projects', '/team', '/contact', '/all']) {
-      const html = await (await get(path)).text()
-      const rail = html.slice(html.indexOf('<aside class="rail"'), html.indexOf('</aside>'))
-      expect(rail, path).not.toContain('identity__name')
-      expect(rail, path).not.toContain('岡崎 昂功')
+    const rail = railOf(top)
+    expect(rail).not.toContain('identity__name')
+    expect(rail).not.toContain('岡崎 昂功')
+    // 肩書きも Hero の h1 の上に添えてある（.hero__role）
+    expect(rail).not.toContain('identity__role')
+    // 名乗らない画面ではワードマークを畳まない（帯に場所がある）
+    expect(rail).toContain('<div class="identity">')
+  })
+
+  it('入口の外では、1人のサイトなら柱が名前と職種を名乗る', async () => {
+    await seedMember({
+      name: '岡崎 昂功',
+      role: 'System Engineer',
+      skillsText: 'C# | 3年以上',
+      careerText: '2024.03 | 入社 | ある会社',
+    })
+    await seedItem({ slug: 'appmixer' })
+
+    for (const path of [
+      '/projects',
+      '/members/okazaki',
+      '/apps/item/appmixer',
+      '/contact',
+      '/all',
+    ]) {
+      const rail = railOf(await okText(path))
+      // 名乗る画面の印。899 以下の帯では、これを目印にワードマークを畳む（app.css）
+      expect(rail, path).toContain('<div class="identity identity--named">')
+      expect(rail, path).toContain('<span class="identity__name">岡崎 昂功</span>')
       expect(rail, path).toContain('<span class="identity__role">System Engineer</span>')
+    }
+  })
+
+  it('2人以上のサイトでは、柱に誰の名前も出さない', async () => {
+    // 誰か1人の名前を柱に置くと、その人のサイトに見える
+    await seedMember()
+    await seedMember({ slug: 'hoshino', name: '星野', role: 'Designer' })
+    await seedItem({ slug: 'appmixer' })
+
+    for (const path of ['/', '/projects', '/team', '/members/okazaki', '/contact', '/all']) {
+      const rail = railOf(await okText(path))
+      expect(rail, path).toContain('<div class="identity">')
+      expect(rail, path).not.toContain('identity__name')
+      expect(rail, path).not.toContain('identity__role')
+    }
+  })
+
+  it('Contact の画面では、柱に GitHub / メールを出さない。本文にボタンがある', async () => {
+    await seedMember()
+
+    const contact = await okText('/contact')
+    expect(railOf(contact)).not.toContain('class="socials"')
+    // 行き先は本文に残っている（同じ行き先を柱と本文に2組並べない）
+    expect(mainOf(contact)).toContain(`href="${SITE.github}"`)
+    expect(mainOf(contact)).toContain(`href="mailto:${SITE.email}"`)
+
+    // ほかの画面の柱には今までどおり出る。全体ページの Contact は節の1つで、柱は全体のもの
+    for (const path of ['/', '/all']) {
+      expect(railOf(await okText(path)), path).toContain('class="socials"')
     }
   })
 
@@ -326,7 +432,7 @@ describe('入口の名乗り', () => {
     await seedMember({ name: '岡崎 昂功', role: 'System Engineer' })
     await seedItem()
 
-    const html = await (await get('/')).text()
+    const html = await okText('/')
     expect(html).toContain('<title>岡崎 昂功（System Engineer） — Noctifex</title>')
     expect(html).toContain('content="岡崎 昂功（System Engineer）のポートフォリオ。')
   })
@@ -337,7 +443,7 @@ describe('入口の名乗り', () => {
     await seedItem({ type: 'app', title: 'アプリ弐' })
     await seedItem({ type: 'work', title: 'ある仕事' })
 
-    const html = await (await get('/')).text()
+    const html = await okText('/')
     expect(html).toContain('class="band" href="/projects"')
     // 1つの一覧へ送るが、何がどれだけあるかは区分ごとに数えて見せる
     expect(html).toContain('個人開発 2 · 業務 1')
@@ -347,7 +453,7 @@ describe('入口の名乗り', () => {
     await seedMember()
     await seedItem({ type: 'work' })
 
-    const html = await (await get('/')).text()
+    const html = await okText('/')
     expect(html).toContain('class="band" href="/projects"')
     expect(html).toContain('<span class="band__meta">業務 1</span>')
   })
@@ -360,7 +466,7 @@ describe('入口の名乗り', () => {
     await seedItem({ type: 'work', title: 'よその仕事' })
 
     // 入口で見せたいのは「ここに何件あるか」で、「いま絞り込んだ結果が何件か」ではない
-    const html = await (await get(`/?member=${member.slug}`)).text()
+    const html = await okText(`/?member=${member.slug}`)
     expect(html).toContain('個人開発 1 · 業務 2')
   })
 
@@ -368,48 +474,161 @@ describe('入口の名乗り', () => {
     await seedMember()
     await seedItem()
 
-    expect(await (await get('/all')).text()).not.toContain('class="band"')
+    expect(await okText('/all')).not.toContain('class="band"')
+  })
+
+  it('帯の題は「つくったもの」。右端の「一覧で見る」と「一覧」を重ねない', async () => {
+    await seedMember()
+    await seedItem()
+
+    const band = mainOf(await okText('/'))
+    expect(band).toContain('<strong>つくったもの</strong>')
+    // 「つくったものの一覧」のころは、1枚の札の中で「一覧」が2度出ていた
+    expect(band).not.toContain('つくったものの一覧')
+    expect(band).toContain('一覧で見る')
   })
 })
 
 /*
-  画面ごとに URL を分けた以上、1画面 = 1ドキュメント。見出しはその画面の
-  中で完結していなければならない（WCAG 1.3.1）。縦に積んだ全体ページ
-  （/all）だけは今までどおり、Hero の h1 に節が h2 でぶら下がる。
+  ページの移動。公開ページは節ごとに1ページで、行き来するのは目次（柱・上の帯）と
+  ページの中のリンク（入口の帯・カード・「← 一覧に戻る」）だけ。画面の底の左右の手
+  （ページャ）は外した——持ち主が触って「スクロールできず、底の左右の手でしか
+  めくれないのが面倒すぎる」と判断した（CLAUDE.md の「公開ページは縦に読む」）。
 */
-describe('画面ごとの見出し', () => {
-  const h1s = (html: string) => html.match(/<h1[^>]*>/g) ?? []
-
-  it('割られた画面は、どれも h1 をちょうど1つ持つ', async () => {
+describe('ページの移動', () => {
+  it('どのページにも画面の底のページャを出さない。前後の rel も置かない', async () => {
     await seedMember({ skillsText: 'C# | 3年以上', careerText: '2024.03 | 入社 | ある会社' })
-    await seedItem({ type: 'app' })
-    await seedItem({ type: 'work' })
+    await seedItem({ slug: 'appmixer', body: '背景です。' })
+    await seedItem({ slug: 'second', title: '二つ目' })
+    const [note] = await db()
+      .insert(schema.blocks)
+      .values([
+        { type: 'hero' as const, published: 1, sortOrder: 10 },
+        { type: 'projects' as const, published: 1, sortOrder: 20 },
+        { type: 'note' as const, title: 'メモ', body: '段落。', published: 1, sortOrder: 30 },
+        { type: 'team' as const, published: 1, sortOrder: 40 },
+        { type: 'contact' as const, published: 1, sortOrder: 50 },
+      ])
+      .returning()
+      .then((rows) => rows.filter((row) => row.type === 'note'))
+    if (!note) throw new Error('ブロックを置けなかった')
 
     for (const path of [
       '/',
       '/projects',
-      '/team',
-      '/contact',
+      `/block-${note.id}`,
       '/members/okazaki',
-      '/members/okazaki/about',
-      '/members/okazaki/skills',
-      '/members/okazaki/career',
+      '/apps/item/appmixer',
+      '/contact',
     ]) {
-      expect(h1s(await (await get(path)).text()), path).toHaveLength(1)
+      const html = await okText(path)
+      expect(html, path).not.toContain('class="pager')
+      expect(html, path).not.toMatch(/rel="(prev|next)"/)
+      // 行き来の手は目次。どのページでも、名前のある節が全部並ぶ
+      expect(tocOf(html), path).toContain('href="/projects"')
+      expect(tocOf(html), path).toContain('href="/members/okazaki"')
+      expect(tocOf(html), path).toContain('href="/contact"')
     }
+  })
+
+  it('入口と一覧のあいだにページを置いても、帯は一覧へ送る', async () => {
+    await seedMember()
+    await seedItem()
+    await db()
+      .insert(schema.blocks)
+      .values([
+        { type: 'hero' as const, published: 1, sortOrder: 10 },
+        {
+          type: 'statement' as const,
+          title: 'つくる速さは、設計で決まる。',
+          published: 1,
+          sortOrder: 20,
+        },
+        { type: 'projects' as const, published: 1, sortOrder: 30 },
+      ])
+
+    const html = await okText('/')
+    expect(html).toContain('class="band" href="/projects"')
+  })
+})
+
+/*
+  全体ページ（/all）への道。柱の足元の1本は 899 以下の帯で畳まれるので、
+  入口の本文にも1本置く。/all 自身には置かない（自分への行き先）。
+*/
+describe('全体ページへの道', () => {
+  it('入口の帯の下に「すべてを1ページで読む →」を置く', async () => {
+    await seedMember()
+    await seedItem()
+
+    const html = await okText('/')
+    const hero = html.slice(html.indexOf('<header class="hero"'), html.indexOf('</header>'))
+    expect(hero).toContain(
+      '<a class="hero__whole" href="/all">すべてを1ページで読む <span aria-hidden="true">→</span></a>',
+    )
+    // 帯のすぐ下（帯より後ろ）
+    expect(hero.indexOf('class="band"')).toBeLessThan(hero.indexOf('class="hero__whole"'))
+  })
+
+  it('一覧が無く帯の出ない入口にも置く。全体ページと、ほかの画面には置かない', async () => {
+    await seedMember()
+    expect(mainOf(await okText('/'))).toContain('class="hero__whole"')
+
+    await seedItem()
+    for (const path of ['/all', '/projects', '/members/okazaki', '/contact']) {
+      expect(mainOf(await okText(path)), path).not.toContain('hero__whole')
+    }
+  })
+
+  it('柱の足元は著作権表示を箱に包む。中央寄せの上の帯ではそこだけを畳む', async () => {
+    const html = await okText('/')
+    const footer = html.slice(html.indexOf('<footer class="rail__footer">'))
+    // 区切りの「 · 」も同じ箱。畳んだとき区切りだけが行の頭に残らない
+    expect(footer).toMatch(
+      /^<footer class="rail__footer"><span class="rail__copy">© \d{4} Noctifex · <\/span><a href="\/all">/,
+    )
+
+    // 全体ページには自分への行き先が無いので、区切りも無い
+    const whole = await okText('/all')
+    expect(whole).toMatch(
+      /<footer class="rail__footer"><span class="rail__copy">© \d{4} Noctifex<\/span><\/footer>/,
+    )
+  })
+})
+
+/*
+  ページごとに URL を分けた以上、1ページ = 1ドキュメント。見出しはそのページの
+  中で完結していなければならない（WCAG 1.3.1）。縦に積んだ全体ページ
+  （/all）だけは今までどおり、Hero の h1 に節が h2 でぶら下がる。
+*/
+describe('ページごとの見出し', () => {
+  const h1s = (html: string) => html.match(/<h1[^>]*>/g) ?? []
+
+  it('ページごとの URL は、どれも h1 をちょうど1つ持つ', async () => {
+    await seedMember({ skillsText: 'C# | 3年以上', careerText: '2024.03 | 入社 | ある会社' })
+    await seedItem({ type: 'app', slug: 'appmixer', body: '背景です。' })
+    await seedItem({ type: 'work' })
+
+    // 1人のサイトなので /team は無い（プロフィールへ 301）。Team のページは下で2人にして見る
+    for (const path of ['/', '/projects', '/contact', '/members/okazaki', '/apps/item/appmixer']) {
+      expect(h1s(await okText(path)), path).toHaveLength(1)
+    }
+
+    await seedMember({ slug: 'hoshino', name: '星野' })
+    expect(h1s(await okText('/team'))).toHaveLength(1)
   })
 
   it('節の見出しが h1 に上がる。/all では h2 のまま', async () => {
     await seedItem({ type: 'app' })
 
-    expect(await (await get('/projects')).text()).toContain('<h1>Projects</h1>')
+    expect(await okText('/projects')).toContain('<h1>Projects</h1>')
     // 1つの文書に節が並ぶページでは、h1 は Hero の1つだけ
-    const whole = await (await get('/all')).text()
+    const whole = await okText('/all')
     expect(whole).toContain('<h2>Projects</h2>')
     expect(h1s(whole)).toHaveLength(1)
   })
 
-  it('一文だけの画面では、その一文が h1。/all では段落のまま', async () => {
+  it('一文だけのページでは、その一文が h1。/all では段落のまま', async () => {
     const rows = await db()
       .insert(schema.blocks)
       .values([
@@ -425,19 +644,63 @@ describe('画面ごとの見出し', () => {
     const statement = rows[1]
     if (!statement) throw new Error('ブロックを置けなかった')
 
-    // 見出しを持たない画面をひとつも残さない。ここは大きな一文が見出しそのもの
-    const screen = await (await get(`/block-${statement.id}`)).text()
+    // 見出しを持たないページをひとつも残さない。ここは大きな一文が見出しそのもの
+    const screen = await okText(`/block-${statement.id}`)
     expect(screen).toContain('<h1 class="statement__text">つくる速さは、設計で決まる。</h1>')
 
-    const whole = await (await get('/all')).text()
+    const whole = await okText('/all')
     expect(whole).toContain('<p class="statement__text">つくる速さは、設計で決まる。</p>')
     expect(h1s(whole)).toHaveLength(1)
+  })
+
+  it('見出しに訳語だけの添えを置かない（About / Skills / Career）', async () => {
+    /*
+      「紹介」「技術」「経歴」は見出しの訳語でしかなく、同じ見出しを2つの言語で
+      2度言っていた。添えは見出しに無い情報（区分・年）のときだけ置く
+    */
+    await seedMember({ skillsText: 'C# | 3年以上', careerText: '2024.03 | 入社 | ある会社' })
+
+    const html = await okText('/members/okazaki')
+    for (const title of ['About', 'Skills', 'Career']) {
+      expect(html, title).toContain(`<div class="head head--chapter"><h2>${title}</h2></div>`)
+    }
+    expect(html).not.toContain('<span class="note">')
+  })
+
+  it('Projects の添えは、区分のピルが無いときだけ。そのときは区分の名前', async () => {
+    // 区分が2つ: すぐ下のピル（すべて / 個人開発 / 業務）が同じ言葉を並べるので添えない
+    await seedItem({ type: 'app' })
+    await seedItem({ type: 'work', title: '業務の実績' })
+    const both = await okText('/projects')
+    expect(both).toContain('<div class="head"><h1>Projects</h1></div>')
+    expect(both).toContain('href="/projects?kind=work"')
+
+    // 区分が1つ: ピルが並ばないので、何の一覧かを言うのは添えだけ
+    await db().delete(schema.items).where(eq(schema.items.type, 'work'))
+    await touch()
+    const only = await okText('/projects')
+    expect(only).toContain(
+      '<div class="head"><h1>Projects</h1><span class="note">個人開発</span></div>',
+    )
+    expect(only).not.toContain('kind=')
+  })
+
+  it('作品のページの添え（区分の札・年）は残す。見出しに無い情報なので', async () => {
+    await seedItem({
+      type: 'work',
+      title: '開発工程の効率化',
+      slug: 'dev',
+      category: '金融系',
+      year: '2024 — 現在',
+    })
+    const html = await okText('/works/item/dev')
+    expect(html).toContain('<span class="note">金融系 · 2024 — 現在</span>')
   })
 
   it('個人ページの h1 は本文側。大見出しがあればそれ、無ければ名札の名前', async () => {
     await seedMember({ headline: 'つくる工程そのものを、速くする。' })
 
-    const html = await (await get('/members/okazaki')).text()
+    const html = await okText('/members/okazaki')
     // 顔と名前は本文の名札に出る。大見出しのある人では、名前は見出しではない
     expect(html).toContain('<strong class="nameplate__name">岡崎 昂功</strong>')
     // 見出しは句読点で塊に分けてある（Phrases）。読める文字列としては1文のまま
@@ -445,47 +708,104 @@ describe('画面ごとの見出し', () => {
     expect(h1.replace(/<[^>]+>/g, '')).toBe('つくる工程そのものを、速くする。')
     expect(h1s(html)).toHaveLength(1)
 
-    // 2枚目以降も、その画面自身の見出しが h1
-    expect(await (await get('/members/okazaki/about')).text()).toContain('<h1>About</h1>')
+    // About / Skills / Career は同じページの小節なので h2（h1 はページに1つ）
+    expect(html).toContain('<h2>About</h2>')
   })
 })
 
 describe('技術の小見出しと、英語の塊', () => {
-  it('小見出しは段落ではなく見出し。節見出しが h1 なので h2', async () => {
+  it('小見出しは段落ではなく見出し。Skills が h2 なので h3', async () => {
     await seedMember({ skillsText: 'LANGUAGES:\nC# | 3年以上' })
 
-    const html = await (await get('/members/okazaki/skills')).text()
-    expect(html).toContain('class="side-head"')
+    const html = await okText('/members/okazaki')
+    expect(html).toContain('<h3 class="side-head" lang="en">LANGUAGES</h3>')
     expect(html).not.toContain('<p class="side-head"')
-    expect(html).toContain('<h1>Skills</h1>')
+    expect(html).toContain('<h2>Skills</h2>')
+  })
+
+  it('塊の中は添えごとの行。添えは行に1度だけで、項目の列と dt / dd で結ぶ', async () => {
+    /*
+      項目ごとに添えを出していたころは、seed の技術で「3年以上」が11回並んでいた。
+      添えは行の頭に1度だけ。読み上げで添えがその行の項目に結び付くよう、
+      dt（添え）と dd（項目の列）の組にする。添えの無い項目は dl の外の最後の行
+    */
+    await seedMember({
+      skillsText: 'LANGUAGES:\nC# | 3年以上\nSQL | 3年以上\nPython | 1年以上\nTypeScript\nSwift',
+    })
+
+    const html = mainOf(await okText('/members/okazaki'))
+    expect(html.match(/3年以上/g)).toHaveLength(1)
+    expect(html).toContain(
+      '<div class="skill-row"><dt class="skill-row__note">3年以上</dt><dd><ul class="skill-list"><li>C#</li><li>SQL</li></ul></dd></div>',
+    )
+    expect(html).toContain(
+      '<div class="skill-row"><dt class="skill-row__note">1年以上</dt><dd><ul class="skill-list"><li>Python</li></ul></dd></div>',
+    )
+    // 添えの無い行は最後。dt を持たない dd は置けないので dl の外
+    expect(html).toContain('</dl><ul class="skill-list"><li>TypeScript</li><li>Swift</li></ul>')
+    // 項目の中に添えを重ねて出さない（前の .exp）
+    expect(html).not.toContain('class="exp"')
+
+    // 全体ページ（/all）のプロフィールも同じ部品
+    const whole = mainOf(await okText('/all'))
+    expect(whole.match(/3年以上/g)).toHaveLength(1)
+    expect(whole).toContain('<dt class="skill-row__note">3年以上</dt>')
   })
 
   it('日本語の中の英語の塊に lang="en"。日本語の見出しには付けない', async () => {
     await seedMember({ skillsText: 'LANGUAGES:\nC#\n\n言語:\nSQL' })
 
-    const html = await (await get('/members/okazaki/skills')).text()
+    const html = await okText('/members/okazaki')
     // 印が無いと、日本語の音声エンジンがローマ字読みするか読み飛ばす
-    expect(html).toContain('<h2 class="side-head" lang="en">LANGUAGES</h2>')
+    expect(html).toContain('<h3 class="side-head" lang="en">LANGUAGES</h3>')
     // 打ち込んだ見出しなので、日本語のものに付けると今度はそちらが読めなくなる
-    expect(html).toContain('<h2 class="side-head">言語</h2>')
+    expect(html).toContain('<h3 class="side-head">言語</h3>')
   })
 
-  it('一覧のカードの Profile ↗ にも印を付ける', async () => {
+  it('タグは英字だけの札にだけ lang="en"。和文のタグ（生成AI）には付けない', async () => {
+    /*
+      等幅は英字の札にだけ掛ける（app.css の .tags li:lang(en)）。和文のタグに
+      印を付けると、読み上げが英語の発音で読み、字も等幅の字間で組まれる。
+      カードと作品のページは同じ Tags を使う
+    */
+    const item = await seedItem({ slug: 'dev', type: 'work' })
+    await db()
+      .insert(schema.itemTags)
+      .values([
+        { itemId: item.id, tag: 'C#', sortOrder: 0 },
+        { itemId: item.id, tag: '生成AI', sortOrder: 1 },
+      ])
+
+    for (const path of ['/projects', '/works/item/dev']) {
+      const html = mainOf(await okText(path))
+      expect(html, path).toContain('<ul class="tags"><li lang="en">C#</li><li>生成AI</li></ul>')
+    }
+  })
+
+  it('Team のカードの押す手は日本語（プロフィール →）。英語の印は要らない', async () => {
+    /*
+      操作の言葉は日本語、英語で書くのは節の名前だけ（CLAUDE.md「文言」）。
+      「Profile →」のころは lang="en" で読み上げを直していたが、同じページの
+      「一覧で見る →」「メールを送る →」と押す手の言葉だけ言語が違っていた
+    */
     await seedMember()
-    expect(await (await get('/team')).text()).toContain('<span class="member__go" lang="en">')
+    await seedMember({ slug: 'hoshino', name: '星野' })
+    const html = await okText('/team')
+    expect(html).toContain('<span class="member__go">プロフィール →</span>')
+    expect(html).not.toContain('Profile →')
   })
 })
 
 /*
   柱の GitHub は 899 以下で畳んである（横帯に入らない）。畳んだぶんが
-  どこにも無くならないよう、Contact の画面に常設する。
+  どこにも無くならないよう、Contact のページに常設する。
 */
 describe('連絡先の行き先', () => {
-  it('Contact の画面に GitHub のプロフィールがある', async () => {
+  it('Contact のページに GitHub のプロフィールがある', async () => {
     await seedMember()
 
     for (const path of ['/contact']) {
-      const main = mainOf(await (await get(path)).text())
+      const main = mainOf(await okText(path))
       expect(main, path).toContain('href="https://github.com/iam74k4"')
       // メールは大きなピルにある。同じ行き先を2つ置かない
       expect(main.match(/mailto:/g) ?? [], path).toHaveLength(1)
@@ -495,48 +815,62 @@ describe('連絡先の行き先', () => {
   it('アドレスの字は全体ページにだけ置く。紙の上ではボタンの行き先が読めない', async () => {
     await seedMember()
 
-    const screen = mainOf(await (await get('/contact')).text())
+    const screen = mainOf(await okText('/contact'))
     expect(screen).toMatch(/<a class="pill-cta" href="mailto:[^"]+">[\s\S]*?メールを送る/)
     expect(screen).not.toContain('contact__address')
 
-    const whole = await (await get('/all')).text()
+    const whole = await okText('/all')
     const contact = whole.slice(whole.indexOf('<section id="contact"'))
     expect(contact).toContain(`<p class="contact__address">${SITE.email}</p>`)
   })
 })
 
-describe('締めの画面（Contact）', () => {
+describe('締めのページ（Contact）', () => {
   it('入口と対になる月を敷き、節を月の受け皿にする', async () => {
     await seedMember()
 
-    const main = mainOf(await (await get('/contact')).text())
+    const main = mainOf(await okText('/contact'))
     expect(main).toContain('<section id="contact" class="moonlit"')
     expect(main).toContain('<div class="moon moon--closing" aria-hidden="true">')
   })
 
-  it('画面に出すのはボタン2つだけ。見出しは読み上げのためにだけ置く', async () => {
+  it('ページに出すのは誘いの1文とボタン2つ。見出しは読み上げのためにだけ置く', async () => {
     /*
-      字（見出し・リード文・アドレス）は描かない。ただし割られた画面は h1 を
-      ちょうど1つ持つ決まり（WCAG 1.3.1）なので、見出しは .sr-only で残す。
-      外すと、見出しで移動する人にはこの画面が「何も無い」画面になる
+      字を1つも置かなかったころは、ボタンが2つあるだけで、何の相談なら
+      送ってよいのかを言う言葉がページのどこにも無かった（description にしか
+      無かった）。置くのはその1文だけで、見出しとアドレスは描かない。
+      ページは h1 をちょうど1つ持つ決まり（WCAG 1.3.1）なので、
+      見出しは .sr-only で残す
     */
     await seedMember()
 
-    for (const path of ['/contact']) {
-      const main = mainOf(await (await get(path)).text())
-      const contact = main.slice(main.indexOf('<div class="contact">'))
-      expect(contact.match(/<h1[^>]*>/g), path).toEqual(['<h1 class="sr-only">'])
-      expect(contact, path).toContain('<h1 class="sr-only">Contact</h1>')
-      // 画面に出る p は1つも無い（札・リード文・アドレスを置かない）
-      expect(contact, path).not.toMatch(/<p\b/)
-      expect(main, path).toContain('aria-label="Contact"')
-    }
+    const main = mainOf(await okText('/contact'))
+    const contact = main.slice(main.indexOf('<div class="contact">'))
+    expect(contact.match(/<h1[^>]*>/g)).toEqual(['<h1 class="sr-only">'])
+    expect(contact).toContain('<h1 class="sr-only">Contact</h1>')
+    // ページに出る p はリードの1つだけ（札・アドレスは置かない）
+    expect(contact.match(/<p\b[^>]*>/g)).toEqual(['<p class="contact__lead">'])
+    // 句読点までの塊に分けてある（Phrases）。読める文字列としては site.ts の1文のまま
+    const lead = contact.match(/<p class="contact__lead">(.*?)<\/p>/)?.[1] ?? ''
+    expect(lead.replace(/<[^>]+>/g, '')).toBe(SITE.contactLead)
+    // リードはボタンの上（読んでから押す）
+    expect(contact.indexOf('contact__lead')).toBeLessThan(contact.indexOf('contact__actions'))
+    expect(main).toContain('aria-label="Contact"')
+  })
+
+  it('全体ページの Contact にも同じ誘いの1文を置く', async () => {
+    await seedMember()
+
+    const whole = await okText('/all')
+    const contact = whole.slice(whole.indexOf('<section id="contact"'))
+    const lead = contact.match(/<p class="contact__lead">(.*?)<\/p>/)?.[1] ?? ''
+    expect(lead.replace(/<[^>]+>/g, '')).toBe(SITE.contactLead)
   })
 
   it('全体ページでは、ほかの節と同じ見出しを目に見える形で置く', async () => {
     await seedMember()
 
-    const whole = await (await get('/all')).text()
+    const whole = await okText('/all')
     const contact = whole.slice(whole.indexOf('<section id="contact"'))
     expect(contact).toContain('<div class="head"><h2>Contact</h2></div>')
     expect(contact).not.toContain('sr-only')
@@ -546,7 +880,7 @@ describe('締めの画面（Contact）', () => {
     // 全体ページは印刷・Ctrl-F・翻訳の宛先。紙に淡い装飾を刷らせない
     await seedMember()
 
-    const html = await (await get('/all')).text()
+    const html = await okText('/all')
     const contact = html.slice(html.indexOf('<section id="contact"'))
     expect(contact).toContain('<section id="contact"')
     expect(contact).not.toContain('moon--closing')
@@ -555,16 +889,43 @@ describe('締めの画面（Contact）', () => {
 })
 
 /*
-  1画面に入らないぶんは次の URL へ送る。何件で割るかは src/blocks.ts の
-  perScreen（Apps / Works は2件）が正。
+  ブロック1つが1ページ。以前は1画面に入らないぶんを次の URL（/projects/2）に
+  割っていた。貼られたその URL は、同じページへ送る。
 */
-describe('画面を割る', () => {
-  it('1画面目へ寄せる 303 は、外のサイトへは飛ばさない', async () => {
+describe('ページの URL', () => {
+  it('割っていたころの続きの URL は、同じページへ寄せる 301。絞り込みは付けたまま', async () => {
+    await seedItem({ type: 'app', title: 'アプリ壱' })
+    await seedItem({ type: 'app', title: 'アプリ弐' })
+    await seedItem({ type: 'app', title: 'アプリ参' })
+
+    // 全件が1ページに出る
+    const all = await okText('/projects')
+    for (const title of ['アプリ壱', 'アプリ弐', 'アプリ参']) expect(all).toContain(title)
+
+    for (const [path, to] of [
+      ['/projects/2', '/projects'],
+      ['/projects/1', '/projects'],
+      ['/projects/9', '/projects'],
+      ['/projects/2?kind=app', '/projects?kind=app'],
+      ['/contact/2', '/contact'],
+    ] as const) {
+      const response = await get(path)
+      expect(response.status, path).toBe(301)
+      expect(response.headers.get('location'), path).toBe(to)
+    }
+
+    // 番号の形でない続き（01・0・abc）は、割っていたころにも無かった URL
+    for (const path of ['/projects/01', '/projects/0', '/projects/abc']) {
+      expect((await get(path)).status, path).toBe(404)
+    }
+  })
+
+  it('続きの URL の 301 は、外のサイトへは飛ばさない', async () => {
     /*
       Location を「パスの一部」から組み立てているので、そこに // や /\ が
       入ると、ブラウザがプロトコル相対の外部 URL として解決する。
-      実際に /%2F%2Fevil.com/1 が 303 Location: ///evil.com を返し、
-      curl が evil.com まで着弾した。無い URL なので 404 が正しい。
+      実際に /%2F%2Fevil.com/1 が Location: ///evil.com を返し、curl が
+      evil.com まで着弾した。1語目はページの名前の形だけを通すので、無い URL の 404
     */
     for (const path of [
       '/%2F%2Fevil.com/1',
@@ -581,32 +942,14 @@ describe('画面を割る', () => {
   it('改行の入った URL は 500 ではなく 404', async () => {
     // CR/LF が Location に入ると workerd の Headers.set が例外を投げ、
     // それが 500 になっていた。走査されるたびにエラーログが汚れる
-    for (const path of ['/ab%0d%0aX/1', '/ab%0aX/1', '/members/a%0d%0aX/about/1']) {
+    for (const path of [
+      '/ab%0d%0aX/1',
+      '/ab%0aX/1',
+      '/members/a%0d%0aX/about/1',
+      '/members/a/%0d%0aX',
+    ]) {
       expect((await get(path)).status, path).toBe(404)
     }
-  })
-
-  it('最後の画面の次は無い。1画面目の URL は1つに寄せる', async () => {
-    await seedItem({ type: 'app', title: 'アプリ壱' })
-    await seedItem({ type: 'app', title: 'アプリ弐' })
-    await seedItem({ type: 'app', title: 'アプリ参' })
-
-    const first = await (await get('/projects')).text()
-    expect(first).toContain('アプリ壱')
-    expect(first).not.toContain('アプリ参')
-    expect(await (await get('/projects/2')).text()).toContain('アプリ参')
-
-    // 2画面で終わり。3画面目を指す URL は無い
-    expect((await get('/projects/3')).status).toBe(404)
-
-    // /projects と /projects/1 が並ぶと、同じ画面が2つの URL で数えられる
-    const one = await get('/projects/1')
-    expect(one.status).toBe(303)
-    expect(one.headers.get('location')).toBe('/projects')
-
-    // 寄せるときに絞り込みを落とさない
-    const filtered = await get('/projects/1?kind=app')
-    expect(filtered.headers.get('location')).toBe('/projects?kind=app')
   })
 
   it('Apps と Works の一覧の URL は、同じ区分で絞った Projects へ寄せる', async () => {
@@ -628,23 +971,24 @@ describe('画面を割る', () => {
     }
   })
 
-  it('目次の印は、いま見ている画面にだけ付く', async () => {
+  it('目次の印は、いま見ているページにだけ付く', async () => {
     await seedMember()
     await seedItem({ type: 'app' })
 
-    const html = await (await get('/projects')).text()
+    const html = await okText('/projects')
     expect(html).toContain('href="/projects" aria-current="page"')
-    expect(html).toContain('href="/team"')
+    // 1人のサイトなので、Team の位置はプロフィール（目次の名前は Profile）
+    expect(tocOf(html)).toContain('<a href="/members/okazaki">Profile</a>')
     // 2つ付くと、どちらが「いま」なのか読み上げでも見た目でも決まらない
     expect(html.match(/aria-current="page"/g)).toHaveLength(1)
   })
 
-  it('入口の月は、入口の画面にだけ出る', async () => {
+  it('入口の月は、入口のページにだけ出る', async () => {
     await seedMember()
     await seedItem({ type: 'app' })
 
     // 入口。装飾なので読み上げには流さない
-    const home = await (await get('/')).text()
+    const home = await okText('/')
     expect(home).toContain('<div class="moon" aria-hidden="true">')
     /*
       絵は <img> では貼らない。CSS が --accent から色を敷いて、素材を mask として
@@ -662,48 +1006,46 @@ describe('画面を割る', () => {
       全体ページには出さない。あそこは印刷と Ctrl-F と翻訳の宛先で、
       縦に伸びる唯一の公開 URL。淡い装飾を紙に刷らせない。
     */
-    expect(await (await get('/all')).text()).not.toContain('class="moon"')
+    expect(await okText('/all')).not.toContain('class="moon"')
 
     /*
       個人ページにも出さない。Hero 部品も .hero クラスも名乗りと共有して
       いるので、月を Hero 側に埋めた瞬間にメンバー全員のページに出る。
       この検査だけがその漏れを見張っている。
     */
-    expect(await (await get('/members/okazaki')).text()).not.toContain('class="moon"')
+    expect(await okText('/members/okazaki')).not.toContain('class="moon"')
   })
 
-  it('目次の名乗りは、行き先がページ内か別画面かで変わる', async () => {
+  it('目次の名乗りは、行き先がページ内か別ページかで変わる', async () => {
     await seedMember()
     await seedItem({ type: 'app' })
 
-    // 画面ごとの URL では別ページへ移る
-    expect(await (await get('/projects')).text()).toContain('aria-label="画面の移動"')
+    // ページごとの URL では別ページへ移る
+    expect(await okText('/projects')).toContain('aria-label="ページの移動"')
     // 全体ページの目次だけが本当に #projects を指している
-    expect(await (await get('/all')).text()).toContain('aria-label="ページ内の移動"')
+    expect(await okText('/all')).toContain('aria-label="ページ内の移動"')
   })
 
-  it('Team の形は総人数で決まる。画面を割っても変わらない', async () => {
-    // 1画面6人。7人目だけが2画面目に残る
+  it('Team は全員を1ページに並べる。形は総人数で決まる', async () => {
     for (let i = 1; i <= 7; i++) await seedMember({ slug: `m${i}`, name: `メンバー${i}` })
 
-    const second = await (await get('/team/2')).text()
-    expect(second).toContain('メンバー7')
-    // この画面は1人だが、横長には化けない（めくるたびに形が変わってしまう）
-    expect(second).toContain('member--compact')
-    expect(second).not.toContain('member--wide')
+    const team = await okText('/team')
+    for (let i = 1; i <= 7; i++) expect(team).toContain(`メンバー${i}`)
+    expect(team).toContain('member--compact')
+    expect(team).not.toContain('member--wide')
   })
 })
 
 /*
-  絞り込みはサーバーが持つ。ピルは URL へのリンクで、押した先はそのブロックの
-  1画面目。公開ページに JavaScript は無いので、絞り込みは画面をまたいで効く。
+  絞り込みはサーバーが持つ。ピルは URL へのリンクで、押した先は絞り込んだ一覧の
+  ページ。公開ページに JavaScript は無いので、絞り込みは URL の query で持つ。
 */
 describe('絞り込み', () => {
   it('区分で絞ると、その区分の項目だけになる', async () => {
     await seedItem({ type: 'app', title: '個人のアプリ' })
     await seedItem({ type: 'work', title: 'ある仕事' })
 
-    const html = await (await get('/projects?kind=work')).text()
+    const html = await okText('/projects?kind=work')
     expect(html).toContain('ある仕事')
     expect(html).not.toContain('個人のアプリ')
     // 押したピルに印が付く。もう一度押すと外れるので、行き先は絞り込み無しの URL
@@ -715,7 +1057,7 @@ describe('絞り込み', () => {
     await seedItem({ type: 'app', title: '個人のアプリ' })
 
     for (const path of ['/projects?kind=work', '/projects?kind=nope']) {
-      const html = await (await get(path)).text()
+      const html = await okText(path)
       expect(html, path).toContain('個人のアプリ')
       expect(html, path).toContain('href="/projects" aria-current="true">すべて</a>')
     }
@@ -729,25 +1071,25 @@ describe('絞り込み', () => {
     await seedItem({ type: 'work', title: 'この人の仕事', memberId: member.id })
     await seedItem({ type: 'work', title: 'よその人の仕事', memberId: other.id })
 
-    const mine = await (await get(`/projects?member=${member.slug}`)).text()
+    const mine = await okText(`/projects?member=${member.slug}`)
     expect(mine).toContain('この人のアプリ')
     expect(mine).toContain('この人の仕事')
     expect(mine).not.toContain('よその人のアプリ')
     expect(mine).not.toContain('よその人の仕事')
 
     // 2つの軸は重ねて効く
-    const both = await (await get(`/projects?kind=work&member=${member.slug}`)).text()
+    const both = await okText(`/projects?kind=work&member=${member.slug}`)
     expect(both).toContain('この人の仕事')
     expect(both).not.toContain('この人のアプリ')
   })
 
   it('件数は、絞り込みの有無で取り違えない', async () => {
     /*
-      件数は2つある——絞り込みを見ない total（節を出すかどうか・入口の帯）と、
-      絞り込んだあとの matched（説明文と画面の枚数）。
+      件数は2つある——絞り込みを見ない total（節を出すかどうか・入口の帯・説明文）と、
+      絞り込んだあとの行（一覧に並ぶカード）。
 
       絞り込みが付かないときは同じ数なので、**片方をもう片方に取り違えても
-      画面は正しく見える**。取り違いが出るのは絞り込んだときだけ。
+      ページは正しく見える**。取り違いが出るのは絞り込んだときだけ。
     */
     const member = await seedMember()
     const other = await seedMember({ slug: 'hoshino', name: '星野' })
@@ -755,32 +1097,30 @@ describe('絞り込み', () => {
     await seedItem({ type: 'work', title: 'よその人の仕事', memberId: other.id })
 
     // 絞り込み無し: 2件
-    expect(await (await get('/projects')).text()).toContain('つくったもの 2 件')
+    expect(await okText('/projects')).toContain('つくったもの 2 件')
 
-    // 画面の枚数は絞り込んだあとの数で決まる。その人で絞ると1件＝1画面
-    const mine = await (await get(`/projects?member=${member.slug}`)).text()
+    // 並ぶカードは絞り込んだあとの行。その人で絞ると1件
+    const mine = await okText(`/projects?member=${member.slug}`)
     expect(mine).toContain('この人の仕事')
-    expect(mine).not.toContain('class="pager__of"')
+    expect(mainOf(mine)).not.toContain('よその人の仕事')
 
     // 入口の帯は絞り込みを見ないので、絞ったあとも 2 のまま
-    expect(await (await get(`/?member=${member.slug}`)).text()).toContain('業務 2')
+    expect(await okText(`/?member=${member.slug}`)).toContain('業務 2')
   })
 
-  it('絞り込みは、めくっても外れない。一覧の無い画面には付けて回らない', async () => {
+  it('絞り込みは、目次の行き先にも残る。一覧の無いページには付けて回らない', async () => {
     const member = await seedMember()
     // 名前のピルは2人以上いるときだけ並ぶ。1人のサイトでは ?member= を読まない
     await seedMember({ slug: 'tanaka', name: '田中 未来', sortOrder: 20 })
     await seedItem({ type: 'app', title: 'アプリ壱', memberId: member.id })
-    await seedItem({ type: 'app', title: 'アプリ弐', memberId: member.id })
-    await seedItem({ type: 'app', title: 'アプリ参', memberId: member.id })
     await seedItem({ type: 'work', title: 'ある仕事', memberId: member.id })
 
-    const html = await (await get(`/projects?kind=app&member=${member.slug}`)).text()
-    // めくる先にも同じ絞り込みが付く。付けないと、移った先で静かに外れる
-    expect(html).toContain('href="/projects/2?kind=app&amp;member=okazaki"')
-    // 一覧を持たない画面（Team）には付けない。中身が変わらないのに URL だけ増える
-    expect(html).toContain('href="/team"')
-    expect(html).not.toContain('/team?')
+    const toc = tocOf(await okText(`/projects?kind=app&member=${member.slug}`))
+    // 目次の Projects にも同じ絞り込みが付く。付けないと、押した瞬間に静かに外れる
+    expect(toc).toContain('href="/projects?kind=app&amp;member=okazaki"')
+    // 一覧を持たないページ（Team）には付けない。中身が変わらないのに URL だけ増える
+    expect(toc).toContain('href="/team"')
+    expect(toc).not.toContain('/team?')
   })
 
   it('絞り込んで0件でも、ピルを残して1行だけ出す', async () => {
@@ -789,7 +1129,7 @@ describe('絞り込み', () => {
     await seedItem({ type: 'app', title: 'この人のアプリ', memberId: member.id })
     await seedItem({ type: 'work', title: 'よその仕事' })
 
-    // この人の業務は1件も無い。ここで節ごと消すと、絞り込みを外す手が画面から消える
+    // この人の業務は1件も無い。ここで節ごと消すと、絞り込みを外す手がページから消える
     const response = await get(`/projects?kind=work&member=${member.slug}`)
     expect(response.status).toBe(200)
 
@@ -804,7 +1144,7 @@ describe('絞り込み', () => {
     await seedItem({ platformKey: 'web' })
 
     for (const path of ['/', '/projects', '/all']) {
-      const html = await (await get(path)).text()
+      const html = await okText(path)
       expect(html).not.toContain('<script src')
       expect(html).not.toContain('filter.js')
     }
@@ -814,12 +1154,10 @@ describe('絞り込み', () => {
 /*
   作品1件の恒久リンク。
 
-  一覧の URL（/apps/3）は「いまの並びの3枚目」でしかない。並べ替え・公開の
-  切り替え・追加のたびに、200 のまま別の作品を指す——404 なら気づけるが、
-  これは誰にも気づかれない。ここで押さえるのは2つ：slug で名指しした URL は
-  何を足しても外しても同じ作品を指し続けること、そしてその画面が
-  「1画面 = 1ドキュメント」の作法（h1 ちょうど1つ・弁の tabindex・自分を指す
-  canonical）に従うこと。
+  一覧の中の位置は、並べ替え・公開の切り替え・追加のたびに変わる。ここで
+  押さえるのは2つ：slug で名指しした URL は何を足しても外しても同じ作品を
+  指し続けること、そしてそのページが「1ページ = 1ドキュメント」の作法
+  （h1 ちょうど1つ・自分を指す canonical）に従うこと。
 */
 describe('作品1件の恒久リンク', () => {
   it('slug で開ける。題と og:title と canonical に作品名が入る', async () => {
@@ -842,21 +1180,24 @@ describe('作品1件の恒久リンク', () => {
     expect(mainOf(html)).toContain('AppMixer')
   })
 
-  it('並べ替えても同じ URL が同じ作品を指す（一覧の URL は指す先が変わる）', async () => {
+  it('並べ替えても同じ URL が同じ作品を指す', async () => {
     await seedItem({ title: '一番目', slug: 'ichi', sortOrder: 10 })
     await seedItem({ title: '二番目', slug: 'ni', sortOrder: 20 })
     await seedItem({ title: '三番目', slug: 'san', sortOrder: 30 })
 
-    // 1画面2件。いま3枚目の「三番目」は2画面目に居る
-    expect(mainOf(await (await get('/projects/2')).text())).toContain('三番目')
+    const at = (html: string, title: string) => mainOf(html).indexOf(title)
+    const before = await okText('/projects')
+    expect(at(before, '三番目')).toBeGreaterThan(at(before, '一番目'))
 
     // 並べ替える（管理画面の「並び順」を変えたのと同じこと）
     await db().update(schema.items).set({ sortOrder: 5 }).where(eq(schema.items.slug, 'san'))
+    await touch()
 
-    // 一覧の URL は 200 のまま、別の作品を指すようになった
-    expect(mainOf(await (await get('/projects/2')).text())).not.toContain('三番目')
+    // 一覧の中の位置は動いた
+    const after = await okText('/projects')
+    expect(at(after, '三番目')).toBeLessThan(at(after, '一番目'))
     // 恒久リンクは動かない。これがこの列の全部の理由
-    expect(mainOf(await (await get('/apps/item/san')).text())).toContain('三番目')
+    expect(mainOf(await okText('/apps/item/san'))).toContain('三番目')
   })
 
   it('一覧の節を外しても、貼られた作品のリンクは死なない', async () => {
@@ -879,51 +1220,151 @@ describe('作品1件の恒久リンク', () => {
     expect((await get('/apps/item/draft-one')).status).toBe(404)
   })
 
-  it('知らない slug は 404。1語目と種類の食い違いも 404', async () => {
+  it('知らない slug は 404。1語目と種類の食い違いは、いまの区分の URL へ 301', async () => {
     await seedItem({ type: 'app', title: 'AppMixer', slug: 'appmixer' })
     expect((await get('/apps/item/nosuch')).status).toBe(404)
-    // 同じ作品に2つの URL を作らない（どちらが正かを canonical で名指し直すことになる）
-    expect((await get('/works/item/appmixer')).status).toBe(404)
+    /*
+      区分を変えた作品の、前の区分の URL（SYS-6）。以前は 404 で、区分を直すと
+      貼られたリンクが切れた。200 で2つ目の URL を作るのではなく、いまの1つへ寄せる
+    */
+    const moved = await get('/works/item/appmixer')
+    expect(moved.status).toBe(301)
+    expect(moved.headers.get('location')).toBe('/apps/item/appmixer')
   })
 
   it('一覧のカードの題から行ける。slug の無い作品はリンクにしない', async () => {
     await seedItem({ title: 'AppMixer', slug: 'appmixer' })
     await seedItem({ title: 'まだ無いほう', sortOrder: 20 })
 
-    const html = mainOf(await (await get('/projects')).text())
-    // 一覧は1つにまとめたが、恒久リンクは区分の語（/apps/item/…）のまま。貼られた URL を変えない
-    expect(html).toContain('<h3><a href="/apps/item/appmixer">AppMixer</a></h3>')
-    // 当てにならない URL を出すくらいなら、リンクそのものを出さない
+    const html = mainOf(await okText('/projects'))
+    /*
+      一覧は1つにまとめたが、恒久リンクは区分の語（/apps/item/…）のまま。貼られた
+      URL を変えない。class はカードの面を押せるようにする覆い（app.css の
+      .card__link::after）の付け先
+    */
+    expect(html).toContain('<h3><a class="card__link" href="/apps/item/appmixer">AppMixer</a></h3>')
+    // 当てにならない URL を出すくらいなら、リンクそのものを出さない。覆いも付かない
     expect(html).toContain('<h3>まだ無いほう</h3>')
+    expect(html.match(/class="card__link"/g) ?? []).toHaveLength(1)
   })
 
-  it('1画面 = 1ドキュメントの作法に従う。連なりの外なのでページャは出ない', async () => {
-    await seedItem({ title: 'AppMixer', slug: 'appmixer' })
-    await seedItem({ title: 'AllTasks', slug: 'alltasks', sortOrder: 20 })
-    await seedItem({ title: '三番目', slug: 'san', sortOrder: 30 })
+  it('カードは面ごと押せる。リンクは題の1本のままで、入れ子にしない', async () => {
+    /*
+      カードを <a> で包むと、中の Repository と担当者名が入れ子の <a> になる
+      （HTML として壊れていて、ブラウザは外側を途中で閉じる）。押せる面は題の
+      リンクの ::after で広げ、マークアップ上のリンクは今までどおり別々に並ぶ
+    */
+    const member = await seedMember()
+    await seedMember({ slug: 'futari', name: 'もう一人', sortOrder: 20 })
+    const item = await seedItem({ title: 'AppMixer', slug: 'appmixer', memberId: member.id })
+    await db().insert(schema.itemLinks).values({
+      itemId: item.id,
+      label: 'Repository',
+      url: 'https://example.test/r',
+      sortOrder: 10,
+    })
 
-    const html = await (await get('/apps/item/appmixer')).text()
-    expect(html.match(/<h1[^>]*>/g) ?? []).toHaveLength(1)
-    // 弁（overflow: auto）を開いたときに中身へ行けること
-    expect(mainOf(html)).toContain('tabindex="0"')
-    // めくる先が無い1枚に、通し番号もページャも出さない
-    expect(html).not.toContain('class="pager"')
+    const html = mainOf(await okText('/projects'))
+    const card = html.slice(html.indexOf('<article class="card"'), html.indexOf('</article>'))
+    expect(card).not.toBe('')
+    expect(card).not.toContain('<a class="card"')
+    // 題のリンクは題だけを包む。その中にほかのリンクは入らない
+    const title = card.slice(card.indexOf('<a class="card__link"'), card.indexOf('</a>') + 4)
+    expect(title).toBe('<a class="card__link" href="/apps/item/appmixer">AppMixer</a>')
+    // ほかの行き先は、覆いの上に出る別のリンクとして残る
+    expect(card).toContain('class="card__member" href="/members/okazaki"')
+    expect(card).toContain('href="https://example.test/r"')
   })
 
-  it('目次はサイトの画面のまま。印はその作品が載っている一覧に付く', async () => {
+  it('一覧は全件を1ページに並べる。カードは id を持ち、作品のページから戻る的になる', async () => {
+    /*
+      以前は1画面2件で /projects/2 … に割っていた。いまは全件が1ページに並び、
+      作品のページの「← 一覧に戻る」はそのカード（#item-<slug>）へ戻る。
+      カードの説明は行数で切らない（軽い行 .card--lean の出し分けも外した）
+    */
+    for (const [index, title] of ['A', 'B', 'C', 'D', 'E'].entries()) {
+      await seedItem({ title, slug: title.toLowerCase(), sortOrder: (index + 1) * 10 })
+    }
+    await seedItem({ title: 'まだ無いほう', sortOrder: 90 })
+
+    const html = mainOf(await okText('/projects'))
+    for (const slug of ['a', 'b', 'c', 'd', 'e']) {
+      expect(html, slug).toContain(`<article class="card" id="item-${slug}">`)
+    }
+    // slug の無い作品は、戻ってくる作品のページが無いので id も持たない
+    expect(html).toContain('<article class="card"><div class="card__head"><h3>まだ無いほう</h3>')
+    expect(html).not.toContain('card--lean')
+  })
+
+  it('画像のある作品のカードにはサムネイル。飾りなので名前を持たず、遅延読み込み', async () => {
+    await seedItem({
+      title: 'AppMixer',
+      slug: 'appmixer',
+      imageUrl: '/images/items/appmixer-ab12.png',
+      imageAlt: '音量ミキサーの画面',
+    })
+
+    const card = mainOf(await okText('/projects'))
+    /*
+      名前は題のリンクが持つ（2つ目の名前を付けると、読み上げが作品を2度名乗る）。
+      遅延読み込みは、縦に長い一覧で画面に入るまで取りに行かせないため
+    */
+    expect(card).toContain(
+      '<span class="card__thumb" aria-hidden="true"><img src="/images/items/appmixer-ab12.png" alt="" loading="lazy" decoding="async"/></span>',
+    )
+    // 代替テキストは作品のページのもの。カードには出さない
+    expect(card).not.toContain('音量ミキサーの画面')
+  })
+
+  it('同じ行に画像の有る無しが混ざったら、無いほうにも空の枠。行に1枚も無ければ枠は無い', async () => {
+    const per = PROJECT_COLUMNS
+    // 1行目: 1枚目だけ画像あり。2行目: どれも画像なし
+    await seedItem({
+      title: '画像あり',
+      slug: 'with-shot',
+      sortOrder: 10,
+      imageUrl: '/images/items/a.png',
+      imageAlt: '画面',
+    })
+    for (let at = 1; at < per * 2; at += 1) {
+      await seedItem({ title: `画像なし${at}`, slug: `no-shot-${at}`, sortOrder: (at + 1) * 10 })
+    }
+
+    const list = mainOf(await okText('/projects'))
+    // 1行目のカードは全部が枠を持ち、画像を持つのは1枚だけ。揃える相手の居ない
+    // 2行目に空の枠を並べると、読み込みに失敗した一覧に見えるので、枠はここだけ
+    expect(list.match(/class="card__thumb"/g) ?? []).toHaveLength(per)
+    expect(list.match(/<span class="card__thumb" aria-hidden="true"><\/span>/g) ?? []).toHaveLength(
+      per - 1,
+    )
+
+    // 全体ページ（/all）も同じ grid を PROJECT_COLUMNS 件ずつの行で数える
+    const whole = mainOf(await okText('/all'))
+    expect(whole.match(/class="card__thumb"/g) ?? []).toHaveLength(per)
+  })
+
+  it('1ページ = 1ドキュメントの作法に従う。h1 は作品名の1つ', async () => {
+    await seedItem({ title: 'AppMixer', slug: 'appmixer', body: '背景です。' })
+
+    const html = await okText('/apps/item/appmixer')
+    expect(html.match(/<h1[^>]*>/g) ?? []).toEqual(['<h1>'])
+    expect(html).toContain('<h1>AppMixer</h1>')
+  })
+
+  it('目次はサイトのページのまま。印はその作品が載っている一覧に付く', async () => {
     await seedMember()
     await seedItem({ type: 'app', title: 'AppMixer', slug: 'appmixer' })
     await seedItem({ type: 'work', title: 'ある仕事', slug: 'shigoto' })
 
-    const toc = tocOf(await (await get('/apps/item/appmixer')).text())
-    // ここから戻る道は目次しか無いので、トップと同じ行き先を同じ順で出す
+    const toc = tocOf(await okText('/apps/item/appmixer'))
+    // 行き来の手は目次なので、トップと同じ行き先を同じ順で出す
     expect(toc).toContain('href="/projects" aria-current="page"')
-    expect(toc).toContain('href="/team"')
+    expect(toc).toContain('<a href="/members/okazaki">Profile</a>')
     // 業務の作品も同じ一覧（Projects）に印が付く
-    expect(tocOf(await (await get('/works/item/shigoto')).text())).toContain(
+    expect(tocOf(await okText('/works/item/shigoto'))).toContain(
       'href="/projects" aria-current="page"',
     )
-    // 自分の1枚は目次に並ばない（めくって着く先ではない）
+    // 作品のページは目次に並ばない（一覧のカードから着く先）
     expect(toc).not.toContain('/apps/item/appmixer')
   })
 
@@ -932,32 +1373,274 @@ describe('作品1件の恒久リンク', () => {
     await seedItem({ title: 'AppMixer', slug: 'appmixer', memberId: member.id })
 
     // 1人のサイトでは、どの作品も同じ人のもの。名前を添える意味が無い
-    expect(mainOf(await (await get('/apps/item/appmixer')).text())).not.toContain(
-      'href="/members/okazaki"',
-    )
+    expect(mainOf(await okText('/apps/item/appmixer'))).not.toContain('href="/members/okazaki"')
 
     await seedMember({ slug: 'futari', name: 'もう一人' })
-    const main = mainOf(await (await get('/apps/item/appmixer')).text())
+    const main = mainOf(await okText('/apps/item/appmixer'))
     expect(main).toContain('href="/members/okazaki"')
     expect(main).toContain('担当')
   })
 
-  it('説明文はカードの2行止めに掛からない形で出す', async () => {
+  it('説明文は段落（Note）で出す。カードの部品を丸ごとは使わない', async () => {
     await seedItem({ title: 'AppMixer', slug: 'appmixer', summary: '音を配る常駐アプリ。' })
 
-    // .card p は --card-lines で2行に切られる。この画面は作品1件のためにある
-    const main = mainOf(await (await get('/apps/item/appmixer')).text())
+    // カードは面ごと作品のページへのリンク。このページは作品1件のためにある
+    const main = mainOf(await okText('/apps/item/appmixer'))
     expect(main).toContain('<div class="bio">')
     expect(main).not.toContain('class="card"')
+  })
+
+  it('画像と本文があれば、画像は代替テキストつきの figure。本文は説明の下の小節「Story」', async () => {
+    await seedItem({
+      title: 'AppMixer',
+      slug: 'appmixer',
+      summary: '音を配る常駐アプリ。',
+      body: '背景の段落。\n\n結果の段落。',
+      imageUrl: '/images/items/appmixer-ab12.png',
+      imageAlt: '音量ミキサーの画面',
+    })
+
+    const html = await okText('/apps/item/appmixer')
+    const main = mainOf(html)
+    // 画像は文の列の横に並ぶ組み方（900 以上。app.css の .detail--shot）
+    expect(main).toContain('<div class="detail detail--shot">')
+    expect(main).toContain(
+      '<figure class="shot"><img src="/images/items/appmixer-ab12.png" alt="音量ミキサーの画面" decoding="async"/></figure>',
+    )
+    /*
+      説明（目録の2文）のあとに、本文の小節。以前は本文を次の画面（…/story）に分け、
+      説明の下に「くわしく読む →」を置いていた。同じページのすぐ下に続くので、
+      入口の札は外した
+    */
+    expect(main).toContain('<div class="bio"><p>音を配る常駐アプリ。</p></div>')
+    expect(main).not.toContain('class="more"')
+    expect(main).toContain(
+      '<div class="story" id="story"><div class="head head--sub"><h2>Story</h2></div><div class="bio"><p>背景の段落。</p><p>結果の段落。</p></div></div>',
+    )
+    // 本文は説明・画像・行き先（.detail）のあと
+    expect(main.indexOf('id="story"')).toBeGreaterThan(main.indexOf('class="detail'))
+    // 構造化データの画像は絶対 URL（相対のままでは、この文書の外で読む側が解決できない）
+    expect(html).toContain(`"image":"${SITE.origin}/images/items/appmixer-ab12.png"`)
+    // 説明文（<meta>）は要約のまま。本文は検索結果の1行には畳めない
+    expect(html).toContain('<meta name="description" content="音を配る常駐アプリ。"/>')
+  })
+
+  it('画像も本文も無ければ、figure も横に並べる組み方も本文の小節も出さない', async () => {
+    await seedItem({ title: 'AppMixer', slug: 'appmixer', summary: '音を配る常駐アプリ。' })
+
+    const html = await okText('/apps/item/appmixer')
+    const main = mainOf(html)
+    expect(main).toContain('<div class="detail">')
+    expect(main).not.toContain('<figure')
+    expect(main).toContain('<div class="bio"><p>音を配る常駐アプリ。</p></div>')
+    expect(main).not.toContain('id="story"')
+    expect(main).not.toContain('Story')
+    expect(html).not.toContain('"image"')
   })
 
   it('この URL が何を指しているかを構造化データにも書く', async () => {
     await seedItem({ title: 'AppMixer', slug: 'appmixer', summary: '音を配る常駐アプリ。' })
 
-    const html = await (await get('/apps/item/appmixer')).text()
+    const html = await okText('/apps/item/appmixer')
     expect(html).toContain('"@type":"CreativeWork"')
     expect(html).toContain('"name":"AppMixer"')
     expect(html).toContain(`"url":"${SITE.origin}/apps/item/appmixer"`)
+  })
+
+  it('構造化データは、どの作品のページにも載る。名乗りと違って並びの先頭だけではない', async () => {
+    /*
+      名乗り（Person / Organization）はサイトの並びの先頭にだけ載せる。その決まりを
+      作品のページにも当てると、どの作品のページも「この URL は何か」を言わなくなる
+    */
+    await seedItem({ title: 'AppMixer', slug: 'appmixer', sortOrder: 10 })
+    await seedItem({ title: 'AllTasks', slug: 'alltasks', sortOrder: 20 })
+
+    const html = await okText('/apps/item/alltasks')
+    expect(html).toContain('"@type":"CreativeWork"')
+    expect(html).toContain(`"url":"${SITE.origin}/apps/item/alltasks"`)
+  })
+})
+
+/*
+  作品1件のページの行き来。行き来の手は目次と「← 一覧に戻る」。作品同士を画面の底の
+  左右の手でめくっていたころのページャは外した（一覧は全件を1ページに並べるので、
+  隣の作品は戻った一覧のすぐ隣のカードにある）。
+*/
+describe('作品1件のページの行き来', () => {
+  // 本文の頭の「← 一覧に戻る」の行き先。無ければ null
+  const backOf = (html: string) => mainOf(html).match(/<a class="back" href="([^"]*)"/)?.[1] ?? null
+
+  it('作品同士をめくる手は置かない。目次はサイトのまま、作品のページは目次に並ばない', async () => {
+    await seedItem({ title: '一番目', slug: 'ichi', sortOrder: 10 })
+    await seedItem({ title: '二番目', slug: 'ni', sortOrder: 20 })
+
+    const html = await okText('/apps/item/ichi')
+    expect(html).not.toContain('class="pager')
+    expect(mainOf(html)).not.toContain('/apps/item/ni')
+    const toc = tocOf(html)
+    expect(toc).toContain('href="/projects" aria-current="page"')
+    expect(toc).not.toContain('/apps/item/')
+  })
+
+  it('「← 一覧に戻る」は、一覧のその作品のカードへ送る', async () => {
+    /*
+      一覧の頭へ戻すと、何件目のカードから入った人も最初から探し直すことになる。
+      カードは id="item-<slug>" を持っている（components.tsx の itemCardId）
+    */
+    for (let at = 0; at < 7; at += 1) {
+      await seedItem({ title: `作品${at}`, slug: `work-${at}`, sortOrder: (at + 1) * 10 })
+    }
+
+    expect(backOf(await okText('/apps/item/work-0'))).toBe('/projects#item-work-0')
+    expect(backOf(await okText('/apps/item/work-6'))).toBe('/projects#item-work-6')
+    // 戻った先に、その id のカードが載っている
+    expect(mainOf(await okText('/projects'))).toContain('<article class="card" id="item-work-6">')
+  })
+
+  it('一覧の節を置いていなければ、戻る道は出さない（行き先が 404 になる）', async () => {
+    await seedItem({ title: 'AppMixer', slug: 'appmixer' })
+    await db()
+      .insert(schema.blocks)
+      .values([
+        { type: 'hero' as const, published: 1, sortOrder: 10 },
+        { type: 'contact' as const, published: 1, sortOrder: 20 },
+      ])
+
+    expect(backOf(await okText('/apps/item/appmixer'))).toBeNull()
+  })
+
+  it('一覧を先頭に置いた構成では、戻り先は /（並びの先頭の URL）のカード', async () => {
+    await seedItem({ title: 'AppMixer', slug: 'appmixer' })
+    await db()
+      .insert(schema.blocks)
+      .values([
+        { type: 'projects' as const, published: 1, sortOrder: 10 },
+        { type: 'contact' as const, published: 1, sortOrder: 20 },
+      ])
+
+    expect(backOf(await okText('/apps/item/appmixer'))).toBe('/#item-appmixer')
+  })
+
+  it('サイトの中の行き先（担当）には ↗ を付けない。↗ は外へ出る・別タブの印だけ', async () => {
+    const member = await seedMember()
+    await seedMember({ slug: 'futari', name: 'もう一人', sortOrder: 20 })
+    const item = await seedItem({ title: 'AppMixer', slug: 'appmixer', memberId: member.id })
+    await db().insert(schema.itemLinks).values({
+      itemId: item.id,
+      label: 'Repository',
+      url: 'https://example.test/r',
+      sortOrder: 10,
+    })
+
+    /*
+      作品のページの行き先はカードと同じ1行（LinkRow の .links）。矢印は CSS が
+      URL の頭で決める（test/theme.test.ts の「行き先の矢印」）。ここで見るのは、
+      同じ条件で別タブかどうかも決まっていること
+    */
+    const main = mainOf(await okText('/apps/item/appmixer'))
+    // 担当は同じタブで開くサイトの中の続き。target も rel も付けない
+    expect(main).toContain('<a href="/members/okazaki">担当 岡崎 昂功</a>')
+    // 外へ出るリンクは今までどおり別タブで開く
+    expect(main).toContain(
+      '<a href="https://example.test/r" rel="noreferrer" target="_blank">Repository</a>',
+    )
+  })
+})
+
+/*
+  作品の本文（Story）。以前は1枚目の次の画面（…/story）に分けていた——1枚目に
+  置くと、説明・画像・実績値・行き先と同じ1画面に収めるために 60 字・1段落しか
+  書けなかったから。ページが縦に読めるようになったので、作品のページの説明の下の
+  小節（#story）に戻した。貼られた …/story は #story へ送る。
+*/
+describe('作品の本文（Story）', () => {
+  const STORY = '背景の段落です。\n\nやったことの段落です。\n\n結果の段落です。'
+
+  it('本文は作品のページの小節。h1 は作品名の1つで、Story は h2', async () => {
+    await seedItem({
+      title: 'AppMixer',
+      slug: 'appmixer',
+      summary: '音を配る常駐アプリ。',
+      body: STORY,
+    })
+
+    const html = await okText('/apps/item/appmixer')
+    const main = mainOf(html)
+    expect(html.match(/<h1[^>]*>/g) ?? []).toHaveLength(1)
+    expect(main).toContain('<h2>Story</h2>')
+    expect(main).toContain(
+      '<div class="bio"><p>背景の段落です。</p><p>やったことの段落です。</p><p>結果の段落です。</p></div>',
+    )
+    // 説明（目録の2文）は小節の前にある
+    expect(main.indexOf('音を配る常駐アプリ。')).toBeLessThan(main.indexOf('背景の段落です。'))
+    // 説明文（<meta>）は要約のまま。構造化データは作品の1つ
+    expect(html).toContain('<meta name="description" content="音を配る常駐アプリ。"/>')
+    expect(html.match(/"@type":"CreativeWork"/g)).toHaveLength(1)
+  })
+
+  it('空白と空行だけの本文は小節を作らない（見出しだけ残さない）', async () => {
+    await seedItem({ title: '空白だけ', slug: 'blank', body: '  \n\n \n' })
+    const main = mainOf(await okText('/apps/item/blank'))
+    expect(main).not.toContain('id="story"')
+    expect(main).not.toContain('<h2>Story</h2>')
+  })
+
+  it('前の本文の画面（…/story）は、作品のページの #story へ 301。本文が無ければページの頭へ', async () => {
+    await seedItem({ title: 'AppMixer', slug: 'appmixer', body: STORY, sortOrder: 10 })
+    await seedItem({ title: 'AllTasks', slug: 'alltasks', sortOrder: 20 })
+    await seedItem({ title: '下書き', slug: 'draft', body: STORY, published: 0, sortOrder: 30 })
+
+    const told = await get('/apps/item/appmixer/story')
+    expect(told.status).toBe(301)
+    expect(told.headers.get('location')).toBe('/apps/item/appmixer#story')
+    // 本文を消した作品の …/story を 404 にしない。貼られたリンクを殺さない
+    const plain = await get('/apps/item/alltasks/story')
+    expect(plain.status).toBe(301)
+    expect(plain.headers.get('location')).toBe('/apps/item/alltasks')
+    // 下書きの作品は、転送もしない
+    expect((await get('/apps/item/draft/story')).status).toBe(404)
+    // 行き先は本文の有無で変わるので、ブラウザには覚えさせない
+    expect(told.headers.get('cache-control')).toBe('no-cache')
+  })
+
+  it('前の slug・前の区分の本文の画面も、いまの URL の #story へ届く', async () => {
+    const item = await seedItem({ type: 'app', title: 'AppMixer', slug: 'appmixer', body: STORY })
+    await db().insert(schema.itemSlugRedirects).values({ oldSlug: 'old-mixer', itemId: item.id })
+
+    // 前の slug はいまの URL の …/story へ（そこで #story へ）
+    const moved = await get('/apps/item/old-mixer/story')
+    expect(moved.status).toBe(301)
+    expect(moved.headers.get('location')).toBe('/apps/item/appmixer/story')
+    // 前の区分の URL は1回で #story へ
+    const kind = await get('/works/item/appmixer/story')
+    expect(kind.status).toBe(301)
+    expect(kind.headers.get('location')).toBe('/apps/item/appmixer#story')
+  })
+
+  it('sitemap には作品のページだけを載せる。転送するだけの …/story は載せない', async () => {
+    await seedItem({ title: 'AppMixer', slug: 'appmixer', body: STORY, sortOrder: 10 })
+    await seedItem({ title: 'AllTasks', slug: 'alltasks', sortOrder: 20 })
+
+    const xml = await okText('/sitemap.xml')
+    expect(xml).toContain(`<loc>${SITE.origin}/apps/item/appmixer</loc>`)
+    expect(xml).toContain(`<loc>${SITE.origin}/apps/item/alltasks</loc>`)
+    expect(xml).not.toContain('/story')
+  })
+
+  it('全体ページは本文も載せる。カードの下に、作品名と Story の添えの小節で', async () => {
+    await seedItem({ title: 'AppMixer', slug: 'appmixer', body: STORY, sortOrder: 10 })
+    await seedItem({ title: 'AllTasks', slug: 'alltasks', sortOrder: 20 })
+
+    const whole = mainOf(await okText('/all'))
+    expect(whole).toContain(
+      '<div class="stories"><div><div class="head head--sub"><h3>AppMixer</h3><span class="note">Story</span></div><div class="bio"><p>背景の段落です。</p>',
+    )
+    // カードの grid のあと（本文は grid の2列の片方だけを伸ばさない）
+    expect(whole.indexOf('class="grid"')).toBeLessThan(whole.indexOf('class="stories"'))
+    // 本文の無い作品は並べない（見出しだけ残さない）
+    expect(whole).not.toContain('<h3>AllTasks</h3>')
+    // ページごとの一覧には出さない（本文は作品のページの小節）
+    expect(mainOf(await okText('/projects'))).not.toContain('class="stories"')
   })
 })
 
@@ -979,9 +1662,9 @@ describe('メンバーページ', () => {
     await seedMember({ slug: 'tanaka', name: '田中 未来', sortOrder: 20 })
     await seedItem({ memberId: member.id })
 
-    const html = await (await get('/members/okazaki')).text()
+    const html = await okText('/members/okazaki')
     expect(html).toContain('class="band" href="/projects?member=okazaki"')
-    // トップへ送っても、そこに一覧は無い（画面ごとの URL に分かれたため）
+    // トップへ送っても、そこに一覧は無い（節ごとのページに分かれたため）
     expect(html).not.toContain('/?member=')
 
     /*
@@ -998,100 +1681,91 @@ describe('メンバーページ', () => {
     await seedMember({ slug: 'tanaka', name: '田中 未来', sortOrder: 20 })
     await seedItem({ type: 'work', memberId: member.id })
 
-    const html = await (await get('/members/okazaki')).text()
+    const html = await okText('/members/okazaki')
     expect(html).toContain('class="band" href="/projects?member=okazaki"')
     expect(html).toContain('<span class="band__meta">業務 1</span>')
   })
 })
 
 /*
-  個人ページもトップと同じ規則の連なり。1画面 = 1ドキュメントで、
-  /members/<slug>（名乗りと帯）→ /about → /skills → /career → /contact。
-  中身の無い画面は作らない——「中身が無ければ節ごと出さない」がそのまま伸びた形。
+  個人ページは1ページ。/members/<slug> に 名札 → 大見出し → About → Skills → Career を
+  縦に並べる。以前は4つの URL（/about・/skills・/career）に割り、画面の底の左右の手で
+  めくっていた（持ち主が「面倒すぎる」と判断してまとめた）。中身の無い小節は作らない
+  ——「中身が無ければ節ごと出さない」がそのまま伸びた形。
 */
-describe('個人ページを画面に分ける', () => {
+describe('個人ページは1ページ', () => {
   const FULL = { skillsText: 'C# | 3年以上', careerText: '2024.03 | 入社 | ある会社' }
 
-  it('技術と経歴は別の画面になる', async () => {
-    await seedMember(FULL)
+  it('名札・About・Skills・Career を1ページに、その順で並べる。小節は id で指せる', async () => {
+    await seedMember({ ...FULL, bio: '紹介の段落。' })
 
-    const skills = await get('/members/okazaki/skills')
-    expect(skills.status).toBe(200)
-    expect(await skills.text()).toContain('C#')
-
-    const career = await get('/members/okazaki/career')
-    expect(career.status).toBe(200)
-    expect(await career.text()).toContain('入社')
+    const main = mainOf(await okText('/members/okazaki'))
+    const at = (text: string) => main.indexOf(text)
+    for (const text of [
+      '<div class="nameplate">',
+      '<section id="about" role="region" aria-label="About">',
+      '<section id="skills" role="region" aria-label="Skills">',
+      '<section id="career" role="region" aria-label="Career">',
+    ]) {
+      expect(at(text), text).toBeGreaterThan(-1)
+    }
+    expect(at('id="about"')).toBeGreaterThan(at('class="nameplate"'))
+    expect(at('id="skills"')).toBeGreaterThan(at('id="about"'))
+    expect(at('id="career"')).toBeGreaterThan(at('id="skills"'))
+    expect(main).toContain('紹介の段落。')
+    expect(main).toContain('C#')
+    expect(main).toContain('入社')
+    // 見出しの段: ページの h1（名札の名前）→ 小節の h2 → 技術の小見出しは無し（塊に見出しが無い）
+    expect(main.match(/<h[1-6][^>]*>[^<]*/g)).toEqual([
+      '<h1 class="nameplate__name">岡崎 昂功',
+      '<h2>About',
+      '<h2>Skills',
+      '<h2>Career',
+    ])
+    // めくる手は置かない
+    expect(main).not.toContain('class="pager')
   })
 
-  it('下書きのメンバーは、どの画面も 404', async () => {
+  it('書いていない小節は作らない。About だけは空でも「準備中です」で置く', async () => {
+    await seedMember()
+
+    const main = mainOf(await okText('/members/okazaki'))
+    expect(main).toContain('id="about"')
+    expect(main).toContain('準備中です')
+    // 見出しだけの空の小節を置くと、読みに来た先で行き止まりになる
+    expect(main).not.toContain('id="skills"')
+    expect(main).not.toContain('id="career"')
+  })
+
+  it('下書きのメンバーは、ページも前の続きの URL も 404', async () => {
     await seedMember({ slug: 'hidden', published: 0, ...FULL })
 
-    for (const path of ['/members/hidden', '/members/hidden/skills', '/members/hidden/career']) {
-      expect((await get(path)).status).toBe(404)
+    for (const path of ['/members/hidden', '/members/hidden/skills', '/members/hidden/career/2']) {
+      expect((await get(path)).status, path).toBe(404)
     }
   })
 
-  it('書いていない画面は作らない。目次にも出さない', async () => {
-    await seedMember()
-
-    // 見出しだけの空の画面に URL を与えると、めくった先で行き止まりになる
-    expect((await get('/members/okazaki/skills')).status).toBe(404)
-    expect((await get('/members/okazaki/career')).status).toBe(404)
-
-    const html = await (await get('/members/okazaki')).text()
-    expect(html).not.toContain('/members/okazaki/skills')
-    expect(html).toContain('href="/members/okazaki/about"')
-  })
-
-  it('知らない画面の名前は 404。1枚目の入口は1つだけ', async () => {
+  it('知らない続きの名前は 404。/hero のような2つ目の入口も作らない', async () => {
     await seedMember(FULL)
 
     expect((await get('/members/okazaki/nope')).status).toBe(404)
-    // 1枚目は /members/okazaki ひとつ。同じ画面が2つの URL で数えられないように
     expect((await get('/members/okazaki/hero')).status).toBe(404)
+    expect((await get('/members/okazaki/career/01')).status).toBe(404)
   })
 
-  it('個人ページは Team の続き。← Team から入り、Contact → へ抜ける', async () => {
-    /*
-      以前は個人ページの中で閉じた連なりで、1枚目には「←」が無く（Team へ
-      戻れない）、最後はその人だけの Contact だった。いまはサイトの列の Team の
-      直後に差し込んだ列でめくる
-    */
-    await seedMember(FULL)
-
-    const first = await (await get('/members/okazaki')).text()
-    expect(first).toContain('<a class="pager__go" href="/team" rel="prev">← Team</a>')
-    expect(first).toContain('href="/members/okazaki/about" rel="next">About →')
-
-    // 1枚目へ戻る手は「← 前」ではなく名前を名乗る（別の節へ出るので）
-    const about = await (await get('/members/okazaki/about')).text()
-    expect(about).toContain('rel="prev">← 岡崎 昂功</a>')
-
-    const career = await (await get('/members/okazaki/career')).text()
-    expect(career).toContain(
-      '<a class="pager__go pager__go--next" href="/contact" rel="next">Contact →</a>',
-    )
-
-    // Team の画面自身の「次」は変えない。個人ページはカードから入る脇の道
-    const team = await (await get('/team')).text()
-    expect(team).toContain('href="/contact" rel="next"')
-  })
-
-  it('柱と目次はサイトのまま。目次は Team に印を付ける', async () => {
+  it('2人以上なら、柱と目次はサイトのまま。目次は Team に印を付ける', async () => {
     // 個人ページ専用の柱と目次に丸ごと入れ替わると、別のサイトへ飛んだように見える
     await seedMember(FULL)
+    await seedMember({ slug: 'hoshino', name: '星野', sortOrder: 20 })
 
-    for (const path of ['/members/okazaki', '/members/okazaki/about', '/members/okazaki/career']) {
-      const html = await (await get(path)).text()
-      const toc = tocOf(html)
-      expect(toc, path).toContain('<a href="/team" aria-current="page">Team</a>')
-      expect(toc, path).not.toContain('/members/okazaki')
-      expect(html.match(/aria-current="page"/g), path).toHaveLength(1)
-      const rail = html.slice(html.indexOf('<aside class="rail"'), html.indexOf('</aside>'))
-      expect(rail, path).toContain('<a class="brand" href="/">')
-      expect(rail, path).not.toContain('avatar')
-    }
+    const html = await okText('/members/okazaki')
+    const toc = tocOf(html)
+    expect(toc).toContain('<a href="/team" aria-current="page">Team</a>')
+    expect(toc).not.toContain('/members/okazaki')
+    expect(html.match(/aria-current="page"/g)).toHaveLength(1)
+    const rail = railOf(html)
+    expect(rail).toContain('<a class="brand" href="/">')
+    expect(rail).not.toContain('avatar')
   })
 
   it('個人ページの Contact は外した。貼られた URL はサイトの Contact へ寄せる', async () => {
@@ -1102,16 +1776,16 @@ describe('個人ページを画面に分ける', () => {
     expect(moved.headers.get('location')).toBe('/contact')
   })
 
-  it('1枚目の名札は Team のカードと同じ顔と名前。大見出しが無ければ名前が h1', async () => {
+  it('名札は Team のカードと同じ顔と名前。大見出しが無ければ名前が h1', async () => {
     await seedMember({ headline: '' })
 
-    const main = mainOf(await (await get('/members/okazaki')).text())
+    const main = mainOf(await okText('/members/okazaki'))
     expect(main).toContain('<div class="nameplate">')
     expect(main).toContain('<h1 class="nameplate__name">岡崎 昂功</h1>')
     expect(main.match(/<h1[^>]*>/g)).toHaveLength(1)
   })
 
-  it('サイトと違う連絡先を持つ人だけ、1枚目にその行き先を置く', async () => {
+  it('サイトと違う連絡先を持つ人だけ、名札の下にその行き先を置く', async () => {
     await seedMember({ github: SITE.github, email: SITE.email })
     await seedMember({
       slug: 'tanaka',
@@ -1122,171 +1796,297 @@ describe('個人ページを画面に分ける', () => {
     })
 
     // サイトと同じ行き先は2つ置かない
-    expect(mainOf(await (await get('/members/okazaki')).text())).not.toContain('class="socials"')
+    expect(mainOf(await okText('/members/okazaki'))).not.toContain('class="socials"')
 
-    const other = mainOf(await (await get('/members/tanaka')).text())
+    const other = mainOf(await okText('/members/tanaka'))
     expect(other).toContain('href="https://github.com/tanaka-example"')
     expect(other).toContain('href="mailto:tanaka@example.test"')
   })
 
-  it('画面ごとに canonical と題が変わる', async () => {
+  it('その人の GitHub / メールは、読み上げの名前でその人のものだと名乗る', async () => {
+    /*
+      2人以上のサイトの個人ページには、柱にサイトの GitHub / メール、Hero に
+      その人の GitHub / メールが並ぶ。同じ「GitHub」の名前が別の行き先を指すと、
+      読み上げのリンクの一覧ではどちらがこの人のものか分からない。見た目の札の
+      字（GitHub / メール）は名前に含める（WCAG 2.5.3）
+    */
+    await seedMember()
+    await seedMember({
+      slug: 'tanaka',
+      name: '田中 未来',
+      sortOrder: 20,
+      github: 'https://github.com/tanaka-example',
+      email: 'tanaka@example.test',
+    })
+
+    const html = await okText('/members/tanaka')
+    const own = mainOf(html)
+    expect(own).toMatch(
+      /<a href="https:\/\/github.com\/tanaka-example"[^>]* aria-label="田中 未来の GitHub">/,
+    )
+    expect(own).toContain('<a href="mailto:tanaka@example.test" aria-label="田中 未来のメール">')
+    // 柱のサイトの行き先は名乗らない（サイトの行き先で、誰か1人のものではない）
+    const rail = html.slice(html.indexOf('<aside'), html.indexOf('<main'))
+    const siteSocials = rail.slice(rail.indexOf('<div class="socials">'))
+    expect(siteSocials.slice(0, siteSocials.indexOf('</div>'))).toContain(`href="${SITE.github}"`)
+    expect(siteSocials.slice(0, siteSocials.indexOf('</div>'))).not.toContain('aria-label="')
+  })
+
+  it('canonical はそのページ自身。題は人の名前', async () => {
     const member = await seedMember()
 
-    const first = await (await get('/members/okazaki')).text()
-    expect(first).toContain(`<link rel="canonical" href="${SITE.origin}/members/okazaki"/>`)
-
-    // 同じ題の URL が並ぶと、履歴から選び直せない
-    const about = await (await get('/members/okazaki/about')).text()
-    expect(about).toContain(`<link rel="canonical" href="${SITE.origin}/members/okazaki/about"/>`)
-    expect(about).toContain(`<title>${member.name} · About — ${SITE.name}</title>`)
+    const html = await okText('/members/okazaki')
+    expect(html).toContain(`<link rel="canonical" href="${SITE.origin}/members/okazaki"/>`)
+    expect(html).toContain(`<title>${member.name} — ${SITE.name}</title>`)
   })
 })
 
 /*
-  個人ページも「1画面に何件」の軸を持つ。
-
-  件数は src/blocks.ts の MEMBER_PER_SCREEN が正で、割るのはトップと同じ
-  src/lib/paginate.ts。ここに軸が無かったころ、書き足した人に残っていた道は
-  「入らなくなったら CSS を縮める」だけだった。
+  前の個人ページの続きの URL（/members/<slug>/about・/skills・/career と、割って
+  いたころの /career/2）。貼られたリンクを殺さず、同じページの中の小節へ送る。
 */
-describe('個人ページを件数で割る', () => {
-  // 数はテストに書き写さない。上限を変えたら、この列が一緒に伸びる
-  const rows = (n: number, make: (i: number) => string) =>
-    Array.from({ length: n }, (_, i) => make(i + 1)).join('\n')
+describe('前の個人ページの URL', () => {
+  const FULL = { skillsText: 'C# | 3年以上', careerText: '2024.03 | 入社 | ある会社' }
 
-  it('経歴は1画面 N 件。入りきらないぶんは次の URL へ', async () => {
-    const per = MEMBER_PER_SCREEN.career
-    await seedMember({
-      careerText: rows(per + 1, (i) => `2024.0${i} | できごと${i} | ある会社`),
-    })
+  it('/about・/skills・/career（とその続き）は、ページの中の小節へ 301', async () => {
+    await seedMember(FULL)
 
-    const first = await (await get('/members/okazaki/career')).text()
-    expect(first).toContain('できごと1')
-    expect(first).not.toContain(`できごと${per + 1}`)
-
-    const second = await get('/members/okazaki/career/2')
-    expect(second.status).toBe(200)
-    expect(await second.text()).toContain(`できごと${per + 1}`)
-
-    /*
-      経歴が2画面に割れる。数えるのは**節の中**なので、Career の 1 / 2。
-      連なり全体では3枚目だが、そこは数えない——絞り込みで動く数を
-      画面に出さないため（src/lib/sequence.ts）。
-    */
-    expect(first).toContain('Career の 2 画面のうち 1 画面目')
-    // 同じ節の中の移動なので、次は行き先を名乗らない
-    expect(first).toContain('次 →')
-    // 3画面目は無い
-    expect((await get('/members/okazaki/career/3')).status).toBe(404)
-  })
-
-  it('1画面目の URL は1つに寄せる。トップと同じ文法', async () => {
-    await seedMember({ careerText: '2024.03 | 入社 | ある会社' })
-
-    const one = await get('/members/okazaki/career/1')
-    expect(one.status).toBe(303)
-    expect(one.headers.get('location')).toBe('/members/okazaki/career')
-
-    // /career/01 のような別の書き方を通すと、同じ画面の URL がまた増える
-    expect((await get('/members/okazaki/career/01')).status).toBe(404)
-    expect((await get('/members/okazaki/career/abc')).status).toBe(404)
-  })
-
-  it('割られた画面でも、節の中で数える。目次の印は Team に1つだけ', async () => {
-    const per = MEMBER_PER_SCREEN.career
-    await seedMember({ careerText: rows(per + 1, (i) => `2024.0${i} | できごと${i}`) })
-
-    const html = await (await get('/members/okazaki/career/2')).text()
-    expect(html).toContain('<span class="pager__section">Career</span>')
-    expect(html).toContain('<span class="pager__of">2 / 2</span>')
-    // 目次はサイトのもの。Career の行は無く、印は Team に1つ
-    expect(tocOf(html)).not.toContain('Career')
-    expect(html).toContain('<a href="/team" aria-current="page">Team</a>')
-    expect(html.match(/aria-current="page"/g)).toHaveLength(1)
-  })
-
-  it('技術は塊ごとに割る。小見出しの途中では割らない', async () => {
-    const per = MEMBER_PER_SCREEN.skills
-    await seedMember({
-      skillsText: rows(per + 1, (i) => `塊${i}:\n項目${i}`).replaceAll('\n塊', '\n\n塊'),
-    })
-
-    const first = await (await get('/members/okazaki/skills')).text()
-    expect(first).toContain('項目1')
-    expect(first).not.toContain(`項目${per + 1}`)
-    expect(await (await get('/members/okazaki/skills/2')).text()).toContain(`項目${per + 1}`)
-  })
-
-  it('紹介文は段落で割る。書く側の上限と同じ数', async () => {
-    const per = MEMBER_PER_SCREEN.about
-    await seedMember({ bio: rows(per + 1, (i) => `紹介の段落${i}`).replaceAll('\n', '\n\n') })
-
-    const first = await (await get('/members/okazaki/about')).text()
-    expect(first).toContain('紹介の段落1')
-    expect(first).not.toContain(`紹介の段落${per + 1}`)
-    expect(await (await get('/members/okazaki/about/2')).text()).toContain(`紹介の段落${per + 1}`)
-  })
-
-  it('中身が1画面に収まるうちは、2つ目の URL を作らない', async () => {
-    await seedMember({ skillsText: 'C# | 3年以上', careerText: '2024.03 | 入社 | ある会社' })
-
-    for (const path of ['/members/okazaki/about', '/skills', '/career'].map((part) =>
-      part.startsWith('/members') ? part : `/members/okazaki${part}`,
-    )) {
-      expect((await get(`${path}/2`)).status, path).toBe(404)
+    for (const [path, to] of [
+      ['/members/okazaki/about', '/members/okazaki#about'],
+      ['/members/okazaki/skills', '/members/okazaki#skills'],
+      ['/members/okazaki/career', '/members/okazaki#career'],
+      ['/members/okazaki/career/2', '/members/okazaki#career'],
+      ['/members/okazaki/about/1', '/members/okazaki#about'],
+    ] as const) {
+      const response = await get(path)
+      expect(response.status, path).toBe(301)
+      expect(response.headers.get('location'), path).toBe(to)
+      // 行き先は中身しだい（小節を消すと頭へ）なので、ブラウザに覚えさせない
+      expect(response.headers.get('cache-control'), path).toBe('no-cache')
     }
   })
+
+  it('書いていない小節の URL は、ページの頭へ（404 にしない）', async () => {
+    await seedMember()
+
+    for (const path of ['/members/okazaki/skills', '/members/okazaki/career/2']) {
+      const response = await get(path)
+      expect(response.status, path).toBe(301)
+      expect(response.headers.get('location'), path).toBe('/members/okazaki')
+    }
+  })
+
+  it('slug を変えたメンバーの前の続きは、いまの slug の続きを経て小節へ届く', async () => {
+    const member = await seedMember(FULL)
+    await db().insert(schema.memberSlugRedirects).values({ oldSlug: 'old', memberId: member.id })
+
+    const first = await get('/members/old/career/2?x=1')
+    expect(first.status).toBe(301)
+    expect(first.headers.get('location')).toBe('/members/okazaki/career?x=1')
+    const second = await get('/members/okazaki/career?x=1')
+    expect(second.headers.get('location')).toBe('/members/okazaki#career')
+  })
 })
 
 /*
-  節そのものが弁（app.css の `main > :is(.hero, section)` の overflow: auto）。
-  WebKit ではスクロール箱にキーボードでフォーカスできないので、tabindex が
-  無いと、弁が開いた画面の中身に読み手がたどり着けない（WCAG 2.1.1）。
+  1人のサイトのプロフィール。
+
+  公開中のメンバーが1人で Team を置いているとき、Team のページは作らない。
+  その位置にその人のページが入り、目次には「Profile」の1行で並ぶ。1枚の細い
+  カードだけの Team のページは、「複数いる前提の器に1人しか入っていない」ことを
+  ページ1枚ぶん使って告知していた。
 */
-describe('弁をキーボードで操作できる', () => {
+describe('1人のサイトのプロフィール', () => {
+  const FULL = { skillsText: 'C# | 3年以上', careerText: '2024.03 | 入社 | ある会社' }
+
+  it('目次は「Profile」の1行。行き先はプロフィールのページで、そのページでその行に印', async () => {
+    await seedMember(FULL)
+    await seedItem({ type: 'app' })
+
+    const labels = (html: string) =>
+      [...tocOf(html).matchAll(/<a [^>]*>([^<]+)<\/a>/g)].map((match) => match[1])
+    expect(labels(await okText('/'))).toEqual(['Projects', 'Profile', 'Contact'])
+
+    const html = await okText('/members/okazaki')
+    expect(tocOf(html)).toContain('<a href="/members/okazaki" aria-current="page">Profile</a>')
+    expect(html.match(/aria-current="page"/g)).toHaveLength(1)
+    // Team の行は無い（ページが無いので、指す先も無い）。About などの小節も目次には並ばない
+    for (const name of ['Team', 'About', 'Skills', 'Career']) {
+      expect(tocOf(html), name).not.toContain(name)
+    }
+  })
+
+  it('/team はプロフィールへ 301。2人目を公開すると Team のページに戻る', async () => {
+    await seedMember()
+
+    for (const path of ['/team', '/team?kind=app']) {
+      const response = await get(path)
+      expect(response.status, path).toBe(301)
+      expect(response.headers.get('location'), path).toBe('/members/okazaki')
+    }
+    // 割っていたころの /team/2 は、まず /team へ（そこからプロフィールへ）
+    const second = await get('/team/2')
+    expect(second.status).toBe(301)
+    expect(second.headers.get('location')).toBe('/team')
+
+    await seedMember({ slug: 'hoshino', name: '星野' })
+    expect((await get('/team')).status).toBe(200)
+  })
+
+  it('プロフィールに帯は出さない。入口の帯と同じ行き先・同じ件数になる', async () => {
+    const member = await seedMember()
+    await seedItem({ type: 'app', memberId: member.id })
+
+    expect(await okText('/')).toContain('class="band"')
+    expect(mainOf(await okText('/members/okazaki'))).not.toContain('class="band"')
+  })
+
+  it('全体ページでは、Team のカードの代わりにプロフィールを1つの節として置く', async () => {
+    await seedMember({
+      headline: 'つくる工程そのものを、速くする。',
+      bio: '紹介の段落。',
+      skillsText: 'LANGUAGES:\nC# | 3年以上',
+      careerText: '2024.03 | 入社 | ある会社',
+    })
+
+    const html = await okText('/all')
+    const profile = html.slice(
+      html.indexOf('<section id="profile"'),
+      html.indexOf('<section id="contact"'),
+    )
+    expect(profile).toContain('role="region" aria-label="Profile"')
+    expect(html).toContain('<a href="#profile">Profile</a>')
+    // カード1枚の Team は置かない
+    expect(html).not.toContain('member--wide')
+    expect(html).not.toContain('<section id="team"')
+
+    /*
+      見出しの段: Hero の h1 → Profile の h2 → About / Skills / Career の h3 →
+      技術の小見出しの h4。段を飛ばすと、見出しで移動する人が骨格を掴めない
+    */
+    expect(profile.match(/<h[1-6][^>]*>[^<]*/g)).toEqual([
+      '<h2>Profile',
+      '<h3>About',
+      '<h3>Skills',
+      '<h4 class="side-head" lang="en">LANGUAGES',
+      '<h3>Career',
+    ])
+    expect(html.match(/<h1[^>]*>/g) ?? []).toHaveLength(1)
+    // 名札の名前は添え（見出しは節の h2）。大見出しは大きな一文として出る
+    expect(profile).toContain('<strong class="nameplate__name">岡崎 昂功</strong>')
+    expect(profile).toContain('<p class="statement__text">つくる工程そのものを、速くする。</p>')
+    expect(profile).toContain('紹介の段落。')
+    expect(profile).toContain('入社')
+
+    // 2人目を公開すると Team のカードの節に戻る。見出しは h2 のまま、h1 は Hero の1つ
+    await seedMember({ slug: 'hoshino', name: '星野' })
+    const two = await okText('/all')
+    expect(two).toContain('<div class="head"><h2>Team</h2>')
+    expect(two).not.toContain('<section id="profile"')
+    expect(two.match(/<h1[^>]*>/g) ?? []).toHaveLength(1)
+  })
+
+  it('sitemap にはプロフィールを1度だけ載せ、/team と前の続きの URL は載せない', async () => {
+    await seedMember(FULL)
+
+    const locsOf = async () =>
+      [...(await okText('/sitemap.xml')).matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1])
+    const locs = await locsOf()
+    expect(new Set(locs).size).toBe(locs.length)
+    expect(locs).toContain(`${SITE.origin}/members/okazaki`)
+    expect(locs).not.toContain(`${SITE.origin}/team`)
+    for (const path of ['/about', '/skills', '/career']) {
+      expect(locs).not.toContain(`${SITE.origin}/members/okazaki${path}`)
+    }
+
+    // 2人以上なら Team のページが戻り、個人ページも載ったまま（同じ URL は1度ずつ）
+    await seedMember({ slug: 'hoshino', name: '星野' })
+    const two = await locsOf()
+    expect(new Set(two).size).toBe(two.length)
+    expect(two).toContain(`${SITE.origin}/team`)
+    expect(two).toContain(`${SITE.origin}/members/okazaki`)
+    expect(two).toContain(`${SITE.origin}/members/hoshino`)
+  })
+
+  it('Team を置かない1人のサイトでは、個人ページは並びの外。目次に印は付かない', async () => {
+    const member = await seedMember(FULL)
+    await seedItem({ memberId: member.id })
+    await db()
+      .insert(schema.blocks)
+      .values([
+        { type: 'hero' as const, published: 1, sortOrder: 10 },
+        { type: 'projects' as const, published: 1, sortOrder: 20 },
+        { type: 'contact' as const, published: 1, sortOrder: 30 },
+      ])
+
+    const html = await okText('/members/okazaki')
+    // 目次はサイトのもの。Profile の行も印も無い
+    expect(tocOf(html)).not.toContain('Profile')
+    expect(html).not.toContain('aria-current="page"')
+    // 帯はこちらでは出る（入口の帯と行き先が同じでも、このページはサイトの並びの外）
+    expect(mainOf(html)).toContain('class="band"')
+    // カードの担当者名から入る（Team が無いので、個人ページへの道はそこだけ）
+    expect(mainOf(await okText('/projects'))).toContain('href="/members/okazaki"')
+  })
+
+  it('Hero を外して Team を先頭に置いたら、/ はプロフィールへ送る', async () => {
+    await seedMember()
+    await db()
+      .insert(schema.blocks)
+      .values([
+        { type: 'team' as const, published: 1, sortOrder: 10 },
+        { type: 'contact' as const, published: 1, sortOrder: 20 },
+      ])
+
+    // そのページは /members/<slug> にある。構成しだいで変わる行き先なので 302
+    const top = await get('/')
+    expect(top.status).toBe(302)
+    expect(top.headers.get('location')).toBe('/members/okazaki')
+
+    // 並びの先頭なので、ここで名乗る
+    expect(await okText('/members/okazaki')).toContain('application/ld+json')
+    // 送る元の / は sitemap に載せない
+    expect(await okText('/sitemap.xml')).not.toContain(`<loc>${SITE.origin}/</loc>`)
+  })
+})
+
+/*
+  ページそのものが縦にスクロールする（CLAUDE.md の「公開ページは縦に読む」）ので、
+  main の中の箱はスクロール箱ではなく、Tab で止まる先でもない。以前は節が溢れの弁
+  （overflow: auto）で、WebKit では弁にフォーカスできないために tabindex="0" を
+  付けていた。弁を外したあとに残すと、止まっても何も起きないタブ停止が節ごとに
+  1つずつ増える。
+*/
+describe('キーボードで読む', () => {
   const boxes = (html: string) => mainOf(html).match(/<(?:section|header)[^>]*>/g) ?? []
 
-  it('main の中の箱は、どれも tabindex を持つ', async () => {
+  it('main の中の箱は tabindex を持たない', async () => {
     await seedMember({ skillsText: 'C# | 3年以上', careerText: '2024.03 | 入社 | ある会社' })
-    await seedItem({ type: 'app' })
+    await seedItem({ type: 'app', slug: 'appmixer', body: '背景です。' })
     await seedItem({ type: 'work' })
 
     for (const path of [
       '/',
       '/projects',
-      '/team',
       '/contact',
+      '/all',
       '/members/okazaki',
-      '/members/okazaki/about',
-      '/members/okazaki/skills',
-      '/members/okazaki/career',
+      '/apps/item/appmixer',
     ]) {
-      const found = boxes(await (await get(path)).text())
+      const found = boxes(await okText(path))
       expect(found.length, path).toBeGreaterThan(0)
-      // 1つでも漏れると、その画面だけキーボードで読めない箱になる
-      for (const box of found) expect(box, path).toContain('tabindex="0"')
+      for (const box of found) expect(box, path).not.toContain('tabindex')
     }
   })
 
-  it('全体ページには付けない。あちらは弁が無く、ページ自身が動く', async () => {
-    await seedMember()
+  it('見出しのあるページは、その名前の region として出る', async () => {
     await seedItem({ type: 'app' })
-    await seedItem({ type: 'work' })
-
-    // 止まる理由の無い箱にタブ停止を置くと、いちばん長いページで数だけ増える
-    const found = boxes(await (await get('/all')).text())
-    expect(found.length).toBeGreaterThan(1)
-    for (const box of found) expect(box).not.toContain('tabindex')
-  })
-
-  it('見出しのある画面は、その名前の region として出る', async () => {
-    await seedItem({ type: 'app' })
-    expect(await (await get('/projects')).text()).toContain('role="region" aria-label="Projects"')
+    expect(await okText('/projects')).toContain('role="region" aria-label="Projects"')
   })
 
   it('main は tabindex="-1"。「本文へスキップ」の行き先', async () => {
     await seedItem()
-    const html = await (await get('/')).text()
+    const html = await okText('/')
     expect(html).toContain('<main id="main" tabindex="-1">')
     // 迂回路はこの1本しか無い
     expect(html).toContain('<a class="skip" href="#main">')
@@ -1301,10 +2101,185 @@ describe('/images', () => {
     expect((await get('/images/avatars/ok.png')).status).toBe(200)
   })
 
-  it('ログイン試行の記録は読ませない', async () => {
-    // 同じ KV に置いているので、キーの形を縛らないと漏れる
+  it('置き場の外のキーは読ませない', async () => {
+    /*
+      いまの KV には画像しか無いが、この URL は KV のキーを外に開く口。
+      あとから同じ KV に置いたもの（以前はログイン試行の記録 login:<メール> が
+      同居していた）が黙って読み出せないよう、キーの形で縛る
+    */
     await env.MEDIA.put('login:someone@example.com', '3')
     expect((await get('/images/login:someone@example.com')).status).toBe(404)
+  })
+
+  it('items 配下（作品の画像）も返す。置き場の外を指す形は、どの書き方でも 404', async () => {
+    await env.MEDIA.put('items/shot-ab12.png', 'image-bytes', {
+      metadata: { contentType: 'image/png' },
+    })
+    /*
+      下の URL が読みに行くキーに、実際に値を置いておく。置かないと、形の検査を
+      外しても KV に何も無くて 404 になり、この検査は素通りで緑になる
+    */
+    for (const key of [
+      'login:someone@example.com',
+      'items/login:someone@example.com',
+      'other/shot-ab12.png',
+      'items/sub/shot-ab12.png',
+      'items/.shot',
+    ]) {
+      await env.MEDIA.put(key, 'secret')
+    }
+
+    const ok = await get('/images/items/shot-ab12.png')
+    expect(ok.status).toBe(200)
+    expect(ok.headers.get('content-type')).toBe('image/png')
+
+    for (const path of [
+      // 置き場の中から外へ出る。../ は URL の段で畳まれ、%2F は畳まれずに届く
+      '/images/items/../login:someone@example.com',
+      '/images/items/..%2Flogin:someone@example.com',
+      '/images/items/%2E%2E%2Flogin:someone@example.com',
+      // 置き場の名前のあとに、記録のキーそのものを書く（: は名前に使えない）
+      '/images/items/login:someone@example.com',
+      // 知らない置き場・置き場の中の階層・. で始まる名前
+      '/images/other/shot-ab12.png',
+      '/images/items/sub/shot-ab12.png',
+      '/images/items/.shot',
+      '/images/items/',
+    ]) {
+      expect((await get(path)).status, path).toBe(404)
+    }
+  })
+
+  /*
+    SEC-2 / ADM-4。/images/* はサイトと同じオリジンで配る。画像のふりをした
+    文書（SVG の <script>）が直に開かれても走らないよう、嗅ぎ分けを止め、
+    スクリプトも読み込みも持たない sandbox の文書として返す
+  */
+  it('nosniff と sandbox の CSP を付けて返す', async () => {
+    await env.MEDIA.put('items/shot-cd34.png', 'image-bytes', {
+      metadata: { contentType: 'image/png' },
+    })
+    const response = await get('/images/items/shot-cd34.png')
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toBe('image/png')
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff')
+    expect(response.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox")
+    expect(response.headers.get('content-disposition')).toBeNull()
+  })
+
+  it('5種類に無い型で残っている画像（以前の SVG・HEIC）は、画像としてではなく添付で返す', async () => {
+    for (const [key, type] of [
+      ['avatars/eve-9cf5750a.svgxml', 'image/svg+xml'],
+      ['avatars/eve-1234abcd.heic', 'image/heic'],
+      ['items/old-1234abcd.bin', undefined],
+    ] as const) {
+      await env.MEDIA.put(
+        key,
+        '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+        type ? { metadata: { contentType: type } } : {},
+      )
+      const response = await get(`/images/${key}`)
+      expect(response.status, key).toBe(200)
+      expect(response.headers.get('content-type'), key).toBe('application/octet-stream')
+      expect(response.headers.get('content-disposition'), key).toBe('attachment')
+      expect(response.headers.get('x-content-type-options'), key).toBe('nosniff')
+      expect(response.headers.get('content-security-policy'), key).toBe(
+        "default-src 'none'; sandbox",
+      )
+    }
+  })
+})
+
+/*
+  URL の検査の描画の側（ADM-3 / PUB-5 / SEC-4）。保存の側は test/admin.test.ts の
+  「URL の検査（保存）」。こちらは、その検査より前に入った行（や手で DB に入れた行）
+  が公開ページで落ちることを見る。以前は作品のリンクもメンバーの GitHub も、
+  javascript: のまま href と JSON-LD に出ていた。
+*/
+describe('URL の検査（描画）', () => {
+  const jsonLdOf = (html: string) =>
+    JSON.parse(html.match(/<script type="application\/ld\+json">(.*?)<\/script>/)?.[1] ?? 'null')
+
+  it('作品のリンクの javascript: と相対 URL は、カードにも作品のページにも全体ページにも出さない', async () => {
+    const item = await seedItem({ title: 'AppMixer', slug: 'appmixer' })
+    await db()
+      .insert(schema.itemLinks)
+      .values([
+        { itemId: item.id, label: 'XSS', url: 'javascript:alert(document.domain)', sortOrder: 0 },
+        { itemId: item.id, label: '相対', url: 'github.com/iam74k4', sortOrder: 1 },
+        { itemId: item.id, label: 'タブ', url: '/\t/evil.example', sortOrder: 2 },
+        { itemId: item.id, label: 'Repository', url: 'https://example.test/r', sortOrder: 3 },
+      ])
+
+    for (const path of ['/projects', '/apps/item/appmixer', '/all']) {
+      const main = mainOf(await okText(path))
+      expect(main, path).not.toContain('javascript:')
+      expect(main, path).not.toContain('href="github.com')
+      expect(main, path).not.toContain('evil.example')
+      // 通る行はそのまま残る
+      expect(main, path).toContain('href="https://example.test/r"')
+    }
+  })
+
+  it('リンクが全部落ちたら、行き先の行ごと出さない', async () => {
+    const item = await seedItem({ title: 'AppMixer', slug: 'appmixer' })
+    await db()
+      .insert(schema.itemLinks)
+      .values({ itemId: item.id, label: 'XSS', url: 'javascript:alert(1)', sortOrder: 0 })
+    expect(mainOf(await okText('/apps/item/appmixer'))).not.toContain('<div class="links">')
+  })
+
+  it('メンバーの GitHub の javascript: と相対 URL は、個人ページにも JSON-LD にも出さない', async () => {
+    for (const github of ['javascript:alert(document.cookie)', 'github.com/okazaki']) {
+      await resetDb()
+      await seedMember({ github })
+
+      // 1人のサイト。個人ページの名札の下にも全体ページにも出さず、名乗りはサイトの GitHub に戻す
+      expect(await okText('/members/okazaki'), github).not.toContain(`href="${github}"`)
+      expect(await okText('/all'), github).not.toContain(`href="${github}"`)
+      const top = await okText('/')
+      expect(top, github).not.toContain(github)
+      expect(jsonLdOf(top).sameAs, github).toEqual([SITE.github])
+
+      // 2人のサイトでは個人ページが自分の名乗り（Person）を持つ。そこにも載せない
+      await seedMember({ slug: 'hoshino', name: '星野', sortOrder: 20 })
+      const personal = await okText('/members/okazaki')
+      expect(personal, github).not.toContain(github)
+      expect(jsonLdOf(personal), github).toMatchObject({ '@type': 'Person' })
+      expect(jsonLdOf(personal), github).not.toHaveProperty('sameAs')
+    }
+  })
+
+  it('https:// の GitHub はそのまま出る', async () => {
+    await seedMember({ github: 'https://github.com/okazaki' })
+    await seedMember({ slug: 'hoshino', name: '星野', sortOrder: 20 })
+    const personal = await okText('/members/okazaki')
+    expect(mainOf(personal)).toContain('href="https://github.com/okazaki"')
+    expect(jsonLdOf(personal).sameAs).toEqual(['https://github.com/okazaki'])
+  })
+
+  it('部品が自分で落とす（呼ぶ側の検査に頼らない）', () => {
+    const row = String(
+      LinkRow({
+        links: [
+          { label: 'XSS', url: 'javascript:alert(1)' },
+          { label: 'OK', url: 'https://example.test' },
+        ],
+      }),
+    )
+    expect(row).not.toContain('javascript:')
+    expect(row).toContain('href="https://example.test"')
+
+    const list = String(
+      LinkList({
+        rows: [
+          ['XSS', 'javascript:alert(1)'],
+          ['OK', '/projects'],
+        ],
+      }),
+    )
+    expect(list).not.toContain('javascript:')
+    expect(list).toContain('href="/projects"')
   })
 })
 
@@ -1328,9 +2303,8 @@ describe('robots.txt と sitemap.xml', () => {
     expect(text).toContain(`Sitemap: ${SITE.origin}/sitemap.xml`)
   })
 
-  it('sitemap は公開中の画面をそのまま数え上げる', async () => {
+  it('sitemap は公開中のページをそのまま数え上げる', async () => {
     await seedMember()
-    // perScreen は2なので、3件で2画面になる
     await seedItem({ type: 'app', title: 'ひとつめ', slug: 'one' })
     await seedItem({ type: 'app', title: 'ふたつめ', slug: 'two' })
     await seedItem({ type: 'app', title: 'みっつめ', slug: 'three' })
@@ -1342,10 +2316,9 @@ describe('robots.txt と sitemap.xml', () => {
     const xml = await response.text()
     const locs = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1])
 
-    // 手で並べた表は置かない。画面が増えれば URL も増える
+    // 手で並べた表は置かない。ページが増えれば URL も増える
     expect(locs).toContain(`${SITE.origin}/`)
     expect(locs).toContain(`${SITE.origin}/projects`)
-    expect(locs).toContain(`${SITE.origin}/projects/2`)
     // 寄せる元の URL（Apps / Works の一覧）は載せない
     expect(locs).not.toContain(`${SITE.origin}/apps`)
     expect(locs).toContain(`${SITE.origin}/all`)
@@ -1353,17 +2326,17 @@ describe('robots.txt と sitemap.xml', () => {
     // 個人ページの Contact は外した（サイトの Contact へ 301）。寄せる元の URL は載せない
     expect(locs).not.toContain(`${SITE.origin}/members/okazaki/contact`)
     expect(locs).toContain(`${SITE.origin}/apps/item/one`)
-    // 3件を2画面に割ったので、3画面目は無い
-    expect(locs).not.toContain(`${SITE.origin}/projects/3`)
+    // 一覧は1ページ。割っていたころの続き（転送するだけの URL）は載せない
+    expect(locs.filter((loc) => loc?.startsWith(`${SITE.origin}/projects/`))).toEqual([])
   })
 
-  it('出ない画面は載せない。下書きも、絞り込み付きの URL も', async () => {
+  it('出ないページは載せない。下書きも、絞り込み付きの URL も', async () => {
     await seedMember({ slug: 'draft', name: '下書きの人', published: 0 })
     await seedMember()
     await seedItem({ type: 'app', title: '下書きのアプリ', slug: 'hidden', published: 0 })
     await seedItem({ type: 'app', slug: 'shown' })
 
-    const xml = await (await get('/sitemap.xml')).text()
+    const xml = await okText('/sitemap.xml')
     expect(xml).not.toContain('/apps/item/hidden')
     expect(xml).not.toContain('/members/draft')
     // 同じ中身の取り出し方なので、ピルの組み合わせのぶんだけ URL を数えさせない
@@ -1376,22 +2349,22 @@ describe('robots.txt と sitemap.xml', () => {
     await seedMember()
     await seedItem({ type: 'app' })
 
-    const locs = [...(await (await get('/sitemap.xml')).text()).matchAll(/<loc>([^<]+)<\/loc>/g)]
+    const locs = [...(await okText('/sitemap.xml')).matchAll(/<loc>([^<]+)<\/loc>/g)]
     expect(new Set(locs.map((match) => match[1])).size).toBe(locs.length)
 
     // 置いたものが全部下書きでも、入口は 200 のまま（「まだ何も置いていません」）
     await db().insert(schema.blocks).values({ type: 'hero', published: 0, sortOrder: 10 })
     expect((await get('/')).status).toBe(200)
-    expect(await (await get('/sitemap.xml')).text()).toContain(`<loc>${SITE.origin}/</loc>`)
+    expect(await okText('/sitemap.xml')).toContain(`<loc>${SITE.origin}/</loc>`)
   })
 
-  it('1画面目は正の URL ひとつだけ。/<slug> は載せない', async () => {
+  it('先頭のページは正の URL ひとつだけ。/<slug> は載せない', async () => {
     await seedItem({ type: 'app' })
-    // Hero を置かなければ、先頭の画面は Projects。/ と /projects の2つで開ける
+    // Hero を置かなければ、先頭のページは Projects。/ と /projects の2つで開ける
     await db().insert(schema.blocks).values({ type: 'projects', published: 1, sortOrder: 10 })
 
-    const xml = await (await get('/sitemap.xml')).text()
-    // 正は / のほう（siteSteps が先頭だけ / に寄せている）
+    const xml = await okText('/sitemap.xml')
+    // 正は / のほう（sitePageLinks が先頭だけ / に寄せている）
     expect(xml).toContain(`<loc>${SITE.origin}/</loc>`)
     expect(xml).not.toContain(`<loc>${SITE.origin}/projects</loc>`)
   })
@@ -1399,22 +2372,26 @@ describe('robots.txt と sitemap.xml', () => {
 
 /*
   全体ページ（/all）へ行く道。公開側にも管理画面にも href が1本も無かった。
-  @media print が「全体ページを刷ること」と書いている紙も、2行で切られた
-  説明文の全文も、この1本が無いと URL を手で打った人にしか届かない。
+  @media print が「全体ページを刷ること」と書いている紙も、Ctrl-F で全体を
+  探す手も、この1本が無いと URL を手で打った人にしか届かない。
 */
 describe('全体ページへの導線', () => {
   it('柱の足元から行ける', async () => {
     await seedItem()
 
     for (const path of ['/', '/projects', '/contact']) {
-      const html = await (await get(path)).text()
-      expect(html, path).toContain('<a href="/all">全体を1ページで見る ↗</a>')
+      const html = await okText(path)
+      /*
+        矢印は →。同じタブで開くサイトの中の行き先で、↗（外へ出る・別タブ）
+        ではない。管理画面の同じ1本は別タブなので ↗ のまま（admin.test.ts）
+      */
+      expect(html, path).toContain('<a href="/all">全体を1ページで見る →</a>')
     }
   })
 
   it('全体ページ自身には出さない（自分への行き先）', async () => {
     await seedItem()
-    expect(await (await get('/all')).text()).not.toContain('href="/all"')
+    expect(await okText('/all')).not.toContain('href="/all"')
   })
 })
 
@@ -1430,7 +2407,7 @@ describe('管理画面への入口', () => {
     }
   })
 
-  it('ログインしている人には、いま見ている画面を直す場所へ送る入口を出す', async () => {
+  it('ログインしている人には、いま見ているページを直す場所へ送る入口を出す', async () => {
     const member = await seedMember()
     const item = await seedItem({ slug: 'appmixer' })
     const signed = await signIn()
@@ -1438,7 +2415,7 @@ describe('管理画面への入口', () => {
     const cases: [string, string][] = [
       ['/', `/admin/members/${member.id}/edit`],
       ['/projects', '/admin/items'],
-      ['/team', '/admin/members'],
+      // 1人のサイトに Team のページは無い。その位置のプロフィールは、その人の編集へ
       // 既定の並び（構成を保存していない）には、指せる行がまだ無い
       ['/contact', '/admin/blocks'],
       ['/all', '/admin/blocks'],
@@ -1453,7 +2430,7 @@ describe('管理画面への入口', () => {
     }
   })
 
-  it('打ち込むブロックの画面は、そのブロックの編集へ送る', async () => {
+  it('打ち込むブロックのページは、そのブロックの編集へ送る', async () => {
     await seedMember()
     const [block] = await db()
       .insert(schema.blocks)
@@ -1479,15 +2456,15 @@ describe('管理画面への入口', () => {
 
 /*
   貼られたリンクのカードと、検索結果の見え方。og:image が無いと LinkedIn は
-  灰色の箱、Slack は文字だけの行になり、7つの画面がどれも同じ無地の札になる。
+  灰色の箱、Slack は文字だけの行になり、どのページも同じ無地の札になる。
 */
-describe('共有カードと画面ごとの説明文', () => {
+describe('共有カードとページごとの説明文', () => {
   const descriptionOf = (html: string) =>
     html.match(/<meta name="description" content="([^"]*)"/)?.[1] ?? ''
 
   it('og:image はサイトに1枚。実在する素材を絶対 URL で指す', async () => {
     await seedItem()
-    const html = await (await get('/')).text()
+    const html = await okText('/')
 
     expect(html).toContain(`<meta property="og:image" content="${SITE.origin}/assets/avatar.png"/>`)
     // 144x144 は推奨（1200x630）に届かない。だから札は小さな正方形のまま
@@ -1496,41 +2473,137 @@ describe('共有カードと画面ごとの説明文', () => {
     expect(html).toContain('<meta property="og:image:alt"')
   })
 
-  it('画面ごとに違う説明文を出す。同じ1文を配らない', async () => {
+  /*
+    作品のページは、画像があればその作品の画像を共有カードに出す。種類は経路の
+    拡張子から、寸法は上げたときに読んだもの（items.image_width / image_height）。
+    分からないものは名乗らない。twitter:card は横長で 300x157 以上なら大きい札
+  */
+  it('画像のある作品のページは、その作品の画像を og:image にする（絶対 URL・種類・寸法）', async () => {
+    await seedItem({
+      title: 'AppMixer',
+      slug: 'appmixer',
+      imageUrl: '/images/items/appmixer-ab12cd34.png',
+      imageAlt: '音量ミキサーの画面',
+      imageWidth: 1200,
+      imageHeight: 630,
+    })
+    const html = await okText('/apps/item/appmixer')
+    expect(html).toContain(
+      `<meta property="og:image" content="${SITE.origin}/images/items/appmixer-ab12cd34.png"/>`,
+    )
+    expect(html).toContain('<meta property="og:image:type" content="image/png"/>')
+    expect(html).toContain('<meta property="og:image:width" content="1200"/>')
+    expect(html).toContain('<meta property="og:image:height" content="630"/>')
+    expect(html).toContain('<meta property="og:image:alt" content="音量ミキサーの画面"/>')
+    expect(html).toContain('<meta name="twitter:card" content="summary_large_image"/>')
+    // サイトの1枚は出さない（og:image は1つ）
+    expect(html).not.toContain('/assets/avatar.png"/>')
+    expect(html.match(/property="og:image"/g) ?? []).toHaveLength(1)
+  })
+
+  it('寸法が分からない・縦長・AVIF なら、名乗り方と札を変える', async () => {
+    // この列より前に上げた画像。寸法は名乗らず、札は小さいまま
+    await seedItem({
+      title: '古い画像',
+      slug: 'old',
+      imageUrl: '/images/items/old-ab12cd34.jpeg',
+      imageAlt: '古い画面',
+    })
+    const old = await okText('/apps/item/old')
+    expect(old).toContain(`content="${SITE.origin}/images/items/old-ab12cd34.jpeg"`)
+    expect(old).toContain('<meta property="og:image:type" content="image/jpeg"/>')
+    expect(old).not.toContain('og:image:width')
+    expect(old).toContain('<meta name="twitter:card" content="summary"/>')
+
+    // 縦長のスクリーンショット。大きい札は横長に切り抜くので、小さい札のまま
+    await seedItem({
+      title: '縦長',
+      slug: 'tall',
+      imageUrl: '/images/items/tall-ab12cd34.png',
+      imageAlt: '縦長の画面',
+      imageWidth: 1170,
+      imageHeight: 2532,
+    })
+    const tall = await okText('/apps/item/tall')
+    expect(tall).toContain('<meta property="og:image:width" content="1170"/>')
+    expect(tall).toContain('<meta name="twitter:card" content="summary"/>')
+
+    // AVIF は貼り先が読まないので、サイトの1枚に戻す
+    await seedItem({
+      title: 'AVIF',
+      slug: 'avif',
+      imageUrl: '/images/items/avif-ab12cd34.avif',
+      imageAlt: 'AVIF の画面',
+      imageWidth: 1600,
+      imageHeight: 900,
+    })
+    const avifPage = await okText('/apps/item/avif')
+    expect(avifPage).toContain(
+      `<meta property="og:image" content="${SITE.origin}/assets/avatar.png"/>`,
+    )
+  })
+
+  it('画像の無い作品のページと、ほかのページはサイトの1枚のまま', async () => {
+    await seedItem({ title: 'AppMixer', slug: 'appmixer' })
+    for (const path of ['/apps/item/appmixer', '/projects', '/all']) {
+      const html = await okText(path)
+      expect(html, path).toContain(
+        `<meta property="og:image" content="${SITE.origin}/assets/avatar.png"/>`,
+      )
+      expect(html, path).toContain('<meta name="twitter:card" content="summary"/>')
+    }
+  })
+
+  it('ページごとに違う説明文を出す。同じ1文を配らない', async () => {
     await seedMember({ skillsText: 'C# | 3年以上', careerText: '2024.03 | 入社 | ある会社' })
-    await seedItem({ type: 'app' })
+    await seedItem({ type: 'app', slug: 'appmixer', summary: '音を配る常駐アプリ。' })
     await seedItem({ type: 'work' })
 
-    const paths = [
-      '/',
-      '/projects',
-      '/team',
-      '/contact',
-      '/all',
-      '/members/okazaki',
-      '/members/okazaki/about',
-      '/members/okazaki/skills',
-      '/members/okazaki/career',
-    ]
-    const found = await Promise.all(
-      paths.map(async (path) => descriptionOf(await (await get(path)).text())),
-    )
+    // 1人のサイトなので /team は無い（プロフィールへ 301）
+    const paths = ['/', '/projects', '/contact', '/all', '/members/okazaki', '/apps/item/appmixer']
+    const found = await Promise.all(paths.map(async (path) => descriptionOf(await okText(path))))
 
     for (const [index, text] of found.entries()) expect(text, paths[index]).not.toBe('')
     expect(new Set(found).size).toBe(paths.length)
   })
 
-  it('一覧の説明文は、件数とピルと、その画面に出ているカードから作る', async () => {
+  /*
+    COR-5。説明の無い作品（関門が説明を求める前に公開した作品）の説明文は、入口の
+    サイトの紹介文に戻さず、作品の事実から組む。戻していたころは、説明の無い作品の
+    ページが入口と同じ説明文になり、そうした作品どうしも同じ文になった
+  */
+  it('説明の無い作品の説明文は、入口とも、ほかの説明の無い作品とも重ならない', async () => {
+    await seedMember()
+    await seedItem({
+      type: 'work',
+      title: 'NoSumA',
+      slug: 'nosuma',
+      summary: '',
+      category: '製造業',
+      year: '2024',
+    })
+    await seedItem({ type: 'work', title: 'NoSumB', slug: 'nosumb', summary: '', year: '2025' })
+
+    const top = descriptionOf(await okText('/'))
+    const a = descriptionOf(await okText('/works/item/nosuma'))
+    const b = descriptionOf(await okText('/works/item/nosumb'))
+    expect(a).toBe('NoSumA（業務 · 製造業 · 2024）')
+    expect(b).toBe('NoSumB（業務 · 2025）')
+    expect(new Set([top, a, b]).size).toBe(3)
+  })
+
+  it('一覧の説明文は、件数とピルと、そのページに出ているカードから作る', async () => {
     await seedItem({ type: 'app', title: 'ひとつめ', sortOrder: 10 })
     await seedItem({ type: 'app', title: 'ふたつめ', sortOrder: 20 })
     await seedItem({ type: 'work', title: 'みっつめ', sortOrder: 30 })
 
-    const first = descriptionOf(await (await get('/projects')).text())
-    const second = descriptionOf(await (await get('/projects/2')).text())
-
-    expect(first).toBe('つくったもの 3 件。個人開発 / 業務。ひとつめ、ふたつめ')
-    // 割った先が同じ説明文だと、2画面目は1画面目の準重複になる
-    expect(second).toBe('つくったもの 3 件。個人開発 / 業務。みっつめ')
+    expect(descriptionOf(await okText('/projects'))).toBe(
+      'つくったもの 3 件。個人開発 / 業務。ひとつめ、ふたつめ、みっつめ',
+    )
+    // 絞り込んだページは、そこに出ているカードだけを並べる
+    expect(descriptionOf(await okText('/projects?kind=work'))).toBe(
+      'つくったもの 3 件。個人開発 / 業務。みっつめ',
+    )
   })
 
   it('業務の説明文には、カードに出ている実績値も入る', async () => {
@@ -1539,19 +2612,21 @@ describe('共有カードと画面ごとの説明文', () => {
       title: '開発工程の効率化',
       metricValue: '20',
       metricUnit: '人日',
-      metricNote: '見込み 40人日 → 実績',
+      metricNote: '見込み 40人日から半減',
     })
 
     /*
       このサイトでいちばん強い一文は .metric にしかなく、検索結果にも貼られた
-      カードにも1文字も出ていなかった。並べる順はカードのまま（値・単位・添え）
+      カードにも1文字も出ていなかった。並べる順はカードのまま（値・単位・添え）。
+      添えは値のあとに続けて読まれる——「見込み 40人日 → 実績」のころは、→ が
+      値より前を指して逆に読めた（添えの書き方は管理画面のヒントが言う）
     */
-    expect(descriptionOf(await (await get('/projects')).text())).toBe(
-      'つくったもの 1 件。業務。開発工程の効率化（20 人日 見込み 40人日 → 実績）',
+    expect(descriptionOf(await okText('/projects'))).toBe(
+      'つくったもの 1 件。業務。開発工程の効率化（20 人日 見込み 40人日から半減）',
     )
   })
 
-  it('打ち込んだブロックは、その画面に出ている文字から作る', async () => {
+  it('打ち込んだブロックは、そのページに出ている文字から作る', async () => {
     const [block] = await db()
       .insert(schema.blocks)
       .values({
@@ -1563,14 +2638,25 @@ describe('共有カードと画面ごとの説明文', () => {
       })
       .returning()
 
-    const html = await (await get(`/block-${block?.id}`)).text()
+    const html = await okText(`/block-${block?.id}`)
     expect(descriptionOf(html)).toBe('年表。2026 出した 補足')
   })
 
   it('説明文は長すぎたら切る。どこで切れるかはこちらで決める', async () => {
-    await seedMember({ bio: 'あ'.repeat(400) })
+    await seedMember({ headline: 'あ'.repeat(80) })
+    await db()
+      .insert(schema.blocks)
+      .values({
+        type: 'note',
+        title: 'メモ',
+        body: 'あ'.repeat(400),
+        published: 1,
+        sortOrder: 10,
+      })
 
-    const text = descriptionOf(await (await get('/members/okazaki/about')).text())
+    // 個人ページの説明文（大見出し）は短いので、長い段落を持つメモのページで見る
+    const [note] = await db().select().from(schema.blocks)
+    const text = descriptionOf(await okText(`/block-${note?.id}`))
     expect([...text]).toHaveLength(110)
     expect(text.endsWith('…')).toBe(true)
   })
@@ -1583,8 +2669,8 @@ describe('共有カードと画面ごとの説明文', () => {
   いちばん最後に置いてある。あとから固定のルート（`/all` や `/robots.txt` の
   たぐい）をその下に足すと、一致が catch-all に吸われて**そのページだけが
   静かに 404 になる**。足した本人はその URL のテストを書くので気づけるが、
-  「登録順」という決まり自体を守らせるものは、これまで CLAUDE.md・
-  public.tsx のコメント・docs/screens.md という散文3か所しか無かった。
+  「登録順」という決まり自体は散文（CLAUDE.md・src/routes/public/routes.ts の
+  コメント・docs/screens.md）だけでは守れない。
 
   Hono は登録した順のまま `.routes` を公開しているので、そこを読めばよい。
   CSS を文字列で読む test/theme.test.ts の契約テストと同じ手口——実装の
@@ -1597,6 +2683,25 @@ describe('URL の登録順', () => {
     expect(paths().slice(-2)).toEqual(['/:screen', '/:screen/:page'])
   })
 
+  /*
+    区分の URL の語は src/domain.ts の ITEM_KINDS から作る。区分を1つ足した日に、
+    恒久リンク（itemHref が組む URL）と前の一覧の 301 が、その区分のぶんだけ
+    黙って欠けないこと（URL の組み方とルートが同じ表を読んでいること）。
+  */
+  it('区分ごとに、恒久リンク・前の本文の画面・前の一覧のルートがある', () => {
+    for (const kind of ITEM_KINDS) {
+      expect(paths()).toEqual(
+        expect.arrayContaining([
+          `/${kind.path}/item/:slug`,
+          `/${kind.path}/item/:slug/story`,
+          `/${kind.path}`,
+          `/${kind.path}/:page`,
+        ]),
+      )
+      expect(itemHref({ type: kind.key, slug: 'x' })).toBe(`/${kind.path}/item/x`)
+    }
+  })
+
   it('1語目が可変のルートは、この2本のほかに作らない', () => {
     // 3本目を足すと、どれが先に当たるかが登録順の暗黙知になる
     expect(paths().filter((path) => path.startsWith('/:'))).toEqual(['/:screen', '/:screen/:page'])
@@ -1607,4 +2712,417 @@ it('知らない URL は 404 ページを返す', async () => {
   const response = await get('/nope')
   expect(response.status).toBe(404)
   expect(await response.text()).toContain('ページが見つかりません')
+})
+
+/*
+  文書の外枠。DOCTYPE・404 の説明・足元の年。
+
+  4つの外枠（公開ページ・管理画面の壁の中と外・404 と 500）は、どれも
+  <!DOCTYPE html> を持たずに互換モードで組まれていた。JSX は DOCTYPE を
+  書けないので、書かないまま誰も気づかない種類の抜けで、外枠を1つ足せば
+  また起きる。だから本文の先頭を見る。500 は 404 と同じ ErrorPage から出る。
+*/
+describe('文書の外枠', () => {
+  const expectDoctype = (html: string, path: string) => {
+    expect(html.startsWith('<!DOCTYPE html><html lang="ja">'), path).toBe(true)
+    // 外枠を入れ子にすると2つ出る。先頭の1つだけであること
+    expect(html.match(/<!DOCTYPE/gi)?.length, path).toBe(1)
+  }
+
+  it('公開ページ・管理画面の入口・404 の本文は <!DOCTYPE html> から始まる', async () => {
+    await seedMember()
+    await seedItem({ slug: 'appmixer' })
+
+    const paths = [
+      '/',
+      '/projects',
+      '/all',
+      '/members/okazaki',
+      '/apps/item/appmixer',
+      '/admin/login', // 壁の外（AdminBare）
+      '/no-such-page', // 404（ErrorPage）
+    ]
+    for (const path of paths) {
+      const response = await get(path)
+      expect(response.headers.get('content-type'), path).toContain('text/html')
+      expectDoctype(await response.text(), path)
+    }
+  })
+
+  it('ログインした先の管理画面（AdminLayout）も', async () => {
+    const signed = await signIn()
+    for (const path of [
+      '/admin/members',
+      '/admin/items',
+      '/admin/blocks',
+      '/admin/appearance',
+      '/admin/account',
+    ]) {
+      const response = await signed(path)
+      expect(response.status, path).toBe(200)
+      expectDoctype(await response.text(), path)
+    }
+  })
+
+  it('404 は訪問者の言葉で説明する。管理画面の言葉（slug）を出さない', async () => {
+    // 404 になる道はメンバーのページに限らない。どの道でも同じ説明が出る
+    for (const path of ['/members/nosuch', '/apps/item/nosuch', '/no-such-page']) {
+      const response = await get(path)
+      expect(response.status, path).toBe(404)
+      const html = await response.text()
+      expect(html, path).toContain('URL が変わったか、打ち間違えているかもしれません。')
+      expect(html, path).not.toMatch(/slug/i)
+    }
+  })
+
+  it('足元の年は描いたときの年（日本時間）。字で固定しない', async () => {
+    await seedItem()
+    /*
+      時計を先の年へ進めて描かせる。今年のままだと「© 2026」と字で書いてあっても
+      通ってしまう。UTC ではまだ大晦日、日本ではもう元日の時刻にしてあるので、
+      日本時間へずらし忘れても落ちる。
+    */
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2031-12-31T15:30:00Z'))
+      for (const path of ['/', '/projects', '/all']) {
+        const html = await okText(path)
+        expect(html, path).toContain(`© 2032 ${SITE.name}`)
+      }
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+/*
+  サイトを「置けるものを全部置いた」姿にする。sitemap の全 URL を回す検査
+  （h1・<title>）が、手で並べた URL ではなく実物の並びを見るため。
+  書くブロックは全種類、メモは見出しを空けたもの。
+*/
+async function seedEverything() {
+  await seedMember({
+    skillsText: 'LANGUAGES:\nC# | 3年以上',
+    careerText: Array.from({ length: 6 }, (_, i) => `20${10 + i}.04 | 仕事${i} | 会社`).join('\n'),
+  })
+  for (let i = 0; i < 3; i += 1) {
+    await seedItem({
+      title: `作品${i}`,
+      slug: `item-${i}`,
+      year: `20${20 + i}`,
+      sortOrder: i,
+      // 1件目だけ本文を持つ（作品のページに小節 #story が付く）
+      body: i === 0 ? '背景の段落です。\n\n結果の段落です。' : '',
+    })
+  }
+  await db()
+    .insert(schema.blocks)
+    .values([
+      { type: 'hero', published: 1, sortOrder: 10 },
+      { type: 'statement', title: 'つくる速さは、設計で決まる。', published: 1, sortOrder: 20 },
+      { type: 'projects', published: 1, sortOrder: 30 },
+      {
+        type: 'now',
+        title: 'Now',
+        body: 'ポートフォリオ | 作り直し中',
+        published: 1,
+        sortOrder: 40,
+      },
+      {
+        type: 'numbers',
+        title: '数字で見る',
+        body: '20 | 人日 | 半減',
+        published: 1,
+        sortOrder: 50,
+      },
+      {
+        type: 'links',
+        title: 'Links',
+        body: 'GitHub | https://github.com/iam74k4',
+        published: 1,
+        sortOrder: 60,
+      },
+      {
+        type: 'timeline',
+        title: 'Timeline',
+        body: '2024.03 | 入社 | 会社',
+        published: 1,
+        sortOrder: 70,
+      },
+      // 見出しを空けたメモ（段落だけのページ）
+      {
+        type: 'note',
+        title: '',
+        body: Array.from({ length: 4 }, (_, i) => `メモの段落 ${i} です。`).join('\n\n'),
+        published: 1,
+        sortOrder: 80,
+      },
+      {
+        type: 'note',
+        title: 'あとがき',
+        body: '見出しのあるメモです。',
+        published: 1,
+        sortOrder: 90,
+      },
+      { type: 'team', published: 1, sortOrder: 100 },
+      { type: 'contact', published: 1, sortOrder: 110 },
+    ])
+}
+
+const sitemapPaths = async () => {
+  const xml = await okText('/sitemap.xml')
+  return [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => new URL(match[1] ?? '').pathname)
+}
+
+const titleOf = (html: string) => html.match(/<title>([^<]*)<\/title>/)?.[1] ?? ''
+
+/*
+  見出しの無いメモ（PUB-3）と、ページごとの題（PUB-2）。どちらも sitemap の全 URL で見る
+  ——固定のブロックと個人ページだけを並べていた検査は、管理画面が許す「見出しを
+  空けたメモ」のページに h1 が1つも無いことを見逃していた。
+*/
+describe('サイトの全ページ', () => {
+  it('ページごとの URL は、どれも h1 をちょうど1つ持つ（sitemap の全 URL、書くブロックの全種類）', async () => {
+    await seedEverything()
+    const paths = (await sitemapPaths()).filter((path) => path !== '/all')
+    expect(paths.length).toBeGreaterThan(10)
+    for (const path of paths) {
+      const html = await okText(path)
+      expect(html.match(/<h1[^>]*>/g) ?? [], path).toHaveLength(1)
+    }
+  })
+
+  it('見出しを空けたメモは、種類の名前（メモ）を読み上げの h1・region の名前に使う。目次には並べない', async () => {
+    await seedEverything()
+    const note = await db().query.blocks.findFirst({
+      where: (t, { and, eq }) => and(eq(t.type, 'note'), eq(t.title, '')),
+    })
+    const html = await okText(`/block-${note?.id}`)
+    expect(mainOf(html)).toContain('<h1 class="sr-only">メモ</h1>')
+    expect(mainOf(html)).toContain('aria-label="メモ"')
+    expect(tocOf(html)).not.toContain('メモ')
+    // 見出しのあるメモは今までどおり目に見える h1 で、目次にも並ぶ
+    const titled = await db().query.blocks.findFirst({
+      where: (t, { eq }) => eq(t.title, 'あとがき'),
+    })
+    const other = await okText(`/block-${titled?.id}`)
+    expect(other).toContain('<h1>あとがき</h1>')
+    expect(tocOf(other)).toContain('あとがき')
+  })
+
+  it('sitemap の URL はどれも違う <title> を持つ。数え方（2 / 4）はもう添えない', async () => {
+    await seedEverything()
+    const titles = new Map<string, string>()
+    for (const path of await sitemapPaths()) {
+      titles.set(path, titleOf(await okText(path)))
+    }
+    const seen = new Map<string, string>()
+    for (const [path, title] of titles) {
+      expect(seen.get(title), `${path} と ${seen.get(title)} が同じ題「${title}」`).toBeUndefined()
+      seen.set(title, path)
+    }
+    expect(titles.get('/projects')).toBe(`Projects — ${SITE.name}`)
+    expect(titles.get('/contact')).toBe(`Contact — ${SITE.name}`)
+    expect(titles.get('/members/okazaki')).toBe(`岡崎 昂功 — ${SITE.name}`)
+    expect(titles.get('/apps/item/item-0')).toBe(`作品0 — ${SITE.name}`)
+    // 割っていたころの続き・前の本文の画面は、転送するだけなので sitemap に無い
+    expect([...titles.keys()].filter((path) => /\/\d+$|\/story$|\/about$/.test(path))).toEqual([])
+    // 名前の無いページは、そのページの文の頭（入口と同じ題にしない）
+    expect([...titles.values()]).toContain(`つくる速さは、設計で決まる。 — ${SITE.name}`)
+  })
+
+  it('全体ページの題は入口と違う', async () => {
+    await seedMember()
+    expect(titleOf(await okText('/all'))).not.toBe(titleOf(await okText('/')))
+  })
+})
+
+describe('肩書きの無い人', () => {
+  it('題にも説明にも「（）」を出さない。jobTitle も名乗らない（PUB-6）', async () => {
+    await seedMember({ role: '', headline: '', bio: '' })
+    for (const path of ['/', '/members/okazaki', '/all']) {
+      const html = await okText(path)
+      expect(html, path).not.toContain('（）')
+    }
+    const entrance = await okText('/')
+    expect(titleOf(entrance)).toBe(`岡崎 昂功 — ${SITE.name}`)
+    expect(entrance).not.toContain('"jobTitle"')
+  })
+})
+
+/*
+  作品の並び（PUB-4）。year の頭の4文字を文字列のまま比べていたころは、数字で
+  始まらない年が文字の大小で 2026 より上、一覧の先頭に来た。
+*/
+describe('作品の並び', () => {
+  it('年の頭が数字4桁でない作品は、年のある作品より後ろ。そのあいだは並び順', async () => {
+    const years = ['令和6', '〜2023', 'FY2024', '24', '2026', '2019.04 — 2021', '']
+    for (const [index, year] of years.entries()) {
+      await seedItem({ title: `年「${year}」`, slug: `y${index}`, year, sortOrder: index * 10 })
+    }
+    const html = await okText('/all')
+    const order = years
+      .map((year) => ({ year, at: html.indexOf(`年「${year}」`) }))
+      .sort((a, b) => a.at - b.at)
+      .map((one) => one.year)
+    expect(order).toEqual(['2026', '2019.04 — 2021', '令和6', '〜2023', 'FY2024', '24', ''])
+  })
+
+  it('同じ年の中では、区分をまたいで並び順を比べる', async () => {
+    await seedItem({ type: 'work', title: '業務の20', slug: 'w', year: '2026', sortOrder: 20 })
+    await seedItem({ type: 'app', title: '個人の10', slug: 'a', year: '2026', sortOrder: 10 })
+    await seedItem({ type: 'app', title: '個人の30', slug: 'b', year: '2026', sortOrder: 30 })
+    const html = await okText('/all')
+    const at = (title: string) => html.indexOf(title)
+    expect(at('個人の10')).toBeLessThan(at('業務の20'))
+    expect(at('業務の20')).toBeLessThan(at('個人の30'))
+  })
+})
+
+/*
+  前の URL（ADM-7 / SYS-6）。slug を変えた作品・メンバーの前の URL は、いまの URL へ
+  301。以前は変えた日から 404 で、名刺や SNS に貼ったリンクが切れた。
+*/
+describe('前の URL', () => {
+  it('slug を変えた作品の前の URL は、いまの URL へ 301', async () => {
+    const item = await seedItem({ title: 'AppMixer', slug: 'appmixer' })
+    const signed = await signIn()
+    await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: form({
+        type: 'app',
+        title: 'AppMixer',
+        slug: 'app-mixer',
+        summary: '説明。',
+        published: '1',
+      }),
+    })
+    const moved = await get('/apps/item/appmixer')
+    expect(moved.status).toBe(301)
+    expect(moved.headers.get('location')).toBe('/apps/item/app-mixer')
+    // 前の区分の URL でも、いまの URL へ
+    expect((await get('/works/item/appmixer')).headers.get('location')).toBe('/apps/item/app-mixer')
+    // 下書きにしたら、送る先ごと無い
+    await db().update(schema.items).set({ published: 0 })
+    await touch()
+    expect((await get('/apps/item/appmixer')).status).toBe(404)
+  })
+
+  it('slug を変えたメンバーの前の URL は、いまの URL（続きの名前も継ぐ）へ 301', async () => {
+    const member = await seedMember({ careerText: '2024.03 | 入社 | ある会社' })
+    const signed = await signIn()
+    await signed(`/admin/members/${member.id}`, {
+      method: 'POST',
+      body: form({ name: member.name, slug: 'okazaki-k', published: '1' }),
+    })
+    for (const [from, to] of [
+      ['/members/okazaki', '/members/okazaki-k'],
+      ['/members/okazaki/career', '/members/okazaki-k/career'],
+    ] as const) {
+      const response = await get(from)
+      expect(response.status, from).toBe(301)
+      expect(response.headers.get('location'), from).toBe(to)
+    }
+    expect((await get('/members/nobody')).status).toBe(404)
+  })
+})
+
+/*
+  COR-1。行き先がデータで変わる転送（slug の転送表・区分を変えた作品・1人のサイトの
+  /team・個人ページの Contact）は、ブラウザに覚えさせない（Cache-Control: no-cache）。
+  覚えさせていたころは、slug を変えて前の URL を開いたブラウザが「前 → 新」を覚え、
+  slug を元に戻すと「新 → 前」とのあいだでリダイレクトの無限ループになった。
+  行き先が動かない転送（/apps → /projects）は素の 301 のまま（長く覚えてよい）。
+*/
+describe('転送をブラウザに覚えさせるか', () => {
+  const noCache = async (path: string, location: string) => {
+    for (const round of ['miss', 'hit']) {
+      const response = await get(path)
+      expect(response.status, `${path} ${round}`).toBe(301)
+      expect(response.headers.get('location'), `${path} ${round}`).toBe(location)
+      // 写しから返すとき（hit）も、同じ cache-control を付け直す
+      expect(response.headers.get('cache-control'), `${path} ${round}`).toBe('no-cache')
+      expect(response.headers.get('x-noctifex-cache'), path).toBe(round)
+    }
+  }
+
+  it('slug の転送・区分を変えた作品の転送は no-cache。戻したあとは前の URL が 200', async () => {
+    const item = await seedItem({ title: 'AppMixer', slug: 'appmixer', summary: '説明。' })
+    const signed = await signIn()
+    const rename = (slug: string) =>
+      signed(`/admin/items/${item.id}`, {
+        method: 'POST',
+        body: form({ type: 'app', title: 'AppMixer', slug, summary: '説明。', published: '1' }),
+      })
+    await rename('mixer2')
+    await noCache('/apps/item/appmixer', '/apps/item/mixer2')
+    await noCache('/works/item/mixer2', '/apps/item/mixer2')
+
+    // 元に戻す。サーバーは逆向きに送る（ブラウザが前の転送を覚えていなければループしない）
+    await rename('appmixer')
+    expect((await get('/apps/item/appmixer')).status).toBe(200)
+    await noCache('/apps/item/mixer2', '/apps/item/appmixer')
+  })
+
+  it('メンバーの slug の転送・1人のサイトの /team・個人ページの Contact も no-cache', async () => {
+    const member = await seedMember()
+    await noCache('/team', '/members/okazaki')
+    await noCache('/members/okazaki/contact', '/contact')
+    const signed = await signIn()
+    await signed(`/admin/members/${member.id}`, {
+      method: 'POST',
+      body: form({ name: member.name, slug: 'okazaki-k', published: '1' }),
+    })
+    await noCache('/members/okazaki', '/members/okazaki-k')
+  })
+
+  it('行き先が動かない転送（/apps → /projects）は素の 301 のまま', async () => {
+    const response = await get('/apps')
+    expect(response.status).toBe(301)
+    expect(response.headers.get('cache-control')).toBeNull()
+  })
+})
+
+/*
+  固定のブロックが2行ある D1（PUB-1）。いまは DB の部分一意索引が2行目を拒むが、
+  索引より前に二重送信でできた重複は残りうる。読む側（publishedBlocks）でも1行に
+  絞り、同じ URL が並びに2度並ぶ（目次に同じ行き先が2行出る。当時は画面の底の
+  「次」が自分自身を指して先へ進めなかった）を起こさない。
+*/
+describe('固定のブロックの重複', () => {
+  it('2組ある構成でも、目次の行き先は1つずつで、全体ページの節も1つずつ', async () => {
+    const index = env.TEST_MIGRATIONS.flatMap((one) => one.queries).find((query) =>
+      query.includes('blocks_fixed_once'),
+    )
+    if (!index) throw new Error('blocks_fixed_once の移行が無い')
+    await env.DB.prepare('DROP INDEX blocks_fixed_once').run()
+    try {
+      await seedMember({ slug: 'hoshino', name: '星野' })
+      await seedMember()
+      await seedItem({ title: 'AppMixer', slug: 'appmixer' })
+      await db()
+        .insert(schema.blocks)
+        .values(
+          (['hero', 'projects', 'team', 'contact'] as const).flatMap((type, at) => [
+            { type, published: 1, sortOrder: (at + 1) * 10 },
+            { type, published: 1, sortOrder: (at + 1) * 10 + 100 },
+          ]),
+        )
+
+      for (const path of ['/', '/projects', '/team', '/contact']) {
+        const hrefs = [...tocOf(await okText(path)).matchAll(/href="([^"]+)"/g)].map(
+          (match) => match[1],
+        )
+        expect(hrefs, path).toEqual(['/projects', '/team', '/contact'])
+      }
+
+      const whole = await okText('/all')
+      for (const id of ['projects', 'team', 'contact']) {
+        expect(whole.match(new RegExp(`id="${id}"`, 'g')), id).toHaveLength(1)
+      }
+    } finally {
+      await db().delete(schema.blocks)
+      await env.DB.prepare(index).run()
+    }
+  })
 })

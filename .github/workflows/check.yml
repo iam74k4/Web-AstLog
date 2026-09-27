@@ -4,19 +4,32 @@ on:
   push:
     branches: ['**']
   pull_request:
+  # deploy.yml が本番へ出す前に、これと同じ門（型・lint・テスト・写しの戻し・ビルド・fit・contrast）を
+  # そのまま呼ぶ。門を2か所に書き写すと、片方だけ弱くなる（以前の deploy は型とテストしか
+  # 通していなかった）
+  workflow_call:
 
-# 同じブランチに続けて push したら、前の実行は捨てる
+# 同じブランチに続けて push したら、前の実行は捨てる。
+# 名前に event_name を入れるのは、deploy から呼ばれた実行（workflow_dispatch）を
+# 同じ main への push の実行と同じ組にしないため——組が同じだと、push が deploy の
+# 門を取り消してしまう
 concurrency:
-  group: check-${{ github.ref }}
+  group: check-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
+
+# 読むだけ。secret も使わない（本番のトークンは deploy.yml の environment の中にだけある）
+permissions:
+  contents: read
+
+# action は commit の SHA で固定する（deploy.yml の頭と同じ理由・同じ引き方）
 
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -33,16 +46,23 @@ jobs:
       - name: テスト
         run: npm test
 
+      # deploy が残す D1 の写し（定義と中身の2本）が、空の D1 に戻せるか。使い捨ての
+      # D1 に seed と上限ちょうどの fixture を入れ、deploy と同じ形で export して、
+      # README の「戻す」の順で流し、全部の表の全部の行を突き合わせる。
+      # 1本の export は戻せなかった（子の表の行が親の CREATE より前に来る）
+      - name: 写しから戻せるか
+        run: npm run check:restore
+
       # デプロイせずに、束ねられるところまで確かめる
       - name: ビルド
         run: npx wrangler deploy --dry-run
 
   # 実際に描いてみないと分からない2つを、ブラウザで測る。
-  # 「公開ページはスクロールしない」と、「入口の月の上で文字が読める」。
+  # 「公開ページのレイアウト（横にはみ出さない・切られない・目次が貼り付く）」と、
+  # 「入口の月の上で文字が読める」。
   #
   # 上の4つはどれも版面を見ない——vitest は workerd の上で動くので、
-  # そもそも組むエンジンが居ない。この機能の名前そのものである不変条件を、
-  # CI で確かめる手段がここまで1つも無かった。
+  # そもそも組むエンジンが居ない。
   #
   # job を分けてあるのは、落ちたときに「型が通らない」のか
   # 「画面が壊れている」のかを一目で分けるため。ブラウザを1つ入れるので
@@ -50,9 +70,9 @@ jobs:
   fit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -63,19 +83,23 @@ jobs:
       - name: ブラウザ
         run: npx playwright install --with-deps chromium
 
-      # 空の DB では、カードも目次も無い画面しか測れない
+      # scripts/check-fit.mjs が、使い捨ての D1 を4つ（seed・seed＋ブロック3本・上限
+      # ちょうどの複数人のサイト・同じ中身の1人のサイト）作って wrangler dev を順に立て、
+      # 終わったら落とす。上限ちょうどの中身は scripts/lib/fit-fixture.mjs が
+      # src/blocks.ts の上限から作る。3書体 × 3骨格 × 3寸法 × 訪問者 / ログインの姿で測る
+      - name: レイアウト（はみ出し・切り取り・目次の貼り付け）
+        run: npm run check:fit
+
+      # 空の DB では、月の上に乗る字（入口の帯・Contact）が生えない。check:contrast は
+      # 手元の D1（--local の既定の置き場）をそのまま読む
       - name: ローカル D1 を用意する
         run: |
           npm run db:migrate:local
           npm run db:seed:local
 
-      # scripts/check-fit.mjs が wrangler dev を自分で立てて、終わったら落とす
-      - name: 画面に収まっているか
-        run: npm run check:fit
-
       # 同じブラウザで、もう1つの「実際に描いてみないと分からない」不変条件を測る。
       # 入口の背景の月の上で、見出しとリード文が読めるか（WCAG 1.4.3）。
-      # 月は白い粒子、見出しは #f2f2f4 なので、置き方を間違えると白の上の白に
+      # 月の点はいちばん明るい所が白、見出しは #f2f2f4 なので、置き方を間違えると白の上の白に
       # なる——実際にリード文が 1.00:1（背景と同じ明るさ＝消えている）だった。
       # job を分けないのは、ブラウザの用意と D1 の seed をそのまま使えるため。
       - name: 月の上で文字が読めるか

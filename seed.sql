@@ -1,12 +1,19 @@
 -- 移行前の index.html に載っていた内容を、そのまま D1 に入れる。
--- 何度流しても同じ状態になるよう、先に消してから入れている。
--- 本番に流すのは最初の一度だけ（npm run db:seed）。
+-- 何度流しても同じ状態になるよう、先に消してから入れている——**中身を全部消す**。
+--
+-- ふだん流すのはローカルだけ（npm run db:seed:local）。本番に流すのは空の D1 に
+-- 一度きりで、npm run db:seed:remote:destroys-prod（scripts/seed-remote.mjs）が
+-- 作品・メンバー・構成が1行でもあれば止める。
+--
+-- プラットフォームの選択肢（platforms）は参照データなので、ここではなく移行
+-- （drizzle/0011_platforms_reference）が入れる。先に移行を流してから流すこと。
 
+DELETE FROM item_slug_redirects;
+DELETE FROM member_slug_redirects;
 DELETE FROM item_links;
 DELETE FROM item_tags;
 DELETE FROM items;
 DELETE FROM members;
-DELETE FROM platforms;
 DELETE FROM blocks;
 
 -- トップの並び（src/blocks.ts の DEFAULT_BLOCKS と揃える）。
@@ -16,13 +23,6 @@ INSERT INTO blocks (type, published, sort_order) VALUES
   ('projects', 1, 20),
   ('team',     1, 30),
   ('contact',  1, 40);
-
-INSERT INTO platforms (key, label, sort_order) VALUES
-  ('macos',  'macOS',  10),
-  ('ios',    'iOS',    20),
-  ('cli',    'CLI',    30),
-  ('server', 'Server', 40),
-  ('web',    'Web',    50);
 
 INSERT INTO members (id, slug, name, role, location, headline, bio, skills_text, career_text, avatar_url, github, email, published, sort_order)
 VALUES (
@@ -76,6 +76,10 @@ Playwright',
 -- 重なったら末尾に -2, -3 と付けて一意にする（いまは重なっていない）。
 -- 題が日本語だけのもの（Works の2件）は toSlug が空を返すので、意味の分かる英語を手で置く。
 -- ここを変えると、貼られたリンクが切れる。足すのはよいが、書き換えないこと。
+--
+-- 本文（body）と画像（image_url / image_alt）は書かない。列の既定値のまま
+-- （本文と代替テキストは空、画像は無し）入る。作品の中身は本人が管理画面から
+-- 書くもので、ここで作り話を埋めると、それが本人の言葉として公開される。
 
 INSERT INTO items (id, type, member_id, platform_key, title, slug, year, summary, published, sort_order) VALUES
   (1, 'app', 1, 'macos', 'AppMixer', 'appmixer', '2026', 'macOS 14.4 の Core Audio Process Tap でアプリ単位の音量と出力先を制御する常駐アプリ。署名と公証を通して配布している。', 1, 10),
@@ -92,8 +96,13 @@ INSERT INTO items (id, type, member_id, platform_key, title, slug, year, summary
 
 -- Works -----------------------------------------------------------------
 
+-- 続いているものの年は「2024 — 現在」（経歴の期間と同じ書き方）。「2024 —」だけでは
+-- ダッシュの先が空いて書きかけに見える。並びは頭の4桁で決まるので 2024 のまま。
+-- 実績値の添え（metric_note）は、値と単位のあとに続けて読まれる（「20 人日 見込み
+-- 40人日から半減」）。「見込み 40人日 → 実績」と書くと → が値の前を指して逆に読める。
+
 INSERT INTO items (id, type, member_id, category, title, slug, year, summary, metric_value, metric_unit, metric_note, published, sort_order) VALUES
-  (9, 'work', 1, '金融系基幹システム', '開発工程の効率化', 'dev-efficiency', '2024 —', '生成AIと自動化を設計・製造・テストに組み込む取り組み。横断で使える集計ツールも展開している。', '20', '人日', '見込み 40人日 → 実績', 1, 10),
+  (9, 'work', 1, '金融系基幹システム', '開発工程の効率化', 'dev-efficiency', '2024 — 現在', '生成AIと自動化を設計・製造・テストに組み込む取り組み。横断で使える集計ツールも展開している。', '20', '人日', '見込み 40人日から半減', 1, 10),
   (10, 'work', 1, '製造業', '問い合わせ対応エージェント', 'support-agent', '2026', 'Copilot Studio で構築した、ドキュメントを参照して問い合わせに答えるエージェント。参照する資料を整理し、回答を検証して一次対応に充てた。', NULL, NULL, NULL, 1, 20);
 
 -- タグ --------------------------------------------------------------------

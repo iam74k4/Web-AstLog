@@ -5,100 +5,120 @@ GitHub 上でそのまま図として表示される（Mermaid）。画面の一
 
 ## 公開側
 
-公開ページは1画面に1つぶん。ページはスクロールせず、移動は普通のフルページ遷移で
-やる。見る人は連なりをめくるか、目次で飛ぶか、カードから作品1件へ入るか、
-Team のカードから個人ページへ入るかの4つだけ。個人ページも柱と目次はサイトのままで、
-Team の続きとしてめくり、最後は Contact へ抜ける。
+公開ページは節ごとに1ページ（入口・Projects・Profile・Contact と打ち込むブロック）で、
+普通に縦にスクロールする。目次（柱・上の帯）の1行が1ページで、目次はページの上に貼り付いて
+いつでも押せる。ページからページへの移動は普通のフルページ遷移。見る人は目次で飛ぶか、
+入口の帯から一覧へ行くか、カードから作品1件へ入るか、Team のカードから個人ページへ入るかの
+4つだけ。**画面の底のページャ（← 前 / 次 →）は無い**——以前は「1画面に収めてスクロール
+させない」ために節を画面ごとに割り、底の左右の手でめくっていた。持ち主が触って「面倒すぎる」と
+判断してやめた。個人ページも柱と目次はサイトのまま。
+
+個人ページへの入り方は人数で変わる。
+
+- **1人のサイト（Team を置いているとき）**: Team のページは無い。その位置にその人のページ
+  （`/members/<slug>`。名札 → About → Skills → Career を縦に並べた1ページ）が並び、目次では
+  「Profile」の1行。`/team` はそこへ 301
+- **2人以上のサイト**: Team のカードから入る（目次の印は Team）
+
+下の図は両方の形を1枚に載せ、片方にしか無い矢印には（2人以上）（1人のサイト）と
+添えてある。
 
 ```mermaid
 flowchart LR
-    Top["トップ（連なりの先頭）<br>GET /"]
-    Screen["画面<br>GET /:screen"]
-    Page["画面の続き<br>GET /:screen/:page"]
-    Filtered["絞り込んだ1画面目<br>/projects?kind= ・ ?member="]
+    Top["トップ（並びの先頭）<br>GET /"]
+    Screen["ページ<br>GET /:screen"]
+    OldPage["割っていたころの続き<br>/:screen/:page"]
+    Filtered["絞り込んだ一覧<br>/projects?kind= ・ ?member="]
     Moved["以前の一覧<br>/apps ・ /works（続きも）"]
-    Item["作品1件（恒久リンク）<br>/apps/item/:slug ・ /works/item/:slug"]
-    Whole["全体 GET /all<br>（縦に伸びる唯一の1本）"]
-    Profile["メンバー個別<br>/members/:slug"]
-    MScreen["その人の画面<br>/about ・ /skills ・ /career<br>（続きは …/:page）"]
+    Item["作品1件（恒久リンク）<br>/apps/item/:slug ・ /works/item/:slug<br>本文は小節 #story"]
+    OldStory["前の本文の画面<br>…/item/:slug/story"]
+    Whole["全体 GET /all"]
+    Profile["メンバー個別<br>/members/:slug<br>小節 #about ・ #skills ・ #career"]
+    OldTeam["1人のサイトの Team<br>/team"]
+    OldMember["前の個人ページの続き<br>/about ・ /skills ・ /career（…/:page も）"]
     Contact["サイトの Contact<br>/contact"]
     Mail["メールソフト"]
     NotFound["404"]
-    Admin["管理画面（その画面を直す場所）"]
+    Admin["管理画面（そのページを直す場所）"]
 
-    Top -->|"ページャ 次 →"| Screen
-    Screen -->|"ページャ 次 →"| Page
-    Page -->|"ページャ ← 前"| Screen
-    Screen -->|"ページャ ← 前（先頭は /hero）"| Top
     Top -->|"左の目次"| Screen
     Screen -->|"左の目次（Hero は載らない）"| Screen
     Screen -->|"左上のロゴ"| Top
-    Top -->|"入口の帯（個人開発 N · 業務 M）"| Screen
+    Top -->|"入口の帯 つくったもの（個人開発 N · 業務 M）一覧で見る →"| Screen
+    OldPage -->|"301（同じページへ。query は付けたまま）"| Screen
     Moved -->|"301。同じ区分で絞る"| Filtered
 
     Screen -->|"ピルを押す"| Filtered
-    Page -->|"ピルを押す"| Filtered
     Filtered -->|"「すべて」で外す"| Screen
 
-    Screen -->|"カードの題"| Item
-    Page -->|"カードの題"| Item
-    Item -->|"目次（戻る道はこれだけ）"| Screen
+    Screen -->|"カード（面ごと押せる）"| Item
+    Item -->|"← 一覧に戻る（一覧のそのカード #item-slug）"| Screen
+    Item -->|"目次（Projects に印）"| Screen
+    Item -->|"行き先の「担当 名前 →」（2人以上、または Team が無いとき）"| Profile
+    Item -->|"前の slug・前の区分の URL → 301（いまの URL へ）"| Item
+    OldStory -->|"301（#story へ。本文が無ければページの頭へ）"| Item
+    Profile -->|"前の slug → 301（いまの URL へ）"| Profile
+    OldMember -->|"301（#about などの小節へ。無ければページの頭へ）"| Profile
 
-    Screen -->|"Team のカード / Profile →"| Profile
+    Screen -->|"Team のカード / プロフィール →（2人以上）"| Profile
+    Screen -->|"目次の Profile（1人のサイト）"| Profile
+    OldTeam -->|"301（1人のサイト）"| Profile
     Screen -->|"カードの担当者名（2人以上、または Team が無いとき）"| Profile
-    Profile -->|"ページャ ← Team"| Screen
     Profile -->|"左上のロゴ"| Top
-    Profile -->|"ページャ About →"| MScreen
-    MScreen -->|"ページャ ← その人の名前"| Profile
-    MScreen -->|"ページャ（About → Skills → Career）"| MScreen
-    MScreen -->|"最後の画面の Contact →"| Contact
-    Profile -->|"目次（サイトのもの。Team に印）"| Screen
-    MScreen -->|"目次（サイトのもの。Team に印）"| Screen
-    Profile -->|"このメンバーの Projects の帯"| Filtered
+    Profile -->|"目次（サイトのもの。Team に印／1人のサイトは Profile に印）"| Screen
+    Profile -->|"このメンバーのつくったものの帯（2人以上のサイト）"| Filtered
+    Profile -->|"/members/:slug/contact → 301"| Contact
 
     Top -->|"柱の足元（900 以上）"| Whole
-    Screen -->|"柱の足元（900 以上）"| Whole
+    Top -->|"帯の下の すべてを1ページで読む →（幅で畳まない）"| Whole
+    Screen -->|"柱の足元（900 以上。中央寄せでは目次の行）"| Whole
     Whole -->|"左上のロゴ"| Top
 
-    Screen -->|"Contact の画面（メール / GitHub）"| Mail
+    Contact -->|"メール / GitHub"| Mail
     Profile -.->|"下書き / 存在しない slug"| NotFound
-    MScreen -.->|"書いていない画面"| NotFound
-    Page -.->|"範囲の外のページ数"| NotFound
-    Item -.->|"下書き / 知らない slug / 種類の食い違い"| NotFound
+    OldMember -.->|"知らない続きの名前"| NotFound
+    Screen -.->|"ページの名前の形でない（D1 に聞かずに）"| NotFound
+    Item -.->|"下書き / 知らない slug"| NotFound
     NotFound -->|"トップへ戻る"| Top
 
     Top -.->|"柱の「管理画面」（ログイン中だけ）"| Admin
     Screen -.->|"柱の「管理画面」（ログイン中だけ）"| Admin
     Item -.->|"柱の「管理画面」（ログイン中だけ）"| Admin
-    MScreen -.->|"柱の「管理画面」（ログイン中だけ）"| Admin
+    Profile -.->|"柱の「管理画面」（ログイン中だけ）"| Admin
 ```
 
-めくる先はページャ。数えるのは**節の中**（`Projects  2 / 4`）で、サイト全体の通し番号では
-ない——全体で数えると、絞り込みが無関係な画面の番号まで動かす（[画面の一覧](screens.md)）。
-節をまたぐ手だけが行き先を名乗る（`← 前` ではなく `← Projects`）。
-`/projects/1` は `/projects` へ 303 で寄せる（同じ画面に URL を2つ作らない）。1画面しか
-無いサイトではページャを出さない。目次には番号を振らない——数え上げはページャ1つに
-寄せてある。画面の連なり（前後・目次・通し番号・canonical）は `src/lib/sequence.ts` が
-1本で持っていて、トップも個人ページも同じところを通る。
+目次には番号を振らない。目次は `src/lib/sequence.ts` の `tableOfContents` が、サイトの
+ページの並び（`src/routes/public/site.ts` の `sitePageLinks`）から1本で組み、トップも個人
+ページも作品のページも同じところを通る。いまのページの行に印が付く（作品のページは
+Projects、個人ページは Profile か Team）。
 
-絞り込み（区分・メンバー）は**ページを移る**。ピルはリンクで、
-押すとそのブロックの1画面目へ遷移する——3画面目で絞り込むと、絞ったあとの
-3画面目が無いことがあるため。絞り込みはページャにも目次にも同じ query が付いて
-画面をまたいで効き、もう一度同じピルを押すとその軸だけ外れる（「すべて」は両方）。
+絞り込み（区分・メンバー）は**ページを移る**。ピルはリンクで、押すと絞り込んだ一覧の
+ページへ遷移する。絞り込みは目次の Projects の行き先にも同じ query が付いて、目次から
+一覧へ戻っても外れない。もう一度同じピルを押すとその軸だけ外れる（「すべて」は両方）。
 公開ページは JavaScript を1バイトも持たないので、切っても何も変わらない。
 
-作品1件のページ（`/apps/item/<slug>` ・ `/works/item/<slug>`）は**連なりの外にある1枚**。
-ページャは出さず、戻る道は目次だけ（印は Projects に付く）。一覧のカードの題がここへの
-リンクで、出る条件は「その作品が公開中」の1つだけ——Projects の節を外しても、
-貼られたリンクは死なない。
+作品1件のページ（`/apps/item/<slug>` ・ `/works/item/<slug>`）は、カードを開いたものと、
+本文を書いた作品なら説明の下の小節「Story」（`#story`）。画像（あれば）はここにだけ出る。
+頭の「← 一覧に戻る」は一覧のその作品のカード（`/projects#item-<slug>`）へ戻す——一覧は
+全件を1ページに並べるので、開いたカードの所から読み続けられる。作品同士をめくる手は無い
+（隣の作品は、戻った一覧の隣のカード）。目次の印は Projects に付く。一覧のカードは面ごと
+ここへのリンクで（中の Repository と担当者名はそれぞれの行き先へ）、出る条件は「その作品が
+公開中」の1つだけ——Projects の節を外しても、貼られたリンクは死なない（そのときは
+「← 一覧に戻る」を出さない）。以前の本文の画面（`…/<slug>/story`）は `#story` へ 301。
+管理画面で slug を変えた作品・メンバーの前の URL と、区分を変えた作品の前の区分の URL は、
+いまの URL へ 301 で寄せる（前の slug は `item_slug_redirects` / `member_slug_redirects`
+に残っている）。変えた日に名刺や SNS に貼ったリンクが切れる、を起こさない。
+この 301（と1人のサイトの `/team`・個人ページの Contact・前の個人ページの続き・前の本文の
+画面の 301）は行き先がデータで変わるので、`Cache-Control: no-cache` でブラウザに覚えさせない
+——slug を元に戻した日に、前の転送を覚えたブラウザがリダイレクトの無限ループにならないように。
 
-個人開発と業務は、公開ページでは Projects の1つの一覧（新しい順）。以前の一覧の URL
-（`/apps` `/works` とその続き）は、同じ区分で絞った `/projects` へ 301 で寄せる
-（ページ数は引き継がない。区分を混ぜて並べ直したので、同じ番号に同じカードは居ない）。
+個人開発と業務は、公開ページでは Projects の1つの一覧（新しい順・全件）。以前の一覧の URL
+（`/apps` `/works` とその続き）は、同じ区分で絞った `/projects` へ 301 で寄せる。割って
+いたころの続き（`/projects/2`）も `/projects` へ 301（絞り込みは付けたまま）。
 
 「構成」で節を外しても、行き止まりを作らない。
 
-- 帯（入口と個人ページの1枚目）は Projects へ送り、件数は区分ごとに数える
+- 帯（入口と、2人以上のサイトの個人ページ）は Projects へ送り、件数は区分ごとに数える
   （`個人開発 5 · 業務 2`。項目の無い区分は数えない）。Projects を外したサイトでは
   帯ごと出さない
 - カードの担当者名（個人ページへのリンク）は、2人以上いるとき**か、Team を
@@ -108,26 +128,28 @@ flowchart LR
   個人ページの帯も付けない。効かせると「すべて」にも名前にも印が付かないまま
   一覧だけが絞られる
 
-全体ページ（`/all`）へは、柱の足元の「全体を1ページで見る ↗」から行く。899 以下では
-足元ごと畳まれるので、スマホの幅では画面から消える（`sitemap.xml` には載る）。
-管理画面の「構成」からも同じ1本が開く。印刷・Ctrl-F・翻訳・全体の点検のための
-1本で、ここだけは縦に伸びる。詳しくは [screens.md](./screens.md#全体ページ)。
+全体ページ（`/all`）へは、柱の足元の「全体を1ページで見る →」と、入口の帯の下の
+「すべてを1ページで読む →」から行く。足元は 899 以下で畳まれるので、スマホの幅では
+入口の1本が受ける（`sitemap.xml` にも載る）。中央寄せの骨格の 900 以上では、足元の
+著作権表示は出さず、全体ページへの1本だけを目次と同じ行に置く。
+管理画面の「構成」からも同じ行き先が開く。印刷・Ctrl-F・翻訳・全体の点検のための
+1本で、サイトの全部が1つの文書に並ぶ。詳しくは [screens.md](./screens.md#全体ページ)。
 
 管理画面へは、**ログインしている人にだけ**柱に出る「管理画面」から行く（訪問者の
 見た目は変わらない）。目次のすぐ後ろに置くので、899 以下の横帯でも右端に残る。
-行き先は「いま見ている画面を直す場所」で、`src/routes/public.tsx` の `blockAdminPath`
+行き先は「いま見ているページを直す場所」で、`src/routes/public/page.tsx` の `blockAdminPath`
 が決める。
 
-| 見ている画面 | 行き先 |
+| 見ているページ | 行き先 |
 |---|---|
 | 入口（Hero） | 1人のサイトならその人の編集、それ以外は Members 一覧 |
 | Projects | 項目の一覧（`/admin/items`。個人開発 / 業務のタブ） |
-| Team | Members 一覧 |
+| Team（2人以上のサイト） | Members 一覧 |
 | Contact | 構成のその行（中身は `src/site.ts` にあり、管理画面からは変えられない） |
 | 打ち込むブロック（ひとこと・メモ …） | そのブロックの編集 |
 | 全体ページ（`/all`）・0件のトップ | 構成 |
 | 作品1件 | その項目の編集 |
-| 個人ページ（どの画面でも） | その人の編集 |
+| 個人ページ（1人のサイトのプロフィールも） | その人の編集 |
 
 同じタブで開く（管理画面の「サイトを見る ↗」は別タブ。両方を別タブにすると、
 直して見に行くたびにタブが増える）。
@@ -143,6 +165,7 @@ flowchart LR
 flowchart TD
     Login["ログイン<br>GET /admin/login"]
     Members["Members 一覧<br>GET /admin/members"]
+    Account["アカウント<br>GET /admin/account"]
     Items["Projects（個人開発 / 業務）<br>GET /admin/items?type="]
     MForm["Member フォーム<br>/members/new ・ /:id/edit"]
     IForm["Item フォーム<br>/items/new ・ /:id/edit"]
@@ -154,13 +177,16 @@ flowchart TD
     Look["見た目<br>GET /admin/appearance"]
     Public["公開ページ<br>/ ・ /all"]
 
-    Login -->|"POST /admin/login<br>成功 → 303（?next= があればそこへ）"| Members
+    Login -->|"GitHub / Google でログイン（認証の節）<br>成功 → 303（?next= があればそこへ）"| Members
+    Members <-->|"左ナビの足元の名前"| Account
+    Account -->|"すべての端末からログアウト<br>POST /admin/account/logout-all → 303 ?out=all"| Login
     Members <-->|"左ナビ"| Items
     Items <-->|"左ナビ"| Blocks
     Blocks <-->|"左ナビ"| Look
 
     Blocks -->|"↑↓ POST /:id/move → 303 #block-id"| Blocks
     Blocks -->|"公開/下書き POST /:id/publish → 303 #block-id"| Blocks
+    Blocks -->|"公開にするのを関門が止めた → 303 /:id/edit?publish=blocked"| BForm
     Blocks -->|"足す（決まった中身）<br>POST /admin/blocks → 303 #block-id"| Blocks
     Blocks -->|"サイトを見る ↗ / 全体を1ページで見る ↗"| Public
     Members -->|"サイトで見る ↗（公開中の行）"| Public
@@ -196,6 +222,13 @@ flowchart TD
 ```
 
 保存が必ず 303 リダイレクトで終わるので、リロードしても二重に登録されない。
+送信ボタンの2度押し（遅い回線・送り直し）は、追加のフォームが描くときに持つ
+一度きりの札（`formKey`）で止める——同じ札の2度目は新しい行を作らず、1度目がその札で
+作った行への保存になる（編集と同じ道。中身が同じなら書き直すだけ、「戻る」で開き直して
+直した・公開に印を付けたなら、それを反映して公開の関門も通す。知らせは
+「1度目に作ったものに書きました」まで言う）。JavaScript が無いので、押したあとにボタンを押せなくする
+手が無い。「この並びから始める」は1文の INSERT で、決まった中身のブロックは DB の
+部分一意索引で、同時に来た2本目を止める。
 
 左ナビの足元の「サイトを見る ↗」は、どの画面からも公開ページを別タブで開く。
 
@@ -213,64 +246,136 @@ flowchart TD
 足したブロックは Contact の手前に入る——末尾に付けると締めの連絡先の後ろに
 来てしまい、↑ を何度も押して運ぶことになる。
 
-公開／下書きの切り替えと、「公開する」を外した保存は、中身の長さを検査しない。
-検査すると、上限より前に保存された長い中身を持つ行が「引っ込めることすらできない」
-行き止まりになる（残る手が本文ごと削除だけになる）。上限は公開するものに掛ける。
+**公開の関門は「published が 1 になるとき」に1か所**（`src/blocks.ts` の
+`publishErrors`）。ブロックを新しく書く・編集で公開にする・構成の一覧の「公開する」・
+作品の保存・メンバーの保存が、どれも同じ関数を通る。一覧の「公開する」が止められたら、
+303 でその行の編集画面へ送り（`?publish=blocked`）、理由と「公開する」の印を付けて描く
+——直して保存すれば公開になる。
+
+下書きに戻す方向（一覧の「下書きにする」と、「公開する」を外した保存）は、中身の長さを
+検査しない。検査すると、上限より前に保存された長い中身を持つ行が「引っ込めることすら
+できない」行き止まりになる（残る手が本文ごと削除だけになる）。上限は公開するものに掛ける
+（以前はメンバーの紹介文だけが下書きでも長さを見ていて、その行き止まりが残っていた）。
+
+長さではなく**値そのもの**が受け取れないものは、下書きの保存でも 400 で止める——
+画像（中身が PNG・JPEG・WebP・AVIF・GIF のどれでもない、1MB を超える）と、URL
+（作品のリンクの `javascript:`・頭を省いた相対 URL・ラベルか URL の片方だけの行、
+メンバーの GitHub の `https://` 以外、リンク集の落ちる行）と、書くブロックの空の中身と、
+数として読めない並び順（全角の数字は読む）と、消えた担当メンバー・プラットフォーム。
+どれも公開ページが落とすか、DB が受け取れないもので、直すのは同じフォームの中で済む
+（リンクとリンク集は何行目かを言う）。画像を選んで別の欄で止められたときは
+「画像はまだ保存していません」と添える。
+
+作品の保存は、行・タグ・リンク・転送表を**1つの batch**で書く（全部書けるか何も
+書かない）。1本ずつ書いていたころは、タグを 34 個付けると D1 の束縛変数の上限で
+途中の INSERT が落ち、前のタグとリンクはもう消えていた。
+
+画像のある保存は、検査が全部通ってから KV に置き、そのあと D1 を書く。D1 で
+落ちたら置いた画像を消してから 500 を返す（どの行からも指されない画像を残さない）。
+差し替えた前の画像を消すのは、D1 が通ったあと。
+
+ログインした POST は、終わったあとで公開ページの写しの版（KV の `site:version`）を
+上げる（`src/lib/page-cache.ts` の `touchSiteOnWrite`）。上げないのは 4xx で止めた保存
+だけ。訪問者の画面が新しくなるのは、ほかの場所では版の読みのキャッシュが切れる
+最大 60 秒ほどあと。保存した本人はクッキーで写しを通らないので、公開ページへ
+行けばすぐ新しい画面が出る。
 
 1行も無いうちは「足す」を出さない。0件のトップは既定の並びで描いているので、
 先にそれを行にしてから触らせる。直接 `POST /admin/blocks` が来たときも、
-足す前に既定の並びを行にする（足したのに5節が消える、を起こさないため）。
+足す前に既定の並びを行にする（足したのに4節が消える、を起こさないため）。
 
 見た目だけは一覧を持たず、同じ画面に戻る。選ぶものが3つしかないので、
 「どれを編集中か」を示す一覧が要らない。
 
 ## 認証
 
+ログインは GitHub / Google の OAuth だけ（パスワードは無い）。ログイン画面の2つは
+フォームではなく GET のリンクで、往復は `/admin/auth/:provider/start` と `callback`。
+
 ```mermaid
 flowchart TD
     Any["/admin/* を開く"]
-    Check{"Cookie の<br>セッションは有効か"}
-    Login["ログイン画面"]
-    Rate{"直近15分の失敗が<br>5回以上か"}
-    Verify{"メールと<br>パスワードが一致するか"}
-    Admin["管理画面"]
+    Check{"Cookie の<br>セッションは有効か<br>（D1 にはハッシュで引く）"}
+    Login["ログイン画面<br>GET /admin/login"]
+    Start["GET /admin/auth/:provider/start<br>D1 に state・verifier・nonce（10分）<br>同じ state をクッキーに"]
+    Busy["429<br>ログインの試行が多すぎます"]
+    Provider["GitHub / Google<br>（本人が許可する）"]
+    Callback["GET /admin/auth/:provider/callback<br>state の札を先に消す"]
+    State{"クッキーと query の state が一致し<br>期限内で、提供元も同じか"}
+    Exchange{"code をトークンに換え<br>本人の ID を引けたか"}
+    Who{"user_identities に<br>（提供元, ID）があるか"}
+    Owner{"OWNER_GITHUB_ID と同じ id か<br>確認済みの OWNER_GOOGLE_EMAIL か<br>その値はまだ使っていないか（owner_claims）"}
+    Link["owner に紐づける<br>（owner の行が無ければ作る。owner は1人）"]
+    Admin["管理画面<br>（前のセッションを捨てて発行し直す）"]
+    Refuse["403<br>このアカウントでは入れません"]
+    Broken["502<br>提供元との通信に失敗"]
 
     Any --> Check
     Check -->|"はい"| Admin
     Check -->|"いいえ → 303 ?next=開いた画面"| Login
-    Login -->|"POST"| Rate
-    Rate -->|"はい → 429"| Login
-    Rate -->|"いいえ"| Verify
-    Verify -->|"はい → Cookie 発行"| Admin
-    Verify -->|"いいえ → 401"| Login
+    Login -->|"GitHub でログイン / Google でログイン"| Start
+    Start -->|"同じ IP から 60 秒に 10 回を超えた<br>（D1 に書かない）"| Busy
+    Start -->|"302（PKCE・state。Google は nonce も）"| Provider
+    Provider -->|"断った → ?error=denied"| Login
+    Provider -->|"?code&state"| Callback
+    Callback --> State
+    State -->|"いいえ → ?error=expired"| Login
+    State -->|"はい"| Exchange
+    Exchange -->|"いいえ"| Broken
+    Exchange -->|"はい"| Who
+    Who -->|"はい"| Admin
+    Who -->|"いいえ"| Owner
+    Owner -->|"はい"| Link
+    Link --> Admin
+    Owner -->|"いいえ"| Refuse
     Admin -->|"POST /admin/logout<br>セッションを消す"| Login
 ```
 
-- ユーザーが居ないときも、必ず1回ハッシュを計算してから失敗を返す。応答の速さで
-  アカウントの有無が分からないようにするため
-- 失敗の回数は KV に 15 分の期限付きで置く。厳密な回数制限ではなく、総当たりを
-  鈍らせるためのもの
-- `POST` は Origin も確認する。ログイン・ログアウト・初期設定も対象
+- 本人は提供元の ID で照合する（GitHub は数値の id、Google は sub）。ログイン名や
+  メールアドレスを見るのは、最初の紐づけのときだけ
+- ログインの入口は、同じ IP から 60 秒に 10 回まで（Workers の Rate Limiting）。
+  超えたぶんは D1 に書かずに 429
+- state は D1 で1回きり。成功しても弾いても、差し出された札（クッキーの側と
+  query の側）はその場で消える。同じ URL をもう一度開いてもやり直しになる
+- Google の id_token は iss・aud・exp・nonce を確かめ、合わなければ 400。署名は、
+  トークンエンドポイントから TLS で直接受け取ったものなので確かめない（OIDC Core 3.1.3.7）
+- アクセストークンは本人の ID を引いたら捨てる。保存しない・ログに出さない
+- `POST` は送り元も確認する（Origin → Sec-Fetch-Site → Referer。`Origin: null` は 403）。
+  ログアウトも対象
 - ログインし直したら `?next=` の画面へ戻す。受け付けるのは `/admin/` の中だけで、
-  外の URL・`//`・`..`・ログインやログアウト自身は捨てて `/admin/members` へ送る
+  外の URL・`//`・`..`・ログインの往復やログアウト自身は捨てて `/admin` へ送る
 
-## 初回だけ通る道
+## 最初の紐づけ
 
-owner がまだ1人も居ないときだけ、この入口が開く。
+最初の owner を作る入口（`/admin/setup`）は無い。`wrangler.toml` の `[vars]` と
+一致するアカウントで初めてログインしたとき、そのアカウントが owner に紐づく。
+`[vars]` の値が効くのは値ごとに1度だけ（使った値は `owner_claims` に残る）。
 
 ```mermaid
 flowchart LR
-    Setup["初期設定<br>/admin/setup"]
-    Gate{"users が空、かつ<br>SETUP_TOKEN が一致"}
-    Create["owner を1件作る"]
-    Admin["管理画面<br>/admin/members"]
-    Gone["404"]
+    First["初めてのログイン<br>（user_identities に行が無い）"]
+    Gate{"GitHub: id = OWNER_GITHUB_ID<br>Google: 確認済みで<br>アドレス = OWNER_GOOGLE_EMAIL"}
+    Used{"その値はもう使ったか<br>（owner_claims に行があるか）"}
+    Existing{"owner の行があるか"}
+    Keep["その行に紐づける<br>（id もメンバーも変えない）"]
+    Create["owner を1件作って紐づける"]
+    Admin["管理画面<br>/admin"]
+    Refuse["403"]
 
-    Setup --> Gate
-    Gate -->|"はい"| Create
-    Create -->|"303（そのままログイン）"| Admin
-    Gate -->|"いいえ（2回目以降）"| Gone
+    First --> Gate
+    Gate -->|"はい"| Used
+    Used -->|"いいえ（記録を残す）"| Existing
+    Used -->|"はい"| Refuse
+    Existing -->|"はい（パスワードの頃から居る）"| Keep
+    Existing -->|"いいえ"| Create
+    Keep --> Admin
+    Create --> Admin
+    Gate -->|"いいえ"| Refuse
 ```
 
-`SETUP_TOKEN` は `wrangler secret put SETUP_TOKEN` で入れる。パスワードを
-リポジトリに置かずに最初の1人を作るための仕掛けで、作った後は通らなくなる。
+GitHub と Google の両方を、同じ owner に紐づけられる（片方で入ったあと、もう片方でも
+一度ログインする。同時に初めて入っても owner は1人——部分一意索引 `users_one_owner`）。
+紐づいたあとは `[vars]` を書き換えても外れない。外すのは `user_identities` の行を
+消すこと（README の「管理画面に入る」）。外したアカウントは、同じアカウントで入り直しても
+紐づき直らない（その値はもう使ってある）。また使うときは `owner_claims` の行も消す。
+同じ確認済みのアドレスを持つ別の Google アカウント（別の sub）も、同じ値では紐づかない。

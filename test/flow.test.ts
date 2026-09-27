@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import * as schema from '../src/db/schema'
-import { db, form, get, OWNER, resetDb, seedItem, seedMember, signIn } from './helpers'
+import { db, form, get, okText, resetDb, seedItem, seedMember, signIn } from './helpers'
 
 /*
-  導線。ある画面から次の画面へ、行き止まらずに進めるか。
+  導線。あるページから次のページへ（目次とページの中のリンクで）、行き止まらずに進めるか。
   構成でブロックを外したときに切れやすいので、その形をここで押さえる。
 */
 
@@ -24,12 +24,14 @@ const bandOf = (html: string) => {
 describe('個人ページ → 一覧', () => {
   it('構成で Projects を外したら、一覧へは案内しない', async () => {
     const member = await seedMember()
+    // 2人のサイト。1人で Team を置くと、帯はもともと出ない（入口の帯と重なる）
+    await seedMember({ slug: 'hoshino', name: '星野' })
     await seedItem({ type: 'app', memberId: member.id })
     await seedItem({ type: 'work', title: '業務の実績', memberId: member.id })
     await place(['hero', 'team', 'contact'])
 
     // 送った先に節が無いと、行き止まり（404）になる
-    const html = await (await get('/members/okazaki')).text()
+    const html = await okText('/members/okazaki')
     expect(bandOf(html)).toBe('')
     expect(html).not.toContain('href="/projects')
   })
@@ -38,13 +40,22 @@ describe('個人ページ → 一覧', () => {
     const member = await seedMember()
     await seedItem({ type: 'app', memberId: member.id })
     await seedItem({ type: 'work', title: '業務の実績' })
-    await place(['hero', 'projects', 'team', 'contact'])
+    /*
+      Team を置かない1人のサイト（カードの担当者名から入る並びの外のページ）。
+      Team を置くと個人ページはサイトの並びに入り、帯は出さない
+    */
+    await place(['hero', 'projects', 'contact'])
 
-    const band = bandOf(await (await get('/members/okazaki')).text())
+    const band = bandOf(await okText('/members/okazaki'))
     expect(band).toContain('href="/projects"')
     expect(band).toContain('個人開発 1')
     // 業務はほかの人のもの。その人の帯で「業務 1」と出すと、どこにも無い1件になる
     expect(band).not.toContain('業務')
+    /*
+      題は入口の帯（つくったもの）と同じ言葉で、誰のものかを足す。「このメンバーの
+      Projects」のころは、節の名前（英語）を札の題に使っていた
+    */
+    expect(band).toContain('<strong>このメンバーのつくったもの</strong>')
   })
 
   it('入口の帯は、個人開発と業務を別々に数えて1つの一覧へ送る', async () => {
@@ -52,7 +63,7 @@ describe('個人ページ → 一覧', () => {
     await seedItem({ type: 'work', title: '業務の実績' })
     await place(['hero', 'projects', 'contact'])
 
-    const band = bandOf(await (await get('/')).text())
+    const band = bandOf(await okText('/'))
     expect(band).toContain('href="/projects"')
     expect(band).toContain('個人開発 1 · 業務 1')
   })
@@ -62,8 +73,10 @@ describe('1人のサイトの ?member=', () => {
   it('帯は ?member= を付けずに一覧へ送る', async () => {
     const member = await seedMember()
     await seedItem({ memberId: member.id })
+    // 帯が出るのは Team を置かない1人のサイト（置くと帯は出さない。入口の帯と重なる）
+    await place(['hero', 'projects', 'contact'])
 
-    const html = await (await get('/members/okazaki')).text()
+    const html = await okText('/members/okazaki')
     expect(bandOf(html)).toContain('href="/projects"')
     expect(html).not.toContain('?member=')
   })
@@ -74,7 +87,7 @@ describe('1人のサイトの ?member=', () => {
     await seedItem({ title: '担当の無いアプリ', sortOrder: 20 })
 
     // 名前のピルが無いので、効かせると「すべて」にも名前にも印が付かなくなる
-    const html = await (await get('/projects?member=okazaki')).text()
+    const html = await okText('/projects?member=okazaki')
     expect(html).toContain('担当の無いアプリ')
     expect(html).toContain('href="/projects" aria-current="true"')
   })
@@ -86,68 +99,47 @@ describe('トップ → 個人ページ', () => {
     await seedItem({ slug: 'appmixer', memberId: member.id })
     await place(['hero', 'projects', 'contact'])
 
-    expect(await (await get('/projects')).text()).toContain(
-      'class="card__member" href="/members/okazaki"',
-    )
+    expect(await okText('/projects')).toContain('class="card__member" href="/members/okazaki"')
     // 作品1件のページの「担当」も同じ条件
-    expect(await (await get('/apps/item/appmixer')).text()).toContain('href="/members/okazaki"')
+    expect(await okText('/apps/item/appmixer')).toContain('href="/members/okazaki"')
   })
 
   it('Team があってメンバーが1人なら、カードには名前を出さない', async () => {
     const member = await seedMember()
     await seedItem({ memberId: member.id })
 
-    expect(await (await get('/projects')).text()).not.toContain('card__member')
+    expect(await okText('/projects')).not.toContain('card__member')
   })
 })
 
 /* ------------------------------------------------------------- 管理側 */
 
 describe('ログインの戻り先', () => {
-  it('弾かれた画面へ、ログイン後に戻る', async () => {
+  it('弾かれた画面は、ログイン画面の提供元のリンクへ持ち回される', async () => {
     const bounced = await get('/admin/appearance')
     expect(bounced.headers.get('location')).toBe('/admin/login?next=%2Fadmin%2Fappearance')
 
-    // 戻り先はログイン画面のフォームに持ち回される
-    const page = await (await get('/admin/login?next=%2Fadmin%2Fappearance')).text()
-    expect(page).toContain('name="next" value="/admin/appearance"')
-
-    await signIn()
-    const response = await get('/admin/login', {
-      method: 'POST',
-      body: form({ email: OWNER.email, password: OWNER.password, next: '/admin/appearance' }),
-    })
-    expect(response.headers.get('location')).toBe('/admin/appearance')
+    // ログイン画面はフォームではなく、提供元ごとの GET のリンク。戻り先はその query に乗る
+    const page = await okText('/admin/login?next=%2Fadmin%2Fappearance')
+    expect(page).toContain('href="/admin/auth/github/start?next=%2Fadmin%2Fappearance"')
+    expect(page).toContain('href="/admin/auth/google/start?next=%2Fadmin%2Fappearance"')
+    // 往復のあとで実際にそこへ戻ることは test/oauth.test.ts（next の安全化）
   })
 
-  it('管理画面の外へは戻さない', async () => {
-    await signIn()
+  it('管理画面の外やログインの往復そのものは、リンクに持ち回さない', async () => {
     for (const next of [
       'https://evil.example',
       '//evil.example',
       '/admin/../..//evil',
       '/members/okazaki',
       '/admin/logout',
+      '/admin/auth/github/start',
     ]) {
-      const response = await get('/admin/login', {
-        method: 'POST',
-        body: form({ email: OWNER.email, password: OWNER.password, next }),
-      })
-      expect(response.headers.get('location'), next).toBe('/admin/members')
+      const page = await okText(`/admin/login?next=${encodeURIComponent(next)}`)
+      expect(page, next).toContain('href="/admin/auth/github/start"')
+      expect(page, next).not.toContain('start?next=')
     }
   })
-})
-
-it('初期設定で owner を作ったら、そのまま管理画面に入れる', async () => {
-  const response = await get('/admin/setup', {
-    method: 'POST',
-    body: form({ token: 'test-setup-token', email: OWNER.email, password: OWNER.password }),
-  })
-  expect(response.status).toBe(303)
-  expect(response.headers.get('location')).toBe('/admin/members')
-
-  const cookie = response.headers.get('set-cookie')?.split(';')[0] ?? ''
-  expect((await get('/admin/members', { headers: { cookie } })).status).toBe(200)
 })
 
 describe('構成', () => {

@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
+  chunk,
+  int,
+  isHttpsUrl,
   isSafeUrl,
-  num,
   paragraphs,
   parseLines,
   parseSkills,
   parseTags,
+  skillRows,
   toSlug,
+  yearFrom,
+  yearInJapan,
 } from '../src/lib/format'
 
 describe('parseSkills', () => {
@@ -30,6 +35,36 @@ describe('parseSkills', () => {
 
   it('空文字なら空配列', () => {
     expect(parseSkills('')).toEqual([])
+  })
+})
+
+describe('skillRows', () => {
+  it('添えごとの行にまとめる。添えは行に1度だけ、添えの無い項目は最後の行', () => {
+    /*
+      項目ごとに添えを出していたころは、同じ「3年以上」が画面に11回並んでいた。
+      行の順は添えが最初に現れた順。添えの無い項目は、途中に書いてあっても
+      最後の1行にまとめる
+    */
+    const [group] = parseSkills(
+      'LANGUAGES:\nC# | 3年以上\nSQL | 3年以上\nPython | 1年以上\nTypeScript\nJavaScript | 3年以上\nSwift',
+    )
+    expect(skillRows(group?.skills ?? [])).toEqual([
+      { note: '3年以上', labels: ['C#', 'SQL', 'JavaScript'] },
+      { note: '1年以上', labels: ['Python'] },
+      { note: '', labels: ['TypeScript', 'Swift'] },
+    ])
+  })
+
+  it('添えの無い項目が先に来ても、行の順は添えの現れた順のまま', () => {
+    const [group] = parseSkills('PRACTICE:\n生成AI\n設計 | 3年以上\nGit')
+    expect(skillRows(group?.skills ?? [])).toEqual([
+      { note: '3年以上', labels: ['設計'] },
+      { note: '', labels: ['生成AI', 'Git'] },
+    ])
+  })
+
+  it('空なら行も無い', () => {
+    expect(skillRows([])).toEqual([])
   })
 })
 
@@ -71,6 +106,26 @@ describe('isSafeUrl', () => {
     expect(isSafeUrl('//evil.example')).toBe(false)
     expect(isSafeUrl('/\\evil.example')).toBe(false)
   })
+
+  it('タブや改行を含む URL は通さない（ブラウザが取り除いたあとで外のサイトになる）', () => {
+    // 「/<タブ>/evil.example」は頭の検査を通るが、ブラウザは //evil.example と読む
+    expect(isSafeUrl('/\t/evil.example')).toBe(false)
+    expect(isSafeUrl('/\n/evil.example')).toBe(false)
+    expect(isSafeUrl('https://example.com/\r\nx')).toBe(false)
+  })
+})
+
+describe('isHttpsUrl', () => {
+  it('https:// の絶対 URL だけを通す（メンバーの GitHub と sameAs）', () => {
+    expect(isHttpsUrl('https://github.com/iam74k4')).toBe(true)
+    expect(isHttpsUrl('http://github.com/iam74k4')).toBe(false)
+    expect(isHttpsUrl('github.com/iam74k4')).toBe(false)
+    expect(isHttpsUrl('javascript:alert(1)')).toBe(false)
+    expect(isHttpsUrl('/members/okazaki')).toBe(false)
+    expect(isHttpsUrl('mailto:a@example.com')).toBe(false)
+    expect(isHttpsUrl('https://')).toBe(false)
+    expect(isHttpsUrl(null)).toBe(false)
+  })
 })
 
 describe('paragraphs', () => {
@@ -98,17 +153,71 @@ describe('toSlug', () => {
   })
 })
 
-describe('num', () => {
-  it('未入力は既定値', () => {
-    expect(num('', 10)).toBe(10)
-    expect(num(null, 10)).toBe(10)
+describe('int', () => {
+  it('未入力は null（空をどう扱うかは呼ぶ側が決める）', () => {
+    expect(int('')).toBeNull()
+    expect(int(null)).toBeNull()
   })
 
-  it('数字でなければ既定値', () => {
-    expect(num('abc', 10)).toBe(10)
+  it('数字でなければ null。黙って別の数に倒さない', () => {
+    expect(int('abc')).toBeNull()
+    expect(int('1.5')).toBeNull()
+    expect(int('10 番')).toBeNull()
+  })
+
+  it('全角の数字は半角に直して読む（日本語入力のままの「２０」）', () => {
+    expect(int('２０')).toBe(20)
+    expect(int('－５')).toBe(-5)
   })
 
   it('0 は 0 のまま', () => {
-    expect(num('0', 10)).toBe(0)
+    expect(int('0')).toBe(0)
+  })
+})
+
+describe('yearFrom', () => {
+  it('頭の数字4桁を読む。続いているもの（— 現在）も頭の年', () => {
+    expect(yearFrom('2026')).toBe(2026)
+    expect(yearFrom('2024 — 現在')).toBe(2024)
+    expect(yearFrom('2019.04 — 2021')).toBe(2019)
+  })
+
+  it('全角の数字は読まない（DB の year_from と同じ ASCII の規則。保存のときに半角へ直る）', () => {
+    expect(yearFrom('２０２４')).toBeNull()
+  })
+
+  it('頭が数字4桁でなければ null（並びでは最後に回る）', () => {
+    for (const year of ['', '令和6', '〜2023', 'FY2024', '24', 'Spring 2024', ' 2024']) {
+      expect(yearFrom(year), year).toBeNull()
+    }
+  })
+})
+
+describe('yearInJapan', () => {
+  it('日本時間で年を数える。UTC の大晦日 15 時は、日本ではもう元日', () => {
+    expect(yearInJapan(new Date('2026-12-31T14:59:59Z'))).toBe(2026)
+    expect(yearInJapan(new Date('2026-12-31T15:00:00Z'))).toBe(2027)
+  })
+})
+
+/*
+  割りかたは境界だけが問題になる。ちょうど入るか、1件はみ出すか、1件も無いか。
+  INSERT を分ける側（childWrites）は、0件で空の INSERT を1本作ると D1 が落ちる。
+*/
+describe('chunk', () => {
+  it('ちょうど size 件なら1つ', () => {
+    expect(chunk(['a', 'b'], 2)).toEqual([['a', 'b']])
+  })
+
+  it('1件はみ出すと2つ。余りは後ろへ', () => {
+    expect(chunk(['a', 'b', 'c'], 2)).toEqual([['a', 'b'], ['c']])
+  })
+
+  it('0件なら空配列。空の束は作らない', () => {
+    expect(chunk([], 2)).toEqual([])
+  })
+
+  it('size が 1 未満でも止まる', () => {
+    expect(chunk(['a', 'b'], 0)).toEqual([['a'], ['b']])
   })
 })

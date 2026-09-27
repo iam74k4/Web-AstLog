@@ -2,7 +2,7 @@
   テストが読む型の宣言。
 
   **このファイルに `import` 文も `export` 文も書かない。** 1つでも書くと
-  ファイルがモジュールになり、下の `declare module 'virtual:app-css'` は
+  ファイルがモジュールになり、下の `declare module 'virtual:asset:*'` は
   「既にあるモジュールへの継ぎ足し」と解釈されて効かなくなる（素の宣言として
   効くのは、モジュールではないファイルの中だけ）。外から型を借りるときは、
   下の `Bindings` のように `import('…')` を型の別名にしてから使う——
@@ -25,14 +25,9 @@ declare namespace Cloudflare {
   interface Env extends Bindings {
     // drizzle-kit が生成した SQL。vitest.config.ts が bindings で渡す
     TEST_MIGRATIONS: import('@cloudflare/vitest-pool-workers').D1Migration[]
+    // 移行を途中から当て直すための空の D1（vitest.config.ts の d1Databases）
+    MIGRATION_DB: D1Database
   }
-}
-
-// app.css の中身。静的ファイルはテストでは配られないので、
-// vitest.config.ts の仮想モジュールから受け取る
-declare module 'virtual:app-css' {
-  const css: string
-  export default css
 }
 
 /*
@@ -43,5 +38,25 @@ declare module 'virtual:app-css' {
 */
 declare module 'virtual:asset:*' {
   const content: string
+  export default content
+}
+
+/*
+  リポジトリの設定ファイルを中身として読む（vitest.config.ts の repoPlugin。
+  読めるのはそこの REPO_FILES に並べたものだけ）。本番へ出す道の決まり
+  （test/deploy.test.ts）を確かめるため。
+*/
+declare module 'virtual:repo:*' {
+  const content: string
+  export default content
+}
+
+/*
+  ソースと文書の中身（vitest.config.ts の sourcePlugin）。files はリポジトリの
+  パス（src・scripts・public・docs・test・drizzle・.github と、根のファイル）、
+  texts は src の .ts / .tsx・scripts の .mjs・public の CSS・文書の中身。
+*/
+declare module 'virtual:sources' {
+  const content: { files: string[]; texts: Record<string, string> }
   export default content
 }

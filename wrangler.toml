@@ -13,10 +13,25 @@ routes = [{ pattern = "noctifex.dev", custom_domain = true }]
 [assets]
 directory = "./public"
 
-# --- 作成してから id を入れること --------------------------------------
+# CSS を文字列として Worker に同梱する（src/ui/components.tsx の Stylesheets が
+# 中身から URL の版 ?v=… を作る。配るのは上の [assets] のほうで、ここは版を数えるためだけ）。
+# テストでは vitest.config.ts の cssTextPlugin が同じ形で渡す
+[[rules]]
+type = "Text"
+globs = ["**/*.css"]
+fallthrough = true
+
+# いま動いている Worker の版。公開ページの写し（src/lib/page-cache.ts）の鍵に入れて、
+# デプロイした日に前のコードで描いた写しを出さない
+[version_metadata]
+binding = "CF_VERSION_METADATA"
+
+# --- 作成してから id を入れ、コミットすること -----------------------------
 #   wrangler d1 create noctifex
 #   wrangler kv namespace create MEDIA
-# ローカル（wrangler dev）は id を見ないので、この値のままでも動く。
+# ローカル（wrangler dev・テスト）は id を見ないので、この値のままでも動く。
+# id は秘密ではない。TO_BE_CREATED のままだと、本番に触れる入口（deploy ワークフロー・
+# npm run deploy / db:migrate / db:seed:remote:destroys-prod）が scripts/check-ids.mjs で止まる。
 [[d1_databases]]
 binding = "DB"
 database_name = "noctifex"
@@ -24,9 +39,32 @@ database_id = "TO_BE_CREATED"
 migrations_dir = "drizzle"
 
 [[kv_namespaces]]
-# アバター画像と、ログイン試行回数
+# アバター（avatars/）と作品の画像（items/）と、公開ページの写しの版（site:version）の1行
 binding = "MEDIA"
 id = "TO_BE_CREATED"
 
-# SETUP_TOKEN は secret で渡す（最初の owner を作るときだけ使う）
-#   wrangler secret put SETUP_TOKEN
+# ログインの入口（/admin/auth/:provider/start）の回数の上限。IP ごとに 60 秒で 10 回。
+# 入口は開くたびに D1 へ1行書く（OAuth の state）ので、上限が無いと未認証の GET だけで
+# D1 の書き込みの枠を使い切られ、管理画面の保存も持ち主のログインも止まる。IP ごとに
+# 数えるのは、別の IP から叩かれても持ち主が締め出されないようにするため
+# （src/routes/admin/auth.tsx の tooManyStarts）。namespace_id はこのアカウントの中で
+# 上限を分ける番号で、秘密でも、事前に作るものでもない。
+[[ratelimits]]
+name = "LOGIN_RATE_LIMIT"
+namespace_id = "1001"
+simple = { limit = 10, period = 60 }
+
+# 管理画面に最初に owner として紐づけてよいアカウント（src/env.ts）。どちらも公開してよい値。
+# GitHub は数値のユーザー id（ログイン名ではない）、Google は確認済みのメールアドレス。
+# 効くのは値ごとに最初の紐づけ1度だけ（使った記録は D1 の owner_claims）。以後は
+# GitHub の id / Google の sub で照合する。違うアカウントで入るなら、ここを書き換えて
+# デプロイする（README の「管理画面に入る」）。
+[vars]
+OWNER_GITHUB_ID = "118629892"
+OWNER_GOOGLE_EMAIL = "iam74k4@gmail.com"
+
+# OAuth のクライアントは secret で渡す（開発は .dev.vars）。片方だけでもよい
+#   wrangler secret put GITHUB_CLIENT_ID
+#   wrangler secret put GITHUB_CLIENT_SECRET
+#   wrangler secret put GOOGLE_CLIENT_ID
+#   wrangler secret put GOOGLE_CLIENT_SECRET

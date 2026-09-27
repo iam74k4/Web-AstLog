@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:test'
 import { beforeEach, describe, expect, it } from 'vitest'
 import * as schema from '../src/db/schema'
-import { db, form, get, resetDb, seedItem, seedMember, signIn } from './helpers'
+import { db, form, get, okText, resetDb, seedItem, seedMember, signIn } from './helpers'
 
 beforeEach(resetDb)
 
@@ -43,10 +43,13 @@ describe('トップの構成', () => {
     await seedItem({ type: 'app' })
     await seedItem({ type: 'work', title: '業務の実績' })
 
-    const html = await (await get('/all')).text()
+    const html = await okText('/all')
     expect(html).toContain('class="hero"')
-    // 個人開発と業務は Projects の1つの節に並ぶ
-    expect(sectionIds(html)).toEqual(['projects', 'team', 'contact'])
+    /*
+      個人開発と業務は Projects の1つの節に並ぶ。公開中が1人なので、Team の
+      位置にはその人のプロフィールが1つの節として入る（id も Profile）
+    */
+    expect(sectionIds(html)).toEqual(['projects', 'profile', 'contact'])
   })
 
   it('置いた順に出る', async () => {
@@ -54,14 +57,19 @@ describe('トップの構成', () => {
     await seedItem({ type: 'app' })
     await place([{ type: 'team' }, { type: 'contact' }, { type: 'projects' }])
 
-    expect(sectionIds(await (await get('/all')).text())).toEqual(['team', 'contact', 'projects'])
+    expect(sectionIds(await okText('/all'))).toEqual(['profile', 'contact', 'projects'])
+
+    // 2人目を公開すると、同じ位置が Team の節に戻る
+    await seedMember({ slug: 'hoshino', name: '星野' })
+    expect(sectionIds(await okText('/all'))).toEqual(['team', 'contact', 'projects'])
   })
 
   it('目次も置いた順に従う', async () => {
     await seedMember()
+    await seedMember({ slug: 'hoshino', name: '星野' })
     await place([{ type: 'contact' }, { type: 'team' }])
 
-    const html = await (await get('/all')).text()
+    const html = await okText('/all')
     expect(html.indexOf('href="#contact"')).toBeLessThan(html.indexOf('href="#team"'))
     expect(html).not.toContain('href="#projects"')
   })
@@ -70,14 +78,14 @@ describe('トップの構成', () => {
     await seedMember()
     await place([{ type: 'team', published: 0 }, { type: 'contact' }])
 
-    expect(sectionIds(await (await get('/all')).text())).toEqual(['contact'])
+    expect(sectionIds(await okText('/all'))).toEqual(['contact'])
   })
 
   it('中身の無い節は見出しごと出さない', async () => {
     // projects は登録が0件、note は本文が空
     await place([{ type: 'projects' }, { type: 'note', title: '空のメモ' }, { type: 'contact' }])
 
-    const html = await (await get('/all')).text()
+    const html = await okText('/all')
     expect(sectionIds(html)).toEqual(['contact'])
     expect(html).not.toContain('空のメモ')
   })
@@ -91,7 +99,7 @@ describe('トップの構成', () => {
       { type: 'now', body: 'Workers への移行 | 進行中' },
     ])
 
-    const html = await (await get('/all')).text()
+    const html = await okText('/all')
     expect(html).toContain('速くつくる。')
     expect(html).toContain('添え書きです')
     expect(html).toContain('metric__value">20<')
@@ -109,23 +117,28 @@ describe('トップの構成', () => {
       { type: 'links', body: '危ない | javascript:alert(1)\n安全 | https://example.com' },
     ])
 
-    const html = await (await get('/all')).text()
+    const html = await okText('/all')
     expect(html).not.toContain('javascript:')
     expect(html).toContain('https://example.com')
   })
 })
 
 /*
-  公開ページは画面ごとに別の URL。並びを確かめるのは上の `/all` のままだが、
+  公開ページはブロックごとに別の URL。並びを確かめるのは上の `/all` のままだが、
   「どのブロックに URL があるか」はここでしか見られない。
 */
-describe('画面ごとの URL', () => {
+describe('ページごとの URL', () => {
   it('置いた順の先頭が / に出る', async () => {
+    /*
+      2人のサイト。1人だと Team はその人のプロフィールに置き換わる
+      （test/public.test.ts の「1人のサイトのプロフィール」）
+    */
     await seedMember()
+    await seedMember({ slug: 'hoshino', name: '星野' })
     await place([{ type: 'team' }, { type: 'contact' }])
 
-    const html = await (await get('/')).text()
-    // 先頭の1画面だけ。2番目から先は / には出ない
+    const html = await okText('/')
+    // 先頭のページだけ。2番目から先は / には出ない
     expect(sectionIds(html)).toEqual(['team'])
     expect(html).not.toContain('<section id="contact"')
   })
@@ -189,9 +202,10 @@ describe('管理の構成', () => {
     // 足したものは Contact の手前に入る
     const rows = await db().query.blocks.findMany({ orderBy: (t, { asc }) => [asc(t.sortOrder)] })
     expect(rows.map((row) => row.type)).toEqual(['hero', 'projects', 'team', 'note', 'contact'])
-    expect(sectionIds(await (await get('/all')).text())).toEqual([
+    // 公開中が1人なので、Team の行はプロフィールの節として出る
+    expect(sectionIds(await okText('/all'))).toEqual([
       'projects',
-      'team',
+      'profile',
       `block-${rows[3]?.id}`,
       'contact',
     ])
@@ -267,7 +281,7 @@ describe('管理の構成', () => {
     })
     expect(response.status).toBe(303)
 
-    const html = await (await get('/all')).text()
+    const html = await okText('/all')
     expect(html).toContain('追記')
     expect(html).toContain('書き直しました')
     expect(html).not.toContain('本文です')
@@ -290,7 +304,7 @@ describe('管理の構成', () => {
     const saved = await db().query.blocks.findFirst({ where: (t, { eq }) => eq(t.id, team.id) })
     expect(saved?.title).toBe('')
     expect(saved?.published).toBe(0)
-    expect(sectionIds(await (await get('/all')).text())).not.toContain('team')
+    expect(sectionIds(await okText('/all'))).not.toContain('team')
   })
 
   it('動かす向きが分からなければ何もしない', async () => {
@@ -364,7 +378,7 @@ describe('管理の構成', () => {
 
     const response = await signed(`/admin/blocks/${team.id}/delete`, { method: 'POST' })
     expect(response.headers.get('location')).toBe('/admin/blocks?deleted=1')
-    expect(sectionIds(await (await get('/all')).text())).not.toContain('team')
+    expect(sectionIds(await okText('/all'))).not.toContain('team')
   })
 })
 

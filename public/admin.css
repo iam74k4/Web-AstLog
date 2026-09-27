@@ -1,0 +1,1146 @@
+/*
+  管理画面だけの規則。管理画面は app.css のあとにこれを読み、公開ページは読まない
+  （src/ui/AdminLayout.tsx の AdminHead。公開ページの外枠は app.css だけ）。
+
+  値は app.css の :root が正で、ここに :root は置かない（段・色・寸法は向こうの
+  名前を読むだけ。管理画面のスイッチの --switch-* も向こうにある）。メディアクエリも
+  同じ 600 / 900 の2つだけで、入力手段は hover: hover / pointer: coarse で分ける。
+  部品（.btn・.field・.row …）が公開ページに出ることは無い——出したくなったら、
+  その部品を app.css へ移すこと（公開ページはこのファイルを読まないので、ここに
+  置いたままでは素の姿で出る）。
+
+  1つのファイルだったころは、訪問者の全員がこの1/6ほどを毎回受け取っていた。
+  並びは app.css と同じ（素の規則 → 600 以上 → 900 以上 → 手触り → 入力手段）。
+  app.css より後に読むので、同じ詳細度なら向こうの規則に勝つ——向こうの素の要素の
+  規則（a・button・input）を、ここの部品が上書きしている形はそのまま保たれる。
+*/
+
+.admin-shell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  max-width: 1120px;
+  margin-inline: auto;
+  padding: var(--gutter);
+}
+
+.admin-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: var(--sp-4);
+}
+
+.admin-nav__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  font-weight: 700;
+}
+
+.admin-nav__links {
+  display: flex;
+  gap: var(--sp-2);
+  flex: 1;
+}
+
+.admin-nav__links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--radius-sm);
+  color: var(--ink-weak);
+  font-size: var(--fs-sm);
+}
+
+.admin-nav__links a[aria-current='page'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.admin-nav__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+/*
+  いま誰として入っているか（@ログイン名・メールアドレス）。押すとアカウントの画面。
+  字は小さいまま、押せる高さだけを --tap にそろえる。長いアドレスは … で切る
+  ——切るには箱が block である必要があり、flex にすると text-overflow が効かない
+*/
+.admin-nav__account {
+  display: inline-block;
+  max-width: 22ch;
+  line-height: var(--tap);
+  color: var(--ink-weak);
+  font-size: var(--fs-meta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-nav__account[aria-current='page'] {
+  color: var(--accent);
+}
+
+.admin-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  min-width: 0;
+}
+
+.admin-head {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sp-4);
+}
+
+.admin-head h1 {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+}
+
+.admin-head__title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+/* 「Projects / 個人開発 / 編集」。和文が入るので本文の書体 */
+.crumbs {
+  font-size: var(--fs-meta);
+  color: var(--ink-weak);
+}
+
+.tabs {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.tabs a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: var(--sp-1) var(--sp-4);
+  border-radius: 999px;
+  color: var(--ink-weak);
+  font-size: var(--fs-sm);
+  transition:
+    background var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
+}
+
+.tabs a[aria-current='page'] {
+  background: var(--accent-soft);
+  box-shadow: var(--highlight);
+  color: var(--accent);
+}
+
+/* 保存・削除の知らせ。上からばねで降りてきて、そのまま残る（勝手には消さない） */
+.flash {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
+  border-radius: var(--radius-sm);
+  background: var(--surface-hover);
+  box-shadow: var(--highlight);
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  animation: toast-in var(--dur-spring) var(--ease-spring) both;
+}
+
+.flash::before {
+  content: '';
+  width: var(--dot);
+  height: var(--dot);
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    translate: 0 calc(var(--sp-4) * -1);
+    scale: var(--press);
+  }
+}
+
+.banner {
+  padding: var(--sp-3) var(--sp-5);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+}
+
+.banner--error {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* --- 一覧: 600 未満はカード、以上は行 --- */
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3) var(--sp-4);
+  padding: var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--highlight);
+}
+
+/* 動かした・直した行。戻ってきたときに、どれを触ったかが分かるように */
+.row:target {
+  border-color: var(--accent);
+}
+
+.row__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.row__main strong {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+/* 担当者と恒久リンク、ブロックの種類。和文が入るので本文の書体 */
+.row__sub {
+  color: var(--ink-weak);
+  font-size: var(--fs-meta);
+}
+
+.row__col {
+  color: var(--ink-weak);
+  font-size: var(--fs-meta);
+}
+
+.row__col--num {
+  font-family: var(--font-mono);
+}
+
+.row__actions {
+  display: flex;
+  gap: var(--sp-3);
+  flex: 1 1 100%;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  flex: 1;
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  /*
+    <button> にも使うので、地と書体を必ず自分で持つ。持たないとブラウザ既定の
+    灰色の地が残り、構成の「下書きにする」が 2.6:1 で読めなくなっていた
+  */
+  background: var(--surface);
+  box-shadow: var(--highlight);
+  color: var(--ink-mid);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  transition:
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
+}
+
+.icon-btn--danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/*
+  行の中の1つぶんのフォーム（構成の公開・下書き）。他の操作と同じ幅で並ぶ。
+  操作子そのものは .icon-btn だが、絵ではなく文字で出す——「下書きにする」は
+  絵にすると「隠す」「消す」と見分けが付かない
+*/
+.row__publish {
+  display: flex;
+  flex: 1;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-3);
+  border-radius: 999px;
+  font-size: var(--fs-meta);
+  line-height: 1.9;
+}
+
+/* 文字で言い分けたうえで、印の形でも分ける（塗り = 公開、輪 = 下書き）。色だけに頼らない */
+.status::before {
+  content: '';
+  width: var(--dot);
+  height: var(--dot);
+  flex-shrink: 0;
+  border-radius: 999px;
+}
+
+.status--published {
+  background: var(--accent-soft);
+  box-shadow: var(--highlight);
+  color: var(--accent);
+}
+
+.status--published::before {
+  background: currentColor;
+}
+
+.status--draft {
+  border: 1px solid var(--line-strong);
+  color: var(--ink-weak);
+}
+
+.status--draft::before {
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-7) var(--sp-5);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--ink-weak);
+  font-size: var(--fs-sm);
+}
+
+/* --- フォーム --- */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--highlight);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.field__label {
+  color: var(--ink-weak);
+  font-size: var(--fs-meta);
+}
+
+.field__hint {
+  color: var(--ink-weak);
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+}
+
+.field__error {
+  color: var(--danger);
+  font-size: var(--fs-meta);
+}
+
+/*
+  保存は止めないが、知らせたいこと（作品の年が並びに使われない、など）。
+  エラー（--danger）と色を分ける——赤は「保存できなかった」と読まれる
+*/
+.field__warn {
+  color: var(--ember);
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+}
+
+.input {
+  width: 100%;
+  min-height: 44px;
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+}
+
+.input:focus-visible {
+  border-color: var(--accent);
+}
+
+.input--error {
+  border-color: var(--danger);
+}
+
+.input--area {
+  min-height: 92px;
+  padding: var(--sp-3) var(--sp-4);
+  line-height: 1.7;
+  resize: vertical;
+}
+
+.input--file {
+  padding: var(--sp-2);
+  color: var(--ink-mid);
+}
+
+.fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.link-row,
+.metric-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-2);
+}
+
+/*
+  作品のリンクの組（ラベルと URL）。600 未満は1列に積まれるので、組の中を詰め
+  （--sp-1）、組と組のあいだを空ける（fieldset の --sp-2 に --sp-4 を足す）。
+  同じ間隔で6段に並べていたころは、どの URL がどのラベルの組か見分けられず、
+  ラベルだけ・URL だけを別の行に書き換えやすかった（片方だけの行は保存で 400）。
+  600 以上は組が横1行に並ぶので、段の間隔は素のまま（下の「600px 以上」）。
+*/
+.link-row {
+  row-gap: var(--sp-1);
+}
+
+.link-row + .link-row {
+  margin-top: var(--sp-4);
+}
+
+.form-foot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+/*
+  保存したときに1回だけ起きる操作の印（作品の「画像を外す」）。公開する /
+  しない のスイッチ（.toggle）とは見た目を分ける——あちらは作品の状態で、
+  保存のあとも「公開」のまま残る。こちらを同じスイッチにすると、外した
+  状態が残る設定に見える。素の checkbox に色だけ合わせる。
+*/
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: var(--tap);
+  color: var(--ink-mid);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.check input {
+  accent-color: var(--accent);
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle__track {
+  position: relative;
+  flex-shrink: 0;
+  width: var(--switch-w);
+  height: var(--switch-h);
+  border-radius: 999px;
+  background: var(--switch-track);
+  box-shadow: var(--highlight);
+  transition: background var(--dur) var(--ease);
+}
+
+/*
+  つまみ。走るときはばねで、少し行き過ぎてから止まる。
+  押している間は潰れて横に伸びる（Squish Switch）。伸びる向きは、いま居る側と反対
+*/
+.toggle__knob {
+  position: absolute;
+  top: calc((var(--switch-h) - var(--switch-knob)) / 2);
+  left: calc((var(--switch-h) - var(--switch-knob)) / 2);
+  width: var(--switch-knob);
+  height: var(--switch-knob);
+  border-radius: 999px;
+  background: var(--switch-knob-off);
+  transition:
+    translate var(--dur-spring) var(--ease-spring),
+    width var(--dur-spring) var(--ease-spring),
+    background var(--dur) var(--ease);
+}
+
+.toggle input:checked + .toggle__track {
+  background: var(--switch-track-on);
+}
+
+.toggle input:checked + .toggle__track .toggle__knob {
+  translate: calc(var(--switch-w) - var(--switch-h)) 0;
+  background: var(--switch-knob-on);
+}
+
+.toggle:active .toggle__knob {
+  width: calc(var(--switch-knob) * var(--switch-squish));
+}
+
+.toggle:active input:checked + .toggle__track .toggle__knob {
+  translate: calc(
+      var(--switch-w) -
+      var(--switch-h) -
+      var(--switch-knob) *
+      (var(--switch-squish) - 1)
+    )
+    0;
+}
+
+.toggle input:focus-visible + .toggle__track {
+  outline: var(--focus-ring) solid var(--accent);
+  outline-offset: var(--focus-offset);
+}
+
+.toggle__text {
+  font-size: var(--fs-sm);
+  display: flex;
+  flex-direction: column;
+}
+
+.toggle__hint {
+  color: var(--ink-weak);
+  font-size: var(--fs-meta);
+}
+
+.form-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.form-actions__right {
+  display: flex;
+  gap: var(--sp-3);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: var(--sp-2) var(--sp-5);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    opacity var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
+}
+
+.btn--primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.btn--ghost {
+  background: var(--surface);
+  box-shadow: var(--highlight);
+  color: var(--ink);
+}
+
+/* 狭い画面では、フォームのボタンだけ横幅いっぱいに広げる */
+.form-actions__right .btn,
+.confirm__actions .btn {
+  flex: 1;
+}
+
+.btn--danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.btn--link {
+  background: transparent;
+  border: 0;
+  color: var(--ink-weak);
+  font-weight: 400;
+  padding: 0;
+}
+
+/*
+  color だけ。background は書かない——.btn--danger の background は、
+  あとに来る .btn--link の transparent に同詳細度で既に負けている。
+  勝っている値を同じ値で上書きしても、規則が1行増えるだけ。
+*/
+.btn--link.btn--danger {
+  color: var(--danger);
+}
+
+.btn--block {
+  width: 100%;
+}
+
+/* --- ログイン / 削除確認 --- */
+
+.admin--bare {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: var(--gutter);
+}
+
+.login {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  width: min(360px, 100%);
+  padding: var(--sp-7) var(--sp-6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--highlight);
+}
+
+.login__brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.login__word {
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.login__label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  letter-spacing: 0.1em;
+  color: var(--accent);
+}
+
+.login__note {
+  color: var(--ink-weak);
+  font-size: var(--fs-meta);
+  text-align: center;
+}
+
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  max-width: 480px;
+  padding: var(--sp-6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--highlight);
+}
+
+.confirm h1 {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* .confirm__detail は置かない。付く先はどれも .confirm 直下の <p> で、
+   こちら（0,1,1）が必ず勝つ——単独で勝つ機会が無いクラスは名前だけ残る */
+.confirm p {
+  color: var(--ink-mid);
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+}
+
+.confirm__actions {
+  display: flex;
+  gap: var(--sp-3);
+  margin-top: var(--sp-2);
+}
+
+/* --- 構成: 並べ替えと、置けるもののカタログ --- */
+
+.row__move {
+  display: flex;
+  gap: var(--sp-1);
+}
+
+.row__move form {
+  display: contents;
+}
+
+.move-btn {
+  width: var(--tap);
+  min-height: var(--tap);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--highlight);
+  color: var(--ink-mid);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
+}
+
+.move-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.form-note {
+  color: var(--ink-mid);
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+}
+
+.catalog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+}
+
+.catalog__title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.catalog__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--sp-3);
+}
+
+.catalog__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--highlight);
+}
+
+.catalog__item .btn {
+  align-self: flex-start;
+  margin-top: auto;
+}
+
+.catalog__label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.catalog__note {
+  color: var(--ink-weak);
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+  flex: 1;
+}
+
+/* --- 見た目のプリセット選び --- */
+
+.presets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--highlight);
+}
+
+.presets__legend {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.presets__note {
+  color: var(--ink-weak);
+  font-size: var(--fs-meta);
+  font-weight: 400;
+}
+
+.presets__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--sp-3);
+}
+
+.preset {
+  position: relative;
+  display: block;
+  cursor: pointer;
+}
+
+/* ラジオは消さずに視覚の外へ。読み上げと矢印キーでの移動を残すため */
+.preset input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.preset__box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  height: 100%;
+  padding: var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
+}
+
+.preset input:checked + .preset__box {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.preset input:focus-visible + .preset__box {
+  outline: var(--focus-ring) solid var(--accent);
+  outline-offset: var(--focus-offset);
+}
+
+.preset__label {
+  font-size: var(--fs-sm);
+}
+
+.preset__note {
+  color: var(--ink-weak);
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+}
+
+/* 骨格の見取り図。縮小版ではなく、帯の並び方だけを見せる */
+.skel {
+  display: grid;
+  gap: var(--sp-2);
+  aspect-ratio: 16 / 9;
+  padding: var(--sp-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.skel i {
+  display: block;
+  border-radius: var(--sp-1);
+  background: var(--line-strong);
+}
+
+.skel i.skel__mark {
+  background: var(--accent);
+}
+
+.skel--rail {
+  grid-template-columns: 1fr 2.4fr;
+  grid-template-rows: 1fr 2fr;
+}
+
+.skel--rail .skel__mark {
+  grid-row: 1 / 3;
+}
+
+.skel--center {
+  grid-template-rows: 1fr 1.6fr 1.6fr;
+}
+
+.skel--center .skel__mark {
+  justify-self: center;
+  width: 45%;
+}
+
+.skel--magazine {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 2.6fr;
+}
+
+.skel--magazine .skel__mark {
+  grid-column: 1 / 3;
+}
+
+.swatch {
+  display: block;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+}
+
+.sample {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+}
+
+/* ============================================================ 600px 以上 */
+
+@media (min-width: 600px) {
+  .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-5);
+  }
+
+  .field--wide {
+    grid-column: 1 / -1;
+  }
+
+  .link-row {
+    grid-template-columns: 160px minmax(0, 1fr);
+  }
+
+  .link-row + .link-row {
+    margin-top: 0;
+  }
+
+  .metric-row {
+    grid-template-columns: 100px 100px minmax(0, 1fr);
+  }
+
+  .admin-head {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
+  .form-actions {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .form-actions__right {
+    margin-left: auto;
+  }
+
+  .form-actions__right .btn,
+  .confirm__actions .btn {
+    flex: 0 0 auto;
+  }
+
+  .form-foot {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-6);
+  }
+
+  .form-foot .form-actions {
+    flex: 1;
+  }
+
+  /* 行に戻す。操作はアイコンだけにして、文字は読み上げ用に残す */
+  .row__actions {
+    flex: 0 0 auto;
+    margin-left: auto;
+  }
+
+  .icon-btn {
+    flex: 0 0 auto;
+    width: 36px;
+    min-height: 36px;
+  }
+
+  /* 文字で出す操作子は詰めない。36px の四角にすると中の文字ごと消える */
+  .row__publish {
+    flex: 0 0 auto;
+  }
+
+  .icon-btn--wide {
+    width: auto;
+    padding: 0 var(--sp-4);
+  }
+
+  .icon-btn__text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* ============================================================ 900px 以上 */
+
+@media (min-width: 900px) {
+  .admin-shell {
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr);
+    gap: var(--sp-7);
+    align-items: start;
+  }
+
+  .admin-nav {
+    position: sticky;
+    top: var(--gutter);
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sp-5);
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .admin-nav__links {
+    flex-direction: column;
+    flex: 0 0 auto;
+  }
+
+  .admin-nav__foot {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--sp-2);
+    border-top: 1px solid var(--line);
+    padding-top: var(--sp-4);
+  }
+
+  .row__col--num {
+    display: inline;
+  }
+}
+
+/* 900 未満では並び順の列を隠す。狭い画面では出番が少ない */
+@media (max-width: 899px) {
+  .row__col--num {
+    display: none;
+  }
+}
+
+/* ============================================ 押す・選ぶ（手触り） */
+
+/* 量と曲線は公開ページと同じ（app.css の「押す・選ぶ」の列。--press と素の transition） */
+.btn:active,
+.icon-btn:active,
+.move-btn:not(:disabled):active,
+.tabs a:active,
+.preset:active .preset__box {
+  scale: var(--press);
+}
+
+/*
+  選んだ瞬間だけ、ぷるんと揺れる（Jelly Radio）。見た目のプリセットの選択肢に使う。
+  :focus を条件にするのは、読み込んだときに最初から選ばれているものまで揺らさないため。
+  クリックでも矢印キーでも、選んだものにはフォーカスが乗る。
+  fill-mode を付けないのは、揺れ終わったあとも押したら縮むようにするため
+*/
+.preset input:checked:focus + .preset__box {
+  animation: jelly var(--dur-spring) var(--ease);
+}
+
+@keyframes jelly {
+  30% {
+    scale: 1.05 0.95;
+  }
+  45% {
+    scale: 0.97 1.03;
+  }
+  60% {
+    scale: 1.02 0.98;
+  }
+  78% {
+    scale: 0.995 1.005;
+  }
+}
+
+/* ============================================ 入力手段で分ける（幅ではなく） */
+
+@media (hover: hover) {
+  .icon-btn:not(.icon-btn--danger):hover,
+  .move-btn:not(:disabled):hover,
+  .btn--ghost:hover,
+  .tabs a:not([aria-current='page']):hover {
+    background: var(--surface-hover);
+    color: var(--ink);
+  }
+
+  .btn:hover {
+    opacity: 0.88;
+  }
+}
+
+/* タッチ端末では当たり判定を広げる。iPad の横向きは幅が広くてもこちら */
+@media (pointer: coarse) {
+  .row {
+    padding: var(--sp-5);
+  }
+
+  .icon-btn {
+    min-height: 44px;
+    width: 44px;
+  }
+}

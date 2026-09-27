@@ -4,20 +4,23 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "node scripts/check-ids.mjs && wrangler deploy",
     "check": "tsc --noEmit && wrangler deploy --dry-run",
     "typecheck": "tsc --noEmit",
     "lint": "biome check --error-on-warnings .",
     "format": "biome check --write .",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply noctifex --local",
-    "db:migrate": "wrangler d1 migrations apply noctifex --remote",
-    "db:seed:local": "wrangler d1 execute noctifex --local --file=./seed.sql",
-    "db:seed": "wrangler d1 execute noctifex --remote --file=./seed.sql",
+    "db:migrate": "node scripts/check-ids.mjs && wrangler d1 migrations apply noctifex --remote",
+    "db:seed:local": "wrangler d1 execute noctifex --local --file=./seed.sql && node scripts/touch-site.mjs --local",
+    "site:touch": "node scripts/touch-site.mjs --remote",
+    "db:seed:remote:destroys-prod": "node scripts/seed-remote.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "check:fit": "node scripts/check-fit.mjs",
-    "check:contrast": "node scripts/check-contrast.mjs"
+    "check:contrast": "node scripts/check-contrast.mjs",
+    "check:restore": "node scripts/check-restore.mjs",
+    "check:ids": "node scripts/check-ids.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",
