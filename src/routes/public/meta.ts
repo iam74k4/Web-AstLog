@@ -7,7 +7,7 @@ import { soloMember } from './data'
 
 /*
   <head> に載せるもの——題・説明文・構造化データ。組み方はここの関数だけで、
-  画面を描く側はこれを呼ぶ（画面ごとに手で組むと、同じ名前が画面ごとに違う形で出る）。
+  ページを描く側はこれを呼ぶ（ページごとに手で組むと、同じ名前がページごとに違う形で出る）。
 */
 
 /*
@@ -19,20 +19,16 @@ export const nameWithRole = (member: Pick<schema.Member, 'name' | 'role'>) =>
   member.role ? `${member.name}（${member.role}）` : member.name
 
 /*
-  <title> の組み方。画面の名前を「 · 」でつなぎ、最後にサイトの名前を置く。
+  <title> の組み方。ページの名前を「 · 」でつなぎ、最後にサイトの名前を置く。
 
-  画面ごとに違う題にする（CLAUDE.md「1画面 = 1ドキュメント」。履歴・タブ・
+  ページごとに違う題にする（CLAUDE.md「1ページ = 1ドキュメント」。履歴・タブ・
   検索結果から選び直せるように）。
-    - 割られた画面は、ページャと同じ数え方を添える（「Projects 2 / 4」。countOf）
-    - 名前の無い画面（ひとこと・見出しの無いメモ）は、その画面に出ている文の
+    - 名前の無いページ（ひとこと・見出しの無いメモ）は、そのページに出ている文の
       頭を抜き出す（excerpt。入口と同じ題にしない）
-    - 個人ページは人の名前を頭に置く（「岡崎 昂功 · About 2 / 2」）
+    - 個人ページは人の名前（「岡崎 昂功 — Noctifex」）、作品のページは作品名
 */
 export const pageTitle = (...parts: string[]) =>
   `${parts.filter((part) => part !== '').join(' · ')} — ${SITE.name}`
-
-// 1画面しか無い節には数を添えない（「Contact 1 / 1」は何も言っていない）
-export const countOf = (page: number, pages: number) => (pages > 1 ? ` ${page} / ${pages}` : '')
 
 // 題に使う文の頭。説明文（describe）と同じく1行に畳んで、字で数えて切る
 const TITLE_EXCERPT = 30
@@ -56,16 +52,15 @@ export const siteDescription = (solo?: schema.Member) =>
   solo ? `${nameWithRole(solo)}のポートフォリオ。${SITE.heroLead}` : SITE.heroLead
 
 /*
-  画面ごとの説明文（<meta name="description"> と og:description）。
+  ページごとの説明文（<meta name="description"> と og:description）。
 
-  作るのは「その画面に実際に出ている文字」から。数と名前を並べ替えるだけなので、
-  中身を足した日に説明文だけ古くなることが無い。割った2画面目には2画面目に
-  出ているものが入るので、/projects と /projects/2 も同じ文にならない。
+  作るのは「そのページに実際に出ている文字」から。数と名前を並べ替えるだけなので、
+  中身を足した日に説明文だけ古くなることが無い。
 */
 // 検索結果は日本語なら 110 字あたりで切られる。どこで切れるかはこちらで決める
 const DESCRIPTION_MAX = 110
 
-// 中身の無い節を落として「。」でつなぐ。0件の画面で「。。」を残さないため
+// 中身の無い節を落として「。」でつなぐ。0件のページで「。。」を残さないため
 export const joinParts = (...parts: string[]) => parts.filter((part) => part !== '').join('。')
 
 export const describe = (text: string) => {
@@ -79,8 +74,7 @@ export const describe = (text: string) => {
 
 /*
   1行1件のものを説明文に畳む。リンク集の URL（2列目）は落とす——href で
-  あって本文には出ないので、字数の検査（src/blocks.ts の screenChars）と
-  同じ数え方にそろえる（blockVisibleParts）。
+  あって本文には出ない（どの列が本文かは src/blocks.ts の blockVisibleParts）。
 */
 export const lineDigest = (key: BlockKey, rows: string[][]) =>
   rows.map((parts) => blockVisibleParts(key, parts).join(' ')).join('、')

@@ -124,21 +124,21 @@ describe('トップの構成', () => {
 })
 
 /*
-  公開ページは画面ごとに別の URL。並びを確かめるのは上の `/all` のままだが、
+  公開ページはブロックごとに別の URL。並びを確かめるのは上の `/all` のままだが、
   「どのブロックに URL があるか」はここでしか見られない。
 */
-describe('画面ごとの URL', () => {
+describe('ページごとの URL', () => {
   it('置いた順の先頭が / に出る', async () => {
     /*
       2人のサイト。1人だと Team はその人のプロフィールに置き換わる
-      （test/public.test.ts の「1人のサイトの連なり」）
+      （test/public.test.ts の「1人のサイトのプロフィール」）
     */
     await seedMember()
     await seedMember({ slug: 'hoshino', name: '星野' })
     await place([{ type: 'team' }, { type: 'contact' }])
 
     const html = await okText('/')
-    // 先頭の1画面だけ。2番目から先は / には出ない
+    // 先頭のページだけ。2番目から先は / には出ない
     expect(sectionIds(html)).toEqual(['team'])
     expect(html).not.toContain('<section id="contact"')
   })

@@ -10,7 +10,7 @@ import {
 import * as schema from '../../db/schema'
 import { ITEM_KIND_KEYS, type KindCounts } from '../../domain'
 import type { AppEnv } from '../../env'
-import { sequence, stepAt } from '../../lib/sequence'
+import { tableOfContents } from '../../lib/sequence'
 import { SITE } from '../../site'
 import { Empty, SiteIdentity } from '../../ui/components'
 import { Layout, type NavItem } from '../../ui/Layout'
@@ -24,7 +24,7 @@ import {
   soloMember,
   type TopData,
 } from './data'
-import { memberHref } from './member-screens'
+import { memberHref } from './member-page'
 import {
   describe,
   joinParts,
@@ -35,14 +35,14 @@ import {
   siteTitle,
 } from './meta'
 import { adminHref, blockAdminPath, firstOnly, movedTo, screenPage } from './page'
-import { screenHref, screenRows, siteScreens, siteSteps, stepQuery } from './site'
+import { pageRows, sitePageLinks, sitePages } from './site'
 
 /*
   公開ブロックを1つのドキュメントに縦に積んだ「全体ページ」（/all）の描画。
 
   印刷・Ctrl-F・ブラウザ翻訳の宛先、オーナーが全体を通しで点検する手段、
-  そして画面ごとの組み立てが効かない環境での退避先を、これ1本でまかなう。
-  だから縦に伸びてよい（body[data-whole]）。画面に収める外枠はここには当てない。
+  そしてページごとの組み立てが効かない環境での退避先を、これ1本でまかなう。
+  節を縦に積んだ1本の文書で、表紙の高さも貼り付く帯も持たない（body[data-whole]）。
 */
 export async function renderWholePage(c: Context<AppEnv>) {
   const db = drizzle(c.env.DB, { schema })
@@ -55,7 +55,7 @@ export async function renderWholePage(c: Context<AppEnv>) {
 
   /*
     このページだけは絞り込まない。全部を1ページに載せるのが役目なので、
-    ?kind= も ?member= も読まない（ピルは画面ごとの URL へのリンクとして
+    ?kind= も ?member= も読まない（ピルはページごとの URL へのリンクとして
     残る）。
   */
   const counts = Object.fromEntries(
@@ -66,17 +66,16 @@ export async function renderWholePage(c: Context<AppEnv>) {
     kinds: kindsOf(counts),
     filter: NO_FILTER,
     showMember: showMemberOf(blocks, members),
-    projects: { total: items.length, matched: items.length, rows: items },
+    projects: { total: items.length, rows: items },
     // このページには一覧そのものがすぐ下に並ぶ。送り出す先が無いので帯は置かない
     band: null,
     // 1人のサイトなら、Team の節の代わりにプロフィールを置く
     profile: profileOf(blocks, members),
   }
 
-  // 管理の「構成」で置いた順に描く。中身の無い節は落ちる。
-  // page に null を渡すと、一覧を画面ぶんに割らずに全件出す（このページだけ）
+  // 管理の「構成」で置いた順に描く。中身の無い節は落ちる（whole: 1つの文書の節として）
   const sections = blocks
-    .map((block) => renderBlock(block, data, null))
+    .map((block) => renderBlock(block, data, true))
     .filter((section) => section !== null)
   const nav: NavItem[] = sections
     .filter((section) => section.nav !== null && section.toc)
@@ -102,7 +101,7 @@ export async function renderWholePage(c: Context<AppEnv>) {
         ),
       )}
       /*
-        正はこのページ自身。画面ごとの URL がそれぞれ自分を正と名乗っているので、
+        正はこのページ自身。ページごとの URL がそれぞれ自分を正と名乗っているので、
         中身が全部ある唯一のページも自分を名乗る（/ を正にすると、完全版を
         「作品を1件も含まないトップの複製」と申告することになる）。
       */
@@ -110,7 +109,7 @@ export async function renderWholePage(c: Context<AppEnv>) {
       jsonLd={siteJsonLd(members)}
       nav={nav}
       theme={theme}
-      // 縦に伸びてよい唯一の公開ページ。app.css の「画面に収める外枠」を外す印
+      // 節を縦に積んだ1本の文書。app.css の「ページの外枠」を外す印
       whole
       /*
         入口ではないので名乗る。Hero の h1 は同じページにあるが、印刷した紙の
@@ -126,18 +125,13 @@ export async function renderWholePage(c: Context<AppEnv>) {
 }
 
 /*
-  画面1つぶんの描画。公開ページの本体。
+  ブロック1つぶんのページの描画。公開ページの本体。
 
-  want が null ならトップ（列の先頭）。そうでなければ URL が名指しした画面で、
-  見つからなければ 404。知らない画面名も、範囲の外のページ数も、
-  「その URL は無い」の一言に落とす。絞り込みで画面が減ったあとの続き（業務が
-  1画面ぶんしか無いときの /projects/3?kind=work）も同じ扱い。目次にもページャにも
-  出てこないので、たどり着くのは URL を手で書いたときだけ。
+  slug が null ならトップ（並びの先頭）。そうでなければ URL が名指ししたページで、
+  見つからなければ 404。知らないページの名前も、中身が無くて出ていないブロックも
+  「その URL は無い」の一言に落とす。
 */
-export async function renderScreen(
-  c: Context<AppEnv>,
-  want: { slug: string; page: number } | null,
-) {
+export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
   const db = drizzle(c.env.DB, { schema })
   const [members, byKind, theme, blocks] = await Promise.all([
     listPublishedMembers(db),
@@ -148,29 +142,29 @@ export async function renderScreen(
 
   const solo = soloMember(members)
   /*
-    1人のサイトで Team を置いているあいだ、Team の画面は無い——その位置には
-    その人のプロフィールが並ぶ（profileOf）。貼られた /team と /team/<n> は
-    死なせずにその人の1枚目へ寄せる。
+    1人のサイトで Team を置いているあいだ、Team のページは無い——その位置には
+    その人のプロフィールが並ぶ（profileOf）。貼られた /team は死なせずにその人の
+    ページへ寄せる。
 
     2人目を公開した日に /team はまた 200 に戻る。行き先がデータで変わる転送なので、
     ブラウザには覚えさせない（movedTo）——覚えさせていたころは、2人目を公開した
     あとも、一度寄せられた人だけが Team へ着けずにプロフィールへ運ばれ続けた。
   */
   const profile = profileOf(blocks, members)
-  if (want?.slug === 'team' && profile) {
-    return movedTo(c, memberHref(profile.slug, ''))
+  if (slug === 'team' && profile) {
+    return movedTo(c, memberHref(profile.slug))
   }
 
   const { filter, memberId } = readFilter(c, kindsOf(byKind), members)
-  const { screens, counted } = await siteScreens(db, blocks, members, filter, memberId, byKind)
+  const { pages, counted } = await sitePages(db, blocks, members, filter, byKind)
 
   /*
-    出せる画面が1つも無いとき（置いたブロックが全部下書き、など）。
+    出せるページが1つも無いとき（置いたブロックが全部下書き、など）。
     トップだけは 200 で「まだ何もありません」を出す。サイトの入口まで 404 に
     すると、管理画面に入って直す前に手詰まりになる。ほかの URL は素直に 404。
   */
-  if (!screens.length) {
-    if (want) return c.notFound()
+  if (!pages.length) {
+    if (slug) return c.notFound()
     return c.html(
       <Layout
         title={siteTitle(solo)}
@@ -187,76 +181,55 @@ export async function renderScreen(
     )
   }
 
-  const steps = siteSteps(screens, filter, solo)
+  const links = sitePageLinks(pages, filter, solo)
   /*
-    入口は / と /<slug>（いまなら /hero）の2つで開ける。列の中では / に
-    寄せてあるので、/<slug> で来たぶんはここで読み替える——同じ1枚なので、
-    404 にはしない。canonical は siteSteps が / を指している。
-  */
-  const first = screens[0]
-  /*
-    連なりの先頭がプロフィール（1人のサイトで Hero を外し、Team を先頭に
-    置いた構成）。その1枚は /members/<slug> にあり、描くのも個人ページの経路
+    並びの先頭がプロフィール（1人のサイトで Hero を外し、Team を先頭に置いた
+    構成）。そのページは /members/<slug> にあり、描くのも個人ページの経路
     なので、入口はそこへ送る。構成しだいで変わる行き先なので 302。
   */
-  const head = steps[0]
-  if (!want && first?.kind === 'profile' && head) return c.redirect(head.href, 302)
-  /*
-    引くときも stepQuery を通す。その画面に効かない絞り込みを付けて来た URL
-    （手で打った /contact?kind=work など）は、余分なぶんを落として同じ1枚に
-    当てる——列の href には付いていないので、素通しすると 404 になる。
-    中身は絞り込み無しと同じで、canonical も素の URL を指す。
-  */
-  const asked = want ? screenHref(want, stepQuery(want.slug, filter)) : null
-  const entry = first?.kind === 'block' && want && want.slug === first.slug && want.page === 1
-  const seq = sequence(steps, stepAt(steps, entry ? `/${stepQuery(first.slug, filter)}` : asked))
-  const current = seq && screens[seq.index]
-  // プロフィールの画面は /members/<slug> …にしか無いので、ここでは当たらない
-  if (!seq || current?.kind !== 'block') return c.notFound()
+  const [first] = pages
+  const head = links[0]
+  if (!slug && first?.kind === 'profile' && head) return c.redirect(head.href, 302)
 
-  // ここで初めてカードを引く。出す画面に載らない行は、1件も取ってこない
-  const rows = await screenRows(db, current, filter, memberId)
+  /*
+    入口は / と /<slug>（いまなら /hero）の2つで開ける。並びの中では / に
+    寄せてあるので、/<slug> で来たぶんも同じページに当てる——同じ1枚なので、
+    404 にはしない。canonical は sitePageLinks が / を指している。
+    そのページに効かない絞り込みを付けて来た URL（手で打った /contact?kind=work）も
+    同じページに当たる（ページは slug で引く。目次の行き先には pageQuery が付けない）。
+  */
+  const index =
+    slug === null ? 0 : pages.findIndex((page) => page.kind === 'block' && page.slug === slug)
+  const current = pages[index]
+  const link = links[index]
+  // プロフィールのページは /members/<slug> にしか無いので、ここでは当たらない
+  if (!link || current?.kind !== 'block') return c.notFound()
+
+  // ここで初めてカードを引く。一覧の無いページでは1件も取ってこない
+  const rows = await pageRows(db, current, filter, memberId)
   const data: TopData = { ...counted, projects: { ...counted.projects, rows } }
 
-  const rendered = renderBlock(current.block, data, current.page)
-  // siteScreens が数えた画面なので、ここで null は返らない
+  const rendered = renderBlock(current.block, data, false)
+  // sitePages が並べたページなので、ここで null は返らない
   if (!rendered) return c.notFound()
 
-  /*
-    入口の帯（一覧へ送る丸い札）が、ページャの「次 →」と同じ行き先なら、
-    入口にはページャを出さない（CLAUDE.md「同じ行き先を1つの画面に2つ置かない」）。
-    札のほうを残すのは、件数（個人開発 5 · 業務 2）を添えて何があるかを先に
-    見せるから。
-
-    落とすのは「前」が無いとき（入口が連なりの先頭）だけ——入口のページャは
-    「前」も数も持たないので、落としても何も失わない。行き先が違うとき（入口と
-    Projects の間にひとことを置いた構成）は、ページャが次の画面へ、帯が一覧へ、
-    と別の道なので両方出す。作品の1枚目の「くわしく読む →」はページャの「次 →」と
-    同じ行き先だが、あちらのページャは作品の数（Projects 3 / 7）を持つので落とさない
-    （item.tsx）。
-  */
-  const band = current.block.type === 'hero' ? data.band : null
-  const pager =
-    seq.pager && band && seq.pager.prev === null && seq.pager.next === band.href ? null : seq.pager
-
-  return screenPage(
-    c,
-    { ...seq, pager },
-    {
-      node: rendered.node,
-      // 説明文はこの画面に出ているものから作る（renderBlock が持っている）
-      description: rendered.description,
-      jsonLd: firstOnly(seq, siteJsonLd(members)),
-      theme,
-      // 入口（Hero）では柱に名乗らない。Contact では柱の GitHub / メールを出さない（SiteIdentity）
-      sidebar: (
-        <SiteIdentity
-          solo={solo}
-          entrance={current.block.type === 'hero'}
-          contact={current.block.type === 'contact'}
-        />
-      ),
-      adminPath: blockAdminPath(current.block, solo),
-    },
-  )
+  return screenPage(c, {
+    title: link.title,
+    canonical: link.canonical,
+    nav: tableOfContents(links, link.key),
+    node: rendered.node,
+    // 説明文はこのページに出ているものから作る（renderBlock が持っている）
+    description: rendered.description,
+    jsonLd: firstOnly(links, link, siteJsonLd(members)),
+    theme,
+    // 入口（Hero）では柱に名乗らない。Contact では柱の GitHub / メールを出さない（SiteIdentity）
+    sidebar: (
+      <SiteIdentity
+        solo={solo}
+        entrance={current.block.type === 'hero'}
+        contact={current.block.type === 'contact'}
+      />
+    ),
+    adminPath: blockAdminPath(current.block, solo),
+  })
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  chunk,
   int,
   isHttpsUrl,
   isSafeUrl,
@@ -196,5 +197,27 @@ describe('yearInJapan', () => {
   it('日本時間で年を数える。UTC の大晦日 15 時は、日本ではもう元日', () => {
     expect(yearInJapan(new Date('2026-12-31T14:59:59Z'))).toBe(2026)
     expect(yearInJapan(new Date('2026-12-31T15:00:00Z'))).toBe(2027)
+  })
+})
+
+/*
+  割りかたは境界だけが問題になる。ちょうど入るか、1件はみ出すか、1件も無いか。
+  INSERT を分ける側（childWrites）は、0件で空の INSERT を1本作ると D1 が落ちる。
+*/
+describe('chunk', () => {
+  it('ちょうど size 件なら1つ', () => {
+    expect(chunk(['a', 'b'], 2)).toEqual([['a', 'b']])
+  })
+
+  it('1件はみ出すと2つ。余りは後ろへ', () => {
+    expect(chunk(['a', 'b', 'c'], 2)).toEqual([['a', 'b'], ['c']])
+  })
+
+  it('0件なら空配列。空の束は作らない', () => {
+    expect(chunk([], 2)).toEqual([])
+  })
+
+  it('size が 1 未満でも止まる', () => {
+    expect(chunk(['a', 'b'], 0)).toEqual([['a'], ['b']])
   })
 })

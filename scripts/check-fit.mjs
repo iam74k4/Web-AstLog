@@ -1,89 +1,80 @@
 /*
-  「公開ページはスクロールしない」を、実際にブラウザで測る。
+  公開ページのレイアウトを、実際にブラウザで測る。`npm run check:fit`。
 
-  この不変条件はこの機能の名前そのものなのに、確かめる手段がリポジトリに
-  1つも無かった。typecheck も lint も vitest も寸法を測らない——vitest は
-  workerd の上で動くので、そもそも版面を組むエンジンが居ない。残っていたのは
-  「9通りを手で開く」という手順だけで、1回目は実行されるが2回目は
-  「今回は件数を1つ増やしただけだから」で飛ばされる。
-
-  だから測るほうを1つのコマンドにする。`npm run check:fit`。
+  公開ページは節ごとに1ページで、縦にスクロールする（CLAUDE.md の「公開ページは縦に読む」）。
+  その代わりに
+  守らなければならないことが、どれも版面を組んでみないと分からない——typecheck も
+  lint も vitest も寸法を測らない（vitest は workerd の上で動き、版面を組むエンジンが
+  居ない）。だから測るほうを1つのコマンドにしてある。
 
   ## 何を測るか
 
-  **幾何で測る。** 以前は「ページが動くか」を scrollingElement の
-  scrollHeight − clientHeight で見ていた。html と body は overflow: clip なので、
-  外枠（.shell の高さ）や弁（節の overflow: auto）が外れて中身が画面の下へ
-  はみ出しても、clip の下では scrollHeight が伸びないことがあり、切り取られた
-  ぶんを 0px と報告した（CSS を差し替えて再現した: 画面の外に 14px 出ていて 0）。
-  切り取られた中身はスクロールでもフォーカスでも届かない——CLAUDE.md がいちばん
-  恐れている壊れ方が、番人から見えなかった。いまは箱の位置そのものを見る。
+  **幾何で測る。** 規則が書いてあるか（test/theme.test.ts が文字列で見る）ではなく、
+  ブラウザが解いた結果の箱の位置を見る。後ろで別のセレクタに上書きされても、
+  ここは書き方に左右されない。
 
-    (1) 外枠        .shell の下端 ≤ 画面の高さ、.shell の高さ = 画面の高さ
-    (2) 切り取り    main と柱（.rail）の見えている子孫の下端 ≤ 画面の高さ
-                    （弁が開いた節の中身は除く。そちらは (3) で数える）
-    (3) 弁          節ごとに scrollHeight ≤ clientHeight
-    (4) 効いているか 計算済みのスタイルで、html と body の overflow が clip、
-                    節の overflow-y が auto、柱が骨格どおりの場所（柱が左に立つ骨格は
-                    本文の左、ほかは本文の上）に居ること
-    (5) 見出しの錨   同じ骨格・書体・寸法・姿の中で、節の見出しの上端の y
-    (6) 押す手       ページャの手（.pager__go）の高さ ≤ --tap（名前が折れて
-                    縦長のカプセルにならない）
-    (7) 中央の軸     中央寄せの骨格で、Hero の直接の子の中心 x が Hero の中心と
-                    そろう（行いっぱいに伸びた子は、中身の広がりの中心で見る）
+    (1) スクロールできる   html と body の overflow が visible（clip / hidden にすると
+                          中身がページの外で黙って切られる）
+    (2) 横にはみ出さない   ページの scrollWidth ≤ clientWidth、見えている要素の左右が
+                          画面の中（横に動く帯＝目次・絞り込みの中身と、月は除く）
+    (3) 切られた要素が無い  overflow が hidden / clip の祖先の外へ出ている要素も、
+                          自分の中身（字）を hidden / clip で切っている箱も無い
+                          （行止め line-clamp・1行で末尾を省く ellipsis・読み上げ用の
+                          1px の箱・月は除く）
+    (4) h1 がちょうど1つ   1ページ = 1ドキュメント（WCAG 1.3.1）
+    (5) 柱の場所           柱が骨格どおりの場所（rail の 900 以上は本文の左、ほかは上）
+    (6) 目次の貼り付け     柱（帯）の position が sticky。本文の下に画面3つぶんの空きを
+                          足して一番下まで送っても、目次といまの印が画面の中に見えて
+                          いて、帯の姿では本文より手前に描かれ（印の真ん中の点が柱）、
+                          地が透けていない
+    (7) 送った先           main の中の id を持つ要素（#about など）へ送ると、上端が
+                          帯の下端より下（rail の 900 以上は画面の上端より下）に来る
+                          （app.css の scroll-padding-top と :root の --band-clear）
+    (8) 目次の的           指（pointer: coarse）の姿で、目次の行き先と管理画面への
+                          入口の高さが --tap 以上
+    (9) 見出しの錨         同じ骨格・書体・寸法・姿の中で、節の見出しの上端の y が
+                          1px 以内でそろう
+   (10) 中央の軸           中央寄せの骨格で、入口の Hero の直接の子の中心 x が Hero の中心と
+                          そろう（行いっぱいに伸びた子は、中身の広がりの中心で見る）
 
   ほかに、読み込み直して測るものが2つある（measureRun の後半）。
 
-    (8) 目次の印     目次が帯になる姿（899 以下の全骨格と、上の帯になる骨格の
-                    900 以上）で、いまの画面の行き先（aria-current）が帯の見えて
-                    いる幅の中にある。帯の最初の位置は読み込んだ時点で決まる
-                    （app.css の scroll-initial-target）ので、属性の差し替えでは
-                    測れない——骨格はサーバーの返す HTML の data-layout を
-                    書き換えて開き直す。書体はサイトの既定のまま
-    (9) 全体ページ   /all がどの骨格・書体・寸法でも横に動かない
-                    （scrollWidth ≤ clientWidth。縦に伸びてよいのは /all だけで、
-                    横はどのページも動かない）
+   (11) 目次の印           目次が帯になる姿（899 以下の全骨格と、上の帯になる骨格の
+                          900 以上）で、いまのページの行き先（aria-current）が帯の見えて
+                          いる幅の中にある。帯の最初の位置は読み込んだ時点で決まる
+                          （app.css の scroll-initial-target）ので、属性の差し替えでは
+                          測れない——骨格はサーバーの返す HTML の data-layout を
+                          書き換えて開き直す。書体はサイトの既定のまま
+   (12) 全体ページ         /all がどの骨格・書体・寸法でも横に動かない
 
-  (4) は test/theme.test.ts が CSS を文字列で読んで見ている決まりの、実際に効いた
-  姿。文字列の検査は「その規則が書いてあるか」しか見られず、後ろで別のセレクタに
-  上書きされても（外枠の @supports の末尾に `.shell { height: auto }` を足しても）
-  緑のままだった。ここはブラウザが解いた結果を見るので、書き方に左右されない。
-
-  (5) は「めくっても見出しが跳ねない」。割られた画面の節は上揃えで、見出しは
-  どの画面でも同じ高さから始まる（app.css の「画面に収める外枠」）。上下中央に
-  寄せていたころは、見出しの高さが中身の量で決まり、/projects 91px →
-  /projects/2 124px → /projects/4 243px と跳ねていた（= rail @390x844）。
-  比べないのは Hero（入口・個人ページの1枚目）と月の節（Contact）——どちらも
-  見出しで始まる画面ではなく、名乗り・誘いを中央や下に置く構図そのもの。
-  作品のページ（1枚目と本文の画面 Story）は「← 一覧に戻る」が見出しの上に立つので、
-  その札の上端で比べる（見出しより前に何かがある画面は、節の最初の子の上端が錨）。
+  (9) は「どのページでも見出しが同じ高さから始まる」。節は上揃えで、見出しの高さは
+  中身の量で変わらない（app.css の「ページの外枠」）。比べるのは main の最初の子が
+  節のページだけ——Hero で始まるページ（入口・個人ページの名札）と月の節（Contact）は
+  見出しで始まるページではなく、名乗り・誘いを置く表紙そのもの。作品のページは
+  「← 一覧に戻る」が見出しの上に立つので、その札の上端で比べる。
 
   1px までは許す。連動する文字の段は clamp() で決まるので、幅しだいで端数が出る。
 
-  成功行の「いちばん惜しい」は、節の余り（中身を置ける高さ − 中身の高さ）の最小。
-  以前は「開いた弁のうち最大」を出していて、開いた弁は失敗なので、合格したときは
-  いつも 0px だった——余裕がどれだけ残っているかは一度も出なかった。
+  以前（公開ページが1画面に収まっていたころ）は「ページが動かない」「節の弁が
+  開かない」と、画面の底のページャの手の高さを測っていた。いまはページが動くのが
+  正しく、ページャも無いので、どれも測らない。
 
   ## 何の中身で測るか
 
   4つの中身を、それぞれ使い捨ての D1 に入れて測る（手元の D1 には触らない）。
 
     seed               seed.sql。本人のサイトそのもの（1人・打ち込むブロック無し）
-    fixture（複数人）  scripts/lib/fit-fixture.mjs が src/blocks.ts の上限から作る、
-                       上限ちょうどの複数人のサイト（打ち込むブロック6種 × 2形・
-                       6人の Team・長い肩書き・上限の大見出し・紹介文・経歴・
-                       いちばん重いカードの行・本文の画面）
+    fixture（複数人）  scripts/lib/fit-fixture.mjs が作る、重い中身の複数人のサイト
+                       （打ち込むブロック6種 × 2形の長い中身・6人の Team・長い肩書き・
+                       上限の大見出し・長い紹介文と経歴・いちばん重いカードの行・
+                       長い本文）
     fixture（1人）     同じ中身で公開中のメンバーを1人にしたもの。Team の位置に
                        プロフィールが入り、柱が名前と長い職種で名乗る姿
     seed＋ブロック3本  seed.sql に、打ち込むブロックを既定の見出しのまま3本
                        （fit-fixture.mjs の seedBlocks）。本人がブロックを数本
-                       足しただけで目次の帯が溢れる姿（(8) の相手）
+                       足しただけで目次の帯が溢れる姿（(11) の相手）
 
-  seed だけを測っていたころは、打ち込むブロックも 3人以上の Team も本文の画面も
-  一度も測られておらず、src/blocks.ts の maxChars は手で測った数のまま守られて
-  いなかった。字の段や余白を動かす変更が来ても、検査はその姿を見ないまま緑を出した。
-
-  どちらの中身も、訪問者の姿とログインした姿（柱に「管理画面」の入口が出る）の
+  どの中身も、訪問者の姿とログインした姿（柱に「管理画面」の入口が出る）の
   両方で測る。ログインした姿は、セッションを使い捨ての D1 に直接作り、クッキーを
   渡して開く（OAuth は通らない）。
 
@@ -99,7 +90,7 @@
 
   FIT_BASE を渡すと、そこに立っている dev サーバをそのまま測る（中身はその D1 の
   まま・訪問者の姿だけ。セッションを作れないので）。FIT_PORT は自分で立てるときの
-  ポート（2つの中身を同じポートで順に立てる）。
+  ポート（中身ごとに同じポートで順に立てる）。
 */
 
 import { createHash, randomBytes } from 'node:crypto'
@@ -116,25 +107,19 @@ const VIEWPORTS = DESIGN_SIZES
 
 /*
   柱が本文の左に立つ骨格と、その幅。ほかの骨格・幅では柱は本文の上の帯になる。
-  app.css の「画面に収める外枠」の 900 以上（rail だけが .shell を1段にする）と同じ。
+  app.css の「ページの外枠」の 900 以上（rail だけが .shell を2列の grid に戻す）と同じ。
 */
 const BESIDE = { rail: 900 }
-
-/*
-  弁の付け先。public/app.css の
-  `:where(body[data-layout]:not([data-whole])) main > :is(.hero, section)`
-  と同じ相手を、同じ書き方で選ぶ。クラスを列挙すると、これから足す節が漏れる。
-*/
-const PANELS = 'main > :is(.hero, section)'
 
 // 端数の許し。連動する段は clamp() で決まるので、幅しだいで 0.x px が出る
 const SLACK = 1
 
 /*
-  見出しの錨を比べる相手。割られた画面の節のうち、Hero（header.hero）でも
-  月の節（.moonlit）でもないもの。app.css の上揃えの規則と同じ相手を選ぶ。
+  見出しの錨を比べる相手。main の最初の子が節で、月の節（.moonlit）でないもの。
+  Hero（header.hero）で始まるページ（入口・個人ページ）は比べない——個人ページの
+  About の見出しは名札の下にあり、名札の高さしだいで下がる。
 */
-const ANCHORED = 'main > section:not(.moonlit)'
+const ANCHORED = 'main > section:first-child:not(.moonlit)'
 
 // src/lib/auth.ts の SESSION_COOKIE と sessionKey（SHA-256 の16進）と同じ
 const SESSION_COOKIE = 'nx_session'
@@ -157,18 +142,17 @@ function session() {
 /*
   測る URL は sitemap.xml から引く。
 
-  手で並べた表を持つと、画面を1つ足した日にこちらだけ古くなる——しかも
+  手で並べた表を持つと、ページを1つ足した日にこちらだけ古くなる——しかも
   古くなったことは緑のまま分からない。sitemap は公開ページと同じ式
-  （siteSteps / memberScreens / itemHref / itemStoryHref）から数え上げているので、
-  新しい連なりを足せばこの検査の対象も自動で増える。
+  （sitePageLinks / memberHref / itemHref）から数え上げているので、新しい URL の族を
+  足せばこの検査の対象も自動で増える。
 
   **少なすぎたら止める。** ここが無いと、この検査は黙って空振りする——D1 が空なら
-  画面がほとんど生えず、それでも1本ずつは 200 で返るので「✓」で終わる。
-  seed は 17 本（1人のサイトでは /team がプロフィールへの 301 で sitemap から外れる）、
-  seed＋ブロック3本は 20 本、
-  fixture は作った中身から必ず生える URL（fit-fixture.mjs の expect）を1本ずつ
-  突き合わせる。本当に画面を減らしたなら、この数も一緒に下げること——その変更が
-  diff に出ることに意味がある。
+  ページがほとんど生えず、それでも1本ずつは 200 で返るので「✓」で終わる。
+  seed は 11 本（1人のサイトでは /team がプロフィールへの 301 で sitemap から
+  外れる）、seed＋ブロック3本は 14 本、fixture は作った中身から必ず生える URL
+  （fit-fixture.mjs の expect）を1本ずつ突き合わせる。本当にページを減らしたなら、
+  この数も一緒に下げること——その変更が diff に出ることに意味がある。
 */
 async function screenPaths(base, run) {
   const response = await fetch(`${base}/sitemap.xml`)
@@ -192,8 +176,8 @@ async function screenPaths(base, run) {
   const missing = (run.expect ?? []).filter((path) => !paths.includes(path))
   if (missing.length) {
     throw new Error(
-      `${run.label}: 中身から生えるはずの画面が sitemap に無い: ${missing.join(', ')}。` +
-        '測ったつもりで、その画面は測られない',
+      `${run.label}: 中身から生えるはずのページが sitemap に無い: ${missing.join(', ')}。` +
+        '測ったつもりで、そのページは測られない',
     )
   }
   return paths
@@ -207,12 +191,17 @@ async function screenPaths(base, run) {
   側だけ（src/ui/Layout.tsx がそう書いてある）。だから属性を差し替えれば、管理画面で
   保存したのと同じ姿になる。保存の経路を通すと、測りたい版面ではなく設定の保存を
   測ることになる。
+
+  測り終えたら、足した空きを外してページの頭へ戻す（次の姿を同じ位置から測る）。
 */
 const measure = ([layout, typeface, cfg]) => {
+  const root = document.documentElement
+  const scroller = document.scrollingElement ?? root
+  const to = (y) => scroller.scrollTo({ top: y, behavior: 'instant' })
   document.body.dataset.layout = layout
   document.body.dataset.typeface = typeface
+  to(0)
 
-  const height = innerHeight
   const slack = cfg.slack
   const problems = []
   const round = (n) => Math.round(n * 10) / 10
@@ -220,31 +209,32 @@ const measure = ([layout, typeface, cfg]) => {
     el.id
       ? `#${el.id}`
       : `${el.tagName.toLowerCase()}${el.classList.length ? `.${[...el.classList].join('.')}` : ''}`
+  const list = (items) =>
+    `${items.slice(0, 3).join(', ')}${items.length > 3 ? ` ほか ${items.length - 3}` : ''}`
 
-  // (4) 外側は clip。hidden は「見えないだけのスクロール箱」、visible は伸びるページ
-  for (const el of [document.documentElement, document.body]) {
+  // (1) スクロールできる。clip / hidden にすると、長い中身がページの外で黙って切られる
+  for (const el of [root, document.body]) {
     const style = getComputedStyle(el)
-    if (style.overflowX !== 'clip' || style.overflowY !== 'clip') {
+    if (style.overflowY !== 'visible' || style.overflowX !== 'visible') {
       problems.push(
-        `${el.tagName.toLowerCase()} の overflow が ${style.overflowX} / ${style.overflowY}（clip のはず）`,
+        `${el.tagName.toLowerCase()} の overflow が ${style.overflowX} / ${style.overflowY}（visible のはず）`,
       )
     }
   }
 
-  // (1) 外枠
   const shell = document.querySelector('.shell')
   const main = document.querySelector('main')
   const rail = document.querySelector('.rail')
-  if (!shell || !main || !rail) {
-    return { problems: ['.shell / main / .rail のどれかが無い'], panels: [], anchor: null, page: 0 }
+  const toc = rail?.querySelector('.toc')
+  if (!shell || !main || !rail || !toc) {
+    return { problems: ['.shell / main / .rail / .toc のどれかが無い'], anchor: null, tall: 0 }
   }
-  const frame = shell.getBoundingClientRect()
-  if (Math.abs(frame.height - height) > slack) {
-    problems.push(`.shell の高さが ${round(frame.height)}px（画面は ${height}px）`)
-  }
-  if (frame.bottom > height + slack) problems.push(`.shell の下端が ${round(frame.bottom)}px`)
 
-  // (4) 柱の場所。骨格どおりに解けているか
+  // (4) h1 はちょうど1つ
+  const h1s = document.querySelectorAll('h1')
+  if (h1s.length !== 1) problems.push(`h1 が ${h1s.length} 個（ちょうど1つのはず）`)
+
+  // (5) 柱の場所。骨格どおりに解けているか
   const railBox = rail.getBoundingClientRect()
   const mainBox = main.getBoundingClientRect()
   const beside = cfg.beside[layout] !== undefined && innerWidth >= cfg.beside[layout]
@@ -254,78 +244,103 @@ const measure = ([layout, typeface, cfg]) => {
     )
   }
 
-  // (3) 弁と、節の余り
-  const boxes = [...document.querySelectorAll(cfg.panels)]
-  const panels = boxes.map((box) => {
-    const style = getComputedStyle(box)
-    if (style.overflowY !== 'auto')
-      problems.push(`節 ${nameOf(box)} の overflow-y が ${style.overflowY}（auto のはず）`)
-    const over = Math.max(0, box.scrollHeight - box.clientHeight)
-    /*
-      余り。中身を置ける高さ（clientHeight − 上下の padding）から、流れに乗った子の
-      外形（margin 込み）の上端〜下端を引く。絶対配置の子（月）は数えない
-    */
-    const kids = [...box.children].filter((kid) => {
-      const kidStyle = getComputedStyle(kid)
-      return kidStyle.position !== 'absolute' && kidStyle.display !== 'none'
-    })
-    let free = null
-    if (kids.length) {
-      const top = Math.min(
-        ...kids.map(
-          (kid) => kid.getBoundingClientRect().top - parseFloat(getComputedStyle(kid).marginTop),
-        ),
-      )
-      const bottom = Math.max(
-        ...kids.map(
-          (kid) =>
-            kid.getBoundingClientRect().bottom + parseFloat(getComputedStyle(kid).marginBottom),
-        ),
-      )
-      const inner =
-        box.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)
-      free = round(inner - (bottom - top))
-    }
-    return { box, name: nameOf(box), over, free }
-  })
+  /*
+    (2)(3) 横のはみ出しと、切られた要素。
 
-  // (2) 切り取り。弁の開いた節の中は (3) が数えるので除く
-  const open = panels.filter((panel) => panel.over > slack).map((panel) => panel.box)
-  const strays = []
+    除くもの: 大きさの無い箱、visibility: hidden、読み上げ用の 1px の箱（.sr-only・
+    畳んだワードマーク）の中、月（aria-hidden の飾り。自分の overflow: clip の中で
+    光暈を切る）、行止め（line-clamp）の中、横や縦に送れる箱（overflow: auto /
+    scroll ——目次と絞り込みの帯、900 以上の柱）の中。送れる箱はその箱自身を測る
+  */
+  const scrolls = (style) =>
+    ['auto', 'scroll'].includes(style.overflowX) || ['auto', 'scroll'].includes(style.overflowY)
+  const clips = (style) =>
+    ['hidden', 'clip'].includes(style.overflowX) || ['hidden', 'clip'].includes(style.overflowY)
+  const skipped = new Set()
+  const wide = []
+  const cut = []
   for (const el of [...rail.querySelectorAll('*'), ...main.querySelectorAll('*')]) {
-    if (open.some((box) => box.contains(el))) continue
+    const parent = el.parentElement
+    if (parent && skipped.has(parent)) {
+      skipped.add(el)
+      continue
+    }
+    const style = getComputedStyle(el)
     const rect = el.getBoundingClientRect()
-    if (rect.width === 0 || rect.height === 0) continue
-    if (rect.bottom <= height + slack) continue
-    if (getComputedStyle(el).visibility === 'hidden') continue
-    strays.push(`${nameOf(el)} ${round(rect.bottom)}px`)
+    if (
+      el.classList.contains('moon') ||
+      (rect.width <= 1 && rect.height <= 1 && style.position === 'absolute') ||
+      style.webkitLineClamp !== 'none'
+    ) {
+      skipped.add(el)
+      // 月の箱そのものは画面の中に居ること（中の光暈は自分で切る）
+      if (!el.classList.contains('moon')) continue
+    }
+    if (rect.width === 0 || rect.height === 0 || style.visibility === 'hidden') continue
+    if (rect.right > innerWidth + slack || rect.left < -slack) {
+      wide.push(`${nameOf(el)} ${round(rect.left)}〜${round(rect.right)}px`)
+    }
+    if (scrolls(style)) skipped.add(el)
+    if (skipped.has(el)) continue
+    /*
+      自分の中身（字）を切っている箱。子の要素が無い段落を max-height と
+      overflow: hidden で止めても、子の位置では見つからない。1行で末尾を省く箱
+      （text-overflow: ellipsis。読み上げには全部が残る）は決まりどおりなので除く
+    */
+    if (
+      clips(style) &&
+      style.textOverflow !== 'ellipsis' &&
+      (el.scrollHeight > el.clientHeight + slack || el.scrollWidth > el.clientWidth + slack)
+    ) {
+      cut.push(
+        `${nameOf(el)} の中身（${el.scrollWidth}x${el.scrollHeight} を ${el.clientWidth}x${el.clientHeight} で）`,
+      )
+    }
+    for (let up = el.parentElement; up && up !== shell; up = up.parentElement) {
+      const upStyle = getComputedStyle(up)
+      if (scrolls(upStyle)) break
+      if (!clips(upStyle)) continue
+      const box = up.getBoundingClientRect()
+      const x = ['hidden', 'clip'].includes(upStyle.overflowX)
+      const y = ['hidden', 'clip'].includes(upStyle.overflowY)
+      if (
+        (x && (rect.left < box.left - slack || rect.right > box.right + slack)) ||
+        (y && (rect.top < box.top - slack || rect.bottom > box.bottom + slack))
+      ) {
+        cut.push(`${nameOf(el)}（${nameOf(up)} の外）`)
+        break
+      }
+    }
   }
-  if (strays.length) {
-    problems.push(
-      `画面の外（下端 ${height}px より下）で切られている: ${strays.slice(0, 3).join(', ')}${strays.length > 3 ? ` ほか ${strays.length - 3}` : ''}`,
-    )
-  }
+  const across = scroller.scrollWidth - scroller.clientWidth
+  if (across > slack) problems.push(`ページが横に ${across}px 動く`)
+  if (wide.length) problems.push(`画面の横にはみ出している: ${list(wide)}`)
+  if (cut.length) problems.push(`切られている: ${list(cut)}`)
 
   /*
-    (6) ページャの手。名前（行き先の節の見出し）は1行で省く（app.css の
-    .pager__name）。折れると、上限の 10 字で 390 の指の手が 76px（3行）になった
+    (8) 目次の的。指のときは目次の行き先と管理画面への入口も --tap（app.css の
+    @media (pointer: coarse)）
   */
-  const tap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tap'))
-  for (const hand of document.querySelectorAll('.pager__go')) {
-    const tall = hand.getBoundingClientRect().height
-    if (tall > tap + slack) {
-      problems.push(
-        `ページャの手「${hand.textContent.trim()}」の高さが ${round(tall)}px（--tap は ${tap}px）`,
-      )
+  const tap = parseFloat(getComputedStyle(root).getPropertyValue('--tap'))
+  if (matchMedia('(pointer: coarse)').matches) {
+    for (const hand of rail.querySelectorAll('.toc a, .rail__admin')) {
+      const tall = hand.getBoundingClientRect().height
+      if (tall > 0 && tall < tap - slack) {
+        problems.push(
+          `目次の的「${hand.textContent.trim()}」が ${round(tall)}px（--tap は ${tap}px）`,
+        )
+      }
     }
   }
 
   /*
-    (7) 中央寄せの Hero の子の中心。自分の幅の子（帯・名札）は箱の中心、行いっぱいに
-    伸びた子（見出し・GitHub / メールの .socials）は中身の広がり（Range）の中心で見る
-    ——伸びた箱の中心はいつも真ん中なので、中身が左に寄っていても見逃す
+    (10) 中央寄せの入口の Hero の子の中心。自分の幅の子（帯・全体ページへの1本）は
+    箱の中心、行いっぱいに伸びた子（見出し・リード文）は中身の広がり（Range）の中心で
+    見る——伸びた箱の中心はいつも真ん中なので、中身が左に寄っていても見逃す。
+    個人ページの頭（.hero--profile）は中央に組まない（本文の列と同じ左の軸）ので測らない
   */
-  const hero = layout === 'center' ? document.querySelector('main > .hero') : null
+  const hero =
+    layout === 'center' ? document.querySelector('main > .hero:not(.hero--profile)') : null
   if (hero) {
     const heroStyle = getComputedStyle(hero)
     const heroBox = hero.getBoundingClientRect()
@@ -352,39 +367,95 @@ const measure = ([layout, typeface, cfg]) => {
     }
   }
 
-  // 以前の測り方も残す。標準モードでは scrollingElement が html で、動けば出る
-  const scroller = document.scrollingElement ?? document.documentElement
-  const page = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
-  if (page > slack) problems.push(`ページが ${page}px 動く`)
-
   /*
-    (5) 錨の y。節の最初の h1 の上端——ただし h1 より前に別の子（作品のページの
-    「← 一覧に戻る」）が立つ画面では、その最初の子の上端。絶対配置の子
-    （月）と display: none の子は並びに数えない。
+    (9) 錨の y。節の最初の h1 の上端——ただし h1 より前に別の子（作品のページの
+    「← 一覧に戻る」）が立つページでは、その最初の子の上端。絶対配置の子
+    （月）と display: none の子は並びに数えない。ページの頭で測る。
   */
   const anchored = document.querySelector(cfg.anchored)
   let anchor = null
   if (anchored) {
     const kids = [...anchored.children].filter((kid) => {
-      const style = getComputedStyle(kid)
-      return style.position !== 'absolute' && style.display !== 'none'
+      const kidStyle = getComputedStyle(kid)
+      return kidStyle.position !== 'absolute' && kidStyle.display !== 'none'
     })
     const heading = anchored.querySelector('h1')
     const first = kids[0]
     const leader = first && heading && !first.contains(heading) ? first : (heading ?? first)
     anchor = leader ? round(leader.getBoundingClientRect().top) : null
   }
+  const tall = scroller.scrollHeight
 
-  return {
-    problems,
-    panels: panels.map(({ name, over, free }) => ({ name, over, free })),
-    anchor,
-    page,
+  /*
+    (6) 目次の貼り付け。本文の下に画面3つぶんの空きを足し、ページを一番下まで
+    送る。いまの中身が1画面に収まるページでも、貼り付けが効いているかを必ず試せる。
+  */
+  const railStyle = getComputedStyle(rail)
+  if (railStyle.position !== 'sticky') {
+    problems.push(`柱の position が ${railStyle.position}（sticky のはず）`)
   }
+  const spacer = document.createElement('div')
+  spacer.style.height = `${innerHeight * 3}px`
+  main.append(spacer)
+  try {
+    to(scroller.scrollHeight)
+    const tocBox = toc.getBoundingClientRect()
+    if (tocBox.top < -slack || tocBox.top >= innerHeight) {
+      problems.push(`一番下まで送ると目次が画面の外（上端 ${round(tocBox.top)}px）`)
+    }
+    const mark = toc.querySelector("a[aria-current='page']")
+    if (mark) {
+      const at = mark.getBoundingClientRect()
+      if (at.top < -slack || at.bottom > innerHeight + slack) {
+        problems.push(
+          `一番下まで送ると目次の印が画面の外（${round(at.top)}〜${round(at.bottom)}px）`,
+        )
+      }
+    }
+
+    /*
+      帯の姿では、本文を帯の下へ潜らせた位置で、帯が手前に描かれているか（印の
+      真ん中の点が柱の中の要素）と、地が透けていないか（背景が透明でない）
+    */
+    if (!beside) {
+      to(Math.max(0, mainBox.top - railBox.height + innerHeight / 3))
+      const probe = mark ?? toc
+      const at = probe.getBoundingClientRect()
+      const hit = document.elementFromPoint((at.left + at.right) / 2, (at.top + at.bottom) / 2)
+      if (hit && !rail.contains(hit)) {
+        problems.push(`送ると帯の上に本文が描かれる（${nameOf(hit)} が目次の上）`)
+      }
+      const paint = railStyle.backgroundColor
+      if (paint === 'transparent' || /rgba\(.*,\s*0\)$/.test(paint)) {
+        problems.push(`帯の地が透けている（background-color: ${paint}）`)
+      }
+    }
+
+    /*
+      (7) 送った先。main の中の id を持つ要素（と main 自身）へ送り、上端が帯の下端
+      より下に来るか。scrollIntoView は html の scroll-padding-top を読む
+      （フラグメントで移るときと同じ）
+    */
+    const hidden = []
+    for (const target of [main, ...main.querySelectorAll('[id]')]) {
+      if (target.getBoundingClientRect().height === 0) continue
+      target.scrollIntoView({ block: 'start', behavior: 'instant' })
+      const floor = beside ? 0 : rail.getBoundingClientRect().bottom
+      const top = target.getBoundingClientRect().top
+      if (top < floor - slack)
+        hidden.push(`#${target.id} ${round(top)}px（帯の下端 ${round(floor)}px）`)
+    }
+    if (hidden.length) problems.push(`送った先が帯の下に隠れる: ${list(hidden)}`)
+  } finally {
+    spacer.remove()
+    to(0)
+  }
+
+  return { problems, anchor, tall }
 }
 
 /*
-  (8) 目次の印。帯の姿（柱が本文の左に立たない骨格・幅）でだけ測る。
+  (11) 目次の印。帯の姿（柱が本文の左に立たない骨格・幅）でだけ測る。
 
   骨格は属性の差し替えではなく、サーバーの返す HTML の data-layout を書き換えて
   開き直す。帯の最初のスクロール位置（scroll-initial-target）は読み込んだときに
@@ -450,8 +521,8 @@ async function tocPass(browser, base, paths, layouts) {
 }
 
 /*
-  (9) 全体ページが横に動かない。/all は縦に伸びてよい唯一のページで、上の
-  測り方（画面に収まるか）には入れていない。横はどのページも動かない。
+  (12) 全体ページが横に動かない。/all は節を縦に積んだ1本の文書で、柱を貼り付けない
+  （app.css の「ページの外枠」の外）ので上の測り方には入れていない。横はどのページも動かない。
 */
 async function wholePass(browser, base, layouts, typefaces) {
   const failures = []
@@ -501,7 +572,7 @@ async function measureRun(browser, base, run, layouts, typefaces) {
   const failures = []
   const anchors = new Map()
   let checked = 0
-  let closest = { free: Number.POSITIVE_INFINITY, where: '' }
+  let longest = { tall: 0, where: '' }
 
   const paths = await screenPaths(base, run)
   const poses = run.token ? ['訪問者', 'ログイン'] : ['訪問者']
@@ -539,7 +610,7 @@ async function measureRun(browser, base, run, layouts, typefaces) {
             const found = await page.evaluate(measure, [
               layout,
               typeface,
-              { slack: SLACK, panels: PANELS, anchored: ANCHORED, beside: BESIDE },
+              { slack: SLACK, anchored: ANCHORED, beside: BESIDE },
             ])
             checked += 1
             const label = `${layout}/${typeface} ${where} ${path}`
@@ -548,21 +619,8 @@ async function measureRun(browser, base, run, layouts, typefaces) {
               if (!anchors.has(key)) anchors.set(key, [])
               anchors.get(key).push({ path, y: found.anchor })
             }
-            if (found.panels.length === 0) {
-              failures.push(`${label} — 節が1つも無い（${PANELS} に当たらない）`)
-            }
             for (const problem of found.problems) failures.push(`${label} — ${problem}`)
-            for (const panel of found.panels) {
-              if (panel.over > SLACK) {
-                failures.push(`${label} — 節「${panel.name}」の弁が ${panel.over}px 開く`)
-              } else if (panel.free !== null && panel.free < -SLACK) {
-                // scrollHeight は整数に丸まる。余りは小数のまま測るので、こちらで拾う
-                failures.push(`${label} — 節「${panel.name}」の中身が ${-panel.free}px はみ出す`)
-              }
-              if (panel.free !== null && panel.free < closest.free) {
-                closest = { free: panel.free, where: label }
-              }
-            }
+            if (found.tall > longest.tall) longest = { tall: found.tall, where: label }
           }
         }
       }
@@ -572,7 +630,7 @@ async function measureRun(browser, base, run, layouts, typefaces) {
 
   /*
     見出しの錨。同じ骨格・書体・寸法・姿の中で、いちばん上といちばん下の差が
-    SLACK を超えたら、外れた画面を名指しする（多数派の y から離れているもの）。
+    SLACK を超えたら、外れたページを名指しする（多数派の y から離れているもの）。
   */
   let worstDrift = 0
   for (const [key, list] of anchors) {
@@ -586,7 +644,7 @@ async function measureRun(browser, base, run, layouts, typefaces) {
     const strays = list.filter((one) => Math.abs(one.y - usual) > SLACK)
     for (const one of strays) {
       failures.push(
-        `${key} ${one.path} — 見出しの錨が ${one.y}px（ほかの画面は ${usual}px）。めくると見出しが跳ねる`,
+        `${key} ${one.path} — 見出しの錨が ${one.y}px（ほかのページは ${usual}px）。ページごとに見出しが跳ねる`,
       )
     }
     // 多数派から 1px ずつずれて並んだ（どれも名指しできない）ときも、差そのもので落とす
@@ -604,7 +662,7 @@ async function measureRun(browser, base, run, layouts, typefaces) {
     checked,
     urls: paths.length,
     poses: poses.length,
-    closest,
+    longest,
     drift: Math.round(worstDrift * 10) / 10,
     toc,
     whole,
@@ -626,25 +684,25 @@ async function main() {
           key: 'seed',
           label: 'seed（1人のサイト）',
           sql: [await readFile(`${ROOT}seed.sql`, 'utf8')],
-          least: 17,
+          least: 11,
         },
         {
           key: 'blocks',
           label: 'seed＋ブロック3本（1人のサイト・目次が帯から溢れる）',
           sql: [await readFile(`${ROOT}seed.sql`, 'utf8'), blocks.sql],
-          least: 20,
+          least: 14,
           expect: blocks.expect,
         },
         {
           key: 'many',
-          label: 'fixture（複数人・上限ちょうど）',
+          label: 'fixture（複数人・重い中身）',
           sql: [many.sql],
           least: many.expect.length,
           expect: many.expect,
         },
         {
           key: 'solo',
-          label: 'fixture（1人・上限ちょうど）',
+          label: 'fixture（1人・重い中身）',
           sql: [solo.sql],
           least: solo.expect.length,
           expect: solo.expect,
@@ -698,21 +756,21 @@ async function main() {
     }
     console.log(
       `✓ ${result.run.label}: ${result.checked} 通り（${result.urls} URL × ${shape}${poses}）。` +
-        `ページが動いた画面 0・切られた要素 0・弁が開いた節 0。` +
-        `いちばん惜しい節の余り ${result.closest.free}px（${result.closest.where}）。` +
+        `横のはみ出し 0・切られた要素 0・h1 はどれも1つ・一番下まで送っても目次が見え、送った先は帯の下。` +
+        `いちばん長いページ ${result.longest.tall}px（${result.longest.where}）。` +
         `見出しの錨のずれ 最大 ${result.drift}px。` +
-        `目次の印 ${result.toc.checked} 画面が帯の中（うち ${result.toc.scrolled} 画面は送って開いた）。` +
+        `目次の印 ${result.toc.checked} ページが帯の中（うち ${result.toc.scrolled} ページは送って開いた）。` +
         `/all は ${result.whole.checked} 通りとも横に動かない`,
     )
   }
 
   if (failed > 0) {
     console.error(
-      '\n設計サイズで弁が開いたら、それは弁の不具合ではなく src/blocks.ts の perScreen / maxChars の不具合。まず件数と字数を疑う。' +
-        '\n切られた要素・外枠・柱の場所が出たら、app.css の「画面に収める外枠」が効いていない（後ろで上書きされた・条件が外れた）。' +
+      '\n横のはみ出し・切られた要素・柱の場所・貼り付けが出たら、app.css の「ページの外枠」が効いていない（後ろで上書きされた・条件が外れた）か、部品の幅の決め方（min-width: 0・長い1語）を疑う。' +
+        '\n送った先が帯の下に隠れたら、:root の --band-clear / --band-clear-wide（帯の高さ）と html の scroll-padding-top を見る。' +
         '\n見出しの錨がずれたら、節の寄せ方（app.css の align-content: safe start）か、見出しより前に置いた子を疑う。' +
         '\n目次の印が帯の外なら app.css の scroll-initial-target（帯の姿の2か所）と、帯がスクロール容器か（overflow-x: auto）を見る。' +
-        '\nページャの手が --tap を超えたら .pager__name（1行で省く）、中央の軸がずれたら中央寄せの Hero の子の寄せ方、' +
+        '\n目次の的が --tap に合わなければ @media (pointer: coarse)、中央の軸がずれたら中央寄せの Hero の子の寄せ方、' +
         '/all が横に動いたら目次の折り返し（flex-wrap）を見る。',
     )
     process.exitCode = 1

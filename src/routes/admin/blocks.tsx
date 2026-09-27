@@ -3,13 +3,12 @@ import { type Context, Hono } from 'hono'
 import {
   BLOCK_TYPES,
   type BlockType,
-  blockPages,
+  blockShown,
   blockType,
   blockValueErrors,
   isBlockKey,
   MAX_CHARS,
   MAX_STATEMENT_SENTENCE,
-  memberScreenCount,
   publishErrors,
   type SiteCounts,
 } from '../../blocks'
@@ -45,29 +44,23 @@ import {
 export const blockRoutes = new Hono<AppEnv>()
 
 /*
-  公開ページの画面の連なり。置く・外す・前後に動かす、の3つだけ。
+  公開ページの並び。置く・外す・前後に動かす、の3つだけ。
   部品の見た目はここからは変えられない（見た目は「見た目」で、全体に対して選ぶ）。
 
-  1つのブロックが何画面になるかは中身の件数で決まる（1画面あたりの件数は
-  src/blocks.ts の perScreen が正）。行に出す「N 画面」はその結果の知らせで、
-  操作する口ではない。置いたものが何画面になるかが見えないと、
-  「13件目を公開したら画面が1枚増えた」ことに気づけない。
+  ブロック1つが公開ページの1ページ。行に出す「出る / 出ない」は、公開にしたのに
+  中身が無くて出ていないもの（項目が0件の Projects・通る行が1つも無いリンク集）を
+  知らせるためのもので、操作する口ではない。「公開」の札だけでは、それが
+  公開ページのどこにも無いことに気づけない。
 */
 
 const blockLabel = (block: schema.Block) =>
   block.title || blockType(block.type)?.label || block.type
 
 /*
-  画面の数を決める、公開中のものの件数（src/blocks.ts の blockPages が読む形）。
-  項目の行そのものは引かない（数えるだけなら、カードの中身まで取ってくる必要が無い）。
-
-  メンバーだけは行を引く。公開中がちょうど1人なら、Team の行はその人の
-  プロフィールに置き換わる（src/routes/public/data.ts の profileOf）ので、その人の
-  紹介・技術・経歴から画面の数を数える（src/blocks.ts の memberScreenCount。
-  公開ページの memberScreens と同じ開き方）。
-
-  数えるのは絞り込みのかかっていない素のサイト（matched は total と同じ）。
-  ?kind= を付けた URL はこれより少ない画面になることがある。
+  公開ページに出るかを決める、公開中のものの件数（src/blocks.ts の blockShown が
+  読む形）。項目の行そのものは引かない（数えるだけなら、カードの中身まで取って
+  くる必要が無い）。公開中のメンバーが1人なら、Team の行はその人のプロフィールに
+  置き換わる（src/routes/public/data.ts の profileOf。行の下にその旨を出す）。
 */
 async function siteCounts(database: Db): Promise<SiteCounts> {
   const [projects, members] = await Promise.all([
@@ -75,12 +68,7 @@ async function siteCounts(database: Db): Promise<SiteCounts> {
     countPublishedItems(database),
     listPublishedMembers(database),
   ])
-  const [solo] = members.length === 1 ? members : []
-  return {
-    items: { total: projects, matched: projects },
-    members: members.length,
-    profile: solo ? memberScreenCount(solo) : null,
-  }
+  return { items: projects, members: members.length }
 }
 
 const BlocksPage = (props: {
@@ -93,9 +81,9 @@ const BlocksPage = (props: {
   const placed = new Set(props.rows.map((row) => row.type))
   // 決まった中身のものは1つだけ。打ち込むものはいくつでも置ける
   const available = BLOCK_TYPES.filter((type) => type.kind === 'free' || !placed.has(type.key))
-  // 行ごとの画面数と、その合計（＝いまサイトが何画面あるか）
-  const screens = props.rows.map((row) => blockPages(row, props.counts))
-  const total = screens.reduce((sum, n) => sum + n, 0)
+  // 行ごとに公開ページに出るかと、出るものの数（＝いまサイトが何ページあるか）
+  const shown = props.rows.map((row) => blockShown(row, props.counts))
+  const total = shown.filter(Boolean).length
 
   return (
     <AdminLayout title="構成" active="blocks" account={props.account} flash={props.flash}>
@@ -105,11 +93,10 @@ const BlocksPage = (props: {
           <h1>構成</h1>
         </div>
         {/*
-          「見る」は2つある。入口（/）は読む人が着くところで、1画面ずつ
-          めくる姿そのもの。全体ページ（/all）は置いたものが全部縦に並ぶ唯一の
-          姿で、この一覧が「合計 N 画面」と言っている中身を通しで見られる
-          ——並べ替えたあとに確かめる先はこちらのほうで、画面ごとに割った
-          あとは、めくらずに全部を見る手がここにしか無い。
+          「見る」は2つある。入口（/）は読む人が着くところで、節ごとのページを
+          目次で行き来する姿そのもの。全体ページ（/all）は置いたものが全部縦に
+          並ぶ唯一の姿で、この一覧が「合計 N ページ」と言っている中身を通しで
+          見られる——並べ替えたあとに確かめる先はこちらのほう。
 
           入れ物は .form-actions__right（横並び・同じ幅）を借りる。管理画面で
           ボタンを2つ並べる形はこれ1つで、新しい見た目を増やさない。
@@ -144,12 +131,12 @@ const BlocksPage = (props: {
       ) : (
         <>
           {/*
-            画面がいくつあるかは、置いたものと登録の件数で決まる。ここに出さないと、
-            1件足したせいで画面が1枚増えたことが公開ページを開くまで分からない
+            どれが公開ページに出ているかは、公開の札だけでは分からない（中身の無い
+            ものは公開でも出ない）。ここに出さないと、公開ページを開くまで分からない
           */}
           <p class="form-note">
-            合計 {total} 画面。公開ページはこの順に1画面ずつ出ます（下書きと、中身の無いものは 0
-            画面）。
+            合計 {total}{' '}
+            ページ。公開ページはこの順に並び、目次から1つずつ開けます（下書きと、中身の無いものは出ません）。
           </p>
           <ul class="rows">
             {props.rows.map((block, index) => {
@@ -188,21 +175,19 @@ const BlocksPage = (props: {
                       {type?.kind === 'fixed' ? ' · 中身は自動' : ''}
                     </span>
                     {/*
-                      1人のサイトの Team。公開ページでは Team の画面を作らず、その
-                      位置にその人のプロフィール（1枚目・About・Skills・Career）が
-                      並ぶ。ここで言っておかないと、「Team」の行が「4 画面」と
-                      出る理由も、公開ページに Team が見当たらない理由も分からない。
-                      下書きの行にも出す——公開したら何が出るかの知らせなので
+                      1人のサイトの Team。公開ページでは Team のページを作らず、その
+                      位置にその人のプロフィールが並ぶ（目次は「Profile」）。ここで
+                      言っておかないと、公開ページに Team が見当たらない理由が
+                      分からない。下書きの行にも出す——公開したら何が出るかの知らせなので
                     */}
-                    {block.type === 'team' && props.counts.profile !== null ? (
+                    {block.type === 'team' && props.counts.members === 1 ? (
                       <span class="row__sub">
-                        公開中が1人のあいだは、その人のプロフィール（{props.counts.profile}{' '}
-                        画面）に置き換わる
+                        公開中が1人のあいだは、その人のプロフィール（目次は Profile）に置き換わる
                       </span>
                     ) : null}
                   </span>
                   {/* 読み取り専用の知らせ。ここから件数は変えられない */}
-                  <span class="row__col">{screens[index] ?? 0} 画面</span>
+                  <span class="row__col">{shown[index] ? '出る' : '出ない'}</span>
                   <StatusPill published={block.published} />
                   <span class="row__actions">
                     {/*
@@ -299,24 +284,10 @@ blockRoutes.get('/blocks', async (c) => {
 })
 
 /*
-  中身の欄に添える一文。1画面に何件・何字まで出るかを、保存を押す前に出す。
-
-  どちらの数も src/blocks.ts が正で、ここは結果の知らせ。件数のほうは入り
-  きらないぶんが次の画面に回るので気にしなくてよく、字数のほうは回せない
-  ——この違いがあるので、両方を同じ並びで見せる。
+  中身の欄に添える一文。書き方（src/blocks.ts の hint）だけ。行の数や字数に上限は
+  無い（ブロック1つが1ページで、ページは縦に読む）。
 */
-const bodyHint = (type: Extract<BlockType, { kind: 'free' }>) => {
-  const parts: string[] = [type.hint]
-  if ('perScreen' in type) parts.push(`1画面 ${type.perScreen} 件`)
-  // free 6種はすべて maxChars を持つので、ここは条件で包まない
-  // （1行上の perScreen は statement が持たないので、あちらは本当に分岐する）
-  parts.push(
-    type.key === 'statement'
-      ? `一文とあわせて ${type.maxChars} 字まで`
-      : `1画面 ${type.maxChars} 字まで`,
-  )
-  return parts.join(' · ')
-}
+const bodyHint = (type: Extract<BlockType, { kind: 'free' }>) => type.hint
 
 const BlockForm = (props: {
   account: string
@@ -368,7 +339,7 @@ const BlockForm = (props: {
                 hint={
                   type.key === 'statement'
                     ? `大きく出る · ${MAX_STATEMENT_SENTENCE} 字まで`
-                    : `空なら「${type.title || type.label}」 · ${MAX_CHARS.blockHeading} 字まで（目次とページャに1行で並ぶ）`
+                    : `空なら「${type.title || type.label}」 · ${MAX_CHARS.blockHeading} 字まで（目次に1行で並ぶ）`
                 }
               />
               <Area
@@ -454,8 +425,8 @@ function readBlockForm(form: FormData) {
 
 /*
   ブロックを保存してよいか。下書きでも止めるのは受け取れない値（中身が空・
-  リンク集の通らない行。blockValueErrors）だけで、1画面に収まる長さは公開に
-  なるときにだけ見る（publishErrors）。数そのものは src/blocks.ts の maxChars が正。
+  リンク集の通らない行。blockValueErrors）だけで、見出しと一文の長さは公開に
+  なるときにだけ見る（publishErrors）。数そのものは src/blocks.ts の MAX_CHARS が正。
 */
 const blockSaveErrors = (type: BlockType, values: ReturnType<typeof readBlockForm>) =>
   values.published
@@ -505,7 +476,7 @@ blockRoutes.post('/blocks', async (c) => {
       ),
     )
 
-  // 画面の数を数えるのは、一覧を描き直すときだけ。保存できた側では要らない
+  // 公開ページに出るかを数えるのは、一覧を描き直すときだけ。保存できた側では要らない
   if (!type) {
     return c.html(
       <BlocksPage
@@ -564,7 +535,7 @@ blockRoutes.post('/blocks', async (c) => {
   }
 
   /*
-    足す先は Contact の手前。連なりのいちばん後ろに付けると締めの連絡先の後ろに
+    足す先は Contact の手前。並びのいちばん後ろに付けると締めの連絡先の後ろに
     来てしまい、↑ を何度も押して運ぶことになる
   */
   const contact = current.findIndex((row) => row.type === 'contact')
@@ -626,11 +597,11 @@ async function saveBlock(
   }
 
   /*
-    下書きに戻す保存では中身の長さを見ない（関門は published が 1 になるときだけ。
-    publishErrors）。公開しないものは公開ページに出ないので、1画面に収まるか
+    下書きに戻す保存では見出しの長さを見ない（関門は published が 1 になるときだけ。
+    publishErrors）。公開しないものは公開ページに出ないので、目次に並ぶ長さか
     どうかを問う理由が無い。
 
-    問うと行き止まりができる。上限より前に保存された長い中身を持つ行は、編集
+    問うと行き止まりができる。上限より前に保存された長い見出しを持つ行は、編集
     フォームが DB の本文で初期化されるので、「公開する」を外して保存しても同じ 400 で
     戻り、引っ込める手が削除しか残らない。
   */

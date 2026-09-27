@@ -10,47 +10,55 @@ import {
 } from '../../db/queries'
 import * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
-import { isHttpsUrl, isSafeRedirect } from '../../lib/format'
-import { type Sequence, sequence, stepAt } from '../../lib/sequence'
+import { isHttpsUrl } from '../../lib/format'
+import { tableOfContents } from '../../lib/sequence'
 import { SITE } from '../../site'
 import { Band, filterQuery, SiteIdentity } from '../../ui/components'
 import { bandOf, NO_FILTER, soloMember } from './data'
-import { memberHref, memberScreens, memberStep, TEAM_TOC } from './member-screens'
-import { personJsonLd, siteJsonLd } from './meta'
+import {
+  MEMBER_SECTIONS,
+  type MemberSection,
+  memberHref,
+  memberPage,
+  memberSectionHref,
+} from './member-page'
+import { pageTitle, personJsonLd, siteJsonLd } from './meta'
 import { firstOnly, movedTo, screenPage } from './page'
-import { siteScreens, siteSteps } from './site'
+import { PROFILE_KEY, sitePageLinks, sitePages } from './site'
+
+const isSection = (key: string): key is MemberSection =>
+  (MEMBER_SECTIONS as readonly string[]).includes(key)
 
 /*
-  個人ページの画面1つ。want が null なら1枚目（/members/<slug>）。
+  個人ページ（/members/<slug>）。rest は前の URL の続き（/about・/skills・/career・
+  /contact。割っていたころの /career/2 も同じ）で、どれも転送するだけ。
 
-  下書きのメンバーも、その人が持たない画面（技術も経歴も書いていない）も、
-  知らない画面の名前も、まとめて「その URL は無い」に落とす。
+  下書きのメンバーも、知らない続きの名前も、まとめて「その URL は無い」に落とす。
 
-  **個人ページはサイトの連なりの一部。** 柱と目次はサイトのままで、個人ページ
+  **個人ページはサイトの並びの一部。** 柱と目次はサイトのままで、個人ページ
   専用のものに入れ替えない（入れ替えると、Team のカードを押した先が別のサイトに
-  見え、Team へ戻る道も無くなる）。どう連なるかは人数で2つに分かれる。
+  見え、Team へ戻る道も無くなる）。どう並ぶかは人数で2つに分かれる。
 
     1人のサイト（Team を置いているとき。data.ts の profileOf）
-      Team の画面は作らず、その位置にこの人の画面がそのまま並ぶ（site.ts の
-      screenList）。/ から「次」を押し続けると 入口 → Projects … → 1枚目 →
-      About → Skills → Career → Contact と一周する。目次は「Profile」の1行。
-      1枚目の帯は出さない（入口の帯と同じ行き先・同じ件数）。構造化データも
-      載せない（連なりの途中）
+      Team のページは作らず、その位置にこの人のページが並ぶ（site.ts の pageList）。
+      目次は「Profile」の1行で、このページでその行に印。帯は出さない（入口の帯と
+      同じ行き先・同じ件数）。構造化データはサイトの並びの先頭のときだけ
+      サイトの名乗りを載せる（firstOnly）
     2人以上のサイト
-      Team の続き。目次はサイトのもの（Team に印）で、ページャはサイトの列の
-      Team の直後にこの人の画面を差し込んだ列でめくる——
-      ← Team → 1枚目 → About → Skills → Career → Contact →。Team の画面自身の
-      「次」は Contact のまま（個人ページはカードから入る脇の道）
+      Team の続き。目次はサイトのもので、印は Team に付く。この人の一覧への帯を
+      名札の下に置き、構造化データはこの人の Person
 
-  Team を置いていないサイトでは、差し込む先が無いので、この人の画面だけで
-  連ねる（カードの担当者名から入る単独の連なり）。連絡先はサイトの Contact に
-  合流させた（/members/<slug>/contact はそこへ 301）。
+  Team を置いていないサイトでは、目次に印の付く行が無い（カードの担当者名から
+  入る並びの外のページ）。連絡先はサイトの Contact に合流させた
+  （/members/<slug>/contact はそこへ 301）。
 */
-export async function renderMemberScreen(
-  c: Context<AppEnv>,
-  slug: string,
-  want: { key: string; page: number } | null,
-) {
+export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest: string | null) {
+  /*
+    続きの名前は決まった4つだけ。先に見ておくと、下の転送で Location に入れる
+    文字列がこの4つに限られる（パスの一部をそのまま Location に入れない。
+    format.ts の isSafeRedirect のコメントに、CR/LF で 500 になった例がある）
+  */
+  if (rest !== null && rest !== 'contact' && !isSection(rest)) return c.notFound()
   const db = drizzle(c.env.DB, { schema })
   const [member, members, theme, blocks] = await Promise.all([
     findPublishedMember(db, slug),
@@ -65,127 +73,102 @@ export async function renderMemberScreen(
     loadTheme(db),
     publishedBlocks(db),
   ])
+
   /*
     slug を変えたメンバー。前の slug は転送表（member_slug_redirects）に残って
-    いるので、同じ画面のいまの URL へ 301 で寄せる（作品の恒久リンクと同じ）。
-    行き先は URL の残り（画面の名前・ページ数・query）をそのまま継ぐ——
-    パスの一部から組むので、Location に入れてよい形かを確かめてから
-    （routes.ts の readPage と同じ）。
+    いるので、いまの URL へ 301 で寄せる（作品の恒久リンクと同じ）。続き（/about …）
+    で来たぶんは、いまの URL の続きへ送る——そこからもう一度、小節へ送られる。
+    query はそのまま継ぐ。
   */
   if (!member) {
     const moved = await findMovedMember(db, slug)
-    const to = moved ? memberHref(moved, want?.key ?? '', want?.page ?? 1) : null
-    return to && isSafeRedirect(to) ? movedTo(c, `${to}${new URL(c.req.url).search}`) : c.notFound()
+    if (!moved) return c.notFound()
+    const to = `${memberHref(moved)}${rest ? `/${rest}` : ''}`
+    return movedTo(c, `${to}${new URL(c.req.url).search}`)
   }
 
   const solo = soloMember(members)
-  // サイトの画面の列。1人のサイトならこの人の画面はもう入っている（profileOf）
-  const [counts, { screens: site, counted }] = await Promise.all([
+  // サイトのページの並び。1人のサイトならこの人のページはもう入っている（profileOf）
+  const [counts, { pages, counted }] = await Promise.all([
     countPublishedByKind(db, member.id),
-    siteScreens(db, blocks, members, NO_FILTER, null),
+    sitePages(db, blocks, members, NO_FILTER),
   ])
-  const siteList = siteSteps(site, NO_FILTER, solo)
+  const links = sitePageLinks(pages, NO_FILTER, solo)
 
-  /*
-    個人ページの Contact は持たず、サイトの Contact に合流させた。貼られた
-    URL は死なせずにそちらへ寄せる（恒久的な移動なので 301）。サイトに
-    Contact を置いていなければ、寄せる先が無いので「その URL は無い」
-  */
-  if (want?.key === 'contact' && want.page === 1) {
-    const contact = siteList.find((step) => step.navKey === 'contact')
-    return contact ? movedTo(c, contact.canonical) : c.notFound()
+  if (rest !== null) {
+    /*
+      個人ページの Contact は持たず、サイトの Contact に合流させた。貼られた
+      URL は死なせずにそちらへ寄せる（恒久的な移動なので 301）。サイトに
+      Contact を置いていなければ、寄せる先が無いので「その URL は無い」
+    */
+    if (rest === 'contact') {
+      const contact = links.find((link) => link.key === 'contact')
+      return contact ? movedTo(c, contact.canonical) : c.notFound()
+    }
+    /*
+      前の続き（/about・/skills・/career）は、このページの中の小節へ。小節が
+      無くなっていればページの頭へ（memberSectionHref）。行き先は中身しだいで
+      変わるので、ブラウザには覚えさせない（movedTo）
+    */
+    return isSection(rest) ? movedTo(c, memberSectionHref(member, rest)) : c.notFound()
   }
 
+  const href = memberHref(member.slug)
   /*
-    1枚目は /members/<slug> だけで開く。1枚目の key は空文字なので、名指し
-    （3語目。/members/<slug>/hero のような）では当たらない
+    1人のサイトのプロフィール。この人のページはサイトの並びそのものに入っている
+    ので、目次の印は「Profile」の行に付く。帯は付けない（site.ts の ProfilePage）。
   */
-  const asked =
-    want === null ? memberHref(member.slug, '') : memberHref(member.slug, want.key, want.page)
+  const inSite = counted.profile ? links.find((link) => link.key === PROFILE_KEY) : undefined
 
   /*
-    1人のサイトのプロフィール。この人の画面はサイトの列そのものに並んでいる
-    ので、そこから引いてそのまま連ねる——前後も目次もページャの数もサイトの
-    連なりのもの。帯は付けない（site.ts の ProfileScreen）。構造化データは列の
-    先頭にだけ載せる（firstOnly）ので、入口より後ろのプロフィールには載らない。
-  */
-  if (counted.profile) {
-    const at = stepAt(siteList, asked)
-    const seq = sequence(siteList, at)
-    const current = site[at]
-    if (!seq || current?.kind !== 'profile') return c.notFound()
-    return screenPage(c, seq, {
-      node: current.screen.node,
-      description: current.screen.description,
-      jsonLd: firstOnly(seq, siteJsonLd(members)),
-      theme,
-      sidebar: <SiteIdentity solo={solo} />,
-      adminPath: `/admin/members/${member.id}/edit`,
-    })
-  }
-
-  /*
-    この人の一覧への帯。カードをここに複製せず、絞り込んだ一覧の1画面目へ送る。
-    行き先と件数の決め方は data.ts の bandOf。
+    この人の一覧への帯。カードをここに複製せず、絞り込んだ一覧へ送る。
+    行き先と件数の決め方は data.ts の bandOf。1人のサイトのプロフィールでは
+    出さない（入口の帯と同じ行き先・同じ件数になる）。
 
     1人のサイトでは ?member= を付けない。readFilter が読まない（名前のピルが
     無い）ので、付けても効かない URL が1本増えるだけになる。
   */
-  const band = bandOf(
-    blocks,
-    counts,
-    filterQuery({ kind: null, member: members.length > 1 ? member.slug : null }),
-  )
-
-  const screens = memberScreens(
+  const band = inSite
+    ? null
+    : bandOf(
+        blocks,
+        counts,
+        filterQuery({ kind: null, member: members.length > 1 ? member.slug : null }),
+      )
+  const page = memberPage(
     member,
     band ? <Band href={band.href} label="このメンバーのつくったもの" counts={band.counts} /> : null,
   )
-  const own = screens.map((screen) => memberStep(member, screen, TEAM_TOC))
 
-  const index = stepAt(own, asked)
-  const step = own[index]
-  const current = screens[index]
-  if (!step || !current) return c.notFound()
-
-  /*
-    めくる列。サイトの列の Team（割られていれば最後の画面）の直後に、この人の
-    画面を差し込む。1枚目の「←」は Team へ、最後の画面の「→」は Team の次の
-    節（ふつうは Contact）へ出る。Team の画面自身の「次」は変えない。
-
-    目次もこの列から取る。この人の画面は目次に行を持たず（TEAM_TOC）、印は
-    Team に付く——作品1件のページが「載っている一覧」に印を付けるのと同じ
-    借り方で、印を付ける手続きは sequence に任せる。
-
-    Team を置いていないサイト（カードの担当者名から入る）では差し込む先が
-    無いので、めくるのはこの人の画面だけ。目次はサイトのまま（印は無い）。
-  */
-  const teamEnd = siteList.map((one) => one.navKey).lastIndexOf('team')
-  const around =
-    teamEnd < 0
-      ? [...siteList, ...own]
-      : [...siteList.slice(0, teamEnd + 1), ...own, ...siteList.slice(teamEnd + 1)]
-  const spliced = sequence(around, (teamEnd < 0 ? siteList.length : teamEnd + 1) + index)
-  const pager = teamEnd < 0 ? (sequence(own, index)?.pager ?? null) : (spliced?.pager ?? null)
-
-  // index は個人ページの中での位置。0（1枚目）にだけ構造化データが載る
-  const seq: Sequence = { index, current: step, nav: spliced?.nav ?? [], pager }
-
-  return screenPage(c, seq, {
-    node: current.node,
-    // 説明文もその画面のもの（memberScreens が画面ごとに持っている）
-    description: current.description,
-    jsonLd: firstOnly(seq, {
-      '@context': 'https://schema.org',
-      ...personJsonLd(member, `${SITE.origin}/members/${member.slug}`, {
-        // sameAs はこの文書の外で読まれる。相対の URL や javascript: は載せない
-        ...(isHttpsUrl(member.github) ? { sameAs: [member.github] } : {}),
-        // 1人のサイトなら器は無い。2人目が公開された日に戻る
-        ...(solo
-          ? {}
-          : { worksFor: { '@type': 'Organization', name: SITE.name, url: SITE.origin } }),
-      }),
-    }),
+  return screenPage(c, {
+    title: inSite?.title ?? pageTitle(member.name),
+    canonical: href,
+    /*
+      目次はサイトのもの。印は1人のサイトなら Profile、2人以上なら Team（作品のページが
+      「載っている一覧」に印を付けるのと同じ借り方）。Team を置いていないサイトでは
+      どの行にも付かない
+    */
+    nav: tableOfContents(links, inSite ? PROFILE_KEY : 'team'),
+    node: page.node,
+    description: page.description,
+    /*
+      1人のサイトのプロフィールは、サイトの並びの先頭のときだけサイトの名乗りを載せる
+      （Hero を外して Team を先頭に置いた構成）。それ以外は、この人の Person——
+      このページが何の URL かを言う
+    */
+    jsonLd: inSite
+      ? firstOnly(links, inSite, siteJsonLd(members))
+      : {
+          '@context': 'https://schema.org',
+          ...personJsonLd(member, `${SITE.origin}${href}`, {
+            // sameAs はこの文書の外で読まれる。相対の URL や javascript: は載せない
+            ...(isHttpsUrl(member.github) ? { sameAs: [member.github] } : {}),
+            // 1人のサイトなら器は無い。2人目が公開された日に戻る
+            ...(solo
+              ? {}
+              : { worksFor: { '@type': 'Organization', name: SITE.name, url: SITE.origin } }),
+          }),
+        },
     theme,
     // 柱はサイトのもの。個人ページだけの柱に入れ替えると、別のサイトへ飛んだように見える
     sidebar: <SiteIdentity solo={solo} />,

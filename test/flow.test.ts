@@ -3,7 +3,7 @@ import * as schema from '../src/db/schema'
 import { db, form, get, okText, resetDb, seedItem, seedMember, signIn } from './helpers'
 
 /*
-  導線。ある画面から次の画面へ、行き止まらずに進めるか。
+  導線。あるページから次のページへ（目次とページの中のリンクで）、行き止まらずに進めるか。
   構成でブロックを外したときに切れやすいので、その形をここで押さえる。
 */
 
@@ -41,8 +41,8 @@ describe('個人ページ → 一覧', () => {
     await seedItem({ type: 'app', memberId: member.id })
     await seedItem({ type: 'work', title: '業務の実績' })
     /*
-      Team を置かない1人のサイト（カードの担当者名から入る単独の連なり）。
-      Team を置くと個人ページはサイトの連なりに入り、帯は出さない
+      Team を置かない1人のサイト（カードの担当者名から入る並びの外のページ）。
+      Team を置くと個人ページはサイトの並びに入り、帯は出さない
     */
     await place(['hero', 'projects', 'contact'])
 

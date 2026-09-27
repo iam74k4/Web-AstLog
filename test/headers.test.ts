@@ -171,8 +171,8 @@ describe('応答のヘッダ', () => {
   })
 
   /*
-    PERF-2。CSS は既定（public, max-age=0, must-revalidate）のまま配られ、画面を1枚
-    めくるたびに描画を止めて条件付き GET を1往復していた。いまは中身から作った版を
+    PERF-2。CSS は既定（public, max-age=0, must-revalidate）のまま配られ、ページを
+    移るたびに描画を止めて条件付き GET を1往復していた。いまは中身から作った版を
     URL に付け（src/ui/components.tsx の Stylesheets）、_headers が1年・immutable で配る。
     長く持たせてよいのは版つきの URL で読まれるものだけ——版の無い素材（ロゴ・月）を
     immutable にすると、差し替えた絵が1年届かない

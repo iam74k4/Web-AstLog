@@ -23,12 +23,11 @@ export type Db = DrizzleD1Database<typeof schema>
 
   公開の一覧はこの並びのまま索引を読む（src/db/schema.ts の idx_items_public /
   idx_items_kind / idx_items_member）。並びを変えるときは索引も一緒に変えること。
-  変えないと、1画面ぶん（2件）を出すために公開中の全件と、その子を全部読む
-  並べ直しに戻る（test/queries.test.ts の「索引」）。
+  変えないと、一覧を出すたびに公開中の全件を並べ直す（TEMP B-TREE）形に戻る
+  （test/queries.test.ts の「索引」）。
 
-  公開ページの一覧・作品のページのページャ（listPublishedItemKeys）・管理画面の
-  一覧が、どれもこの1本を読む。別の並びで数えると、「次」で着く作品が一覧の隣の
-  カードと食い違う。
+  公開ページの一覧・sitemap（listPublishedItemKeys）・管理画面の一覧が、どれも
+  この1本を読む。別の並びで数えると、管理画面の並びと公開ページの並びが食い違う。
 */
 export const itemOrder = [
   sql`${schema.items.yearFrom} desc nulls last`,
@@ -58,12 +57,6 @@ export function findPublishedMember(db: Db, slug: string) {
   全件が出る）。ここで slug を受けると、その一手間を飛ばせてしまう。
 */
 export type ItemScope = { kind?: ItemKind | null; memberId?: number | null }
-
-/*
-  1画面ぶんだけを引くための範囲。limit と offset は必ず対で渡すこと。
-  offset だけでは SQL に載らず、静かに1画面目が出る。
-*/
-type ItemSlice = ItemScope & { limit?: number; offset?: number }
 
 const itemsWhere = (scope: ItemScope) =>
   and(
@@ -109,25 +102,24 @@ function toItemView(row: ItemRow): ItemView {
 }
 
 /*
-  画面に出すぶんだけを引く問い合わせ。範囲を渡さなければ全件（全体ページ /all）。
+  一覧に出す作品を引く問い合わせ（Projects のページと全体ページ /all）。絞り込みを
+  渡さなければ全件。
 
   絞り込みの3つの形（全部・区分・担当）は、どれも公開の並びの順に並んだ索引に
-  乗り、LIMIT が索引の上で効く（src/db/schema.ts の items の索引）。await せずに
+  乗り、並べ直さずに読める（src/db/schema.ts の items の索引）。await せずに
   返すのは、テストが同じ問い合わせの SQL を EXPLAIN QUERY PLAN で見るため
   （test/queries.test.ts の「索引」）。
 */
-export function publishedItemsQuery(db: Db, slice: ItemSlice = {}) {
+export function publishedItemsQuery(db: Db, scope: ItemScope = {}) {
   return db.query.items.findMany({
-    where: itemsWhere(slice),
+    where: itemsWhere(scope),
     orderBy: itemOrder,
-    limit: slice.limit,
-    offset: slice.offset,
     with: itemWith,
   })
 }
 
-export async function listPublishedItems(db: Db, slice: ItemSlice = {}): Promise<ItemView[]> {
-  const rows = await publishedItemsQuery(db, slice)
+export async function listPublishedItems(db: Db, scope: ItemScope = {}): Promise<ItemView[]> {
+  const rows = await publishedItemsQuery(db, scope)
   return rows.map(toItemView)
 }
 
@@ -160,9 +152,8 @@ export async function findMovedMember(db: Db, oldSlug: string) {
 /*
   作品1件を恒久リンク（/apps/item/<slug>）から引く。
 
-  並び順も絞り込みも見ない。一覧の URL（/projects/3）は「いまの並びの3枚目」で、
-  並べ替えれば同じ URL が別の作品を指すが、こちらは slug で名指しするので
-  何を足しても外しても指す先が動かない。それがこの列の全部の理由。
+  並び順も絞り込みも見ない。slug で名指しするので、何を足しても外しても、並べ
+  替えても指す先が動かない（貼るための URL）。それがこの列の全部の理由。
 
   公開中のものだけ。下書きの作品は、一覧に出ないのと同じ理由でここにも無い
   （URL を知っている人にだけ見える下書き、という抜け道を作らない）。
@@ -176,18 +167,11 @@ export async function findPublishedItem(db: Db, slug: string): Promise<ItemView 
 }
 
 /*
-  公開中の作品の並びだけ（id・区分・slug・題・本文）。sitemap.xml（恒久リンクと
-  本文の画面の URL を数え上げる）と、作品1件のページの行き来に
-  使う——前後の作品へめくるページャと、「← 一覧に戻る」がその作品の載っている
-  Projects の何画面目かを数えるのに。本文を引くのは、その作品が本文の画面
-  （Story）を持つかを決めるため（src/blocks.ts の itemStory）。ページャは
-  1枚目 → Story → 次の作品の1枚目とめくるので、前後の作品の本文の有無も要る。
+  公開中の作品の並びだけ（id・区分・slug）。sitemap.xml が恒久リンクを数え上げるのに
+  使う。並びは一覧と同じ itemOrder。
 
-  並びは一覧と同じ itemOrder。別の並びで数えると、「次」で着く作品が一覧の
-  隣のカードと食い違い、戻った画面にその作品が居ない。
-
-  カードの中身（タグ・リンク・担当）は引かない。要るのは並びの中の位置だけで、
-  7件なら7件ぶんの子を毎回引くことになる。
+  カードの中身（タグ・リンク・担当）は引かない。要るのは URL だけで、7件なら
+  7件ぶんの子を毎回引くことになる。
 */
 export function listPublishedItemKeys(db: Db) {
   return db
@@ -195,8 +179,6 @@ export function listPublishedItemKeys(db: Db) {
       id: schema.items.id,
       type: schema.items.type,
       slug: schema.items.slug,
-      title: schema.items.title,
-      body: schema.items.body,
     })
     .from(schema.items)
     .where(itemsWhere({}))
@@ -204,8 +186,8 @@ export function listPublishedItemKeys(db: Db) {
 }
 
 /*
-  画面が何枚になるかを決める数。カードを引かずに数えるので、出さない画面の
-  中身は取ってこない。
+  公開中の項目の数。管理画面の構成が「Projects が公開ページに出るか」を知らせるのに
+  使う（src/routes/admin/blocks.tsx の siteCounts）。カードを引かずに数える。
 */
 export async function countPublishedItems(db: Db, scope: ItemScope = {}) {
   const [row] = await db.select({ n: count() }).from(schema.items).where(itemsWhere(scope))
@@ -340,8 +322,8 @@ export function defaultBlocks(): schema.Block[] {
 
   決まった中身の種類（hero・projects・team・contact）は、並びの先頭の1行だけを
   採る。DB の部分一意索引（blocks_fixed_once）ができる前に二重送信で2行になった
-  D1 でも、同じ URL が画面の列に2度並んでページャが自分自身を指す、を起こさない
-  ための読む側の受け（移行 0009 も同じ行を残して片付ける）。
+  D1 でも、同じ URL がページの並びに2度並んで目次に同じ行き先が2行出る、を
+  起こさないための読む側の受け（移行 0009 も同じ行を残して片付ける）。
 */
 export async function publishedBlocks(db: Db): Promise<schema.Block[]> {
   const rows = await listBlocks(db)
@@ -381,8 +363,8 @@ export async function reorderBlocks(db: Db, ids: number[]) {
   「保存しました」と出さないため）。
 
   「数えてから足す」を2文で書かない。2本の送信が同時に来ると、どちらも0件と
-  数えて両方が足し、hero〜contact が2組になっていた（ページャが自分自身を指して
-  入口から先へ進めなくなる）。1文の INSERT … SELECT … WHERE NOT EXISTS は
+  数えて両方が足し、hero〜contact が2組になっていた（同じ URL がページの並びに
+  2度並び、目次に同じ行き先が2行出る）。1文の INSERT … SELECT … WHERE NOT EXISTS は
   SQLite の中で原子的に動くので、数えると足すの間に割り込めない。それでも
   重なったときの最後の受けが ON CONFLICT DO NOTHING（blocks_fixed_once）。
 

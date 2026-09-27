@@ -2,10 +2,9 @@ import { env } from 'cloudflare:test'
 import seedSql from 'virtual:repo:seed.sql'
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { type BlockKey, blockType, MAX_CHARS, MEMBER_PER_SCREEN, TIMELINE } from '../src/blocks'
+import { blockType, MAX_CHARS } from '../src/blocks'
 import * as schema from '../src/db/schema'
 import { yearFrom } from '../src/lib/format'
-import { chunk } from '../src/lib/paginate'
 import { db, form, get, okText, resetDb, seedItem, seedMember, signIn } from './helpers'
 import { avif, file, gif, heic, jpeg, png, svg, webp } from './images'
 
@@ -291,7 +290,7 @@ describe('Items — 本文と画像', () => {
     expect(row?.imageAlt).toBe('')
   })
 
-  it('画像は KV の items/ に置き、作品のページに代替テキストつきで出る。本文は次の画面（Story）に出る', async () => {
+  it('画像は KV の items/ に置き、作品のページに代替テキストつきで出る。本文は小節（Story）に出る', async () => {
     const signed = await signIn()
     const response = await signed('/admin/items', {
       method: 'POST',
@@ -321,13 +320,11 @@ describe('Items — 本文と画像', () => {
     expect(html).toContain(
       `<figure class="shot"><img src="${url}" alt="音量ミキサーの画面" decoding="async"/></figure>`,
     )
-    // 1枚目は説明だけの段落と、本文の画面への入口。本文は1枚目に出さない
+    // 説明の段落のあとに、本文の小節が同じ段落の部品（Note）で出る
     expect(html).toContain('<div class="bio"><p>音量を分ける常駐アプリ。</p></div>')
-    expect(html).toContain('<a class="more" href="/apps/item/appmixer/story">')
-    expect(html).not.toContain('背景と結果の段落です。')
-    // 本文は本文の画面に、同じ段落の部品（Note）で出る
-    const story = await okText('/apps/item/appmixer/story')
-    expect(story).toContain('<div class="bio"><p>背景と結果の段落です。</p></div>')
+    expect(html).toContain(
+      '<div class="story" id="story"><div class="head head--sub"><h2>Story</h2></div><div class="bio"><p>背景と結果の段落です。</p></div></div>',
+    )
   })
 
   it('画像があるのに代替テキストが空なら、公開では止める。打った内容は残し、画像は書かない', async () => {
@@ -392,49 +389,36 @@ describe('Items — 本文と画像', () => {
     expect(removed.status).toBe(303)
   })
 
-  it('下書きの保存では、代替テキストの不足も本文の長さも見ない', async () => {
+  it('下書きの保存では、代替テキストの不足も説明の長さも見ない', async () => {
     const signed = await signIn()
-    const long = 'あ'.repeat(MAX_CHARS.itemBody + 10)
+    const long = 'あ'.repeat(MAX_CHARS.itemSummary + 10)
     const response = await signed('/admin/items', {
       method: 'POST',
-      body: withImage({ type: 'app', title: '下書き', body: long }),
+      body: withImage({ type: 'app', title: '下書き', summary: long }),
     })
     expect(response.status).toBe(303)
 
     const [row] = await db().select().from(schema.items)
     expect(row?.published).toBe(0)
-    expect(row?.body).toBe(long)
+    expect(row?.summary).toBe(long)
     expect(row?.imageUrl).toMatch(/^\/images\/items\//)
   })
 
-  it('本文は、公開するときに字数と段落の数の両方で止める', async () => {
+  it('本文は長さでも段落の数でも止めない（作品のページは縦に読む）', async () => {
+    /*
+      本文を1画面に収めていたころは、300 字・3段落で止めていた。いまは作品の
+      ページの小節で、ページごと縦に伸びる
+    */
     const signed = await signIn()
-    const long = await signed('/admin/items', {
+    const body = Array.from({ length: 6 }, (_, i) => `段落${i}。${'あ'.repeat(120)}`).join('\n\n')
+    const response = await signed('/admin/items', {
       method: 'POST',
-      body: form({
-        type: 'app',
-        title: '長い本文',
-        body: 'あ'.repeat(MAX_CHARS.itemBody + 1),
-        summary: '説明。',
-        published: '1',
-      }),
+      body: form({ type: 'app', title: '長い本文', body, summary: '説明。', published: '1' }),
     })
-    expect(long.status).toBe(400)
-    expect(await long.text()).toContain(`本文は ${MAX_CHARS.itemBody} 字までです`)
-
-    // 字数が足りていても、段落を増やせば空行のぶんだけ高くなる
-    const many = await signed('/admin/items', {
-      method: 'POST',
-      body: form({
-        type: 'app',
-        title: '段落の多い本文',
-        body: Array.from({ length: MAX_CHARS.itemBodyParagraphs + 1 }, () => 'あ').join('\n\n'),
-        published: '1',
-      }),
-    })
-    expect(many.status).toBe(400)
-    expect(await many.text()).toContain(`段落は ${MAX_CHARS.itemBodyParagraphs} つまでです`)
-    expect(await db().select().from(schema.items)).toHaveLength(0)
+    expect(response.status).toBe(303)
+    const [row] = await db().select().from(schema.items)
+    expect(row?.published).toBe(1)
+    expect(row?.body).toBe(body)
   })
 
   it('大きすぎる画像は、下書きでも止める（長さではなく受け取れない画像）', async () => {
@@ -516,12 +500,11 @@ describe('Items — 本文と画像', () => {
     expect(await itemKeys()).toEqual([])
   })
 
-  it('本文の上限と画像の欄は書く前に見える。フォームは画像を送れる形', async () => {
+  it('本文の出る場所と画像の欄は書く前に見える。フォームは画像を送れる形', async () => {
     const signed = await signIn()
     const html = await (await signed('/admin/items/new?type=app')).text()
     expect(html).toContain('enctype="multipart/form-data"')
-    expect(html).toContain(`maxlength="${MAX_CHARS.itemBody}"`)
-    expect(html).toContain(`${MAX_CHARS.itemBody} 字・${MAX_CHARS.itemBodyParagraphs} 段落まで`)
+    expect(html).toContain('作品のページの「Story」に出る')
     expect(html).toContain('name="image"')
     expect(html).toContain('name="imageAlt"')
     // 外す画像が無い作品には「画像を外す」を出さない
@@ -1058,77 +1041,51 @@ describe('Items — 恒久リンクの slug', () => {
 })
 
 /*
-  構成の「N 画面」と、自由文の長さ。
+  構成の「出る / 出ない」と、自由文の長さ。
 
   置く・外す・並べ替えそのものは test/blocks.test.ts の「管理の構成」にある。
-  ここに置くのは、公開ページが1画面に収まることを管理画面側から支える2つ——
-  結果を見せること（何画面になったか）と、収まらない中身を入口で止めること。
+  ここに置くのは、公開ページの姿を管理画面側から支える2つ——結果を見せること
+  （公開ページに出るか）と、受け取れない中身・長すぎる名前を入口で止めること。
 */
 
 /*
-  一覧の行に出る「N 画面」を、行の順に拾う。
-
-  拾えなかったこと自体を落とす。0件のまま toEqual([]) を通すと、バッジが
-  丸ごと消えていてもこのテストは緑のままになる。
+  一覧の行に出る「出る / 出ない」を、行の順に拾う。拾えなかったこと自体を落とす。
+  0件のまま toEqual([]) を通すと、バッジが丸ごと消えていてもこのテストは緑のまま
+  になる。
 */
-const screenBadges = (html: string) => {
-  const found = [...html.matchAll(/class="row__col">(\d+) 画面</g)].map((m) => Number(m[1]))
-  expect(found.length, '「N 画面」を1つも拾えていない（バッジの形が変わった？）').toBeGreaterThan(0)
+const shownBadges = (html: string) => {
+  const found = [...html.matchAll(/class="row__col">(出る|出ない)</g)].map((m) => m[1])
+  expect(
+    found.length,
+    '「出る / 出ない」を1つも拾えていない（バッジの形が変わった？）',
+  ).toBeGreaterThan(0)
   return found
 }
 
-// 1画面あたりの件数は src/blocks.ts が正。テストに数を書き写さない
-const perScreenOf = (key: string) => {
-  const type = blockType(key)
-  if (!type || !('perScreen' in type)) throw new Error(`${key} に perScreen が無い`)
-  return type.perScreen
-}
-
-describe('構成 — 何画面になるかを見せる', () => {
-  it('行の「N 画面」は chunk() と同じ数で、合計は公開ページの画面数と一致する', async () => {
+describe('構成 — 公開ページに出るかを見せる', () => {
+  it('行ごとに「出る / 出ない」、合計は公開ページのページ数と一致する', async () => {
     const signed = await signIn()
     await signed('/admin/blocks/init', { method: 'POST' })
-    // 個人開発と業務を混ぜて登録する。Projects は区分を問わず1つの一覧で数える。
-    // members は0件なので、Team は画面にならない
-    const titles = ['アプリ 1', 'アプリ 2', '業務 1', '業務 2']
-    for (const [index, title] of titles.entries()) {
-      await seedItem({
-        title,
-        type: title.startsWith('業務') ? 'work' : 'app',
-        sortOrder: (index + 1) * 10,
-      })
-    }
-    const per = perScreenOf('projects')
-
+    // members は0件なので、Team はページにならない。Projects も0件のうちは出ない
     const before = await (await signed('/admin/blocks')).text()
     // hero・projects・team・contact の順
-    expect(screenBadges(before)).toEqual([1, chunk(titles, per).length, 0, 1])
-    expect(before).toContain('合計 4 画面')
-    /*
-      公開ページ側と突き合わせる。ページャは**節の中**を数えるので、
-      見るのは Projects の画面に出る数（管理画面の Projects の「N 画面」と同じ数）。
-      全体の通し番号は持っていない——絞り込みで動いてしまうのでやめた。
-    */
-    expect(await okText('/projects')).toContain(
-      `Projects の ${chunk(titles, per).length} 画面のうち 1 画面目`,
-    )
+    expect(shownBadges(before)).toEqual(['出る', '出ない', '出ない', '出る'])
+    expect(before).toContain('合計 2 ページ')
 
-    // 1件足すと画面が1枚増える。それが管理画面から見えることがこのテストの主題
-    const grown = [...titles, 'アプリ 5']
-    await seedItem({ title: 'アプリ 5', sortOrder: 50 })
-
+    // 1件足すと Projects が出る。それが管理画面から見えることがこのテストの主題
+    await seedItem({ title: 'アプリ 1' })
     const after = await (await signed('/admin/blocks')).text()
-    expect(screenBadges(after)).toEqual([1, chunk(grown, per).length, 0, 1])
-    expect(after).toContain('合計 5 画面')
-    expect(await okText('/projects')).toContain(
-      `Projects の ${chunk(grown, per).length} 画面のうち 1 画面目`,
-    )
+    expect(shownBadges(after)).toEqual(['出る', '出る', '出ない', '出る'])
+    expect(after).toContain('合計 3 ページ')
+    // 公開ページ側と突き合わせる。目次の行き先（名前のあるページ）＋入口
+    const toc = [...(await okText('/')).matchAll(/<nav class="toc"[\s\S]*?<\/nav>/g)][0]?.[0] ?? ''
+    expect(toc.match(/<a /g)).toHaveLength(2)
   })
 
   /*
-    画面ごとに割ったあと、置いたものを通しで見る手はここにしか無い。
-    「サイトを見る ↗」は入口（/）に着くだけで、そこから全部を見るには
-    めくり続けるしかない——並べ替えたあとに確かめるのは全体のほう。
+    置いたものを通しで見る手はここにしか無い。「サイトを見る ↗」は入口（/）に
+    着くだけで、そこから全部を見るには目次をたどるしかない——並べ替えたあとに
+    確かめるのは全体のほう。
   */
   it('構成から全体ページを開ける', async () => {
     const signed = await signIn()
@@ -1141,39 +1098,33 @@ describe('構成 — 何画面になるかを見せる', () => {
     expect(html).toContain('href="/"')
   })
 
-  it('1人のサイトの Team の行は、プロフィールの画面を数え、置き換わると言う', async () => {
+  it('1人のサイトの Team の行は、プロフィールに置き換わると言う', async () => {
     /*
-      公開中が1人なら、公開ページの Team の位置にはその人のプロフィール
-      （1枚目・About・Skills・Career）が並ぶ。行が「Team 1 画面」のままだと、
-      合計が公開ページの画面数とずれ、Team が見当たらない理由も分からない
+      公開中が1人なら、公開ページの Team の位置にはその人のプロフィールが並ぶ
+      （目次は Profile）。言っておかないと、公開ページに Team が見当たらない理由が
+      分からない
     */
     await seedMember({ skillsText: 'C# | 3年以上', careerText: '2024.03 | 入社 | ある会社' })
     const signed = await signIn()
     await signed('/admin/blocks/init', { method: 'POST' })
 
     const html = await (await signed('/admin/blocks')).text()
-    // hero・projects(0件)・team（プロフィール 4 画面）・contact
-    expect(screenBadges(html)).toEqual([1, 0, 4, 1])
-    expect(html).toContain('合計 6 画面')
-    expect(html).toContain('公開中が1人のあいだは、その人のプロフィール（4 画面）に置き換わる')
+    // hero・projects(0件)・team（プロフィール）・contact
+    expect(shownBadges(html)).toEqual(['出る', '出ない', '出る', '出る'])
+    expect(html).toContain('合計 3 ページ')
+    expect(html).toContain(
+      '公開中が1人のあいだは、その人のプロフィール（目次は Profile）に置き換わる',
+    )
+    expect((await get('/members/okazaki')).status).toBe(200)
 
-    // 公開ページ側と突き合わせる。/ から「次」を辿った数がそのまま合計になる
-    let visited = 0
-    for (let path: string | null = '/'; path && visited < 20; visited += 1) {
-      const page = await okText(path)
-      path =
-        page.match(/<a class="pager__go pager__go--next" href="([^"]+)" rel="next">/)?.[1] ?? null
-    }
-    expect(visited).toBe(6)
-
-    // 2人目を公開すると Team の画面に戻る。知らせも消える
+    // 2人目を公開すると Team のページに戻る。知らせも消える
     await seedMember({ slug: 'hoshino', name: '星野' })
     const two = await (await signed('/admin/blocks')).text()
-    expect(screenBadges(two)).toEqual([1, 0, 1, 1])
+    expect(shownBadges(two)).toEqual(['出る', '出ない', '出る', '出る'])
     expect(two).not.toContain('置き換わる')
   })
 
-  it('下書きのブロックは 0 画面と出る', async () => {
+  it('下書きのブロックは「出ない」と出る', async () => {
     await seedMember()
     const signed = await signIn()
     await signed('/admin/blocks/init', { method: 'POST' })
@@ -1185,200 +1136,91 @@ describe('構成 — 何画面になるかを見せる', () => {
 
     const html = await (await signed('/admin/blocks')).text()
     // hero・projects(0件)・team(下書き)・contact
-    expect(screenBadges(html)).toEqual([1, 0, 0, 1])
-    expect(html).toContain('合計 2 画面')
+    expect(shownBadges(html)).toEqual(['出る', '出ない', '出ない', '出る'])
+    expect(html).toContain('合計 2 ページ')
   })
 
   /*
-    自由文の5種を1つずつ突き合わせる。
-
-    「N 画面」と公開ページの画面数は、どちらも src/blocks.ts の blockPages
-    （行の開き方は blockUnitCount）から出る。ずれると、置いた本人だけが古い数を
-    見続ける——「13件目を公開したら画面が1枚増えた」と気づかせるのがこの表示の
-    存在理由なので、いちばん要るときに嘘をつく。管理画面の描き方と公開ページの
-    描き方の両方を通して突き合わせる。
+    通らない URL の行は公開ページが落とす。落ちた行を数えると、公開ページに何も
+    出ないリンク集が管理画面では「出る」と見える（src/blocks.ts の blockShown は
+    blockLines が落としたあとの行を数える）。保存は全部の行が通るときだけなので、
+    ここへ来るのは保存の検査より前に入った行
   */
-  it('自由文のどの種類でも、「N 画面」と公開ページの画面数が一致する', async () => {
+  it('自由文は、公開ページに出る行が1つも無ければ「出ない」。公開ページでも URL が無い', async () => {
     const signed = await signIn()
-    const rows = (n: number, make: (i: number) => string) =>
-      Array.from({ length: n }, (_, i) => make(i + 1)).join('\n')
+    const [block] = await db()
+      .insert(schema.blocks)
+      .values({
+        type: 'links',
+        title: 'Links',
+        body: 'だめ | javascript:alert(1)',
+        published: 1,
+        sortOrder: 10,
+      })
+      .returning()
+    if (!block) throw new Error('links を置けなかった')
 
-    /*
-      key は BlockKey。素の string のままだと、打ち間違えた種類名でも
-      `.values({ type: one.key })` が通ってしまい、この一覧が
-      src/blocks.ts の BLOCK_TYPES から外れても誰も気づかない
-    */
-    const cases: { key: BlockKey; body: string; screens?: number }[] = [
-      { key: 'now', body: rows(perScreenOf('now') + 1, (i) => `いま${i} | 補足`), screens: 2 },
-      { key: 'numbers', body: rows(perScreenOf('numbers') + 1, (i) => `${i} | 件 | 説明`) },
-      { key: 'timeline', body: rows(perScreenOf('timeline') + 1, (i) => `2024.0${i} | こと`) },
-      {
-        /*
-          段落は1行とはかぎらない。行で数えると、同じ中身でも画面数がずれる
-          （メモを割る単位は空行で分けた段落）。だからここは2行ずつの段落にする
-        */
-        key: 'note',
-        body: rows(perScreenOf('note') + 1, (i) => `段落${i}の一文。\n続きの行。`).replaceAll(
-          '\n段落',
-          '\n\n段落',
-        ),
-      },
-      {
-        /*
-          通らない URL の行は公開ページが落とす。落ちた行を数えると、ちょうど
-          1画面に収まっているのに「2 画面」と出る（この1件だけが 1 画面）
-        */
-        key: 'links',
-        body: `${rows(perScreenOf('links'), (i) => `ラベル${i} | https://example.com/${i}`)}\nだめ | javascript:alert(1)`,
-        screens: 1,
-      },
-    ]
+    expect(shownBadges(await (await signed('/admin/blocks')).text())).toEqual(['出ない'])
+    expect((await get(`/block-${block.id}`)).status).toBe(404)
+  })
 
-    for (const one of cases) {
-      await db().delete(schema.blocks)
-      const [block] = await db()
-        .insert(schema.blocks)
-        .values({ type: one.key, title: '見出し', body: one.body, published: 1, sortOrder: 10 })
-        .returning()
-      if (!block) throw new Error(`${one.key} を置けなかった`)
-      const want = one.screens ?? 2
+  it('自由文は行の数に関わらず1ページ。割っていたころの続きの URL は同じページへ', async () => {
+    const signed = await signIn()
+    const body = Array.from({ length: 30 }, (_, i) => `いま${i} | 補足`).join('\n')
+    const [block] = await db()
+      .insert(schema.blocks)
+      .values({ type: 'now', title: 'Now', body, published: 1, sortOrder: 10 })
+      .returning()
+    if (!block) throw new Error('now を置けなかった')
 
-      const admin = await (await signed('/admin/blocks')).text()
-      expect(screenBadges(admin), one.key).toEqual([want])
-      expect(admin, one.key).toContain(`合計 ${want} 画面`)
-
-      /*
-        公開ページ側の数。ページャは節の中を数えるので、その節の1画面目に
-        出る数と突き合わせる。置いてあるのはこのブロック1つだけなので、
-        節の画面数＝管理画面の「N 画面」。
-      */
-      const first = await okText(`/block-${block.id}`)
-      if (want > 1) expect(first, one.key).toContain(`${want} 画面のうち 1 画面目`)
-      else expect(first, one.key).not.toContain('画面のうち')
-
-      /*
-        数えた画面には URL があり、数えていない画面には無い。1画面目は
-        /block-<id> ひとつに寄せてあるので、2枚目から先だけを URL で確かめる
-      */
-      if (want > 1) expect((await get(`/block-${block.id}/${want}`)).status, one.key).toBe(200)
-      expect((await get(`/block-${block.id}/${want + 1}`)).status, one.key).toBe(404)
-    }
+    expect(shownBadges(await (await signed('/admin/blocks')).text())).toEqual(['出る'])
+    const page = await okText(`/block-${block.id}`)
+    expect(page).toContain('いま0')
+    expect(page).toContain('いま29')
+    const second = await get(`/block-${block.id}/2`)
+    expect(second.status).toBe(301)
+    expect(second.headers.get('location')).toBe(`/block-${block.id}`)
   })
 })
 
-// 1画面に出せる字数も src/blocks.ts が正。テストに数を書き写さない
-const maxCharsOf = (key: string) => {
-  const type = blockType(key)
-  if (!type || !('maxChars' in type)) throw new Error(`${key} に maxChars が無い`)
-  return type.maxChars
-}
-
-describe('構成 — 1画面に収まらない自由文は保存させない', () => {
-  it('長すぎるメモは 400 で戻し、打った内容は残す', async () => {
-    const signed = await signIn()
-    const max = maxCharsOf('note')
-    const response = await signed('/admin/blocks', {
-      method: 'POST',
-      body: form({ type: 'note', title: 'あとがき', body: 'あ'.repeat(max + 1), published: '1' }),
-    })
-    expect(response.status).toBe(400)
-
-    const html = await response.text()
-    expect(html).toContain('1画面に収まりません')
-    expect(html).toContain('あとがき')
-    expect(await db().select().from(schema.blocks)).toHaveLength(0)
-  })
-
+describe('構成 — 自由文の長さ', () => {
   /*
-    上限は「割ったあとの1画面」あたり。段落は1画面に perScreen 個まとめて
-    出るので、空行で分けても同じ画面に居る限り合計で見る。ここを段落あたりに
-    すると、規則どおり空行で分けた perScreen 倍の字数が素通りする
-    （メモなら 3 倍。no-scroll を支える上限がその時点で成り立たなくなる）。
+    1画面に収めていたころは、メモ 400 字・いま 250 字…と1画面ぶんの字数で止めて
+    いた。ページは縦に読むので、中身の長さは止めない
   */
-  it('空行で分けても、同じ画面に出るぶんは合計で見る', async () => {
+  it('長いメモも、行の多いリンク集も公開できる', async () => {
     const signed = await signIn()
-    const max = maxCharsOf('note')
-    // 2つ合わせて上限をちょうど1字だけ超える。どちらの段落も単独では上限以内
-    const half = Math.ceil((max + 1) / 2)
-
-    const split = await signed('/admin/blocks', {
+    const note = await signed('/admin/blocks', {
       method: 'POST',
       body: form({
         type: 'note',
         title: 'あとがき',
-        body: `${'あ'.repeat(half)}\n\n${'い'.repeat(half)}`,
+        body: Array.from({ length: 8 }, () => 'あ'.repeat(300)).join('\n\n'),
         published: '1',
       }),
     })
-    expect(split.status).toBe(400)
-    expect(await split.text()).toContain('1画面に収まりません')
-    expect(await db().select().from(schema.blocks)).toHaveLength(0)
-  })
+    expect(note.status).toBe(303)
 
-  /*
-    次の画面に回るぶんは、いまの画面の字数ではない。1画面ぶんが上限ちょうどの
-    段落を perScreen の倍だけ並べても、画面ごとに見れば上限どおりなので通る。
-    ここで落ちるようだと、長いメモがどこにも書けなくなる
-  */
-  it('次の画面に回るぶんまで足して数えない', async () => {
-    const signed = await signIn()
-    const per = perScreenOf('note')
-    const max = maxCharsOf('note')
-    const paragraph = 'あ'.repeat(Math.floor(max / per))
-
-    const response = await signed('/admin/blocks', {
+    const links = await signed('/admin/blocks', {
       method: 'POST',
       body: form({
-        type: 'note',
-        title: 'あとがき',
-        body: Array.from({ length: per * 2 }, () => paragraph).join('\n\n'),
+        type: 'links',
+        title: 'Links',
+        body: Array.from({ length: 20 }, (_, i) => `ラベル${i} | https://example.com/${i}`).join(
+          '\n',
+        ),
         published: '1',
       }),
     })
-    expect(response.status).toBe(303)
+    expect(links.status).toBe(303)
+    // 何も置いていない構成に足すと既定の4節も行になる。数えるのは書いた2行
+    const written = await db().select().from(schema.blocks)
+    expect(written.filter((row) => row.type === 'note' || row.type === 'links')).toHaveLength(2)
   })
 
-  it('1行1件のものも、1画面ぶんの合計で止める', async () => {
+  it('ひとことは一文の長さだけを見る（大きく出る一文としての決まり）', async () => {
     const signed = await signIn()
-    const per = perScreenOf('now')
-    const max = maxCharsOf('now')
-    // 1画面ぶんの行に、上限をちょうど1字だけ超える字数を配る
-    const line = 'あ'.repeat(Math.ceil((max + 1) / per))
 
-    const response = await signed('/admin/blocks', {
-      method: 'POST',
-      body: form({
-        type: 'now',
-        title: 'Now',
-        body: Array.from({ length: per }, () => line).join('\n'),
-        published: '1',
-      }),
-    })
-    expect(response.status).toBe(400)
-    expect(await response.text()).toContain('1画面に収まりません')
-  })
-
-  /*
-    リンク集の URL は href であって、画面に文字としては出ない。数えてしまうと、
-    長い URL を1つ置いただけで書ける説明が減る
-  */
-  it('リンク集は URL を字数に数えない', async () => {
-    const signed = await signIn()
-    const max = maxCharsOf('links')
-    const url = `https://example.com/${'a'.repeat(max)}`
-
-    const response = await signed('/admin/blocks', {
-      method: 'POST',
-      body: form({ type: 'links', title: 'Links', body: `ラベル | ${url}`, published: '1' }),
-    })
-    expect(response.status).toBe(303)
-  })
-
-  it('ひとことは一文の長さと、添え書きを足した長さの両方を見る', async () => {
-    const signed = await signIn()
-    const max = maxCharsOf('statement')
-
-    // 一文そのものが長い（大きく出る一文としての決まり）
     const sentence = await signed('/admin/blocks', {
       method: 'POST',
       body: form({ type: 'statement', title: 'あ'.repeat(121), published: '1' }),
@@ -1386,54 +1228,49 @@ describe('構成 — 1画面に収まらない自由文は保存させない', (
     expect(sentence.status).toBe(400)
     expect(await sentence.text()).toContain('120 字まで')
 
-    // 一文は短くても、添え書きと足すと1画面に収まらない
-    const together = await signed('/admin/blocks', {
+    // 添え書きは長くてよい
+    const notes = await signed('/admin/blocks', {
       method: 'POST',
       body: form({
         type: 'statement',
         title: 'あ'.repeat(100),
-        body: 'い'.repeat(max - 100 + 1),
+        body: 'い'.repeat(600),
         published: '1',
       }),
     })
-    expect(together.status).toBe(400)
-    expect(await together.text()).toContain('1画面に収まりません')
-    expect(await db().select().from(schema.blocks)).toHaveLength(0)
+    expect(notes.status).toBe(303)
   })
 
-  it('上限は書く前に見える（保存を押すまで分からない、にしない）', async () => {
+  it('書き方は書く前に見える。行の数や字数の上限は出さない', async () => {
     const signed = await signIn()
     const html = await (await signed('/admin/blocks/new?type=now')).text()
-    expect(html).toContain(`1画面 ${perScreenOf('now')} 件`)
-    expect(html).toContain(`1画面 ${maxCharsOf('now')} 字まで`)
+    expect(html).toContain('1行に1件。「何を | 補足」')
+    expect(html).not.toContain('1画面')
+    // 見出しの上限は目次の1行の名前として出る
+    expect(html).toContain(`${MAX_CHARS.blockHeading} 字まで（目次に1行で並ぶ）`)
   })
 })
 
 /*
   上限は「公開するもの」に掛ける。下書きに戻す道まで塞ぐと、上限より前に
-  保存された長い中身を持つ行が、編集フォームからも一覧からも引っ込められなく
-  なる（残る手が本文ごと削除だけになる）。
+  保存された長い見出しを持つ行が、編集フォームからも一覧からも引っ込められなく
+  なる（残る手が中身ごと削除だけになる）。
 */
 describe('構成 — 上限に引っかかる行でも、引っ込められる', () => {
-  const seedLongNote = async () => {
+  const LONG = 'あ'.repeat(MAX_CHARS.blockHeading * 3)
+  const seedLongHeading = async () => {
     const [block] = await db()
       .insert(schema.blocks)
-      .values({
-        type: 'note',
-        title: '前に書いた長いメモ',
-        body: 'あ'.repeat(maxCharsOf('note') * 3),
-        published: 1,
-        sortOrder: 10,
-      })
+      .values({ type: 'note', title: LONG, body: '段落。', published: 1, sortOrder: 10 })
       .returning()
     if (!block) throw new Error('block を作れなかった')
     return block
   }
 
   it('編集フォームから下書きに戻せる（公開したままは止める）', async () => {
-    const block = await seedLongNote()
+    const block = await seedLongHeading()
     const signed = await signIn()
-    const body = { type: 'note', title: '前に書いた長いメモ', body: 'あ'.repeat(1200) }
+    const body = { type: 'note', title: LONG, body: '段落。' }
 
     // 公開したままの保存は、いままでどおり止める
     const keep = await signed(`/admin/blocks/${block.id}`, {
@@ -1451,11 +1288,11 @@ describe('構成 — 上限に引っかかる行でも、引っ込められる',
 
     const row = await db().query.blocks.findFirst({ where: (t, { eq }) => eq(t.id, block.id) })
     expect(row?.published).toBe(0)
-    expect(row?.body).toHaveLength(1200)
+    expect(row?.title).toBe(LONG)
   })
 
   it('一覧のトグルで下書きに戻すのは、中身を見ずに通す', async () => {
-    const block = await seedLongNote()
+    const block = await seedLongHeading()
     const signed = await signIn()
 
     const off = await signed(`/admin/blocks/${block.id}/publish`, {
@@ -1466,16 +1303,16 @@ describe('構成 — 上限に引っかかる行でも、引っ込められる',
     const row = await db().query.blocks.findFirst({ where: (t, { eq }) => eq(t.id, block.id) })
     expect(row?.published).toBe(0)
     // 中身は触らない
-    expect(row?.body).toHaveLength(maxCharsOf('note') * 3)
+    expect(row?.title).toBe(LONG)
   })
 
   it('一覧のトグルで公開に戻すほうは、編集フォームと同じ関門で止め、理由を編集画面に出す', async () => {
     /*
       「中身は触らないので検査もしない」としていたころは、下書きの保存（長さを
-      見ない）とこのトグルを続けると、検査が1度も走らずに上限の3倍のメモが
+      見ない）とこのトグルを続けると、検査が1度も走らずに上限を超えた中身が
       公開になった（ADM-1 / MNT-1）。関門は published が 1 になるときに1か所
     */
-    const block = await seedLongNote()
+    const block = await seedLongHeading()
     await db().update(schema.blocks).set({ published: 0 }).where(eq(schema.blocks.id, block.id))
     const signed = await signIn()
 
@@ -1491,12 +1328,12 @@ describe('構成 — 上限に引っかかる行でも、引っ込められる',
     // 送られた先で、止めた理由と「公開する」の印（直して保存すれば公開される）
     const edit = await (await signed(on.headers.get('location') ?? '')).text()
     expect(edit).toContain('公開できませんでした')
-    expect(edit).toContain('1画面に収まりません')
+    expect(edit).toContain(`見出しは ${MAX_CHARS.blockHeading} 字までです`)
     expect(edit).toContain('name="published" value="1" checked=""')
   })
 
   it('一覧にその切り替えの口がある', async () => {
-    const block = await seedLongNote()
+    const block = await seedLongHeading()
     const signed = await signIn()
     const html = await (await signed('/admin/blocks')).text()
 
@@ -1515,7 +1352,9 @@ describe('構成 — 上限に引っかかる行でも、引っ込められる',
 })
 
 /*
-  ブロックではない「書く場所」。どちらも1画面に全部出るので、割る先が無い。
+  ブロックではない「書く場所」の上限。残したのは名前と目録の文の長さ（作品名・
+  説明・大見出し・ブロックの見出し）だけで、紹介文・経歴・本文は長さで止めない
+  （ページは縦に読む。src/blocks.ts の MAX_CHARS）。
 */
 describe('項目とメンバー — 書く場所の上限', () => {
   it('長すぎる説明文は、公開するときに止め、打った内容は残す', async () => {
@@ -1533,7 +1372,7 @@ describe('項目とメンバー — 書く場所の上限', () => {
     expect(response.status).toBe(400)
 
     const html = await response.text()
-    expect(html).toContain('カードに収まりません')
+    expect(html).toContain(`説明文は ${MAX_CHARS.itemSummary} 字までです`)
     expect(html).toContain('KeepMe')
     expect(await db().select().from(schema.items)).toHaveLength(0)
   })
@@ -1563,9 +1402,8 @@ describe('項目とメンバー — 書く場所の上限', () => {
     const html = await (await signed('/admin/items/new?type=app')).text()
     expect(html).toContain(`maxlength="${MAX_CHARS.itemSummary}"`)
     expect(html).toContain(`${MAX_CHARS.itemSummary} 字まで`)
-    // 電話の幅の重い行（実績値か担当者名がある）のカードは2行で切る。上限まで書けば
-    // どこでも全部読まれる、とは書かない
-    expect(html).toContain(`${MAX_CHARS.itemSummaryVisible} 字までしか出ません`)
+    // カードは説明を切らずに全部出す。電話の幅で何字まで出るか、はもう言わない
+    expect(html).not.toContain('字までしか出ません')
     // 説明は目録の文なので常体、本文は「です・ます」。同じ作品のページに続けて出る
     expect(html).toContain('2文を常体で')
     expect(html).toContain('「です・ます」で')
@@ -1586,85 +1424,77 @@ describe('項目とメンバー — 書く場所の上限', () => {
     expect(html).not.toContain('→ 実績')
   })
 
-  it('紹介文は、公開するときに字数と段落の数の両方で止める', async () => {
-    const signed = await signIn()
-    const long = await signed('/admin/members', {
-      method: 'POST',
-      body: form({
-        name: '岡崎 昂功',
-        slug: 'okazaki',
-        bio: 'あ'.repeat(MAX_CHARS.memberBio + 1),
-        published: '1',
-      }),
-    })
-    expect(long.status).toBe(400)
-    expect(await long.text()).toContain('1画面に収まりません')
-
-    // 字数が足りていても、段落を増やせば空行のぶんだけ高くなる
-    const manyParagraphs = await signed('/admin/members', {
-      method: 'POST',
-      body: form({
-        name: '岡崎 昂功',
-        slug: 'okazaki',
-        bio: Array.from({ length: MAX_CHARS.memberBioParagraphs + 1 }, () => 'あ').join('\n\n'),
-        published: '1',
-      }),
-    })
-    expect(manyParagraphs.status).toBe(400)
-    expect(await manyParagraphs.text()).toContain('段落は')
-    expect(await db().select().from(schema.members)).toHaveLength(0)
-  })
-
-  it('上限より前に保存された長い紹介文の人も、下書きに戻せる（行き止まりにしない）', async () => {
+  it('紹介文・経歴・作品の本文・タグ・リンクは、長さでも数でも止めない', async () => {
     /*
-      紹介文の長さを下書きの保存でも見ていたころは、上限より前に保存された長い
-      紹介文を持つ人の編集フォームが同じ 400 で戻り、公開を外すことすらできなかった
-      （ADM-1 の「関門が3つの validator に別々に書いてあり、2つは下書きにも掛かる」）
+      1画面に収めていたころは、紹介文 400 字・3段落、経歴は1画面 250 字、作品の
+      本文 300 字・3段落、タグ3つ・リンク3本で止めていた。どれも「1画面に収まるか」
+      だけが理由だった
     */
-    const member = await seedMember({ bio: 'あ'.repeat(MAX_CHARS.memberBio * 2) })
     const signed = await signIn()
-    const response = await signed(`/admin/members/${member.id}`, {
-      method: 'POST',
-      body: form({ name: member.name, slug: 'okazaki', bio: member.bio }),
-    })
-    expect(response.status).toBe(303)
-    const row = await db().query.members.findFirst({ where: eq(schema.members.id, member.id) })
-    expect(row?.published).toBe(0)
-    expect(row?.bio).toHaveLength(MAX_CHARS.memberBio * 2)
-  })
-
-  it('上限のうちに収まる紹介文は通る', async () => {
-    const signed = await signIn()
-    const parts = MAX_CHARS.memberBioParagraphs
-    // 空行も字として数える（打った文字列そのままの長さで見る）
-    const each = Math.floor((MAX_CHARS.memberBio - (parts - 1) * 2) / parts)
-    const response = await signed('/admin/members', {
+    const member = await signed('/admin/members', {
       method: 'POST',
       body: form({
         name: '岡崎 昂功',
         slug: 'okazaki',
-        bio: Array.from({ length: parts }, () => 'あ'.repeat(each)).join('\n\n'),
+        bio: Array.from({ length: 6 }, () => 'あ'.repeat(150)).join('\n\n'),
+        careerText: Array.from({ length: 12 }, (_, i) => `20${10 + i} | ${'あ'.repeat(60)}`).join(
+          '\n',
+        ),
         published: '1',
       }),
     })
-    expect(response.status).toBe(303)
+    expect(member.status).toBe(303)
+
+    const item = await signed('/admin/items', {
+      method: 'POST',
+      body: form({
+        type: 'app',
+        title: '多い作品',
+        summary: '説明。',
+        tags: 'A, B, C, D, E, F',
+        linkLabel: ['1', '2', '3', '4', '5'],
+        linkUrl: ['/a', '/b', '/c', '/d', '/e'],
+        published: '1',
+      }),
+    })
+    expect(item.status).toBe(303)
+    expect(await db().select().from(schema.itemTags)).toHaveLength(6)
+    expect(await db().select().from(schema.itemLinks)).toHaveLength(5)
+  })
+
+  it('リンクの欄は、持っている行を全部と、空いた行を少なくとも1つ出す', async () => {
+    /*
+      JavaScript が無いので欄を足す手が無い。持っている行を切って出すと、出なかった
+      行が保存の総入れ替えで黙って消える。空いた行が1つも無いと、もう1本足せない
+    */
+    const item = await seedItem({ slug: 'many' })
+    await db()
+      .insert(schema.itemLinks)
+      .values(
+        Array.from({ length: 4 }, (_, i) => ({
+          itemId: item.id,
+          label: `L${i}`,
+          url: `/l${i}`,
+          sortOrder: i,
+        })),
+      )
+    const signed = await signIn()
+    const html = await (await signed(`/admin/items/${item.id}/edit`)).text()
+    expect(html.match(/name="linkLabel"/g)).toHaveLength(5)
+
+    // 新しい作品では3行ぶん空けて出す
+    const fresh = await (await signed('/admin/items/new?type=app')).text()
+    expect(fresh.match(/name="linkLabel"/g)).toHaveLength(3)
   })
 })
 
 /*
-  ADM-10。字数の関門が紹介文とブロックの本文にしか無く、個人ページの大見出し・
-  経歴、ブロックの見出しは上限なしで公開できた。経歴は timeline ブロックと同じ
-  部品・同じ件数で割るのに、timeline の字数の上限を持たなかった（同じ本文の
-  timeline は 400、経歴は 303）。上限はどれも npm run check:fit の fixture が
-  上限ちょうどの姿で測り続けている。
+  ADM-10。個人ページの大見出しとブロックの見出しは上限なしで公開できた。大見出しは
+  連動の大きな段で出る1つの文、ブロックの見出しは目次の1行の名前で、どちらも
+  長さで止める（src/blocks.ts の MAX_CHARS）。
 */
-describe('大見出し・経歴・ブロックの見出しの上限（公開の関門）', () => {
-  // 経歴の1行。年月 | 何を | 補足 で、見える字数が n 字になる
-  const careerLine = (n: number) => `2024 | ${'あ'.repeat(n - 5)} | あ`
-  const perScreen = MEMBER_PER_SCREEN.career
-  const overLine = Math.ceil((TIMELINE.maxChars + 1) / perScreen) + 2
-
-  it('長い大見出しと経歴は、公開するときに止め、理由をまとめて返す', async () => {
+describe('大見出し・ブロックの見出しの上限（公開の関門）', () => {
+  it('長い大見出しは、公開するときに止める', async () => {
     const signed = await signIn()
     const response = await signed('/admin/members', {
       method: 'POST',
@@ -1672,14 +1502,12 @@ describe('大見出し・経歴・ブロックの見出しの上限（公開の�
         name: '岡崎 昂功',
         slug: 'okazaki',
         headline: 'あ'.repeat(MAX_CHARS.memberHeadline + 1),
-        careerText: Array.from({ length: perScreen }, () => careerLine(overLine)).join('\n'),
         published: '1',
       }),
     })
     expect(response.status).toBe(400)
     const html = await response.text()
     expect(html).toContain(`大見出しは ${MAX_CHARS.memberHeadline} 字までです`)
-    expect(html).toContain(`経歴は1画面（${perScreen} 行）で ${TIMELINE.maxChars} 字までです`)
     expect(await db().select().from(schema.members)).toHaveLength(0)
   })
 
@@ -1691,23 +1519,6 @@ describe('大見出し・経歴・ブロックの見出しの上限（公開の�
         name: '岡崎 昂功',
         slug: 'okazaki',
         headline: 'あ'.repeat(MAX_CHARS.memberHeadline * 2),
-        careerText: Array.from({ length: perScreen }, () => careerLine(overLine)).join('\n'),
-      }),
-    })
-    expect(response.status).toBe(303)
-  })
-
-  it('経歴は割ったあとの1画面ごとに数える。次の画面に回るぶんまで足さない', async () => {
-    const signed = await signIn()
-    const each = Math.floor(TIMELINE.maxChars / perScreen)
-    const response = await signed('/admin/members', {
-      method: 'POST',
-      body: form({
-        name: '岡崎 昂功',
-        slug: 'okazaki',
-        headline: 'あ'.repeat(MAX_CHARS.memberHeadline),
-        careerText: Array.from({ length: perScreen * 2 }, () => careerLine(each)).join('\n'),
-        published: '1',
       }),
     })
     expect(response.status).toBe(303)
@@ -1751,12 +1562,11 @@ describe('大見出し・経歴・ブロックの見出しの上限（公開の�
   })
 
   /*
-    seed.sql の紹介文は本人の文章で、いまの上限（紹介文 400 字）を超えている。
-    書き換えない（本人の言葉を検査の都合で削らない）。そのかわり関門がそれを
-    公開としては通さず、下書きへは戻せることをここで確かめる——上限を下げた日に
-    「公開中の本人のプロフィールが、次に保存した瞬間に止まる」ことを知っておくため。
+    seed.sql の紹介文は本人の文章で、1画面に収めていたころの上限（400 字）を
+    超えていて、公開のまま保存し直すと止まっていた。いまは紹介文を長さで止めないので、
+    本人の言葉を削らずにそのまま公開で保存できる。
   */
-  it('seed の紹介文（本人の文章）は上限を超えている。公開では止まり、下書きへは戻せる', async () => {
+  it('seed の紹介文（本人の文章）は、公開のまま保存し直せる', async () => {
     const tuple = seedSql.slice(seedSql.indexOf('INSERT INTO members'))
     const strings = [...tuple.matchAll(/'((?:[^']|'')*)'/g)].map((found) =>
       (found[1] ?? '').replaceAll("''", "'"),
@@ -1764,25 +1574,16 @@ describe('大見出し・経歴・ブロックの見出しの上限（公開の�
     // slug, name, role, location, headline, bio の順
     const bio = strings[5] ?? ''
     expect(bio).toContain('コンピュータサイエンス')
-    expect([...bio].length).toBeGreaterThan(MAX_CHARS.memberBio)
 
     const member = await seedMember({ bio, published: 1 })
     const signed = await signIn()
-    const values = { name: member.name, slug: member.slug, bio }
     const publish = await signed(`/admin/members/${member.id}`, {
       method: 'POST',
-      body: form({ ...values, published: '1' }),
+      body: form({ name: member.name, slug: member.slug, bio, published: '1' }),
     })
-    expect(publish.status).toBe(400)
-    expect(await publish.text()).toContain(`紹介文は ${MAX_CHARS.memberBio} 字までです`)
-
-    const draft = await signed(`/admin/members/${member.id}`, {
-      method: 'POST',
-      body: form(values),
-    })
-    expect(draft.status).toBe(303)
+    expect(publish.status).toBe(303)
     const row = await db().query.members.findFirst({ where: eq(schema.members.id, member.id) })
-    expect(row?.published).toBe(0)
+    expect(row?.published).toBe(1)
     expect(row?.bio).toBe(bio)
   })
 })
@@ -1833,7 +1634,7 @@ describe('作品の保存は、全部書けるか何も書かないか', () => {
     expect(await db().select().from(schema.itemLinks)).toHaveLength(1)
   })
 
-  it('公開では、タグとリンクは作品のページに収まる数まで。止めても前のタグとリンクは残る', async () => {
+  it('公開で止めても、前のタグとリンクは残る（止めるのは書く前）', async () => {
     const item = await seedWithChildren()
     const signed = await signIn()
     const response = await signed(`/admin/items/${item.id}`, {
@@ -1842,16 +1643,15 @@ describe('作品の保存は、全部書けるか何も書かないか', () => {
         type: 'app',
         title: 'AppMixer',
         slug: 'appmixer',
-        tags: tags(MAX_CHARS.itemTags + 1),
-        linkLabel: Array.from({ length: MAX_CHARS.itemLinks + 1 }, (_, i) => `L${i}`),
-        linkUrl: Array.from({ length: MAX_CHARS.itemLinks + 1 }, (_, i) => `https://e.test/${i}`),
+        // 説明が空のまま公開しようとする（公開の関門が止める）
+        tags: tags(5),
+        linkLabel: ['L0', 'L1'],
+        linkUrl: ['https://e.test/0', 'https://e.test/1'],
         published: '1',
       }),
     })
     expect(response.status).toBe(400)
-    const html = await response.text()
-    expect(html).toContain(`タグは ${MAX_CHARS.itemTags} つまでです`)
-    expect(html).toContain(`リンクは ${MAX_CHARS.itemLinks} 本までです`)
+    expect(await response.text()).toContain('公開するときは説明文が要ります')
     expect((await db().select().from(schema.itemTags)).map((row) => row.tag)).toEqual(['Swift'])
     expect(await db().select().from(schema.itemLinks)).toHaveLength(1)
   })
@@ -1918,24 +1718,6 @@ describe('作品の保存は、全部書けるか何も書かないか', () => {
     expect(html).toContain('プラットフォームが見つかりません')
     expect(html).toContain('value="残ってほしい題"')
     expect(await db().select().from(schema.items)).toHaveLength(0)
-  })
-
-  it('上限より前に4本以上のリンクを持つ作品も、編集フォームに全部の行が出る（保存で消えない）', async () => {
-    const item = await seedItem({ slug: 'many' })
-    await db()
-      .insert(schema.itemLinks)
-      .values(
-        Array.from({ length: 5 }, (_, i) => ({
-          itemId: item.id,
-          label: `L${i}`,
-          url: `https://e.test/${i}`,
-          sortOrder: i,
-        })),
-      )
-    const signed = await signIn()
-    const html = await (await signed(`/admin/items/${item.id}/edit`)).text()
-    expect(html.match(/name="linkLabel"/g)).toHaveLength(5)
-    expect(html).toContain('value="L4"')
   })
 })
 
@@ -2064,9 +1846,9 @@ describe('二重送信', () => {
     expect((await send({ name: '星野', bio: '古い紹介' })).headers.get('location')).toContain(
       'saved=draft',
     )
-    const blocked = await send({ name: '星野', bio: 'あ'.repeat(401), published: '1' })
+    const blocked = await send({ name: '星野', headline: 'あ'.repeat(81), published: '1' })
     expect(blocked.status).toBe(400)
-    expect(await blocked.text()).toContain('400 字まで')
+    expect(await blocked.text()).toContain('80 字まで')
 
     const again = await send({ name: '星野', bio: '新しい紹介', published: '1' })
     expect(again.headers.get('location')).toContain('saved=1')
@@ -2087,9 +1869,13 @@ describe('二重送信', () => {
       })
 
     expect((await send({ body: '段落です' })).headers.get('location')).toContain('saved=draft')
-    const blocked = await send({ body: 'あ'.repeat(1000), published: '1' })
+    const blocked = await send({
+      title: 'あ'.repeat(11),
+      body: '段落です',
+      published: '1',
+    })
     expect(blocked.status).toBe(400)
-    expect(await blocked.text()).toContain('1画面に収まりません')
+    expect(await blocked.text()).toContain('見出しは 10 字までです')
 
     const again = await send({ body: '段落です', published: '1' })
     expect(again.headers.get('location')).toContain('saved=1')
@@ -2203,17 +1989,18 @@ describe('公開の関門', () => {
   it('公開になる入口はどれも同じ関門（新しく書く・編集・一覧のトグル）。下書きの保存は長さを見ない', async () => {
     const signed = await signIn()
     await signed('/admin/blocks/init', { method: 'POST' })
-    const long = 'あ'.repeat(maxCharsOf('note') + 1)
+    // 目次に1行で並ぶ名前の上限を超える見出し（src/blocks.ts の MAX_CHARS.blockHeading）
+    const long = 'あ'.repeat(MAX_CHARS.blockHeading + 1)
 
     // 新しく書く: 公開は止める、下書きは通す
     const publish = await signed('/admin/blocks', {
       method: 'POST',
-      body: form({ type: 'note', title: '長い', body: long, published: '1' }),
+      body: form({ type: 'note', title: long, body: '段落。', published: '1' }),
     })
     expect(publish.status).toBe(400)
     const draft = await signed('/admin/blocks', {
       method: 'POST',
-      body: form({ type: 'note', title: '長い', body: long }),
+      body: form({ type: 'note', title: long, body: '段落。' }),
     })
     expect(draft.status).toBe(303)
     const note = await db().query.blocks.findFirst({ where: eq(schema.blocks.type, 'note') })
@@ -2222,7 +2009,7 @@ describe('公開の関門', () => {
     // 編集: 公開にする保存は止める
     const edit = await signed(`/admin/blocks/${note.id}`, {
       method: 'POST',
-      body: form({ title: '長い', body: long, published: '1' }),
+      body: form({ title: long, body: '段落。', published: '1' }),
     })
     expect(edit.status).toBe(400)
 

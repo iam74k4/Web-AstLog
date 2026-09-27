@@ -1,7 +1,7 @@
 /*
   src/ の .ts を検査スクリプトからそのまま読む。
 
-  上限の数（src/blocks.ts の maxChars / perScreen / MAX_CHARS）を検査の側に
+  数（src/blocks.ts の MAX_CHARS / PROJECT_COLUMNS）を検査の側に
   書き写すと、上限を変えた日に検査だけが古い数で測り続ける——しかも緑のままで
   分からない。だから数は blocks.ts そのものから読む。
 

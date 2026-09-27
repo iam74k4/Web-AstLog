@@ -9,10 +9,9 @@ beforeEach(resetDb)
   公開の一覧の索引（PERF-1）。
 
   item_links に item_id の索引が無く、items の索引も公開の並び（year_from の新しい順 →
-  sort_order → id）と別の順だった。Projects の1画面（カード2枚）を出すのに、公開中の
-  全件を並べ直し（TEMP B-TREE）、その全件ぶんのタグとリンクを読んでいた——200 件なら
-  1画面で約 1,200 行。索引が並びの順になっていれば、LIMIT が索引の上で効き、読むのは
-  1画面ぶんの行と、その子だけになる。
+  sort_order → id）と別の順だった。一覧を出すたびに公開中の全件を並べ直し
+  （TEMP B-TREE）、その全件ぶんのタグとリンクを読んでいた。索引が並びの順に
+  なっていれば、並べ直さずに前から読め、子も作品ごとに自分の索引で引ける。
 */
 
 type Plan = { detail: string }
@@ -55,14 +54,11 @@ async function explain(query: ReturnType<typeof publishedItemsQuery>) {
   const plan = await env.DB.prepare(`EXPLAIN QUERY PLAN ${sql}`)
     .bind(...params)
     .all<Plan>()
-  const run = await env.DB.prepare(sql)
-    .bind(...params)
-    .all()
-  return { plan: plan.results.map((row) => row.detail), rowsRead: run.meta.rows_read }
+  return { plan: plan.results.map((row) => row.detail) }
 }
 
 describe('索引', () => {
-  it('Projects の1画面は、公開中の全件ではなく、その画面の2件とその子だけを読む', async () => {
+  it('Projects の一覧は、並べ直さずに索引の順で読む。子も作品ごとに索引で引く', async () => {
     const member = await seedMember()
     await seedMany(60, member.id)
 
@@ -72,9 +68,7 @@ describe('索引', () => {
       担当: { memberId: member.id },
     }
     for (const [name, scope] of Object.entries(scopes)) {
-      const { plan, rowsRead } = await explain(
-        publishedItemsQuery(db(), { ...scope, limit: 2, offset: 2 }),
-      )
+      const { plan } = await explain(publishedItemsQuery(db(), scope))
       // 並べ直しが1つも無い（一覧の並びも、タグとリンクの並びも索引のまま）
       expect(
         plan.filter((line) => line.includes('TEMP B-TREE')),
@@ -88,11 +82,6 @@ describe('索引', () => {
       // 子は作品ごとに自分の索引で引く（その場で作る AUTOMATIC INDEX に頼らない）
       expect(plan, name).toContain('SEARCH items_links USING INDEX idx_item_links_item (item_id=?)')
       expect(plan, name).toContain('SEARCH items_tags USING INDEX idx_item_tags_item (item_id=?)')
-      /*
-        読んだ行の数が件数に比例しない。60 件・子 360 行のうち、索引の上で飛ばす
-        前の2件と、出す2件とその子だけ（並べ直していたころは 60 件ぶん全部を読んでいた）
-      */
-      expect(rowsRead, name).toBeLessThan(60)
     }
   })
 

@@ -242,3 +242,20 @@ export function toSlug(value: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 64)
 }
+
+/*
+  size 件ずつの配列に割る。0件なら空配列。使うのは、1文の束縛変数の上限を超えない
+  ように複数行の INSERT を分けるとき（src/routes/admin/items.tsx の childWrites）と、
+  Projects のカードを1行ぶんずつ数えるとき（src/routes/public/blocks.tsx。行ごとに
+  画像の枠をそろえる）。
+
+  size が 1 未満だと1件も進まず終わらないので、下限を 1 に切り上げる。
+*/
+export function chunk<T>(rows: T[], size: number): T[][] {
+  const step = Math.max(1, Math.floor(size))
+  const parts: T[][] = []
+  for (let i = 0; i < rows.length; i += step) {
+    parts.push(rows.slice(i, i + step))
+  }
+  return parts
+}

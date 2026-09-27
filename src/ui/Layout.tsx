@@ -11,8 +11,8 @@ export type NavItem = { href: string; label: string; active?: boolean }
   共有カードの画像（og:image）。サイトの1枚と、作品のページではその作品の画像。
 
   このサイトへの流入は、貼られたリンク（Slack / DM / 職務経歴書）から来る。
-  og:image が無いと、貼った先は灰色の箱か文字だけの行になり、画面が7つに
-  分かれたいまはどの画面を貼っても同じ無地のカードになっていた。
+  og:image が無いと、貼った先は灰色の箱か文字だけの行になり、ページが節ごとに
+  分かれたいまはどのページを貼っても同じ無地のカードになっていた。
 
   **作品のページは、画像があればその作品の画像を出す**（src/routes/public/item.tsx の
   itemOgImage）。作品を1件名指しして貼る URL なので、サイトの札より作品の
@@ -22,7 +22,7 @@ export type NavItem = { href: string; label: string; active?: boolean }
   名乗るくらいなら、貼り先に取りに行かせたほうがよい。AVIF は使わず、サイトの
   1枚に戻す（X が og:image に読むのは JPEG / PNG / WebP / GIF だけ）。
 
-  **それ以外の画面はサイトの1枚**（SITE_IMAGE）。素材はリポジトリにある
+  **それ以外のページはサイトの1枚**（SITE_IMAGE）。素材はリポジトリにある
   public/assets/avatar.png。og:image に出せる raster はこれ1枚——ロゴ
   （noctifex-mark.svg / noctifex-wordmark.svg）は SVG で、貼り先のどれも
   og:image の SVG を読まない（Slack / LinkedIn / X）。入口の月
@@ -86,7 +86,7 @@ const ShareImage = ({ image }: { image: OgImage }) => (
   どのプリセットでも同じで、変わるのは app.css の [data-layout] 側。
   出し分けを JSX に持たせると、プリセットの数だけ画面が分かれてしまう。
 
-  公開ページは JavaScript を持たない。絞り込みも画面の移動もサーバーが決め、
+  公開ページは JavaScript を持たない。絞り込みもページの移動もサーバーが決め、
   リンクをたどるだけで動く。ここに <script> を1つ足すと、切られた環境で
   何が落ちるかを毎回考えることになる。
 */
@@ -100,7 +100,7 @@ export const Layout = (props: {
   sidebar: Child
   /*
     縦に積んだ全体ページ（/all）のときだけ立てる。app.css は body のこの印で
-    「画面に収める外枠」を外す。印の無いページは1画面に収まり、動かない。
+    「ページの外枠」（表紙の高さ・貼り付く帯）を外す。
   */
   whole?: boolean
   /*
@@ -157,19 +157,23 @@ export const Layout = (props: {
         <aside class="rail">
           {props.sidebar}
           {/*
-            いま見ている画面には aria-current="page"。'true' ではなく 'page' な
+            いま見ているページには aria-current="page"。'true' ではなく 'page' な
             のは、目次の行き先が別の URL（/projects）だから。'true' は「この一覧の
-            中のいま」で、ページそのものは指さない。
+            中のいま」で、ページそのものは指さない。作品のページは載っている一覧
+            （Projects）の行に、個人ページは Profile か Team の行に印が付く。
 
-            番号は振らない。数えるのは画面の底のページャ1つ（Projects 2 / 4）に
-            寄せる——目次の番号はブロックの並び順で、節の何画面目に居ても動かない
-            ので、同じ姿の数が2組あると別の数え上げが並んで見える。
+            番号は振らない。目次の番号はブロックの並び順でしかなく、読む人に言う
+            ことが無い。
 
             aria-label は行き先で出し分ける。全体ページの目次だけが本当に
-            ページ内（#projects）を指していて、画面ごとの URL では別ページへ移る。
+            ページ内（#projects）を指していて、ページごとの URL では別ページへ移る。
             片方に固定した文字列は、必ずどちらかで嘘になる。
+
+            ページの移動は、この目次と、ページの中のリンク（入口の帯・カード・
+            「← 一覧に戻る」）だけ。画面の底の左右の手（ページャ）は外した
+            （CLAUDE.md の「公開ページは縦に読む」）。
           */}
-          <nav class="toc" aria-label={props.whole ? 'ページ内の移動' : '画面の移動'}>
+          <nav class="toc" aria-label={props.whole ? 'ページ内の移動' : 'ページの移動'}>
             {props.nav.map((item) => (
               <a key={item.href} href={item.href} aria-current={item.active ? 'page' : undefined}>
                 {item.label}
@@ -186,19 +190,16 @@ export const Layout = (props: {
             全体ページ（/all）への1本道。
 
             公開側にも管理画面にも /all への href が1本も無かった。@media print は
-            「紙の上では『次の画面へ』は押せない。全体ページを刷ること」と書いて
-            いるのに、そこへ行く手段が URL を手で打つことしか無い。カードの説明が
-            行数で切られない唯一の姿も、Ctrl-F もブラウザ翻訳も、同じ1本が無いために
-            届かなかった。
+            「全体ページを刷ること」と書いているのに、そこへ行く手段が URL を手で
+            打つことしか無い。Ctrl-F もブラウザ翻訳も、同じ1本が無いために
+            サイトの一部にしか届かなかった。
 
             全体ページ自身には出さない（自分への行き先）。
 
             899 以下ではこの足元ごと畳まれる（著作権表示と一緒に。CLAUDE.md の
             「899 以下で畳むもの」）。畳んでも全体ページへの道は消えない——入口の Hero の帯の
             下に「すべてを1ページで読む →」（components.tsx の WholeLink）を置いて
-            あり、そちらは幅で畳まない。一覧は画面ごとの URL で読めるし、切られた
-            説明の全文はカードを押した先の作品1件のページにある。sitemap.xml にも
-            載るので、検索からも届く。
+            あり、そちらは幅で畳まない。sitemap.xml にも載るので、検索からも届く。
           */}
           {/*
             著作権表示（と、あとに続く「 · 」）は .rail__copy に包む。中央寄せの骨格は

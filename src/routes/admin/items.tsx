@@ -7,9 +7,17 @@ import * as schema from '../../db/schema'
 import { ITEM_KINDS, type ItemKind, KIND_LABEL, readKind } from '../../domain'
 import type { AppEnv } from '../../env'
 import { newToken } from '../../lib/auth'
-import { bool, halfWidthDigits, int, isSafeUrl, parseTags, str, yearFrom } from '../../lib/format'
+import {
+  bool,
+  chunk,
+  halfWidthDigits,
+  int,
+  isSafeUrl,
+  parseTags,
+  str,
+  yearFrom,
+} from '../../lib/format'
 import { IMAGE_ACCEPT, IMAGE_LABELS } from '../../lib/image'
-import { chunk } from '../../lib/paginate'
 import {
   Area,
   Confirm,
@@ -241,19 +249,23 @@ type ItemDraft = {
 const METRIC_NOTE_HINT =
   '添えは値と単位のあとに続けて読まれる。「20 人日 見込み 40人日から半減」のように、続けて読んで意味が通る形で'
 
+// リンクの欄を空けて出す行の数（ItemForm）。上限ではない
+const LINK_ROWS = 3
+
 const ItemForm = (props: ItemFormData) => {
   const item = props.item
   const d = itemDraft(item, props.submitted)
   /*
-    リンクの欄は、公開できる本数（MAX_CHARS.itemLinks）ぶんを空けて出す。
-    それより多く持っている作品（上限より前に保存したもの）は全部の行を出す
-    ——3行で切っていたころは、4本目から先が欄に出ないまま、保存の総入れ替えで
-    黙って消えた
+    リンクの欄は、持っている行を全部と、空いた行を足して出す（LINK_ROWS まで。
+    持っている行が LINK_ROWS 以上なら空いた行を1つ）。JavaScript が無いので欄を
+    足す手が無く、もう1本足したい人は保存して開き直せば次の空いた行が出る。
+    持っている行を切って出すと、出なかった行が保存の総入れ替えで黙って消える
+    （3行で切っていたころ、4本目から先がそうなった）
   */
   const blank = { label: '', url: '' }
   const links = [
     ...d.links,
-    ...Array.from({ length: Math.max(0, MAX_CHARS.itemLinks - d.links.length) }, () => blank),
+    ...Array.from({ length: Math.max(1, LINK_ROWS - d.links.length) }, () => blank),
   ]
   // 年の欄の頭が数字4桁でなければ、並びに使われない（保存は止めない）
   const unordered = d.year !== '' && yearFrom(d.year) === null
@@ -280,8 +292,8 @@ const ItemForm = (props: ItemFormData) => {
         <FormKey value={props.formKey} />
         <div class="form-grid">
           {/*
-            作品名はカードの題・作品のページと Story の見出しに出る。長さは公開する
-            ときにだけ見る（MAX_CHARS.itemTitle。数と測り方は src/blocks.ts）
+            作品名はカードの題・作品のページの見出しに出る。長さは公開する
+            ときにだけ見る（MAX_CHARS.itemTitle。理由は src/blocks.ts）
           */}
           <Field
             label="タイトル"
@@ -370,37 +382,27 @@ const ItemForm = (props: ItemFormData) => {
             value={d.summary}
             rows={3}
             /*
-              カードは行数で切る（--card-lines。600 以上は上限の 100 字が切れずに
-              出る6行、電話の幅は2行。実績値も担当者名も無い軽い行だけは電話でも
-              5行で、100 字が切れずに出る——--card-lines-lean）。長く書いても画面から溢れはしない代わりに、
-              溢れたぶんが黙って消える。電話の幅の字数（itemSummaryVisible）を
-              添えるのは、上限まで書けばどの画面でも全部読まれる、と読めてしまわない
-              ようにするため。
+              カードは説明を行数で切らずに全部出す。長いと同じ行のカードがその高さ
+              まで伸びるので、目録の2文ぶん（MAX_CHARS.itemSummary）で止める。
 
               説明は目録の文なので常体（〜する。〜した。）。本文（下の欄）は
-              「です・ます」。作品のページの1枚目（説明）から「くわしく読む →」で
-              次の画面（本文）へ続けて読まれるので、文体で目録と本文を分ける
-              （CLAUDE.md「文言」）
+              「です・ます」。作品のページでは説明のすぐ下に本文の小節（Story）が
+              続けて読まれるので、文体で目録と本文を分ける（CLAUDE.md「文言」）
             */
-            hint={`「何であるか。何をしたか。」の2文を常体で（〜する。〜した。）· ${MAX_CHARS.itemSummary} 字まで（電話の幅では、実績値か担当者名のあるカードの行は2行で、${MAX_CHARS.itemSummaryVisible} 字までしか出ません。公開するときは必須——カードと作品のページの説明文になる）`}
+            hint={`「何であるか。何をしたか。」の2文を常体で（〜する。〜した。）· ${MAX_CHARS.itemSummary} 字まで（公開するときは必須——カードと作品のページの説明文になる）`}
             maxlength={MAX_CHARS.itemSummary}
             error={props.errors?.summary}
           />
           {/*
-            本文は作品のページの2枚目（本文の画面 Story。/apps/item/<slug>/story）に
-            だけ出る（カードにも1枚目にも出ない。1枚目には「くわしく読む →」の入口が
-            出る）。上限は本文の画面1枚に収まる数（割らない。数と測り方は
-            src/blocks.ts）。空なら本文の画面は作らない。
-            「空行で段落を分ける」は段落を2つ以上置けるときだけ言う——1段落まで
-            のときに言うと、言われたとおりに分けた人が保存で止められる
+            本文は作品のページの説明の下に、小節「Story」として出る（カードには
+            出ない）。空なら小節は作らない。長さに上限は無い（ページは縦に読む）
           */}
           <Area
             label="本文"
             name="body"
             value={d.body}
             rows={6}
-            hint={`背景・やったこと・結果を「です・ます」で。${MAX_CHARS.itemBodyParagraphs > 1 ? '空行で段落を分ける' : '空行を入れずに1段落で'} · ${MAX_CHARS.itemBody} 字・${MAX_CHARS.itemBodyParagraphs} 段落まで（作品のページの次の画面「Story」に出る。空なら画面を作らない。カードには出ない）`}
-            maxlength={MAX_CHARS.itemBody}
+            hint="背景・やったこと・結果を「です・ます」で。空行で段落を分ける（作品のページの「Story」に出る。空なら出ない。カードには出ない）"
             error={props.errors?.body}
           />
           <label class="field">
@@ -446,7 +448,7 @@ const ItemForm = (props: ItemFormData) => {
             name="tags"
             value={d.tags}
             error={props.errors?.tags}
-            hint={`カンマ区切り · 公開は ${MAX_CHARS.itemTags} つまで（作品のページの1画面に収まる数）`}
+            hint="カンマ区切り"
           />
           {/*
             並びは年が先に効き、同じ年の中でこの数。個人開発と業務は公開ページで
@@ -492,8 +494,8 @@ const ItemForm = (props: ItemFormData) => {
             })}
             {props.errors?.links ? <span class="field__error">{props.errors.links}</span> : null}
             <span class="field__hint">
-              ラベルと URL は両方入れる。URL は https:// か mailto: か / から · 公開は{' '}
-              {MAX_CHARS.itemLinks} 本まで
+              ラベルと URL は両方入れる。URL は https:// か mailto: か / から ·
+              もっと足すときは、保存してから開き直すと空いた行が出る
             </span>
           </fieldset>
 
@@ -878,11 +880,8 @@ itemRoutes.post('/items', async (c) => {
           kind: 'item',
           title: values.title,
           summary: values.summary,
-          body: values.body,
           imageAlt: values.imageAlt,
           hasImage: picked.image !== null,
-          tags: tags.length,
-          links: links.links.length,
         })
       : null,
     await itemSlugTaken(database, values.slug, null),
@@ -976,11 +975,8 @@ async function saveItem(
           kind: 'item',
           title: values.title,
           summary: values.summary,
-          body: values.body,
           imageAlt: values.imageAlt,
           hasImage: picked.image !== null || keeps,
-          tags: tags.length,
-          links: links.links.length,
         })
       : null,
     await itemSlugTaken(database, values.slug, id),

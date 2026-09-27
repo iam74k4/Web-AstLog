@@ -5,10 +5,9 @@ import type { Child } from 'hono/jsx'
 import * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
 import { getSessionUser, SESSION_COOKIE } from '../../lib/auth'
-import type { Sequence } from '../../lib/sequence'
+import type { NavLink, Page } from '../../lib/sequence'
 import { SITE } from '../../site'
 import type { Theme } from '../../theme'
-import { ScreenPager } from '../../ui/components'
 import { Layout, type OgImage } from '../../ui/Layout'
 
 /*
@@ -32,7 +31,9 @@ export async function adminHref(c: Context<AppEnv>, to: string): Promise<string 
 
 /*
   行き先がデータで変わる転送（301）。slug の転送表・区分を変えた作品・1人のサイトの
-  /team → プロフィール・個人ページの Contact → サイトの Contact。
+  /team → プロフィール・個人ページの Contact → サイトの Contact・前の個人ページの
+  続き（/members/<slug>/about …）と前の本文の画面（…/story）→ ページの中の小節
+  （小節が無くなっていればページの頭）。
 
   **ブラウザに覚えさせない**（Cache-Control: no-cache）。301 は既定でキャッシュして
   よい応答で、Chromium は期限なしで覚える。行き先は管理画面の保存で変わる——slug を
@@ -47,8 +48,9 @@ export async function adminHref(c: Context<AppEnv>, to: string): Promise<string 
   （src/lib/page-cache.ts）はこの応答も置き、返すときに no-cache を付け直す——写しは
   管理画面の保存で版ごと外れるので、行き先が変わった日に古い転送は出ない。
 
-  行き先が動かない転送（/apps・/works → /projects）は、素の 301 のままでよい
-  （長く覚えられても、同じ所へ送るだけ）。
+  行き先が動かない転送（/apps・/works → /projects、割っていたころの2ページ目以降
+  /<ページ>/<n> → /<ページ>）は、素の 301 のままでよい（長く覚えられても、同じ所へ
+  送るだけ）。
 */
 export function movedTo(c: Context<AppEnv>, to: string) {
   c.header('cache-control', 'no-cache')
@@ -56,7 +58,7 @@ export function movedTo(c: Context<AppEnv>, to: string) {
 }
 
 /*
-  サイトの画面から、その中身を直す管理画面へ。
+  サイトのページから、その中身を直す管理画面へ。
 
   打ち込むブロックはその編集画面。決まった中身のブロックは、中身の出どころへ
   ——Projects は項目の一覧、Team はメンバーの一覧、入口の名前と職種は
@@ -80,63 +82,56 @@ export const blockAdminPath = (block: schema.Block, solo?: schema.Member) => {
 }
 
 /*
-  連なりの1枚をページにする。トップも個人ページも作品のページもここを通る。
+  サイトの1ページを描く。トップ（ブロックのページ）も個人ページも作品のページも
+  ここを通る。
 
-  連ね方（添字・前後・目次・ページャ）は src/lib/sequence.ts が持つ。ここで
-  やるのは、その結果を Layout に渡すことだけ。画面の列を作る側が違っても、
-  題の付け方も canonical の出し方も名乗りを載せる場所も1つになる。
+  題と canonical は page（src/lib/sequence.ts の Page）が、目次は nav が持つ。ここで
+  やるのは、それを Layout に渡すことだけ。ページを組む側が違っても、題の付け方も
+  canonical の出し方も名乗りを載せる場所も1つになる。
 */
 export async function screenPage(
   c: Context<AppEnv>,
-  seq: Sequence,
   page: {
+    title: string
+    canonical: string
+    nav: NavLink[]
     node: Child
     description: string
     /*
-      この画面に載せる構造化データ。載せるかどうかは呼ぶ側が決めて、載せない
-      画面では渡さない。名乗り（サイトの Person / Organization、個人ページの
-      Person）は連なりの先頭の画面にだけ（firstOnly）。作品1件のページの
-      CreativeWork は名乗りではなく「この URL が何か」なので、どの作品の1枚目にも
-      渡す（src/routes/public/item.tsx）。
+      このページに載せる構造化データ。載せるかどうかは呼ぶ側が決めて、載せない
+      ページでは渡さない。サイトの名乗り（Person / Organization）はサイトの並びの
+      先頭のページにだけ（firstOnly）。個人ページの Person と作品のページの
+      CreativeWork は「この URL が何か」なので、それぞれのページに載せる。
     */
     jsonLd?: unknown
     theme: Theme
     sidebar: Child
-    // この画面の中身を直す管理画面（adminHref が、ログインしている人にだけ出す）
+    // このページの中身を直す管理画面（adminHref が、ログインしている人にだけ出す）
     adminPath: string
-    // ページャが数える単位（ScreenPager の unit）。作品同士をめくるときだけ「件」
-    unit?: '画面' | '件'
     // 共有カードの画像。渡さなければサイトの1枚（src/ui/Layout.tsx の OgImage）
     image?: OgImage
   },
 ) {
   return c.html(
     <Layout
-      title={seq.current.title}
+      title={page.title}
       description={page.description}
-      canonical={`${SITE.origin}${seq.current.canonical}`}
+      canonical={`${SITE.origin}${page.canonical}`}
       jsonLd={page.jsonLd}
-      nav={seq.nav}
+      nav={page.nav}
       theme={page.theme}
       sidebar={page.sidebar}
       admin={await adminHref(c, page.adminPath)}
       image={page.image}
     >
-      {/* 1画面しか無いなら、めくる先が無いのでページャは出さない */}
-      {seq.pager ? (
-        <>
-          {page.node}
-          <ScreenPager {...seq.pager} unit={page.unit} />
-        </>
-      ) : (
-        page.node
-      )}
+      {page.node}
     </Layout>,
   )
 }
 
 /*
-  名乗り（構造化データ）は連なりの先頭の画面にだけ載せる。めくった先で同じ
-  人・同じ器をもう一度名乗らない（CLAUDE.md「1画面 = 1ドキュメント」）。
+  サイトの名乗り（構造化データ）はサイトの並びの先頭のページにだけ載せる。ほかの
+  ページで同じ人・同じ器をもう一度名乗らない（CLAUDE.md「1ページ = 1ドキュメント」）。
 */
-export const firstOnly = (seq: Sequence, jsonLd: unknown) => (seq.index === 0 ? jsonLd : undefined)
+export const firstOnly = (pages: Page[], here: Page, jsonLd: unknown) =>
+  pages[0] === here ? jsonLd : undefined

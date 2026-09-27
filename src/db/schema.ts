@@ -131,13 +131,11 @@ export const items = sqliteTable(
     // 「何であるか。何をしたか。」の2文。常体（目録の文。本文 body は「です・ます」）
     summary: text('summary').notNull().default(''),
     /*
-      作品ページの本文。背景・やったこと・結果を段落で（段落の数の上限は
-      MAX_CHARS.itemBodyParagraphs。いまは3段落）。
-      カードにも作品のページの1枚目にも出さない——出るのは1枚目の次の本文の
-      画面（/apps/item/<slug>/story）だけで、空なら（段落が1つも無ければ）その
-      画面を作らない（src/blocks.ts の itemStory）。カードの説明（summary）は行数で
-      切られる要約で、1枚目はカードを開いたもの。
-      長さの上限は src/blocks.ts の MAX_CHARS（本文の画面1枚に収まる実測）。
+      作品ページの本文。背景・やったこと・結果を段落で。
+      カードには出さない——出るのは作品のページの説明の下の小節「Story」（#story）
+      だけで、空なら（段落が1つも無ければ）その小節を作らない（src/blocks.ts の
+      itemStory）。カードの説明（summary）は目録の2文で、作品のページの頭は
+      カードを開いたもの。
 
       既にある行は '' のまま（NOT NULL に定数の既定値なので ALTER で入る）。
       本人の作品の中身をこちらで書いて埋めない。
@@ -184,8 +182,8 @@ export const items = sqliteTable(
   /*
     公開の一覧の3つの引き方（全部・区分で絞る・担当で絞る）に1本ずつ。どれも
     公開の並び（src/db/queries.ts の itemOrder: year_from の新しい順 → sort_order → id）の
-    順に索引が並んでいるので、LIMIT が索引の上で効き、1画面ぶん（カード2枚）の行と
-    その子だけを読む。id は索引の末尾に暗に入っている rowid が受ける。
+    順に索引が並んでいるので、並べ直さずに前から読める。id は索引の末尾に暗に
+    入っている rowid が受ける。
 
     year_from は desc で持つ。itemOrder の「desc nulls last」は SQLite の desc の
     既定の並び（NULL は最小）なので、この索引をそのまま前から読める。asc で持つと、
@@ -301,7 +299,8 @@ export const memberSlugRedirects = sqliteTable(
   決まった中身の種類は1つずつしか置けない（src/blocks.ts の FIXED_BLOCK_KEYS）。
   それを DB でも持つのが blocks_fixed_once（その種類の行だけに効く部分一意索引）。
   「読んでから足す」だけで守っていたころは、二重送信で hero〜contact が2組になり、
-  ページャが自分自身を指して入口から先へ進めなくなった。
+  同じ URL がページの並びに2度並んだ（当時は画面の底の「次」が自分自身を指して
+  入口から先へ進めなくなった）。
 */
 export const blocks = sqliteTable(
   'blocks',

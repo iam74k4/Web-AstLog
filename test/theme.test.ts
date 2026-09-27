@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import adminCss from '../public/admin.css'
 import css from '../public/app.css'
-import { blockType } from '../src/blocks'
+import { PROJECT_COLUMNS } from '../src/blocks'
 import * as schema from '../src/db/schema'
 import { ACCENTS, LAYOUTS, TYPEFACES } from '../src/theme'
 import { db, form, get, okText, resetDb, seedItem, seedMember, signIn } from './helpers'
@@ -363,9 +363,9 @@ const overridesAt = (whole: string, offset: number): string[] => {
 /*
   宣言を1つ指して、それが書いてある規則をセレクタごと切り出す。
 
-  blockAt と違って「どこかに書いてある」では足りない場所のため。節には
-  同じセレクタの規則が2つ（中身の寄せ方と、溢れの弁）あり、弁だけを
-  別の相手に付け替えられると、寄るのに弁の無い節ができる。
+  blockAt と違って「どこかに書いてある」では足りない場所のため。同じ値が
+  2か所に書いてあっても、付いているセレクタが違えば意味が違う（目次の帯の
+  nowrap と、絞り込みの帯の nowrap）。
 
   切り出した規則が後ろで上書きされていたら落とす（expectNotOverridden）。
 */
@@ -423,11 +423,11 @@ describe('CSS を読む道具', () => {
   })
 
   it('外枠の要の規則は、後ろで上書きされていない', () => {
-    const frame = blockAt(sheet, '@supports (height: 100svh)')
+    const frame = blockAt(sheet, '@media screen')
     for (const decl of [
-      'height: var(--screen-h)',
-      'overflow: clip',
-      'overscroll-behavior: contain',
+      'min-height: var(--screen-h)',
+      'position: sticky',
+      'scroll-padding-top: var(--band-clear)',
       'align-content: safe start',
     ]) {
       expect(() => ruleWith(frame, decl), decl).not.toThrow()
@@ -436,208 +436,135 @@ describe('CSS を読む道具', () => {
 })
 
 /*
-  「1画面に収める・ページは動かさない」という作りは app.css にしかない。
-  骨格の1行が消えても TypeScript は黙っているし、描いた HTML も変わらない。
-  出るのは「中身は全部あるのに下が読めないページ」だけで、それに気付ける
-  場所がここしかない。だから値ではなく規則の存在そのものを見張る。
+  公開ページのレイアウトは app.css にしかない。骨格の1行が消えても TypeScript は
+  黙っているし、描いた HTML も変わらない。出るのは「長い中身がページの外で切られる」
+  「目次が一番上に置き去りになる」ページだけで、それに気付ける場所がここと
+  npm run check:fit しかない。だから値ではなく規則の存在そのものを見張る。
 */
-describe('画面に収める外枠', () => {
-  it('画面1つぶんの高さを :root で持つ', () => {
-    // 道具の帯の出入りで伸び縮みしない svh で測る。
-    // 値そのものを見る（'100svh' がどこかにある、では @supports の条件に当たる）
-    expect(sheet).toContain('--screen-h: calc(100svh')
-    /*
-      100vh の控えは置かない。--screen-h を読むのは @supports (height: 100svh)
-      の内側1か所だけで、svh を知らない環境ではその節ごと効かない。控えを
-      書いても一度も読まれないので、起こり得ない機序の説明が1つ残るだけになる
-    */
+describe('ページの外枠', () => {
+  /*
+    公開ページは縦にスクロールする（CLAUDE.md の「公開ページは縦に読む」）。以前は
+    html と body を overflow: clip で止め、.shell の高さを画面ちょうどに決め打ち、
+    溢れを節の弁（overflow: auto）で受けていた。どれか1つが戻ると、長くなった中身が
+    ページの外で黙って切られるか、ページの中にもう1つのスクロール箱ができる
+  */
+  it('html と body はページを止めない（clip / hidden / 高さの決め打ちを持たない）', () => {
+    const outer = /(^|[\s>(])(html|body)(\[[^\]]*\]|:[a-z-]+\([^)]*\))*\)*$/
+    for (const rule of rulesOf(sheet)) {
+      if (!rule.selectors.some((selector) => outer.test(selector))) continue
+      for (const [property, value] of rule.decls) {
+        const where = `${rule.selectors.join(', ')} { ${property}: ${value} }`
+        if (property.startsWith('overflow')) expect(value, where).not.toMatch(/clip|hidden/)
+        if (property === 'height') expect(value, where).not.toBe('100%')
+        expect(property, where).not.toBe('overscroll-behavior')
+      }
+    }
+  })
+
+  it('節は弁を持たない。スクロール箱はページ1つだけ', () => {
+    // 節の overflow: auto・overscroll-behavior・scrollbar-gutter はどれも弁のためのもの
+    for (const rule of rulesOf(sheet)) {
+      if (!rule.selectors.some((selector) => selector.includes('main > :is(.hero, section)')))
+        continue
+      for (const [property] of rule.decls) {
+        expect(property, rule.selectors.join(', ')).not.toMatch(
+          /^(overflow|overscroll-behavior|scrollbar-gutter)/,
+        )
+      }
+    }
+    expect(sheet).not.toContain('scrollbar-gutter')
+  })
+
+  it('画面1つぶんの高さを :root で持ち、読むのは .shell の min-height だけ', () => {
+    // 値そのものを見る（'100svh' がどこかにある、では括りの条件にも当たる）
+    expect(bodyOf(sheet, ':root {')).toContain('--screen-h: calc(100svh')
     expect(sheet).not.toContain('--screen-h: 100vh')
+
+    /*
+      height ではなく min-height。高さを決め打つと、中身が長い画面ではページの外へ
+      切られる（以前はそれを避けるために中身を画面ごとに割っていた）。min-height
+      なら、短い画面（入口と締めの表紙）は画面いっぱいに月を敷き、長い画面は
+      ページごと伸びる。全体ページ（/all）は外枠の外
+    */
+    expect(sheet.match(/var\(--screen-h\)/g)).toHaveLength(1)
+    const frame = blockAt(sheet, '@media screen')
+    const shell = ruleWith(frame, 'min-height: var(--screen-h)')
+    expect(shell.selector).toBe(':where(body[data-layout]:not([data-whole])) .shell')
   })
 
-  it('画面の高さを実際に読むのは .shell。この1行が外枠の要', () => {
+  it('帯の姿の .shell は縦の flex。grid の子の貼り付けは自分の段から出られない', () => {
     /*
-      app.css 全体で --screen-h は2回しか出てこない。:root の宣言と、この参照。
-      消しても TypeScript も lint も HTML も変わらないのに、公開ページの全画面が
-      一度に壊れる。しかも壊れ方は「縦に伸びるページに戻る」ではない——html と
-      body の overflow: clip はそのまま残るので、画面から溢れたぶんが静かに
-      切り取られ、スクロールでもフォーカス移動でも届かなくなる。
-      だから「:root にある」ではなく「.shell が読んでいる」を見る。
+      grid の子の position: sticky は、その子の grid area の中でしか動けない。
+      帯（.rail）の段は auto＝帯そのものの高さなので、grid のままでは1px も貼り付かない。
+      flex の子なら .shell 全体の中を動ける。柱が左に立つ rail の 900 以上だけは
+      2列の grid に戻す（柱の area がページの高さいっぱいで、素の sticky が効く）
     */
-    const frame = blockAt(sheet, '@supports (height: 100svh)')
-    const screen = ruleWith(frame, 'height: var(--screen-h)')
-
-    expect(screen.selector).toContain('.shell')
-    // 全体ページ（/all）は外枠の外。ここを外すと /all も1画面に切られる
-    expect(screen.selector).toContain(':not([data-whole])')
-    /*
-      1段目が柱、2段目が本文。2段目は minmax(0, 1fr) で、素の 1fr ではない。
-      1fr の最小は auto（＝中身の高さ）なので、本文の行が中身ぶんまで膨らんで
-      高さを固定した .shell の外へ出る。外へ出たぶんは clip で切られる
-    */
-    expect(screen.body).toContain('grid-template-rows: auto minmax(0, 1fr)')
-  })
-
-  it('main を2段にして、本文に残りの高さを渡す', () => {
-    /*
-      1段目が節、2段目がページャ。2段目を auto にしてあるので、ページャは
-      いつも画面の底に座り、めくっても位置が動かない。
-      main が flex 縦積みのままだと、節もページャも中身の高さのまま積まれ、
-      .shell の2段目からはみ出す（はみ出したぶんは clip で切られる）。
-    */
-    const frame = blockAt(sheet, '@supports (height: 100svh)')
-    const box = bodyOf(frame, ':where(body[data-layout]:not([data-whole])) main {')
-
-    expect(box).toContain('display: grid')
-    expect(box).toContain('grid-template-rows: minmax(0, 1fr) auto')
-  })
-
-  it('高さの足りない箱が、中身の高さのまま居座らないようにする', () => {
-    /*
-      grid の子の min-height の初期値 auto は「中身より小さくならない」。
-      行を minmax(0, 1fr) で縮められるようにしても、子（main と節）自身が
-      中身の高さを保ってトラックからはみ出す。0 を書いて初めて、溢れが
-      弁（節の overflow: auto）へ回り、切り取られずに読めるようになる。
-      main と節の両方に要る。片方だけだと、そちらで止まって同じことが起きる。
-    */
-    const frame = blockAt(sheet, '@supports (height: 100svh)')
-
+    const frame = blockAt(sheet, '@media screen')
+    const shell = bodyOf(frame, ':where(body[data-layout]:not([data-whole])) .shell {')
+    expect(shell).toContain('display: flex')
+    expect(shell).toContain('flex-direction: column')
     expect(bodyOf(frame, ':where(body[data-layout]:not([data-whole])) main {')).toContain(
-      'min-height: 0',
+      'flex: 1 0 auto',
     )
-    expect(ruleWith(frame, 'align-content: safe start').body).toContain('min-height: 0')
+    const wide = blockAt(frame, '@media (min-width: 900px)')
+    expect(ruleWith(wide, 'display: grid').selector).toBe(
+      ":where(body[data-layout='rail']:not([data-whole])) .shell",
+    )
   })
 
-  it('節は grid。flex のままだと寄せ方が黙って効かなくなる', () => {
+  it('節は grid で、残りの高さを受ける。flex のままだと寄せ方が黙って効かなくなる', () => {
     /*
       この1行が落ちると、すぐ下の align-content（節は上揃え、Hero は中央か下）が
       黙って効かなくなる。.hero は素で display: flex + flex-direction: column
       ——縦並びの flex では交差軸が横なので、align-content は上下ではなく左右を
-      動かす指定に変わり、入口の字は画面の上端から積まれたまま残る。節（素は
-      display: block）で上下に効くかどうかはブラウザしだいで、そこも当てにできない。
-      エラーも溢れも出ないので、気づく手がかりは「なんとなく上に寄っている」だけ。
+      動かす指定に変わり、入口の字は表紙の上端から積まれたまま残る。
+      flex: 1 0 auto が無いと、節は中身の高さで止まり、表紙が画面を満たさない
     */
-    const frame = blockAt(sheet, '@supports (height: 100svh)')
+    const frame = blockAt(sheet, '@media screen')
     const panel = ruleWith(frame, 'align-content: safe start')
 
     expect(panel.body).toContain('display: grid')
+    expect(panel.body).toContain('flex: 1 0 auto')
     expect(panel.selector).toContain('main > :is(.hero, section)')
   })
 
-  it('カードの説明を止める行数を :root で持ち、カードがそれを読む', () => {
-    // 高さが一定でないと、1画面に何件置けるかをサーバー側で決められない
-    expect(sheet).toContain('--card-lines:')
-    expect(sheet).toContain('line-clamp: var(--card-lines)')
-  })
-
-  it('600 以上は説明の上限が切れない行数。画像の枠のあるカードだけ 900 以上で減らす', () => {
+  it('カードの説明は行数で切らない。タグと行き先も畳まない（一覧は1ページに縦に並ぶ）', () => {
     /*
-      2行で止めていたころは「何であるか。何をしたか。」の2文目がカードから
-      ほぼ読めなかった。600 以上は 100 字が切れずに出る行数へ上げる（768 の
-      rail で和文 100 字が6行）。数は :root で持ち、メディアクエリの中の :root で
-      差し替える——セレクタに行数を書くと、:root を読んでも行数が分からない
+      1画面に収めていたころは、説明を行数で止め（--card-lines）、電話と画像の行では
+      タグと行き先を畳んでいた（--card-extras）。「何であるか。何をしたか。」の2文目が
+      カードからほぼ読めない幅があった。いまは Projects が1ページで縦に伸びるので、
+      カードは書いたぶんを全部出す。止める段が1つでも残ると、どこかの幅で黙って切れる
     */
-    const lines = (block: string, name: string) =>
-      Number(bodyOf(block, ':root {').match(new RegExp(`${name}:\\s*(\\d+)`))?.[1])
-    const narrow = lines(sheet, '--card-lines')
-    const wide = lines(blockAt(sheet, '@media (min-width: 600px)'), '--card-lines')
-    expect(narrow).toBe(2)
-    expect(wide).toBeGreaterThan(narrow)
+    expect(sheet).not.toMatch(/line-clamp/)
+    expect(sheet).not.toContain('--card-lines')
+    expect(sheet).not.toContain('--card-extras')
+    expect(sheet).not.toContain('card--lean')
+  })
 
+  it('外枠は画面にだけ当てる。紙は @media print が受け、外枠を解き直さない', () => {
+    // 紙には貼り付ける帯も1画面ぶんの表紙も要らない。括りの外に書くと、印刷で
+    // 表紙の高さが紙1枚ぶん空く
+    expect(sheet.match(/@media screen/g)).toHaveLength(1)
+    const print = blockAt(sheet, '@media print')
+    expect(print).not.toContain('.shell {')
+    expect(print).not.toMatch(/overflow|height/)
+  })
+
+  it('節の見出しは上揃え。どの画面でも見出しが同じ高さから始まる', () => {
     /*
-      画像の枠は 1440x900 で説明の3〜4行ぶんを食う。枠のある行だけ 900 以上で
-      減らす。規則も 900 以上にだけ書く——枠が出ない 600 未満で当てると、軽い行
-      （下の --card-lines-lean）の行数を枠の段で上書きしてしまう
-    */
-    const shot = lines(blockAt(sheet, '@media (min-width: 900px)'), '--card-lines-shot')
-    expect(shot).toBeGreaterThanOrEqual(narrow)
-    expect(shot).toBeLessThan(wide)
-    const frame = blockAt(sheet, '@supports (height: 100svh)')
-    const framed = bodyOf(
-      blockAt(frame, '@media (min-width: 900px)'),
-      ':where(body[data-layout]:not([data-whole])) .card__thumb ~ p {',
-    )
-    expect(framed.match(/line-clamp: var\(--card-lines-shot\)/g)).toHaveLength(2)
-    expect(frame.split('.card__thumb ~ p').length).toBe(2)
-  })
-
-  it('電話の幅でも、軽い行（実績値も担当者名も無い）は説明の行を足す', () => {
-    /*
-      2行の根拠（3行で溢れる）は実績値と担当者名を持つ重い行のもの。本人の
-      サイトの /projects は、カード2枚の下に 237px 空いたまま説明を2行で切って
-      いた（= rail @390x844 指）。軽い行かはサーバーが行ごとに決めて
-      .card--lean を付け（components.tsx の leanRow）、行数は :root が持つ
-    */
-    const lines = (block: string, name: string) =>
-      bodyOf(block, ':root {').match(new RegExp(`${name}:\\s*([^;]+)`))?.[1]
-    expect(Number(lines(sheet, '--card-lines-lean'))).toBeGreaterThan(
-      Number(lines(sheet, '--card-lines')),
-    )
-    // 600 以上は --card-lines と同じ数（軽い行でも減らさない）
-    expect(lines(blockAt(sheet, '@media (min-width: 600px)'), '--card-lines-lean')).toBe(
-      'var(--card-lines)',
-    )
-
-    const frame = blockAt(sheet, '@supports (height: 100svh)')
-    const lean = bodyOf(frame, ':where(body[data-layout]:not([data-whole])) .card--lean p {')
-    expect(lean.match(/line-clamp: var\(--card-lines-lean\)/g)).toHaveLength(2)
-    // 素の .card p より後ろ、900 以上の枠の段より前（枠のある軽いカードは 900 以上で枠の段）
-    const at = (text: string) => frame.indexOf(text)
-    expect(at('.card--lean p {')).toBeGreaterThan(at('.card p {'))
-    expect(at('.card--lean p {')).toBeLessThan(at('.card__thumb ~ p {'))
-  })
-
-  it('行止めは5行そろって初めて効く', () => {
-    /*
-      行止めは1つの宣言ではなく5行ひとそろい。display: -webkit-box と
-      -webkit-box-orient: vertical と overflow: hidden がそろって初めて切る。
-      1行でも欠けると切らなくなるが、CSS は何も言わない。出るのは「説明が
-      3行のカードと2行のカード」——カードの高さが中身しだいになる。すると
-      1画面に何件置けるかを決めている src/blocks.ts の perScreen が実物と
-      合わなくなり、設計サイズでも弁が開く。
-
-      前置きの有無で2本あるのは、同じ値を新旧の名前で書いているため。片方を
-      落とすと、その名前しか読まないブラウザで切れなくなる。toContain では
-      見分けられない（-webkit- 付きの文字列が素の名前を丸ごと含む）ので数える。
-    */
-    const frame = blockAt(sheet, '@supports (height: 100svh)')
-    const clamp = bodyOf(frame, ':where(body[data-layout]:not([data-whole])) .card p {')
-
-    expect(clamp).toContain('display: -webkit-box')
-    expect(clamp).toContain('-webkit-box-orient: vertical')
-    expect(clamp.match(/line-clamp: var\(--card-lines\)/g)).toHaveLength(2)
-    expect(clamp).toContain('overflow: hidden')
-  })
-
-  it('骨格ひとそろいを @supports で括ってある', () => {
-    // 括り忘れると、svh の無い環境で高さだけ auto に落ちて overflow だけが残る
-    expect(sheet).toContain('@supports (height: 100svh)')
-  })
-
-  it('スクロール箱を作らず clip で切り、全体ページは対象から外す', () => {
-    // hidden は「見えないだけのスクロール箱」。滑った先から戻す手段が無くなる
-    const frame = blockAt(sheet, '@supports (height: 100svh)')
-    const outer = ruleWith(frame, 'overflow: clip')
-
-    // 当てる先は html と body の両方。片方だけでは、もう片方が動く
-    expect(outer.selector).toContain('html:has(> body[data-layout]')
-    expect(outer.selector).toContain(':where(body[data-layout]')
-    expect(outer.selector).toContain(':not([data-whole])')
-  })
-
-  it('割られた画面の節は上揃え。めくっても見出しが跳ねない', () => {
-    /*
-      上下中央に寄せていたころは、見出しの高さが中身の量で決まり、めくるたびに
+      上下中央に寄せていたころは、見出しの高さが中身の量で決まり、画面ごとに
       跳ねていた（/projects 91px → /projects/2 124px → /projects/4 243px =
       rail @390x844）。節は上端から置き、見出しを錨にする。そろっていることは
       npm run check:fit が画素で測る（同じ骨格・寸法の中で 1px 以内）
     */
-    const frame = blockAt(sheet, '@supports (height: 100svh)')
+    const frame = blockAt(sheet, '@media screen')
     const panels = ':where(body[data-layout]:not([data-whole])) main > '
     expect(bodyOf(frame, `${panels}:is(.hero, section) {`)).toContain('align-content: safe start')
 
     /*
-      Hero と月の節は錨を持たない構図。月の無い Hero（個人ページの1枚目）は中央、
-      月のある入口と締めの Contact は下。上揃えの規則より後ろに置いて上書きする
+      Hero と月の節は錨を持たない表紙。月の無い Hero は中央（個人ページの名札は下の
+      「最後の節だけが伸びる」で伸びないので、効くのは控えとして）、月のある入口と
+      締めの Contact は下。上揃えの規則より後ろに置いて上書きする
       （同じ強さなので、順番が逆だと全部が上揃えになる）
     */
     expect(bodyOf(frame, `${panels}.hero {`)).toContain('align-content: safe center')
@@ -651,72 +578,93 @@ describe('画面に収める外枠', () => {
     expect(order).toEqual([...order].sort((a, b) => a - b))
 
     // 外枠のどの寄せ方にも safe を付ける。素の center / end は、中身が容器を超えた
-    // 瞬間に上端を容器の外へ押し出し、ページ自体が動かないので二度と読めない
+    // 瞬間に上端を容器の外へ押し出す
     expect(frame).not.toMatch(/align-content: (center|end|start)/)
     expect(sheet).not.toContain('align-content: center')
   })
 
-  /*
-    次の2つは、値がどのセレクタに付いているかまで見る。文字列が在るかだけを
-    見ていたころは、2つの値を入れ替えても（柱の骨格を2段、ほかを1段に）緑の
-    ままだった。実際にそう解けているか（柱が本文の左か上か）は npm run check:fit が
-    骨格 × 寸法ごとに測る。
-  */
-  it('900 以上（2列）では .shell を1段にする', () => {
-    // 2列になると柱も本文も1行目に入る。1列ぶんの 'auto + 1fr' のままだと
-    // 2行目の 1fr が画面の残りを丸ごと取り、本文は柱の高さで止まって
-    // 下が黒く空く。中身が増えても伸びないので、そのぶんは黙って切れる
-    const wide = blockAt(blockAt(sheet, '@supports (height: 100svh)'), '@media (min-width: 900px)')
-    expect(ruleWith(wide, 'grid-template-rows: minmax(0, 1fr)').selector).toBe(
-      ':where(body[data-layout]:not([data-whole])) .shell',
+  it('節を2つ以上持つページでは、最後の節だけが残りの高さを受ける（名札を浮かせない）', () => {
+    /*
+      個人ページは 名札の Hero → About → Skills → Career を1ページに並べる。どの節も
+      flex: 1 0 auto のままだと、中身の短い人のページで余った高さが節ごとに割り振られ、
+      名札と About のあいだが空き、名札が画面の真ん中に浮く
+    */
+    const frame = blockAt(sheet, '@media screen')
+    const rest = ruleWith(frame, 'flex-grow: 0')
+    expect(rest.selector).toBe(
+      ':where(body[data-layout]:not([data-whole])) main > :is(.hero, section):not(:last-child)',
+    )
+    // 伸びる規則より後ろ。前に置くと、後ろの flex: 1 0 auto に上書きされる
+    expect(frame.indexOf(rest.selector)).toBeGreaterThan(
+      frame.indexOf(':where(body[data-layout]:not([data-whole])) main > :is(.hero, section) {'),
     )
   })
 
-  it('900 以上でも1列のままの骨格には、2段を残す', () => {
-    // 中央寄せと雑誌風は広い画面でも柱を左に立てない。列を1つに戻す指定と
-    // この2段は対。片方だけ直すと、その骨格でだけまた下が空く
-    const wide = blockAt(blockAt(sheet, '@supports (height: 100svh)'), '@media (min-width: 900px)')
-    const rows = ruleWith(wide, 'grid-template-rows: auto minmax(0, 1fr)').selector
-    for (const layout of ['center', 'magazine']) {
-      expect(sheet).toContain(`body[data-layout='${layout}'] .shell`)
-      expect(rows).toContain(`body[data-layout='${layout}']`)
-    }
-    expect(rows).not.toContain("'rail'")
+  it('899 以下の帯は貼り付き、地を敷いて本文より手前に出る。貼り付く前の版面は動かさない', () => {
+    const narrow = blockAt(blockAt(sheet, '@media screen'), '@media (max-width: 899px)')
+    const band = bodyOf(narrow, ':where(body[data-layout]:not([data-whole])) .rail {')
+    expect(band).toContain('position: sticky')
+    expect(band).toContain('top: 0')
+    expect(band).toContain('background: var(--bg)')
+    /*
+      z-index は 2。Hero と月の節の中身（月より前に出す 1）と、カードの中のリンク
+      （覆いの上に出す 1）より上でないと、送った本文が帯の上に描かれる
+    */
+    expect(band).toContain('z-index: 2')
+    expect(sheet.match(/z-index: 1;/g)?.length).toBeGreaterThan(0)
+    expect(sheet).not.toMatch(/z-index: [3-9];/)
+    // 空きは負の margin で戻す。戻さないと表紙が縮み、月の大きさと字の位置が変わる
+    expect(band).toContain('margin-block: calc(var(--sp-3) * -1)')
+    expect(band).toContain('padding-block: var(--sp-3)')
   })
 
-  it('溢れたら弁が開く。hidden でも clip でもなく auto', () => {
-    // 画面を増やしても収まらない中身は、隠さず・縮めず・ページを動かさずに
-    // パネルの中だけで動かす。hidden や clip にすると、文字を拡大しただけで
-    // たどれない部分ができる（WCAG 1.4.4 / 1.4.10）
-    const frame = blockAt(sheet, '@supports (height: 100svh)')
-    const valve = ruleWith(frame, 'overscroll-behavior: contain')
-
-    expect(valve.body).toContain('overflow: auto')
-    // 外側の html と body は overflow: clip。勢いが外へ抜けると戻す手段が無い
-    expect(valve.body).toContain('overscroll-behavior: contain')
-    // 弁が開いた瞬間に幅が縮むと折り返しが変わり、また溢れる、を繰り返す
-    expect(valve.body).toContain('scrollbar-gutter: stable')
+  it('900 以上の上の帯（中央寄せ・雑誌風）も貼り付く。骨格の position: static に勝つ強さで', () => {
+    const wide = blockAt(blockAt(sheet, '@media screen'), '@media (min-width: 900px)')
+    const band = ruleWith(wide, 'position: sticky')
+    // :where() で包むと (0,1,0) になり、骨格の body[data-layout='center'] .rail（0,2,1）に負ける
+    expect(band.selector.split(/,\s*/)).toEqual([
+      "body[data-layout='center']:not([data-whole]) .rail",
+      "body[data-layout='magazine']:not([data-whole]) .rail",
+    ])
+    expect(band.body).toContain('background: var(--bg)')
+    expect(band.body).toContain('z-index: 2')
+    expect(band.body).toContain('margin-top: calc(var(--sp-3) * -1)')
+    expect(band.body).toContain('padding-top: var(--sp-3)')
+    // 外枠は柱を static に戻さない（以前はページが動かないので貼り付けを外していた）
+    expect(blockAt(sheet, '@media screen')).not.toContain('position: static')
   })
 
-  it('弁の付け先は、中身を寄せる相手と同じパネル', () => {
-    // クラスを列挙して本文の箱だけに付けると、これから足すブロックが必ず漏れる。
-    // 漏れた節は「寄るのに弁が無い節」になり、溢れたぶんが静かに切り取られる
-    const frame = blockAt(sheet, '@supports (height: 100svh)')
+  it('柱が左に立つ 900 以上の rail は、素の規則で貼り付き、画面より高ければ柱の中だけが動く', () => {
+    // 最初の 900 以上の括りは素の骨格のもの（プリセットと外枠のものは後ろ）
+    const wide = blockAt(sheet, '@media (min-width: 900px)')
+    expect(wide).toContain('grid-template-columns: var(--nav-w) minmax(0, 1fr)')
+    const rail = bodyOf(wide, '.rail {')
+    expect(rail).toContain('position: sticky')
+    expect(rail).toContain('align-self: start')
+    expect(rail).toContain('max-height: calc(100dvh - var(--gutter) * 2)')
+    expect(rail).toContain('overflow-y: auto')
+  })
 
-    expect(ruleWith(frame, 'overscroll-behavior: contain').selector).toBe(
-      ruleWith(frame, 'align-content: safe start').selector,
+  it('送った先を帯の下に止める。空きは :root の段で、帯の姿ごとに差し替える', () => {
+    const root = bodyOf(sheet, ':root {')
+    expect(root).toMatch(/--band-clear: calc\(var\(--tap\)/)
+    expect(root).toMatch(/--band-clear-wide: calc\(var\(--tap\) \* 2/)
+
+    const frame = blockAt(sheet, '@media screen')
+    expect(ruleWith(frame, 'scroll-padding-top: var(--band-clear)').selector).toBe(
+      ':where(html:has(> body[data-layout]:not([data-whole])))',
     )
-    expect(ruleWith(frame, 'overscroll-behavior: contain').selector).toContain(
-      'main > :is(.hero, section)',
+    const wide = blockAt(frame, '@media (min-width: 900px)')
+    expect(ruleWith(wide, 'scroll-padding-top: var(--band-clear-wide)').selector).toContain(
+      "body[data-layout='center']",
     )
-  })
-
-  it('弁より先に潰れさせない', () => {
-    // 高さの足りない箱の中で flex の子が中身より小さく潰れると、そのぶんは
-    // scrollHeight に出ない。弁は開かないまま段落だけが重なる——切り取りより悪い
-    const frame = blockAt(sheet, '@supports (height: 100svh)')
-
-    expect(ruleWith(frame, 'flex: 0 0 auto').selector).toContain('main > * > *')
+    expect(ruleWith(wide, 'scroll-padding-top: var(--sp-7)').selector).toContain(
+      "body[data-layout='rail']",
+    )
+    // なめらかに送るのは公開ページだけ。reduced-motion の素の html に譲る詳細度 0
+    expect(bodyOf(sheet, ':where(html:has(> body[data-layout])) {')).toContain(
+      'scroll-behavior: smooth',
+    )
   })
 
   it('[hidden] の打ち消しを持つ', () => {
@@ -726,12 +674,9 @@ describe('画面に収める外枠', () => {
 
   it('狭い画面では、柱だけでなく名札の中身も横帯にする', () => {
     // 柱を横に寝かせるだけでは足りない。名札の中身が縦積みのままだと帯が
-    // 何段にも伸び、そのぶん本文の予算が消える（個人ページ専用の名札だった
+    // 何段にも伸び、貼り付いた帯が画面の上を食う（個人ページ専用の名札だった
     // ころは帯だけで 188.7px = rail @390x844, Hiragino Sans, macOS Chromium）
-    const narrow = blockAt(
-      blockAt(sheet, '@supports (height: 100svh)'),
-      '@media (max-width: 899px)',
-    )
+    const narrow = blockAt(blockAt(sheet, '@media screen'), '@media (max-width: 899px)')
 
     expect(narrow).toContain('.identity {')
     const band = narrow.slice(narrow.indexOf('.identity {'))
@@ -743,8 +688,8 @@ describe('画面に収める外枠', () => {
   })
 
   it('全体ページの body にだけ、外枠を外す印が付く', async () => {
-    // CSS 側はこの印だけを頼りに /all を除いている。印が消えると全体ページが
-    // 1画面に切られ、印刷も Ctrl-F も退避先も一度に使えなくなる
+    // CSS 側はこの印だけを頼りに /all を除いている。印が消えると全体ページにも
+    // 表紙の高さと貼り付く帯（目次は1行の横帯）が掛かる
     expect(await okText('/all')).toContain('data-whole=""')
 
     await seedMember()
@@ -755,9 +700,7 @@ describe('画面に収める外枠', () => {
     /*
       中央寄せと雑誌風は 900 以上でも柱を左に立てない（列を1つに戻している）。
       名札が縦積みのまま残ると、それだけで約237px——トップの帯 30.1px の約8倍
-      （rail @390x844）——を取り、そのぶん本文の予算が消えて弁が開く。
-      中央寄せで開いていた3画面（about 23px / skills 58px / career 55px 不足）は
-      これで3つとも収まる。
+      （rail @390x844）——を取り、貼り付いた帯が画面の上の3割近くを食う。
     */
     const presets = sheet.slice(sheet.indexOf("body[data-layout='magazine'] .shell"))
     const rule = bodyOf(presets, "body[data-layout='center'] .identity,")
@@ -819,14 +762,10 @@ describe('画面に収める外枠', () => {
       899 以下では目次も1行の横帯になる。折り返すと2段で場所を取り、中央寄せの
       390px ではその1段ぶんで 6px 足りなくなっていた。
 
-      切れた先に気づく手がかりはこのぼかししか無い。ページ自体は overflow: clip
-      で動かず、タッチ端末ではスクロールバーも出ない。個人ページの目次は
-      番号を落としたあとでも 272px の帯に収まらない。
+      切れた先に気づく手がかりはこのぼかししか無い。帯は横にしか動かず、
+      タッチ端末ではスクロールバーも出ない。
     */
-    const narrow = blockAt(
-      blockAt(sheet, '@supports (height: 100svh)'),
-      '@media (max-width: 899px)',
-    )
+    const narrow = blockAt(blockAt(sheet, '@media screen'), '@media (max-width: 899px)')
     const toc = ruleWith(narrow, 'mask-image: var(--fade-right)')
 
     expect(toc.selector).toContain('.toc')
@@ -841,17 +780,14 @@ describe('画面に収める外枠', () => {
     /*
       中央寄せの body[data-layout='center'] .toc は (0,2,1)。:where() で包んだ
       外枠の指定は (0,1,0) なので、nowrap を足しても負ける。この1本だけ素で書く。
+      （900 以上の上の帯は骨格を名指しした (0,3,1) で書く——別の検査）
 
-      16か所すべてから外してはいけない。下の @media print は素の html, body,
-      .shell のまま外枠を解いており、それが効くのは目印側の詳細度が0だから。
+      ほかは外さない。骨格のプリセットが後から部品を上書きする書き方なので、
+      外枠の側が強いと、プリセットの差し替えが黙って効かなくなる。
     */
-    const frame = blockAt(sheet, '@supports (height: 100svh)')
+    const frame = blockAt(sheet, '@media screen')
     expect(frame.match(/^\s*body\[data-layout\]/gm) ?? []).toHaveLength(1)
     expect(ruleWith(frame, 'flex-wrap: nowrap').selector).not.toContain(':where(')
-
-    const print = blockAt(sheet, '@media print')
-    expect(print).toContain('overflow: visible')
-    expect(print).toContain('.shell {')
   })
 
   it('横帯の中央寄せにも safe を付ける', () => {
@@ -873,23 +809,7 @@ describe('画面に収める外枠', () => {
   付け先をここで見張り、効いているかは npm run check:fit が 27通りで測る。
 */
 describe('上限ちょうどの中身で収めるための組み方', () => {
-  const frame = () => blockAt(sheet, '@supports (height: 100svh)')
-
-  it('カードのタグと行き先は :root の段で畳む（600 未満と、900 以上の画像の行）', () => {
-    const root = (block: string) => bodyOf(block, ':root {')
-    expect(root(sheet)).toContain('--card-extras: none')
-    expect(root(sheet)).toContain('--card-extras-shot: var(--card-extras)')
-    expect(root(blockAt(sheet, '@media (min-width: 600px)'))).toContain('--card-extras: flex')
-    expect(root(blockAt(sheet, '@media (min-width: 900px)'))).toContain('--card-extras-shot: none')
-
-    // 畳むのは1画面に収めるページだけ（外枠の中）。全体ページでは素の flex のまま全部出る
-    expect(ruleWith(frame(), 'display: var(--card-extras)').selector).toBe(
-      ':where(body[data-layout]:not([data-whole])) .card :is(.tags, .links)',
-    )
-    expect(ruleWith(frame(), 'display: var(--card-extras-shot)').selector).toBe(
-      ':where(body[data-layout]:not([data-whole])) .card__thumb ~ :is(.tags, .links)',
-    )
-  })
+  const frame = () => blockAt(sheet, '@media screen')
 
   it('上の帯の目次は 900 以上でも1行で、帯の行の残りを取る（件数で帯を伸ばさない）', () => {
     const wide = blockAt(frame(), '@media (min-width: 900px)')
@@ -919,32 +839,20 @@ describe('上限ちょうどの中身で収めるための組み方', () => {
 })
 
 describe('部品の作法', () => {
-  it('目次に番号は振らず、数えるのはページャだけ', async () => {
-    // 節が1つも無いと目次もページャも出ない。位置を名乗るのは2画面以上の
-    // 節だけなので、Projects が割れる件数（perScreen 2 に対して3件）を置く
-    for (const title of ['壱', '弐', '参']) await seedItem({ type: 'app', title })
+  it('目次に番号は振らない。数えるものも置かない', async () => {
+    await seedItem({ type: 'app', title: '壱' })
 
     /*
-      目次の 01〜04（ブロックの並び順）とページャの 01 · 07（いま何画面目か）が
-      同じ 11px mono・同じ色で並ぶと、同じ数え上げに見える。しかも目次の番号は
-      /projects でも /projects/3 でも「01」のまま動かない。動く番号の隣で動かない番号が
-      同じ姿をしているのが、いちばん読み違えやすい。
+      目次の 01〜04 はブロックの並び順でしかなく、読む人に言うことが無い。
       落とすと .toc__num の opacity: 0.7（3.34:1 で AA 割れ）も同時に消える。
+      画面の底で数えていたページャ（Projects 2 / 4）も外した——ページは節ごとに
+      1つで、数える相手が無い
     */
     expect(sheet).not.toContain('.toc__num')
-
-    /*
-      入口（/）では見ない。既定の並びの入口は、帯（一覧で見る →）がページャの
-      「次」と同じ行き先なのでページャを出さない（test/public.test.ts の
-      「入口のページャ」）。数え上げが残るのはめくる画面のほう
-    */
+    expect(sheet).not.toContain('.pager')
     const projects = await okText('/projects')
     expect(projects).not.toContain('toc__num')
-    expect(projects).toContain('class="pager__count"')
-
-    // 数え上げはページャに残る。数えるのは**節の中**で、位置を名乗るのは節の名前を持つ画面
-    expect(projects).toContain('画面のうち')
-    expect(projects).toContain('class="pager__section"')
+    expect(projects).not.toContain('class="pager')
   })
 
   it('柱の足元のリンクは、著作権表示と見分けが付く', () => {
@@ -953,19 +861,11 @@ describe('部品の作法', () => {
       .rail__footer に置くだけでは、隣の「© 2026 Noctifex」とまったく同じ姿に
       なり、押せるものだと分からない（色の違いすら無い状態）。
       当たり判定（min-height: var(--tap)）は付けない——柱が 40px 伸び、
-      中央寄せと雑誌風の 900 以上では、その 40px がそのまま本文の予算を削る。
+      中央寄せと雑誌風の 900 以上では、その 40px がそのまま貼り付いた帯を伸ばす。
     */
     expect(bodyOf(sheet, '.rail__footer a {')).toContain('text-decoration: underline')
     expect(bodyOf(sheet, '.rail__footer a {')).toContain('color: var(--ink-mid)')
     expect(bodyOf(sheet, '.rail__footer a {')).not.toContain('min-height')
-  })
-
-  it('ページャの「← 前」が列いっぱいに伸びない', () => {
-    // .pager は minmax(0, 1fr) auto minmax(0, 1fr)。grid の子になった inline-flex は blockify され、
-    // justify-self の初期値 normal が stretch として効く（1440 で 396px 対 64px）
-    expect(ruleWith(sheet, 'justify-self: start').selector).toBe('.pager__go')
-    // 「次 →」だけは右端へ。後ろの規則が勝つので、順番を入れ替えないこと
-    expect(ruleWith(sheet, 'justify-self: end').selector).toBe('.pager__go--next')
   })
 
   it('外に出るリンクは1つの流儀に揃え、記号を薄くしない', () => {
@@ -1003,11 +903,11 @@ describe('部品の作法', () => {
     }
   })
 
-  it('カードのフォーカスはカード全体に、節の弁に切られない形で描く', () => {
+  it('カードのフォーカスはカード全体に、縁の内側に描く', () => {
     /*
       押せる面はカード全体なので、輪郭もカード全体。題の字に描いたままだと、
-      輪郭だけが字幅に縮む。外へ離して描くと、節の幅いっぱいのカードでは左右が
-      弁（overflow: auto）に切られ、上下の2本だけになる（rail @390x844）
+      輪郭だけが字幅に縮む。外へ離して描くと、並んだカードの間隔の中に輪郭が
+      出て、どちらのカードを囲んでいるのか読み分けにくい
     */
     expect(bodyOf(sheet, '.card__link:focus-visible {')).toContain('outline: none')
     const ring = bodyOf(sheet, '.card__link:focus-visible::after {')
@@ -1061,32 +961,27 @@ describe('部品の作法', () => {
     expect(bodyOf(sheet, '.card:has(.card__link:active) {')).toContain('scale: var(--press)')
   })
 
-  it('「← 一覧に戻る」と「くわしく読む →」は同じ1本の丸い札。列いっぱいに伸びず、当たり判定は --tap', () => {
-    /*
-      節も .detail__text も grid。子の inline-flex は blockify され、既定の stretch で
-      幅いっぱいに伸びる。対の2枚は同じ規則を読む（片方だけ写すと、同じ札が少しずつ
-      違う姿で増える）
-    */
-    const pill = bodyOf(sheet, '.back,\n.more {')
+  it('「← 一覧に戻る」は丸い札。列いっぱいに伸びず、当たり判定は --tap', () => {
+    // 節は grid。子の inline-flex は blockify され、既定の stretch で幅いっぱいに伸びる
+    const pill = bodyOf(sheet, '.back {')
     expect(pill).toContain('justify-self: start')
     // pointer: coarse では --tap が 44px になる。ここで生の高さを書かない
     expect(pill).toContain('min-height: var(--tap)')
-    // 見出しから離すのは見出しの上に立つ札だけ
-    expect(bodyOf(sheet, '.back {')).toContain('margin-bottom')
-    expect(pill).not.toContain('margin')
+    // 見出しの上に立つので、見出しから離す
+    expect(pill).toContain('margin-bottom')
     // 紙の上では押せない
-    const printed = ruleWith(blockAt(sheet, '@media print'), 'display: none').selector
-    expect(printed).toContain('.back')
-    expect(printed).toContain('.more')
-    // 押して縮み、ホバーで地が明るくなるのも同じ
+    expect(ruleWith(blockAt(sheet, '@media print'), 'display: none').selector).toContain('.back')
+    // 押して縮み、ホバーで地が明るくなる
     const head = sheet.indexOf('.pill-cta:active,')
-    expect(sheet.slice(head, sheet.indexOf('{', head))).toContain('.more:active')
+    expect(sheet.slice(head, sheet.indexOf('{', head))).toContain('.back:active')
     expect(
       ruleWith(
         blockAt(sheet, '@media (hover: hover)'),
         'background: var(--surface-hover);\n    color: var(--ink);',
       ).selector,
-    ).toContain('.more:hover')
+    ).toContain('.back:hover')
+    // 対になっていた「くわしく読む →」は外した（本文は同じページのすぐ下の小節）
+    expect(sheet).not.toContain('.more')
   })
 
   it('読み上げだけに残す部品は、padding のある要素に付けても見えない', () => {
@@ -1127,27 +1022,28 @@ describe('部品の作法', () => {
       「← 一覧に戻る」はすぐ下の見出しに付いて寄る札なので、見出しと一緒に左。
       中央へ寄せる列（帯・名札・全体ページへの1本）に入れない
     */
-    const at = sheet.indexOf("body[data-layout='center'] .band,")
+    const band = "body[data-layout='center'] .hero:not(.hero--profile) > .band,"
+    const at = sheet.indexOf(band)
     const centred = sheet.slice(at, sheet.indexOf('{', at))
-    expect(bodyOf(sheet, "body[data-layout='center'] .band,")).toContain('justify-self: center')
+    expect(bodyOf(sheet, band)).toContain('justify-self: center')
     expect(centred).toContain("body[data-layout='center'] .hero__whole")
     expect(centred).not.toContain('.back')
   })
 
   it('節の見出しは、h1 に上がっても字面が変わらない', () => {
     /*
-      割られた画面（1画面 = 1ドキュメント）では節の見出しが h1、縦に積んだ
+      ページごとの URL（1ページ = 1ドキュメント）では節の見出しが h1、縦に積んだ
       全体ページ（/all）では h2。見出しの階層は読み上げと検索のためのもので、
       大きさの段ではない——要素セレクタを h2 に絞ったままにすると、h1 に
-      上げた画面だけがブラウザ既定の 2em 太字で出る。HTML も TypeScript も
+      上げたページだけがブラウザ既定の 2em 太字で出る。HTML も TypeScript も
       何も言わないので、気づくのは見た目が跳ねたときだけ。
     */
     expect(sheet).not.toContain('.head h2 {')
     expect(bodyOf(sheet, '.head :is(h1, h2) {')).toContain('font-size: var(--fs-display-xs)')
 
     /*
-      Contact の見出しは、割られた画面では読み上げ用の .sr-only、全体ページでは
-      .head（SectionHead）。専用の見出しの規則は持たない——持つと、画面に出ない
+      Contact の見出しは、ページごとの URL では読み上げ用の .sr-only、全体ページでは
+      .head（SectionHead）。専用の見出しの規則は持たない——持つと、ページに出ない
       h1 に大きさを与えるだけの規則が残る
     */
     expect(sheet).not.toMatch(/\.contact (h1|h2|:is\(h1, h2\))/)
@@ -1166,7 +1062,7 @@ describe('部品の作法', () => {
     // 月の受け皿になり、字を月より前に出す。字は入口と同じく画面の下へ
     expect(bodyOf(sheet, '.moonlit {')).toContain('position: relative')
     expect(bodyOf(sheet, '.moonlit > :not(.moon) {')).toContain('z-index: 1')
-    const frame = blockAt(sheet, '@supports (height: 100svh)')
+    const frame = blockAt(sheet, '@media screen')
     expect(
       bodyOf(frame, ':where(body[data-layout]:not([data-whole])) main > .moonlit {'),
     ).toContain('align-content: safe end')
@@ -1227,7 +1123,7 @@ describe('部品の作法', () => {
     expect(body).not.toMatch(/\bto\s*\{/)
   })
 
-  it('入口の下の余白は、浮かび上がりのずれ以上に取る。途中で弁を開かせない', () => {
+  it('入口の下の余白は、浮かび上がりのずれ以上に取る。途中でページを伸ばさない', () => {
     // 字を下に寄せた入口で、帯が下から浮かび上がる途中だけ 4px 溢れていた
     expect(bodyOf(sheet, '.hero {')).toContain('padding-block: var(--sp-3) var(--enter-shift)')
   })
@@ -1266,17 +1162,14 @@ describe('部品の作法', () => {
       畳まない——1人のサイトの入口以外の画面で、帯の中で誰のサイトかを言うのは
       そこだけになる。
     */
-    const narrow = blockAt(
-      blockAt(sheet, '@supports (height: 100svh)'),
-      '@media (max-width: 899px)',
-    )
+    const narrow = blockAt(blockAt(sheet, '@media screen'), '@media (max-width: 899px)')
     const fold = ruleWith(narrow, 'display: none')
 
     expect(fold.selector).toContain('.identity .socials')
     // 柱の外に置いた .socials（Contact の画面）まで消さない
     expect(fold.selector).not.toContain('[data-whole])) .socials')
     expect(fold.selector).toContain('.identity__role')
-    // 本文の側の名札（個人ページの1枚目）は幅で畳まない。そこにしか顔が無い
+    // 本文の側の名札（個人ページの頭）は幅で畳まない。そこにしか顔が無い
     expect(fold.selector).not.toContain('nameplate')
     // 柱の名前は畳まない。代わりにワードマークを畳む（下の検査）
     expect(fold.selector).not.toContain('identity__name')
@@ -1293,31 +1186,43 @@ describe('部品の作法', () => {
       名乗らない画面（入口・2人以上のサイト）では畳まない。.identity--named が
       付いた柱だけを名指しすること
     */
-    const narrow = blockAt(
-      blockAt(sheet, '@supports (height: 100svh)'),
-      '@media (max-width: 899px)',
-    )
+    const narrow = blockAt(blockAt(sheet, '@media screen'), '@media (max-width: 899px)')
     const hide = bodyOf(narrow, '.identity--named .brand__word {')
     expect(hide).toContain('position: absolute')
     expect(hide).toContain('clip-path: inset(50%)')
     expect(hide).not.toContain('display: none')
     expect(narrow).not.toContain(':not([data-whole])) .brand__word {')
 
-    // 名前は1行のまま。2段に折れると帯が伸び、本文の予算が消える
+    // 名前は1行のまま。2段に折れると貼り付いた帯が伸び、画面の上を食う
     expect(bodyOf(narrow, ' .identity__name {')).toContain('white-space: nowrap')
   })
 
-  it('カードのサムネイルは 600 未満で出さない。縦横比は :root の段で、読み込んでも崩れない', () => {
+  it('経歴とできごとの罫線は行のあいだだけ。見出しの線と2本並べない', () => {
+    // 1行目の上にも引いていたころ、見出しの線のすぐ下にもう1本の罫線が並んでいた
+    expect(bodyOf(sheet, '.career li {')).not.toContain('border-top')
+    expect(bodyOf(sheet, '.career li + li {')).toContain('border-top: 1px solid var(--line)')
+  })
+
+  it('行き先の列は折り返した行のあいだを空けない。札の的の高さが行の間隔', () => {
+    // --sp-4 を足していたころ、2行に折れた行き先の行の間が 52px 開いていた
+    const links = bodyOf(sheet, '.links {')
+    expect(links).toContain('gap: 0 var(--sp-4)')
+    expect(bodyOf(sheet, '.links a {')).toContain('min-height: var(--tap)')
+  })
+
+  it('カードのサムネイルはどの幅でも出す。空の枠だけは 600 未満で出さない。縦横比は :root の段', () => {
     /*
-      600 未満ではカードが1列に積まれ、2枚で1画面がほぼ埋まる（空き 26px）。
-      畳んでも作品のページに同じ画像がある（どこにも無くなるものではない）
+      1画面に収めていたころは 600 未満で畳んでいて、電話の一覧には作品の絵が
+      どこにも無かった。一覧は縦に読むので出す。行をそろえる空の枠（中身の無い
+      span）は、カードが1列に積まれる 600 未満ではそろえる相手が居ないので出さない
     */
     const thumb = bodyOf(sheet, '.card__thumb {')
-    expect(thumb).toContain('display: none')
+    expect(thumb).toContain('display: block')
     expect(thumb).toContain('aspect-ratio: var(--thumb-ratio)')
     // 縦横比の箱は既定では中身の高さまで伸びる。読み込んだ絵が 120px の枠を 300px にしていた
     expect(thumb).toContain('min-height: 0')
-    expect(bodyOf(blockAt(sheet, '@media (min-width: 600px)'), '.card__thumb {')).toContain(
+    expect(bodyOf(sheet, '.card__thumb:empty {')).toContain('display: none')
+    expect(bodyOf(blockAt(sheet, '@media (min-width: 600px)'), '.card__thumb:empty {')).toContain(
       'display: block',
     )
     // 枠の形をそろえる。絵は枠いっぱいに切り抜く
@@ -1339,8 +1244,8 @@ describe('部品の作法', () => {
   it('作品の画像は枠の高さを :root の段で決め、絵は切らずに枠へ貼る', () => {
     /*
       寸法は共有カードのためにだけ持つ（古い画像には無い）。絵に合わせて枠を
-      伸ばすと、読み込んだ瞬間に本文が押し下げられ、1画面に収まるかが絵しだいに
-      なる。本文の上限（MAX_CHARS.itemBody）はこの枠の高さで測ってある
+      伸ばすと、読み込んだ瞬間に本文が押し下げられ、縦長の絵1枚でページの頭が
+      何画面ぶんも埋まる
     */
     expect(bodyOf(sheet, ':root {')).toContain('--shot-h:')
     expect(bodyOf(sheet, '.shot {')).toContain('height: var(--shot-h)')
@@ -1369,34 +1274,15 @@ describe('部品の作法', () => {
     expect(bodyOf(sheet, '.links a::after {')).toContain("content: '↗'")
   })
 
-  it('割られた画面の節のフォーカスは、節の縁の内側に描く', () => {
+  it('節に tabindex のための規則を持たない。ページがスクロールするので節は止まる先ではない', () => {
     /*
-      節は外枠いっぱいに敷いてあり、上下は柱の帯とページャの罫線まで数 px。
-      外へ離すと輪郭がその余白に入り、罫線と平行に並んで見分けにくい。
-      太さと色は素の :focus-visible のまま（見えることは変えない）
+      節が溢れの弁（overflow: auto）だったころは、WebKit で弁にフォーカスできない
+      ために節へ tabindex="0" を付け、その輪郭を縁の内側に描き、箱を --focus-inset
+      だけ広げていた。いまはページそのものが動くので、どれも要らない。
+      残すと、tabindex の無い節には効かない規則と、読まれない段が残る
     */
-    const ring = bodyOf(sheet, 'main > :is(.hero, section)[tabindex]:focus-visible {')
-    expect(ring).toContain('outline-offset: calc(var(--focus-ring) * -1)')
-    expect(ring).not.toContain('outline:')
-  })
-
-  it('内側に描いた輪郭と端の字のあいだに空きを取る。中身の箱の幅は変えない', () => {
-    /*
-      節の字は左右の端いっぱいまで組んであり、縁の内側に描いた 2px の輪郭が
-      端の字にかぶっていた（= 390x844 の About）。箱を負の margin で広げ、同じ
-      だけ padding を置く——中身の位置と幅は変わらないので、字数の上限（この幅で
-      測った maxChars）も月の位置も動かない。月は広げたぶん内へ戻す
-    */
-    const box = bodyOf(sheet, 'main > :is(.hero, section)[tabindex] {')
-    expect(box).toContain('margin-inline: calc(var(--focus-inset) * -1)')
-    expect(box).toContain('padding-inline: var(--focus-inset)')
-    expect(bodyOf(sheet, 'main > :is(.hero, section)[tabindex] > .moon {')).toContain(
-      'inset-inline: var(--focus-inset)',
-    )
-    // 空きは輪郭の太さより広い（等しいと、輪郭がまた字に触れる）
-    expect(bodyOf(sheet, ':root {')).toMatch(
-      /--focus-inset: calc\(var\(--focus-ring\) \+ var\(--sp-\d\)\)/,
-    )
+    expect(sheet).not.toContain('[tabindex]')
+    expect(sheet).not.toContain('--focus-inset')
   })
 
   it('指のときは目次の行き先も、ほかの押す手と同じ --tap の的', () => {
@@ -1419,14 +1305,14 @@ describe('部品の作法', () => {
     expect(whole).toContain('align-items: center')
   })
 
-  it('目次のいまの画面は、帯の見えている幅の中で開く（帯のときだけ）', () => {
+  it('目次のいまのページは、帯の見えている幅の中で開く（帯のときだけ）', () => {
     /*
-      JavaScript が無いので、帯は何もしなければいつも左端で開き、連なりの後ろの
+      JavaScript が無いので、帯は何もしなければいつも左端で開き、並びの後ろの
       節に着くと印が帯の外に出ていた。scroll-initial-target は帯の姿（899 以下と、
       上の帯になる骨格の 900 以上）にだけ掛ける——柱が縦に立つ rail では、
       いちばん近いスクロール容器が柱そのものになり、柱を縦に送ってしまう
     */
-    const frame = blockAt(sheet, '@supports (height: 100svh)')
+    const frame = blockAt(sheet, '@media screen')
     const narrow = blockAt(frame, '@media (max-width: 899px)')
     const wide = blockAt(frame, '@media (min-width: 900px)')
     for (const block of [narrow, wide]) {
@@ -1458,28 +1344,26 @@ describe('部品の作法', () => {
     expectNotOverridden(sheet, wraps[0]?.start ?? -1)
   })
 
-  it('ページャの手の名前は1行で、入りきらなければ末尾を省く', () => {
-    // 上限（10 字）の見出しで、390 の指の手が「← データベ / ースの移行 / を」と3行に割れた
-    expect(bodyOf(sheet, '.pager {')).toContain(
-      'grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr)',
-    )
-    const name = bodyOf(sheet, '.pager__name {')
-    for (const decl of [
-      'min-width: 0',
-      'overflow: hidden',
-      'text-overflow: ellipsis',
-      'white-space: nowrap',
-    ]) {
-      expect(name).toContain(decl)
-    }
-    expect(bodyOf(sheet, '.pager__go {')).toContain('max-width: 100%')
-  })
-
-  it('中央寄せの Hero では、その人の GitHub / メールも中央に寄る', () => {
-    // .socials は flex の箱で行いっぱいに伸びる。箱ではなく札の並びを寄せる
-    const socials = bodyOf(sheet, "body[data-layout='center'] .hero > .socials {")
-    expect(socials).toContain('justify-content: center')
-    expect(socials).toContain('justify-self: center')
+  it('中央寄せでも、個人ページの頭（名札・大見出し）は本文の列と同じ左の軸に立てる', () => {
+    /*
+      個人ページは1ページで、頭のすぐ下に About・Skills・Career の本文が続く。
+      頭だけを中央に組んでいたころ（中央寄せ @1440x900）は、中央の大見出しから
+      左の About へ読む目が斜めに飛んでいた。中央に組むのは入口の表紙だけ
+    */
+    const head = "body[data-layout='center'] .rail,"
+    const at = sheet.indexOf(head)
+    const selector = sheet.slice(at, sheet.indexOf('{', at))
+    expect(bodyOf(sheet, head)).toContain('align-items: center')
+    expect(selector).toContain("body[data-layout='center'] .hero:not(.hero--profile)")
+    expect(selector).not.toMatch(/\.hero\s*(,|$)/)
+    expect(sheet).toContain("body[data-layout='center'] .hero:not(.hero--profile) p {")
+    // 全体ページの Profile の大見出し（Statement）も、名札と同じ左の軸
+    expect(
+      bodyOf(sheet, "body[data-layout='center'] .statement:not(.profile > .statement) {"),
+    ).toContain('align-items: center')
+    // 名札・その人の GitHub / メールを中央へ寄せる規則は無い
+    expect(sheet).not.toMatch(/body\[data-layout='center'\] \.nameplate/)
+    expect(sheet).not.toMatch(/body\[data-layout='center'\] \.hero > \.socials/)
   })
 
   it('読まれない値を :root に置かない', () => {
@@ -1493,24 +1377,16 @@ describe('部品の作法', () => {
 /*
   一覧の列の数。
 
-  件数（src/blocks.ts の perScreen）と列の数は同じもので、別々に持つと必ず
-  ずれる。ずれ方は「広い画面ほど本文が細る」と「件数を増やすと2行目ができて
-  画面から溢れる」の2つで、どちらも CSS を見ても HTML を見ても気づけない。
+  列の数はサーバーが決める（src/blocks.ts の PROJECT_COLUMNS）。CSS の auto-fill に
+  任せると「広い画面ほど本文が細る」になり、CSS を見ても HTML を見ても気づけない。
 */
 describe('一覧の列数', () => {
-  const perScreenOf = (key: string) => {
-    const type = blockType(key)
-    if (!type || !('perScreen' in type)) throw new Error(`${key} に perScreen が無い`)
-    return type.perScreen
-  }
-
   it('列を数える規則は CSS に無い（サーバーが渡した数を読むだけ）', () => {
     /*
       前は repeat(auto-fill, minmax(276px, 1fr))。画面が広いほど列が増えるので、
       2件しか出さない画面でも3列ぶんの幅で割られ、説明の本文が 229px まで
       細っていた（= rail @1440x900, Hiragino Sans, macOS Chromium。電話 390 の
-      308px より狭い）。雑誌風は5列で 243px。列を件数に結び付けると、1画面ぶんが
-      必ず1行に並ぶので、カードの高さも列の数で変わらない。
+      308px より狭い）。雑誌風は5列で 243px。
     */
     const wide = blockAt(sheet, '@media (min-width: 600px)')
     expect(bodyOf(wide, '.grid {')).toContain(
@@ -1524,11 +1400,11 @@ describe('一覧の列数', () => {
     expect(bodyOf(sheet, '.grid {')).toContain('grid-template-columns: minmax(0, 1fr)')
   })
 
-  it('その数は perScreen そのもの', async () => {
+  it('その数は PROJECT_COLUMNS そのもの', async () => {
     await seedItem({ title: 'アプリ' })
     await seedItem({ title: '業務', type: 'work' })
 
-    const cols = `<div class="grid" style="--cols:${perScreenOf('projects')}">`
+    const cols = `<div class="grid" style="--cols:${PROJECT_COLUMNS}">`
     expect(await okText('/projects')).toContain(cols)
     // 全体ページも同じ。ここだけ別の数にすると、1枚の中で列の幅が変わる
     expect(await okText('/all')).toContain(cols)
@@ -1613,7 +1489,6 @@ describe('文字の段', () => {
       [
         '.brand__word',
         '.hero .hero__role:lang(en)',
-        '.pager__of',
         '.tags li:lang(en)',
         '.metric__value',
         '.side-head:lang(en)',
@@ -1649,11 +1524,24 @@ describe('文字の段', () => {
       雑誌風の説明は「見出しを大きく取り」なのに、大きいのは入口だけだった
     */
     expect(bodyOf(sheet, '.head :is(h1, h2) {')).toContain('font-size: var(--fs-display-xs)')
-    expect(bodyOf(sheet, "body[data-layout='magazine'] .head :is(h1, h2) {")).toContain(
-      'font-size: var(--fs-display-sm)',
-    )
-    // 入れ子の小見出し（/all の Profile の h3）は、節の見出しより小さく本文より大きい
-    expect(bodyOf(sheet, '.head--sub h3 {')).toContain('font-size: var(--fs-lg)')
+    expect(
+      bodyOf(
+        sheet,
+        "body[data-layout='magazine'] .head:not(.head--sub, .head--chapter) :is(h1, h2) {",
+      ),
+    ).toContain('font-size: var(--fs-display-sm)')
+    /*
+      個人ページの章（About / Skills / Career の h2）も雑誌風で上げない。上げていた
+      ころは頭の大見出し（h1。--fs-display-sm）と同じ大きさで、字の重さでは h1 を
+      越えていた（= magazine @1440x900）。章の上は1段空ける
+    */
+    expect(bodyOf(sheet, '.hero h1.hero__headline {')).toContain('font-size: var(--fs-display-sm)')
+    expect(bodyOf(sheet, '.head--chapter {')).toContain('margin-top: var(--sp-7)')
+    /*
+      小節の見出し（作品のページの Story の h2、/all の Profile の h3）は、節の見出しより
+      小さく本文より大きい。雑誌風でも上げない（上げると作品名の h1 と同じ格に見える）
+    */
+    expect(bodyOf(sheet, '.head--sub :is(h2, h3) {')).toContain('font-size: var(--fs-lg)')
   })
 
   it('見出し・カードの説明・段落は文節で折り、最後の行に1〜2字だけ落とさない', () => {
@@ -1686,9 +1574,9 @@ describe('文字の段', () => {
 
   it('見出しの段は幅だけでなく高さも見る', () => {
     /*
-      1画面ぶんの高さに収める作りにしたのに、連動する値の可変部が全部 vw だった。
-      幅が広くて背の低い画面（横向きの電話、分割表示、短い窓）では見出しだけが
-      大きくなりすぎ、弁（節の overflow: auto）を押し開ける。
+      連動する値の可変部が全部 vw だと、幅が広くて背の低い画面（横向きの電話、
+      分割表示、短い窓）では見出しだけが大きくなりすぎ、1行の見出しが画面の
+      大半を食う。
 
       svh の係数は、設計サイズの3つで今日と同じ数になるように選んである
       （いちばん厳しいのは 1440x900 で svh = 9px。上限 ÷ 9 を上回る係数にする）。
@@ -1702,26 +1590,22 @@ describe('文字の段', () => {
     /*
       括りは必須。@supports で括らずに svh を書くと、svh を知らない環境で
       var() の差し替えに失敗し、見出しが本文の 14px を受け継ぐ。
-      マーカーを外枠の @supports (height: 100svh) と分けてあるのも必須で、
-      同じ文字列を2つ置くと blockAt が先に見つけたほうを切り出す
-      （コメントの中の同じ文字列は bare が落とすので、規則だけを数える）
     */
     expect(sheet).toContain('@supports (font-size: 1svh)')
-    expect(sheet.match(/@supports \(height: 100svh\)/g)).toHaveLength(1)
   })
 })
 
 /*
-  入口の背景の月。装飾だが、置き方を1行間違えると「公開ページはスクロール
-  しない」が破れる場所なので、外枠と同じ強さで見張る。
+  入口の背景の月。装飾だが、置き方を1行間違えるとページが横に動く（光暈と
+  ずらした三日月がはみ出す）場所なので、外枠と同じ強さで見張る。
 */
 describe('入口の月', () => {
   it('溢れは clip で切る。hidden にも auto にもしない', () => {
     /*
-      .hero は弁（overflow: auto）を持つ箱。月は箱より大きいので、clip 以外だと
-      溢れがスクロール可能領域になり、入口の画面だけがスクロールするページに
-      なる。hidden は「見えないだけのスクロール箱」で、しかもスクロールバーが
-      出ないので誰も戻せない——外枠が html/body で hidden を避けたのと同じ理由。
+      三日月は光暈のぶん左へずらし、光暈は三日月の箱より外へ広がる。clip 以外
+      だと溢れがページのスクロール可能領域になり、電話でページが横に動く。
+      hidden は「見えないだけのスクロール箱」で、しかもスクロールバーが
+      出ないので誰も戻せない。
     */
     const body = bodyOf(sheet, '.moon {')
     expect(body).toContain('overflow: clip')
@@ -1807,8 +1691,8 @@ describe('入口の月', () => {
       forced-colors（Windows のハイコントラスト）は文字だけをシステム色に
       置き換え、画像は置き換えない。何もしないと、いちばん読みやすくしたい
       設定で、白い月の上に白い文字だけが残る。
-      背の低い窓（弁が開く条件 (b) と同じ 400px）では、パネル自体が潰れて
-      月が絵として成り立たない（320x256 の実測でパネルは 16px）。
+      背の低い窓（400px 未満）では、貼り付いた帯を除いた表紙が月を絵として
+      置けるほど高くならない。
     */
     expect(blockAt(sheet, '@media (forced-colors: active), (prefers-contrast: more)')).toContain(
       '.moon',

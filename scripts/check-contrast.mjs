@@ -1,8 +1,8 @@
 /*
   月の上で、文字が読めるか（WCAG 1.4.3）を実際にブラウザで測る。
 
-  月が出るのはサイトの連なりの最初と最後——入口と、締めの Contact（入口の
-  三日月を左右に返して小さく置く。画面に出る字は誘いの1文とボタン2つ）。
+  月が出るのはサイトの並びの最初と最後——入口と、締めの Contact（入口の
+  三日月を左右に返して小さく置く。ページに出る字は誘いの1文とボタン2つ）。
   どちらも字の後ろに光暈が回る。
   測る画面と字の一覧は下の SCREENS。
 
@@ -66,7 +66,7 @@ const pageOptions = ({ width, height, touch }) => ({
 })
 
 /*
-  月が出る画面。サイトの連なりの最初（入口）と最後（Contact）の2枚だけ——
+  月が出るページ。サイトの並びの最初（入口）と最後（Contact）の2つだけ——
   /all にも個人ページにも出さない。
 
   panel はその画面の節。targets は測る字（selector は panel の中で探す）で、
@@ -94,7 +94,7 @@ const SCREENS = [
       { selector: ':scope > p:not(.hero__role)', name: 'リード文', required: true },
       { selector: '.band .band__body strong', name: '帯の題' },
       { selector: '.band .band__meta', name: '帯の件数' },
-      // 割られた入口には必ず出る（帯の有無に依らない）。出ていなければ落とす
+      // 入口のページには必ず出る（帯の有無に依らない）。出ていなければ落とす
       { selector: ':scope > .hero__whole', name: '全体ページへの1本', required: true },
     ],
     // 帯は字の子だけを隠せば面が残る（面ごと隠すと実際より暗い地で測る）
@@ -500,7 +500,7 @@ async function main() {
         await sweep(page, where, screen)
         await page.close()
 
-        // 締めの月は動かさない。途中の姿が無いので、ここで次の画面へ
+        // 締めの月は動かさない。途中の姿が無いので、ここで次のページへ
         if (!screen.motion) continue
 
         /*

@@ -2,7 +2,7 @@ import { and, asc, count, eq, ne } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
-import { MAX_CHARS, MEMBER_PER_SCREEN, publishErrors, TIMELINE } from '../../blocks'
+import { MAX_CHARS, publishErrors } from '../../blocks'
 import type { Db } from '../../db/queries'
 import * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
@@ -186,7 +186,7 @@ const MemberForm = (props: {
           />
           {/*
             個人ページは柱も Contact もサイトのものを使う。この人の行き先が出るのは、
-            サイトの行き先と違うときの1枚目だけ（同じ行き先を2つ置かない）
+            サイトの行き先と違うときの名札の下だけ（同じ行き先を2つ置かない）
           */}
           {/*
             https:// で始まる URL だけを受ける（memberErrors）。type=url でも
@@ -199,26 +199,22 @@ const MemberForm = (props: {
             value={value('github')}
             placeholder="https://github.com/…"
             error={props.errors?.github}
-            hint="https:// から。サイトの GitHub と違うときだけ、個人ページの1枚目に出る"
+            hint="https:// から。サイトの GitHub と違うときだけ、個人ページの名札の下に出る"
           />
           <Field
             label="Email"
             name="email"
             type="email"
             value={value('email')}
-            hint="サイトのメールと違うときだけ、個人ページの1枚目に出る"
+            hint="サイトのメールと違うときだけ、個人ページの名札の下に出る"
           />
-          {/*
-            紹介文は個人ページの About 1枚に全段落が出る（件数で割れない）。
-            段落の数も高さを決めるので、字数と一緒に添える
-          */}
+          {/* 紹介文は個人ページの About に全段落が出る。長さに上限は無い（ページは縦に読む） */}
           <Area
             label="紹介文"
             name="bio"
             value={value('bio')}
             rows={5}
-            hint={`「です・ます」で。空行で段落を分ける · 1画面 ${MAX_CHARS.memberBio} 字・${MAX_CHARS.memberBioParagraphs} 段落まで`}
-            maxlength={MAX_CHARS.memberBio}
+            hint="「です・ます」で。空行で段落を分ける"
             error={props.errors?.bio}
           />
           <Area
@@ -239,7 +235,7 @@ const MemberForm = (props: {
             value={value('careerText')}
             rows={4}
             error={props.errors?.careerText}
-            hint={`1行に1件。「期間 | 肩書き | 所属」 · ${MEMBER_PER_SCREEN.career} 行ごとに1画面、1画面 ${TIMELINE.maxChars} 字まで`}
+            hint="1行に1件。「期間 | 肩書き | 所属」"
           />
           <label class="field">
             <span class="field__label">アバター画像</span>
@@ -314,9 +310,9 @@ function readMemberForm(form: FormData, existing?: schema.Member) {
 /*
   メンバーの、下書きでも止める値（受け取れない値）。氏名が空・通らない GitHub。
 
-  紹介文の長さはここでは見ない。公開するときにだけ見る（src/blocks.ts の
-  publishErrors）——下書きの保存でも見ていたころは、上限より前に保存された
-  長い紹介文の人が「公開を外すことすらできない」行き止まりになっていた。
+  大見出しの長さはここでは見ない。公開するときにだけ見る（src/blocks.ts の
+  publishErrors）——下書きの保存でも長さを見ていたころは、上限より前に保存された
+  長い中身の人が「公開を外すことすらできない」行き止まりになっていた。
 */
 function memberErrors(values: {
   name: string
@@ -418,14 +414,7 @@ memberRoutes.post('/members', async (c) => {
     picked.error ? { avatar: picked.error } : null,
     unreadable,
     memberErrors(values),
-    values.published
-      ? publishErrors({
-          kind: 'member',
-          headline: values.headline,
-          bio: values.bio,
-          careerText: values.careerText,
-        })
-      : null,
+    values.published ? publishErrors({ kind: 'member', headline: values.headline }) : null,
     await memberSlugTaken(database, values.slug, null),
   )
   if (errors) return back(errors)
@@ -488,14 +477,7 @@ async function saveMember(
     picked.error ? { avatar: picked.error } : null,
     unreadable,
     memberErrors(values),
-    values.published
-      ? publishErrors({
-          kind: 'member',
-          headline: values.headline,
-          bio: values.bio,
-          careerText: values.careerText,
-        })
-      : null,
+    values.published ? publishErrors({ kind: 'member', headline: values.headline }) : null,
     await memberSlugTaken(database, values.slug, id),
   )
   if (errors) return back(errors)

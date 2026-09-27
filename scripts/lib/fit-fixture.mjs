@@ -1,29 +1,28 @@
 /*
-  check:fit の2本目の中身。**上限ちょうどの、複数人のサイト**。
+  check:fit の2本目の中身。**重い中身の、複数人のサイト**。
 
   seed.sql は本人のサイトそのもの（1人・打ち込むブロック0本・本文0件）で、
-  それだけを測っていたころは、打ち込むブロック6種・3人以上の Team・作品の本文の
-  画面・上限ちょうどの字数は一度も測られていなかった。src/blocks.ts の maxChars は
-  手で測った数で、字の段や余白を動かす変更が来ても、検査はその姿を見ないまま
-  緑を出した。
+  それだけを測っていたころは、打ち込むブロック6種・3人以上の Team・作品の本文・
+  上限の長さの名前は一度も測られていなかった。
 
-  だからこの中身は**上限の数から作る**（src/blocks.ts を読む。書き写さない）。
-  上限を変えた日に、検査は新しい上限で測る。
+  公開ページは縦に読む（ページはスクロールし、中身は割らない）。だから測るのは
+  「1画面に収まるか」ではなく、長い中身でも横にはみ出さない・切られない・目次が
+  貼り付いたまま見える、のほう。中身は**長いほう**で作る。
 
-  - 打ち込むブロック6種を、上限ちょうどで2形ずつ。同じ字数でも1つに寄せたほうが
-    高くつくことがある（行末の空きが寄る）ので、均等に割った形と1つに寄せた形の
-    両方を置く。見出しも上限の長さ（MAX_CHARS.blockHeading）
-  - メンバー6人（Team の1画面ぶん・グリッド）。うち2人は長い肩書き・上限の大見出し・
-    上限の紹介文・技術3塊・上限の経歴を、均等に割った形と寄せた形で持つ
-  - 作品7件。1画面目は、画像あり・説明 100 字・実績値・タグ3つ・リンク3本・担当者名の
-    カード2枚（いちばん重いカードの行）。2画面目は画像の有る無しが混ざる行。
-    3画面目は実績値の無い軽い行（1人のサイトでは説明が電話の幅でも
-    --card-lines-lean まで出る）。4画面目は1枚だけの行。
-    本文は上限（300 字・3段落）を2形で持ち、1件は作品名も上限ちょうど（MAX_CHARS.itemTitle）
+  - 打ち込むブロック6種を2形ずつ。長い段落・行の多い一覧を、均等に割った形と
+    1つに寄せた形（行末の空きが寄ると横の組みが変わる）で。見出しは上限の長さ
+    （MAX_CHARS.blockHeading）、ひとことの一文も上限（MAX_STATEMENT_SENTENCE）
+  - メンバー6人（Team のグリッド）。うち2人は長い肩書き・上限の大見出し・長い
+    紹介文・技術3塊・長い経歴を、均等に割った形と寄せた形で持つ
+  - 作品7件。いちばん重いカード（画像あり・説明の上限 100 字・実績値・タグ5つ・
+    リンク5本・担当者名）、画像の有る無しが混ざる行、作品名が上限ちょうどの作品。
+    2件は長い本文（6段落）を2形で持つ
+
+  上限の数（src/blocks.ts の MAX_CHARS）はそこから読む（書き写さない）。上限を変えた日に、
+  検査は新しい上限で測る。
 
   文は実際の文に近い和文（英字まじり）で作る。段落は word-break: auto-phrase で
   文節の切れ目でだけ折れるので、「あ」を並べた文より行末に空きが出て、行が増える。
-  同じ数を測るなら重いほうで測る。
 
   書いてあるのは検査のための作り話で、本人の中身ではない。seed.sql とは混ぜない
   （check:fit はこの中身を使い捨ての D1 に入れ、手元の D1 には触らない）。
@@ -31,15 +30,8 @@
 
 import { importTs } from './ts-import.mjs'
 
-const {
-  BLOCK_TYPES,
-  MAX_CHARS,
-  MEMBER_PER_SCREEN,
-  MAX_STATEMENT_SENTENCE,
-  blockType,
-  publishErrors,
-  screenChars,
-} = await importTs('src/blocks.ts')
+const { BLOCK_TYPES, MAX_CHARS, MAX_STATEMENT_SENTENCE, blockType, publishErrors } =
+  await importTs('src/blocks.ts')
 
 const len = (text) => [...text].length
 
@@ -103,8 +95,7 @@ const insert = (table, rows) => {
 const YEAR = '2024.03 — 現在' // 12字。経歴・できごとの年月でいちばん長い書き方
 
 /*
-  1行1件のブロックの行を、1画面ぶん（perScreen 行）ちょうど max 字で。
-  数える列は src/blocks.ts の blockVisibleParts と同じ（リンク集の URL は数えない）。
+  1行1件のブロックの行を、per 行・合計およそ max 字で（リンク集の URL は数えない）。
 */
 function rowsOf(key, max, per, shape) {
   switch (key) {
@@ -138,6 +129,19 @@ function rowsOf(key, max, per, shape) {
   }
 }
 
+/*
+  打ち込むブロックの中身の量（1ページに並ぶぶん）。1画面に収めていたころの上限
+  （メモ 400 字・いま 250 字…）の数倍にしてある——ページは縦に読むので、長いほうで測る。
+*/
+const HEAVY = {
+  statement: 480,
+  now: { chars: 900, rows: 16 },
+  numbers: { chars: 480, rows: 10 },
+  links: { chars: 640, rows: 16 },
+  timeline: { chars: 900, rows: 12 },
+  note: { chars: 1800, paragraphs: 8 },
+}
+
 function blockRows() {
   const rows = []
   let order = 10
@@ -154,28 +158,27 @@ function blockRows() {
     if (type.kind !== 'free') continue
     for (const shape of ['even', 'lump']) {
       if (type.key === 'statement') {
-        // 一文と添え書きの合計が上限。均等は一文を上限いっぱい、寄せは添え書きに寄せる
-        const sentence = shape === 'even' ? MAX_STATEMENT_SENTENCE : 30
+        // 一文は上限ちょうど。添え書きは均等は短く、寄せは長く
         push({
           type: type.key,
-          title: text(sentence, 1),
-          body: text(type.maxChars - sentence, 4),
+          title: text(MAX_STATEMENT_SENTENCE, 1),
+          body: text(shape === 'even' ? 60 : HEAVY.statement, 4),
         })
         continue
       }
-      const per = type.perScreen
       if (type.key === 'note') {
         // 段落。寄せた形の小さな段落は 12 字
-        const body = split(type.maxChars, per, shape, 12)
+        const body = split(HEAVY.note.chars, HEAVY.note.paragraphs, shape, 12)
           .map((n, i) => text(n, i))
           .join('\n\n')
         push({ type: type.key, title: words(heading, 2), body })
         continue
       }
+      const heavy = HEAVY[type.key]
       push({
         type: type.key,
         title: words(heading, 5),
-        body: rowsOf(type.key, type.maxChars, per, shape).join('\n'),
+        body: rowsOf(type.key, heavy.chars, heavy.rows, shape).join('\n'),
       })
     }
   }
@@ -208,22 +211,20 @@ PRACTICE:
 Git / GitHub Actions
 Playwright`
 
+// 経歴は10行。1画面に収めていたころの上限（1画面 5行・250 字）の倍を超える
 function career(shape) {
-  const max = blockType('timeline').maxChars
-  return rowsOf('timeline', max, MEMBER_PER_SCREEN.career, shape).join('\n')
+  return rowsOf('timeline', 700, 10, shape).join('\n')
 }
 
-/*
-  紹介文と作品の本文は「打った文字列そのまま」で数える（空行も字。src/blocks.ts の
-  memberPublishErrors / itemPublishErrors）。段落の区切り（\n\n）のぶんを引いて割る
-*/
-const paragraphed = (max, parts, shape, start) =>
-  split(max - 2 * (parts - 1), parts, shape, 12)
+// 段落の列。total 字を parts 段落に（寄せた形の小さな段落は 12 字）
+const paragraphed = (total, parts, shape, start) =>
+  split(total, parts, shape, 12)
     .map((n, i) => text(n, i + start))
     .join('\n\n')
 
+// 紹介文は6段落・900 字（以前の上限は 400 字・3段落）
 function bio(shape) {
-  return paragraphed(MAX_CHARS.memberBio, MAX_CHARS.memberBioParagraphs, shape, 1)
+  return paragraphed(900, 6, shape, 1)
 }
 
 function memberRows() {
@@ -266,8 +267,9 @@ function memberRows() {
 
 /* ------------------------------------------------------------ 作品 */
 
+// 作品の本文は6段落・900 字（以前の上限は 300 字・3段落）
 function storyBody(shape) {
-  return paragraphed(MAX_CHARS.itemBody, MAX_CHARS.itemBodyParagraphs, shape, 2)
+  return paragraphed(900, 6, shape, 2)
 }
 
 function itemRows() {
@@ -289,7 +291,7 @@ function itemRows() {
     ...row,
   })
   return [
-    // 1画面目: いちばん重いカード2枚の行
+    // 1行目: いちばん重いカード2枚の行（grid の1行は PROJECT_COLUMNS 枚）
     heavy({
       id: 1,
       type: 'app',
@@ -312,7 +314,7 @@ function itemRows() {
       body: storyBody('lump'),
       sort_order: 20,
     }),
-    // 2画面目: 画像の有る無しが混ざる行
+    // 2行目: 画像の有る無しが混ざる行
     heavy({
       id: 3,
       type: 'work',
@@ -336,7 +338,7 @@ function itemRows() {
       member_id: 3,
       sort_order: 40,
     }),
-    // 4画面目: 1枚だけの行（並びは下の軽い行のあと）
+    // 4行目: 1枚だけの行（並びは下の2件のあと）
     heavy({
       id: 5,
       type: 'app',
@@ -356,12 +358,9 @@ function itemRows() {
       sort_order: 50,
     }),
     /*
-      3画面目: 軽い行（実績値の無いカード2枚。components.tsx の leanRow）。説明は
-      上限の 100 字、作品名は上限ちょうどで題が2行に折れる姿。1人のサイト（solo）
-      では担当者名も出ないので、電話の幅で説明が --card-lines-lean まで出る——
-      その行数で収まるかをここで測る。複数人のサイトでは担当者名が出るので重い行。
-      年は 2025 で、並びは 2025 の2件（sort_order 30・40）のあと、2024 の1枚だけの
-      行（上の id 5）の前（src/db/queries.ts の itemOrder）
+      3行目: 実績値の無いカード2枚。説明は上限の 100 字、1枚は作品名が上限ちょうどで
+      題が2行に折れる姿。年は 2025 で、並びは 2025 の2件（sort_order 30・40）のあと、
+      2024 の1枚だけの行（上の id 5）の前（src/db/queries.ts の itemOrder）
     */
     ...[6, 7].map((id) =>
       heavy({
@@ -371,7 +370,7 @@ function itemRows() {
         title: id === 6 ? words(MAX_CHARS.itemTitle, 6) : 'Fixture Lean',
         slug: `fixture-lean-${id}`,
         year: '2025',
-        // 1枚は画像あり（900 以上で枠の段 --card-lines-shot になる姿）
+        // 1枚は画像あり（同じ行のもう1枚は空の枠）
         ...(id === 7
           ? { image_url: null, image_alt: '', image_width: null, image_height: null }
           : {}),
@@ -386,35 +385,20 @@ function itemRows() {
 }
 
 /*
-  作った中身が「上限ちょうど」かを、公開の関門そのもの（publishErrors）と字数の
-  数え方（screenChars）で確かめる。上限を超えていれば検査は通らない中身を測る
-  ことになり、足りなければ上限を測っていない。どちらも黙って起きるので、ここで止める。
+  作った中身が公開の関門（publishErrors）を通るかを確かめる。通らない中身は公開
+  できないので、それを測っても意味が無い（上限を超えた名前・空の説明・代替テキストの
+  無い画像）。黙って起きるので、ここで止める。
 */
-function audit(blocks, members, items, tags, links) {
+function audit(blocks, members, items) {
   const problems = []
   for (const block of blocks) {
     const type = blockType(block.type)
     if (type.kind !== 'free') continue
     const errors = publishErrors({ kind: 'block', type, title: block.title, body: block.body })
     if (errors) problems.push(`block-${block.id}（${type.key}）: ${JSON.stringify(errors)}`)
-    if (type.key !== 'statement') {
-      const most = Math.max(...screenChars(type, block.body))
-      if (most !== type.maxChars) {
-        problems.push(
-          `block-${block.id}（${type.key}）: 1画面が ${most} 字（上限 ${type.maxChars}）`,
-        )
-      }
-    } else if (len(block.title) + len(block.body) !== type.maxChars) {
-      problems.push(`block-${block.id}（statement）: 上限ちょうどでない`)
-    }
   }
   for (const member of members) {
-    const errors = publishErrors({
-      kind: 'member',
-      headline: member.headline,
-      bio: member.bio,
-      careerText: member.career_text,
-    })
+    const errors = publishErrors({ kind: 'member', headline: member.headline })
     if (errors) problems.push(`member ${member.slug}: ${JSON.stringify(errors)}`)
   }
   for (const item of items) {
@@ -422,26 +406,24 @@ function audit(blocks, members, items, tags, links) {
       kind: 'item',
       title: item.title,
       summary: item.summary,
-      body: item.body,
       imageAlt: item.image_alt,
       hasImage: Boolean(item.image_url),
-      tags: tags.filter((tag) => tag.item_id === item.id).length,
-      links: links.filter((link) => link.item_id === item.id).length,
     })
     if (errors) problems.push(`item ${item.slug}: ${JSON.stringify(errors)}`)
   }
   if (problems.length) {
-    throw new Error(`fit の中身が上限ちょうどになっていない:\n  ${problems.join('\n  ')}`)
+    throw new Error(`fit の中身が公開の関門を通らない:\n  ${problems.join('\n  ')}`)
   }
 }
 
-const TAGS = ['TypeScript', 'Cloudflare Workers', 'Playwright']
-const LINKS = ['Repository', 'Release', 'Website']
+// タグとリンクは5つずつ（以前は作品のページの1枚目に収めるために3つまでだった）
+const TAGS = ['TypeScript', 'Cloudflare Workers', 'Playwright', 'Hono', '生成AI']
+const LINKS = ['Repository', 'Release', 'Website', 'Docs', 'Changelog']
 
 /*
   使い捨ての D1 に流す SQL。移行（platforms を含む）を流したあとに当てる。
   expect は、この中身から sitemap に必ず載るはずの URL——検査はこれが1本でも
-  欠けていたら止まる（「測ったつもりで、その画面が生えていなかった」を止める）。
+  欠けていたら止まる（「測ったつもりで、そのページが生えていなかった」を止める）。
 */
 export function fixture({ solo = false } = {}) {
   const blocks = blockRows()
@@ -456,14 +438,14 @@ export function fixture({ solo = false } = {}) {
   )
   const items = itemRows()
   const tags = items.flatMap((item) =>
-    TAGS.slice(0, MAX_CHARS.itemTags).map((tag, sort_order) => ({
+    TAGS.map((tag, sort_order) => ({
       item_id: item.id,
       tag,
       sort_order,
     })),
   )
   const links = items.flatMap((item) =>
-    LINKS.slice(0, MAX_CHARS.itemLinks).map((label, sort_order) => ({
+    LINKS.map((label, sort_order) => ({
       item_id: item.id,
       label,
       url: `https://example.com/${item.slug}/${sort_order}`,
@@ -471,10 +453,10 @@ export function fixture({ solo = false } = {}) {
     })),
   )
 
-  audit(blocks, members, items, tags, links)
+  audit(blocks, members, items)
 
   const text = [
-    '-- scripts/lib/fit-fixture.mjs が src/blocks.ts の上限から作った、check:fit 専用の中身',
+    '-- scripts/lib/fit-fixture.mjs が作った、check:fit 専用の重い中身',
     'DELETE FROM item_links;',
     'DELETE FROM item_tags;',
     'DELETE FROM items;',
@@ -492,21 +474,16 @@ export function fixture({ solo = false } = {}) {
   const expect = [
     '/',
     '/projects',
-    '/projects/2',
-    '/projects/3',
-    '/projects/4',
     // 1人のサイトでは /team はプロフィールへの 301 で、sitemap に載らない
     ...(solo ? [] : ['/team']),
     '/contact',
     ...blocks
       .filter((block) => blockType(block.type)?.kind === 'free')
       .map((b) => `/block-${b.id}`),
-    ...shown.flatMap((member) => [`/members/${member.slug}`, `/members/${member.slug}/about`]),
-    ...shown
-      .filter((member) => member.career_text)
-      .flatMap((member) => [`/members/${member.slug}/skills`, `/members/${member.slug}/career`]),
+    // 個人ページは1ページ（About・Skills・Career は小節）
+    ...shown.map((member) => `/members/${member.slug}`),
+    // 作品のページ（本文は小節 #story）
     ...items.map(itemPath),
-    ...items.filter((item) => item.body).map((item) => `${itemPath(item)}/story`),
   ]
   return { sql: text, expect }
 }
@@ -516,9 +493,9 @@ export function fixture({ solo = false } = {}) {
   既定の見出しのまま3本**（いま・数字・リンク集。見出しは src/blocks.ts の title）。
 
   seed は目次が3行（Projects / Profile / Contact）で、どの寸法でも帯に収まる。
-  上限ちょうどの fixture は目次が 12 行で、帯はいつも溢れる。そのあいだの、本人が
+  重い fixture は目次が 12 行で、帯はいつも溢れる。そのあいだの、本人が
   ブロックを数本足しただけの姿を測る相手が無かった——390 の指ではこの3本で帯が
-  126px 溢れ、連なりの後ろの節（Links・Contact）に着くと、目次の印が帯の外に
+  126px 溢れ、並びの後ろの節（Links・Contact）に着くと、目次の印が帯の外に
   押し出されていた。中身の字数は上限ではなく、ふつうに書く長さ。
 
   seed の決まった4本（sort_order 10〜40）の、Team と Contact のあいだに差し込む。

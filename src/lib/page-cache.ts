@@ -6,8 +6,8 @@ import { SESSION_COOKIE } from './auth'
 /*
   公開ページの写し（Cache API）。
 
-  公開ページは1画面が1つの URL で、スクロール1回ぶんがフルページ遷移1回に
-  なる。写しが無いと、めくるたびに単一リージョンの D1 へ1〜3往復し、D1 が
+  公開ページは節ごとに1つの URL で、目次を押すたびにフルページ遷移1回に
+  なる。写しが無いと、移るたびに単一リージョンの D1 へ1〜3往復し、D1 が
   落ちている間は入口も作品の一覧も全部 500 になっていた。ここでは、
   訪問者（セッションのクッキーを持たない GET）の応答だけを、そのデータセンターの
   caches.default に置く。
@@ -56,7 +56,7 @@ import { SESSION_COOKIE } from './auth'
 
   404 も持つのは、形の合う名前（/members/<slug> など）を探し回る要求が、
   写しがあれば D1 を引かずに済むから。形の合わない名前は、写しより前に
-  ルートが D1 を引かずに 404 にしている（src/routes/public/routes.ts の SCREEN_NAME）。
+  ルートが D1 を引かずに 404 にしている（src/routes/public/routes.ts の PAGE_NAME）。
 */
 
 export const SITE_VERSION_KEY = 'site:version'
