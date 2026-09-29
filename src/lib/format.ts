@@ -140,7 +140,7 @@ export function paragraphs(text: string): string[] {
 }
 
 /*
-  いまが日本で何年か。柱の足元の著作権表示（© 2026 Noctifex）に使う。
+  いまが日本で何年か。足元の著作権表示（© 2026 AstLog）に使う。
 
   以前は「© 2026」と字で書いてあった。年が明けると、どの画面の足元も
   去年のまま残る——しかも誰も直す日を覚えていない種類の古さで、
@@ -245,9 +245,7 @@ export function toSlug(value: string): string {
 
 /*
   size 件ずつの配列に割る。0件なら空配列。使うのは、1文の束縛変数の上限を超えない
-  ように複数行の INSERT を分けるとき（src/routes/admin/items.tsx の childWrites）と、
-  Projects のカードを1行ぶんずつ数えるとき（src/routes/public/blocks.tsx。行ごとに
-  画像の枠をそろえる）。
+  ように複数行の INSERT を分けるとき（src/routes/admin/items.tsx の childWrites）。
 
   size が 1 未満だと1件も進まず終わらないので、下限を 1 に切り上げる。
 */

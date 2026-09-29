@@ -44,8 +44,8 @@ export type BlockPage = {
   個人ページの経路（member.tsx）。サイトの並びに入っているのは、目次に
   「Profile」の1行を持たせるため。
 
-  帯（このメンバーのつくったもの）は付けない——入口の帯と同じ行き先・同じ件数に
-  なり、同じ札がサイトに2度出る。
+  帯（このメンバーのつくったもの）は付けない——入口の「一覧で見る →」と同じ
+  行き先・同じ件数になり、同じ手がサイトに2度出る。
 */
 export type ProfilePage = {
   kind: 'profile'
@@ -93,8 +93,9 @@ export const pageQuery = (slug: string, filter: ItemFilter): string =>
   filterApplies(slug) ? filterQuery(filter) : ''
 
 /*
-  いま出すページの行を引く。絞り込みの効かないページでは1件も引かない
-  ——そのページに一覧は無い。
+  いま出すページの行を引く。一覧（Projects）は絞り込みを効かせて、入口は軌道図の札の
+  ために公開中の全件を（入口に絞り込みは効かない）。ほかのページでは1件も引かない
+  ——そのページに作品は出ない。
 */
 export async function pageRows(
   db: Db,
@@ -102,6 +103,7 @@ export async function pageRows(
   filter: ItemFilter,
   memberId: number | null,
 ): Promise<ItemView[]> {
+  if (page.block.type === 'hero') return listPublishedItems(db)
   if (!filterApplies(page.block.type)) return []
   return listPublishedItems(db, scopeOf(filter, memberId))
 }
@@ -109,7 +111,7 @@ export async function pageRows(
 /*
   サイトのページの並びと、それを組むのに使った数。
 
-  ここで引くのは数だけ。カードそのものは、どのページを出すかが決まってから
+  ここで引くのは数だけ。一覧の行そのものは、どのページを出すかが決まってから
   引く（pageRows）。
 */
 export async function sitePages(
@@ -128,6 +130,7 @@ export async function sitePages(
     filter,
     showMember: showMemberOf(blocks, members),
     projects: { total: totalOf(counts), rows: [] },
+    counts,
     band: bandOf(blocks, counts),
     profile: profileOf(blocks, members),
   }
@@ -140,7 +143,7 @@ export async function sitePages(
 
   canonical: 先頭のページは / と /<slug> の2つの URL で開けるので、正は / の
   ほうにそろえる。2つ目からは、そのページの URL が正。絞り込みは付けない——
-  同じ中身の取り出し方なので、ピルの組み合わせのぶんだけ URL が数えられると、
+  同じ中身の取り出し方なので、絞り込みの組み合わせのぶんだけ URL が数えられると、
   どれが本体か分からなくなる。
 
   href も先頭だけは / に寄せる（目次が /hero を指して、入口と同じ中身の URL を

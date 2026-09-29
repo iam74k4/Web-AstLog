@@ -241,7 +241,7 @@ type ItemDraft = {
 }
 
 /*
-  実績値の添えのヒント。添えはカードでも作品のページでも説明文でも、値と単位の
+  実績値の添えのヒント。添えは一覧の行でも作品のページでも説明文でも、値と単位の
   すぐあとに続けて出る（components.tsx の Metric、src/routes/public/meta.ts の metricDigest）。
   「見込み 40人日 → 実績」と書くと、→ が値より前を指して「20 人日 見込み
   40人日 → 実績」と逆に読める。続けて読んで意味が通る形を例で見せる。
@@ -292,7 +292,7 @@ const ItemForm = (props: ItemFormData) => {
         <FormKey value={props.formKey} />
         <div class="form-grid">
           {/*
-            作品名はカードの題・作品のページの見出しに出る。長さは公開する
+            作品名は一覧の行の題・入口の軌道図の札・作品のページの見出しに出る。長さは公開する
             ときにだけ見る（MAX_CHARS.itemTitle。理由は src/blocks.ts）
           */}
           <Field
@@ -301,7 +301,7 @@ const ItemForm = (props: ItemFormData) => {
             value={d.title}
             required
             maxlength={MAX_CHARS.itemTitle}
-            hint={`${MAX_CHARS.itemTitle} 字まで（カードの題と作品のページの見出しに出る）`}
+            hint={`${MAX_CHARS.itemTitle} 字まで（一覧の行の題と作品のページの見出しに出る）`}
             error={props.errors?.title}
           />
           {/*
@@ -382,19 +382,19 @@ const ItemForm = (props: ItemFormData) => {
             value={d.summary}
             rows={3}
             /*
-              カードは説明を行数で切らずに全部出す。長いと同じ行のカードがその高さ
-              まで伸びるので、目録の2文ぶん（MAX_CHARS.itemSummary）で止める。
+              一覧の行は説明を行数で切らずに全部出す。長いと一覧が縦に伸びるので、
+              目録の2文ぶん（MAX_CHARS.itemSummary）で止める。
 
               説明は目録の文なので常体（〜する。〜した。）。本文（下の欄）は
               「です・ます」。作品のページでは説明のすぐ下に本文の小節（Story）が
               続けて読まれるので、文体で目録と本文を分ける（CLAUDE.md「文言」）
             */
-            hint={`「何であるか。何をしたか。」の2文を常体で（〜する。〜した。）· ${MAX_CHARS.itemSummary} 字まで（公開するときは必須——カードと作品のページの説明文になる）`}
+            hint={`「何であるか。何をしたか。」の2文を常体で（〜する。〜した。）· ${MAX_CHARS.itemSummary} 字まで（公開するときは必須——一覧と作品のページの説明文になる）`}
             maxlength={MAX_CHARS.itemSummary}
             error={props.errors?.summary}
           />
           {/*
-            本文は作品のページの説明の下に、小節「Story」として出る（カードには
+            本文は作品のページの説明の下に、小節「Story」として出る（一覧には
             出ない）。空なら小節は作らない。長さに上限は無い（ページは縦に読む）
           */}
           <Area
@@ -402,7 +402,7 @@ const ItemForm = (props: ItemFormData) => {
             name="body"
             value={d.body}
             rows={6}
-            hint="背景・やったこと・結果を「です・ます」で。空行で段落を分ける（作品のページの「Story」に出る。空なら出ない。カードには出ない）"
+            hint="背景・やったこと・結果を「です・ます」で。空行で段落を分ける（作品のページの「Story」に出る。空なら出ない。一覧には出ない）"
             error={props.errors?.body}
           />
           <label class="field">
@@ -417,7 +417,7 @@ const ItemForm = (props: ItemFormData) => {
             <span class="field__hint">
               {item?.imageUrl
                 ? `選ぶと差し替わる。空なら今のまま · ${IMAGE_LABELS}（1MB まで）`
-                : `スクリーンショット。${IMAGE_LABELS}（1MB まで） · 作品のページと、600px 以上の一覧のカードに出る。横長なら共有カードも大きく出る`}
+                : `スクリーンショット。${IMAGE_LABELS}（1MB まで） · 作品のページと、一覧の行のサムネイルに出る。横長なら共有カードも大きく出る`}
             </span>
           </label>
           {/*

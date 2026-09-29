@@ -18,21 +18,8 @@ import { db } from './request'
 
 export const appearanceRoutes = new Hono<AppEnv>()
 
-/*
-  骨格の見取り図。実物の縮小ではなく、どこに何が来るかだけを帯で見せる。
-  本物を縮めて出すには CSS を二重に持つことになり、片方だけ古くなる。
-*/
-const Skeleton = ({ layout }: { layout: string }) => (
-  <span class={`skel skel--${layout}`} aria-hidden="true">
-    <i class="skel__mark" />
-    <i />
-    <i />
-  </span>
-)
-
 // 見本は公開ページと同じ指定（data-*）で色と書体を出す。見本用の値を別に持たない
 const PresetPreview = ({ group, option }: { group: ThemeKey; option: string }) => {
-  if (group === 'layout') return <Skeleton layout={option} />
   if (group === 'accent') return <span class="swatch" data-accent={option} aria-hidden="true" />
   return (
     <span class="sample" data-typeface={option} aria-hidden="true">

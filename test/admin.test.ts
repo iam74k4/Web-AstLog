@@ -249,8 +249,8 @@ describe('Items', () => {
 })
 
 /*
-  作品の本文と画像。本文と画像は作品のページにだけ出る（カードには出さない。
-  カードのサムネイルは同じ画像の飾り）。
+  作品の本文と画像。本文と画像は作品のページにだけ出る（一覧には出さない。
+  一覧のサムネイルは同じ画像の飾り）。
 
   画像はアバターと同じ経路（種類と大きさの検査 → KV）で、置き場だけが items/。
   公開側の /images/* は、KV のキーの形（avatars/ と items/ の2つの置き場）で
@@ -1402,7 +1402,7 @@ describe('項目とメンバー — 書く場所の上限', () => {
     const html = await (await signed('/admin/items/new?type=app')).text()
     expect(html).toContain(`maxlength="${MAX_CHARS.itemSummary}"`)
     expect(html).toContain(`${MAX_CHARS.itemSummary} 字まで`)
-    // カードは説明を切らずに全部出す。電話の幅で何字まで出るか、はもう言わない
+    // 一覧の行は説明を切らずに全部出す。電話の幅で何字まで出るか、はもう言わない
     expect(html).not.toContain('字までしか出ません')
     // 説明は目録の文なので常体、本文は「です・ます」。同じ作品のページに続けて出る
     expect(html).toContain('2文を常体で')

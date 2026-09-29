@@ -27,8 +27,9 @@ import {
   type ProviderKey,
   pkcePair,
 } from '../../lib/oauth'
+import { SITE } from '../../site'
 import { AdminBare } from '../../ui/AdminLayout'
-import { MarkIcon } from '../../ui/icons'
+import { Wordmark } from '../../ui/icons'
 import { db } from './request'
 import { isHttps, safeNext } from './session'
 
@@ -78,8 +79,8 @@ const backToLogin = (error: string, next?: string | null) => {
 
 const LoginBrand = () => (
   <span class="login__brand">
-    <MarkIcon size={30} />
-    <span class="login__word">NOCTIFEX</span>
+    <Wordmark class="login__word" />
+    <span class="sr-only">{SITE.name}</span>
     <span class="login__label">ADMIN</span>
   </span>
 )
@@ -111,7 +112,7 @@ const LoginPage = (props: {
           {PROVIDER_LABEL[provider]} でログイン
         </a>
       ))}
-      <span class="login__note">Noctifex メンバーのみアクセスできます</span>
+      <span class="login__note">AstLog メンバーのみアクセスできます</span>
     </div>
   </AdminBare>
 )

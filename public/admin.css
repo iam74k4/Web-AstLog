@@ -15,6 +15,16 @@
   規則（a・button・input）を、ここの部品が上書きしている形はそのまま保たれる。
 */
 
+/*
+  管理画面ではページの切り替え（app.css の @view-transition）をしない。フォームを
+  送って戻るたびに画面を重ねて入れ替えると、保存の知らせより先に前の画面が一瞬
+  残って見える。あとに読むここの宣言が app.css の宣言に勝つ（切り替わるのは前と
+  次の両方のページが宣言しているときだけなので、公開ページとのあいだも切り替わらない）。
+*/
+@view-transition {
+  navigation: none;
+}
+
 .admin-shell {
   display: flex;
   flex-direction: column;
@@ -657,11 +667,11 @@
   margin-bottom: var(--sp-2);
 }
 
+/* ワードマーク（ΛSTLOG）。高さは上の帯のロゴと同じ段 */
 .login__word {
-  font-family: var(--font-mono);
-  font-size: var(--fs-md);
-  font-weight: 700;
-  letter-spacing: 0.03em;
+  display: block;
+  height: var(--brand-h);
+  width: auto;
 }
 
 .login__label {
@@ -880,53 +890,6 @@
   color: var(--ink-weak);
   font-size: var(--fs-meta);
   line-height: 1.5;
-}
-
-/* 骨格の見取り図。縮小版ではなく、帯の並び方だけを見せる */
-.skel {
-  display: grid;
-  gap: var(--sp-2);
-  aspect-ratio: 16 / 9;
-  padding: var(--sp-2);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-}
-
-.skel i {
-  display: block;
-  border-radius: var(--sp-1);
-  background: var(--line-strong);
-}
-
-.skel i.skel__mark {
-  background: var(--accent);
-}
-
-.skel--rail {
-  grid-template-columns: 1fr 2.4fr;
-  grid-template-rows: 1fr 2fr;
-}
-
-.skel--rail .skel__mark {
-  grid-row: 1 / 3;
-}
-
-.skel--center {
-  grid-template-rows: 1fr 1.6fr 1.6fr;
-}
-
-.skel--center .skel__mark {
-  justify-self: center;
-  width: 45%;
-}
-
-.skel--magazine {
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 2.6fr;
-}
-
-.skel--magazine .skel__mark {
-  grid-column: 1 / 3;
 }
 
 .swatch {

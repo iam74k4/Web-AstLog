@@ -15,7 +15,7 @@ import type { Item } from './db/schema'
   countPublishedByKind）・管理画面のタブは、どれもここから作る。区分を1つ足すと、
   そのすべてに一度に出る。
 
-  並びは画面に出る順（絞り込みのピル・帯の件数・管理画面のタブ）。先頭の区分は、
+  並びは画面に出る順（絞り込み・入口の件数・管理画面のタブ）。先頭の区分は、
   区分を指さない要求（/admin/items）の既定でもある。
 */
 export const ITEM_KINDS = [
@@ -27,7 +27,7 @@ export type ItemKind = (typeof ITEM_KINDS)[number]['key']
 
 export const ITEM_KIND_KEYS = ITEM_KINDS.map((kind) => kind.key) as [ItemKind, ...ItemKind[]]
 
-// 画面での呼び名。帯の件数（「個人開発 5 · 業務 2」）と管理画面のタブも同じ言葉
+// 画面での呼び名。入口の件数・個人ページの帯（「個人開発 5 · 業務 2」）と管理画面のタブも同じ言葉
 export const KIND_LABEL = Object.fromEntries(
   ITEM_KINDS.map((kind) => [kind.key, kind.label]),
 ) as Record<ItemKind, string>

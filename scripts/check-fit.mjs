@@ -16,42 +16,38 @@
     (1) スクロールできる   html と body の overflow が visible（clip / hidden にすると
                           中身がページの外で黙って切られる）
     (2) 横にはみ出さない   ページの scrollWidth ≤ clientWidth、見えている要素の左右が
-                          画面の中（横に動く帯＝目次・絞り込みの中身と、月は除く）
+                          画面の中（横に動く帯＝目次・絞り込みの中身と、軌道図の SVG の中は除く）
     (3) 切られた要素が無い  overflow が hidden / clip の祖先の外へ出ている要素も、
                           自分の中身（字）を hidden / clip で切っている箱も無い
                           （行止め line-clamp・1行で末尾を省く ellipsis・読み上げ用の
-                          1px の箱・月は除く）
+                          1px の箱・軌道図の SVG の中は除く）
     (4) h1 がちょうど1つ   1ページ = 1ドキュメント（WCAG 1.3.1）
-    (5) 柱の場所           柱が骨格どおりの場所（rail の 900 以上は本文の左、ほかは上）
-    (6) 目次の貼り付け     柱（帯）の position が sticky。本文の下に画面3つぶんの空きを
-                          足して一番下まで送っても、目次といまの印が画面の中に見えて
-                          いて、帯の姿では本文より手前に描かれ（印の真ん中の点が柱）、
-                          地が透けていない
+    (5) 帯の場所           上の帯が本文の上、足元が本文の下
+    (6) 帯の貼り付け       上の帯の position が sticky。本文の下に画面3つぶんの空きを
+                          足して一番下まで送っても、帯といまの印が画面の中に見えて
+                          いて、本文より手前に描かれ（印の真ん中の点が帯）、地が透けていない
     (7) 送った先           main の中の id を持つ要素（#about など）へ送ると、上端が
-                          帯の下端より下（rail の 900 以上は画面の上端より下）に来る
-                          （app.css の scroll-padding-top と :root の --band-clear）
-    (8) 目次の的           指（pointer: coarse）の姿で、目次の行き先と管理画面への
-                          入口の高さが --tap 以上
-    (9) 見出しの錨         同じ骨格・書体・寸法・姿の中で、節の見出しの上端の y が
-                          1px 以内でそろう
-   (10) 中央の軸           中央寄せの骨格で、入口の Hero の直接の子の中心 x が Hero の中心と
-                          そろう（行いっぱいに伸びた子は、中身の広がりの中心で見る）
+                          帯の下端より下に来る（app.css の scroll-padding-top と :root の
+                          --top-clear）
+    (8) 目次の的           目次の行き先と管理画面への入口の高さが --tap 以上（指の姿では 44px）
+    (9) 見出しの錨         同じ書体・寸法・姿の中で、節の見出しの上端の y が 1px 以内でそろう
+   (10) 入口の軌道図       星が枠の真ん中（焦点）に座り、名前の札が出ているときは、札どうしも
+                          札と星も重ならず、どの札も枠の中に収まる（札の置き場所は
+                          src/lib/orbits.ts の placeLabels が字の数から見積もって選ぶ。
+                          本物の書体で組んだ幅で確かめる）
 
   ほかに、読み込み直して測るものが2つある（measureRun の後半）。
 
-   (11) 目次の印           目次が帯になる姿（899 以下の全骨格と、上の帯になる骨格の
-                          900 以上）で、いまのページの行き先（aria-current）が帯の見えて
-                          いる幅の中にある。帯の最初の位置は読み込んだ時点で決まる
-                          （app.css の scroll-initial-target）ので、属性の差し替えでは
-                          測れない——骨格はサーバーの返す HTML の data-layout を
-                          書き換えて開き直す。書体はサイトの既定のまま
-   (12) 全体ページ         /all がどの骨格・書体・寸法でも横に動かない
+   (11) 目次の印           いまのページの行き先（aria-current）が帯の見えている幅の中にある。
+                          帯の最初の位置は読み込んだ時点で決まる（app.css の
+                          scroll-initial-target）ので、読み込み直して測る。書体はサイトの既定のまま
+   (12) 全体ページ         /all がどの書体・寸法でも横に動かない
 
   (9) は「どのページでも見出しが同じ高さから始まる」。節は上揃えで、見出しの高さは
   中身の量で変わらない（app.css の「ページの外枠」）。比べるのは main の最初の子が
-  節のページだけ——Hero で始まるページ（入口・個人ページの名札）と月の節（Contact）は
+  節のページだけ——Hero で始まるページ（入口・個人ページの名札）と締めの節（Contact）は
   見出しで始まるページではなく、名乗り・誘いを置く表紙そのもの。作品のページは
-  「← 一覧に戻る」が見出しの上に立つので、その札の上端で比べる。
+  「← 一覧に戻る」が見出しの上に立つので、その手の上端で比べる。
 
   1px までは許す。連動する文字の段は clamp() で決まるので、幅しだいで端数が出る。
 
@@ -66,20 +62,20 @@
     seed               seed.sql。本人のサイトそのもの（1人・打ち込むブロック無し）
     fixture（複数人）  scripts/lib/fit-fixture.mjs が作る、重い中身の複数人のサイト
                        （打ち込むブロック6種 × 2形の長い中身・6人の Team・長い肩書き・
-                       上限の大見出し・長い紹介文と経歴・いちばん重いカードの行・
+                       上限の大見出し・長い紹介文と経歴・いちばん重い一覧の行・
                        長い本文）
     fixture（1人）     同じ中身で公開中のメンバーを1人にしたもの。Team の位置に
-                       プロフィールが入り、柱が名前と長い職種で名乗る姿
+                       プロフィールが入り、足元が名前と長い職種で名乗る姿
     seed＋ブロック3本  seed.sql に、打ち込むブロックを既定の見出しのまま3本
                        （fit-fixture.mjs の seedBlocks）。本人がブロックを数本
                        足しただけで目次の帯が溢れる姿（(11) の相手）
 
-  どの中身も、訪問者の姿とログインした姿（柱に「管理画面」の入口が出る）の
+  どの中身も、訪問者の姿とログインした姿（上の帯に「管理画面」の入口が出る）の
   両方で測る。ログインした姿は、セッションを使い捨ての D1 に直接作り、クッキーを
   渡して開く（OAuth は通らない）。
 
-  骨格と書体は body の data-layout / data-typeface を差し替えて見る（下の measure）。
-  寸法3 × 骨格3 × 書体3 = 27通りを、URL ごと・姿ごとに。
+  書体は body の data-typeface を差し替えて見る（下の measure）。
+  寸法3 × 書体3 = 9通りを、URL ごと・姿ごとに。
 
   `npm test` とは分けてある。あちらは workerd の中で D1 と KV ごと動かす場所で、
   こちらは本物の版面が要る。混ぜると、片方のために片方の実行環境を曲げることになる。
@@ -105,21 +101,15 @@ import { DESIGN_SIZES } from './lib/viewports.mjs'
 // 設計サイズ（390 と 768 は指で測る）。一覧と理由は scripts/lib/viewports.mjs
 const VIEWPORTS = DESIGN_SIZES
 
-/*
-  柱が本文の左に立つ骨格と、その幅。ほかの骨格・幅では柱は本文の上の帯になる。
-  app.css の「ページの外枠」の 900 以上（rail だけが .shell を2列の grid に戻す）と同じ。
-*/
-const BESIDE = { rail: 900 }
-
 // 端数の許し。連動する段は clamp() で決まるので、幅しだいで 0.x px が出る
 const SLACK = 1
 
 /*
-  見出しの錨を比べる相手。main の最初の子が節で、月の節（.moonlit）でないもの。
+  見出しの錨を比べる相手。main の最初の子が節で、締めの節（.orbital）でないもの。
   Hero（header.hero）で始まるページ（入口・個人ページ）は比べない——個人ページの
   About の見出しは名札の下にあり、名札の高さしだいで下がる。
 */
-const ANCHORED = 'main > section:first-child:not(.moonlit)'
+const ANCHORED = 'main > section:first-child:not(.orbital)'
 
 // src/lib/auth.ts の SESSION_COOKIE と sessionKey（SHA-256 の16進）と同じ
 const SESSION_COOKIE = 'nx_session'
@@ -186,19 +176,17 @@ async function screenPaths(base, run) {
 /*
   1つの姿を測る。ページの中で動く（page.evaluate）。
 
-  骨格と書体は body の data-layout / data-typeface を差し替えて見る。マークアップは
-  どのプリセットでも同じで、変わるのは app.css の [data-layout] / [data-typeface]
-  側だけ（src/ui/Layout.tsx がそう書いてある）。だから属性を差し替えれば、管理画面で
-  保存したのと同じ姿になる。保存の経路を通すと、測りたい版面ではなく設定の保存を
-  測ることになる。
+  書体は body の data-typeface を差し替えて見る。マークアップはどのプリセットでも
+  同じで、変わるのは app.css の [data-typeface] 側だけ。だから属性を差し替えれば、
+  管理画面で保存したのと同じ姿になる。保存の経路を通すと、測りたい版面ではなく
+  設定の保存を測ることになる。
 
   測り終えたら、足した空きを外してページの頭へ戻す（次の姿を同じ位置から測る）。
 */
-const measure = ([layout, typeface, cfg]) => {
+const measure = ([typeface, cfg]) => {
   const root = document.documentElement
   const scroller = document.scrollingElement ?? root
   const to = (y) => scroller.scrollTo({ top: y, behavior: 'instant' })
-  document.body.dataset.layout = layout
   document.body.dataset.typeface = typeface
   to(0)
 
@@ -222,35 +210,40 @@ const measure = ([layout, typeface, cfg]) => {
     }
   }
 
-  const shell = document.querySelector('.shell')
+  const top = document.querySelector('.top')
   const main = document.querySelector('main')
-  const rail = document.querySelector('.rail')
-  const toc = rail?.querySelector('.toc')
-  if (!shell || !main || !rail || !toc) {
-    return { problems: ['.shell / main / .rail / .toc のどれかが無い'], anchor: null, tall: 0 }
+  const foot = document.querySelector('.foot')
+  const toc = top?.querySelector('.toc')
+  if (!top || !main || !foot || !toc) {
+    return { problems: ['.top / main / .foot / .toc のどれかが無い'], anchor: null, tall: 0 }
   }
 
   // (4) h1 はちょうど1つ
   const h1s = document.querySelectorAll('h1')
   if (h1s.length !== 1) problems.push(`h1 が ${h1s.length} 個（ちょうど1つのはず）`)
 
-  // (5) 柱の場所。骨格どおりに解けているか
-  const railBox = rail.getBoundingClientRect()
+  // (5) 帯の場所。上の帯が本文の上、足元が本文の下
+  const topBox = top.getBoundingClientRect()
   const mainBox = main.getBoundingClientRect()
-  const beside = cfg.beside[layout] !== undefined && innerWidth >= cfg.beside[layout]
-  if (beside ? railBox.right > mainBox.left + slack : railBox.bottom > mainBox.top + slack) {
+  const footBox = foot.getBoundingClientRect()
+  if (topBox.bottom > mainBox.top + slack) {
     problems.push(
-      `柱が本文の${beside ? '左' : '上'}に居ない（柱 ${round(railBox.bottom)} / 本文 ${round(mainBox.top)}）`,
+      `上の帯が本文の上に居ない（帯 ${round(topBox.bottom)} / 本文 ${round(mainBox.top)}）`,
+    )
+  }
+  if (footBox.top < mainBox.bottom - slack) {
+    problems.push(
+      `足元が本文の下に居ない（足元 ${round(footBox.top)} / 本文 ${round(mainBox.bottom)}）`,
     )
   }
 
   /*
     (2)(3) 横のはみ出しと、切られた要素。
 
-    除くもの: 大きさの無い箱、visibility: hidden、読み上げ用の 1px の箱（.sr-only・
-    畳んだワードマーク）の中、月（aria-hidden の飾り。自分の overflow: clip の中で
-    光暈を切る）、行止め（line-clamp）の中、横や縦に送れる箱（overflow: auto /
-    scroll ——目次と絞り込みの帯、900 以上の柱）の中。送れる箱はその箱自身を測る
+    除くもの: 大きさの無い箱、visibility: hidden、読み上げ用の 1px の箱（.sr-only）の中、
+    軌道図の SVG の中（aria-hidden の飾り。viewBox の外を SVG が自分で切る）、行止め
+    （line-clamp）の中、横や縦に送れる箱（overflow: auto / scroll ——目次と絞り込みの帯）の
+    中。送れる箱はその箱自身を測る
   */
   const scrolls = (style) =>
     ['auto', 'scroll'].includes(style.overflowX) || ['auto', 'scroll'].includes(style.overflowY)
@@ -259,7 +252,11 @@ const measure = ([layout, typeface, cfg]) => {
   const skipped = new Set()
   const wide = []
   const cut = []
-  for (const el of [...rail.querySelectorAll('*'), ...main.querySelectorAll('*')]) {
+  for (const el of [
+    ...top.querySelectorAll('*'),
+    ...main.querySelectorAll('*'),
+    ...foot.querySelectorAll('*'),
+  ]) {
     const parent = el.parentElement
     if (parent && skipped.has(parent)) {
       skipped.add(el)
@@ -267,14 +264,20 @@ const measure = ([layout, typeface, cfg]) => {
     }
     const style = getComputedStyle(el)
     const rect = el.getBoundingClientRect()
+    /*
+      SVG の中（軌道図の線と点）は測らない。SVG は viewBox の外を自分で切るので、
+      締めの脱出軌道のように枠の外まで伸ばした線も画面には出ない——ところが線の
+      箱（getBoundingClientRect）は切る前の形のままで、はみ出しに数えてしまう。
+      SVG の箱そのものは画面の中に居ること
+    */
+    const drawing = el.tagName.toLowerCase() === 'svg'
     if (
-      el.classList.contains('moon') ||
+      drawing ||
       (rect.width <= 1 && rect.height <= 1 && style.position === 'absolute') ||
       style.webkitLineClamp !== 'none'
     ) {
       skipped.add(el)
-      // 月の箱そのものは画面の中に居ること（中の光暈は自分で切る）
-      if (!el.classList.contains('moon')) continue
+      if (!drawing) continue
     }
     if (rect.width === 0 || rect.height === 0 || style.visibility === 'hidden') continue
     if (rect.right > innerWidth + slack || rect.left < -slack) {
@@ -296,7 +299,7 @@ const measure = ([layout, typeface, cfg]) => {
         `${nameOf(el)} の中身（${el.scrollWidth}x${el.scrollHeight} を ${el.clientWidth}x${el.clientHeight} で）`,
       )
     }
-    for (let up = el.parentElement; up && up !== shell; up = up.parentElement) {
+    for (let up = el.parentElement; up && up !== document.body; up = up.parentElement) {
       const upStyle = getComputedStyle(up)
       if (scrolls(upStyle)) break
       if (!clips(upStyle)) continue
@@ -317,52 +320,56 @@ const measure = ([layout, typeface, cfg]) => {
   if (wide.length) problems.push(`画面の横にはみ出している: ${list(wide)}`)
   if (cut.length) problems.push(`切られている: ${list(cut)}`)
 
-  /*
-    (8) 目次の的。指のときは目次の行き先と管理画面への入口も --tap（app.css の
-    @media (pointer: coarse)）
-  */
+  // (8) 目次の的。目次の行き先と管理画面への入口は --tap（指の姿では 44px）
   const tap = parseFloat(getComputedStyle(root).getPropertyValue('--tap'))
-  if (matchMedia('(pointer: coarse)').matches) {
-    for (const hand of rail.querySelectorAll('.toc a, .rail__admin')) {
-      const tall = hand.getBoundingClientRect().height
-      if (tall > 0 && tall < tap - slack) {
-        problems.push(
-          `目次の的「${hand.textContent.trim()}」が ${round(tall)}px（--tap は ${tap}px）`,
-        )
-      }
+  for (const hand of top.querySelectorAll('.toc a, .top__admin')) {
+    const tall = hand.getBoundingClientRect().height
+    if (tall > 0 && tall < tap - slack) {
+      problems.push(
+        `目次の的「${hand.textContent.trim()}」が ${round(tall)}px（--tap は ${tap}px）`,
+      )
     }
   }
 
   /*
-    (10) 中央寄せの入口の Hero の子の中心。自分の幅の子（帯・全体ページへの1本）は
-    箱の中心、行いっぱいに伸びた子（見出し・リード文）は中身の広がり（Range）の中心で
-    見る——伸びた箱の中心はいつも真ん中なので、中身が左に寄っていても見逃す。
-    個人ページの頭（.hero--profile）は中央に組まない（本文の列と同じ左の軸）ので測らない
+    (10) 入口の軌道図。星は枠の真ん中（焦点）に座る。札が出ている（枠が
+    LABEL_MIN_WIDTH 以上）ときは、札どうしと札と星が重ならず、札が枠の中に収まる。
+    札の箱は字の箱（リンク）そのもの
   */
-  const hero =
-    layout === 'center' ? document.querySelector('main > .hero:not(.hero--profile)') : null
-  if (hero) {
-    const heroStyle = getComputedStyle(hero)
-    const heroBox = hero.getBoundingClientRect()
-    const inner =
-      hero.clientWidth - parseFloat(heroStyle.paddingLeft) - parseFloat(heroStyle.paddingRight)
-    const axis = heroBox.left + hero.clientLeft + parseFloat(heroStyle.paddingLeft) + inner / 2
-    for (const kid of hero.children) {
-      const kidStyle = getComputedStyle(kid)
-      if (kidStyle.position === 'absolute' || kidStyle.display === 'none') continue
-      const box = kid.getBoundingClientRect()
-      if (box.width <= 1 || box.height <= 1) continue
-      let rect = box
-      if (box.width >= inner - slack) {
-        const range = document.createRange()
-        range.selectNodeContents(kid)
-        rect = range.getBoundingClientRect()
+  const system = document.querySelector('.system')
+  if (system && getComputedStyle(system).display !== 'none') {
+    const box = system.getBoundingClientRect()
+    const star = system.querySelector('.system__star')?.getBoundingClientRect()
+    if (star) {
+      const dx = (star.left + star.right) / 2 - (box.left + box.right) / 2
+      const dy = (star.top + star.bottom) / 2 - (box.top + box.bottom) / 2
+      if (Math.abs(dx) > slack || Math.abs(dy) > slack) {
+        problems.push(`星が枠の真ん中から ${round(dx)}, ${round(dy)}px ずれている`)
       }
-      const centre = (rect.left + rect.right) / 2
-      if (Math.abs(centre - axis) > slack) {
-        problems.push(
-          `中央寄せの Hero の子 ${nameOf(kid)} の中心が ${round(centre - axis)}px ずれている`,
-        )
+    }
+    const labels = [...system.querySelectorAll('.system__label > *')]
+      .map((el) => ({ name: el.textContent.trim(), rect: el.getBoundingClientRect() }))
+      .filter((one) => one.rect.width > 0)
+    const overlap = (a, b) =>
+      Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) *
+      Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top))
+    for (const [i, one] of labels.entries()) {
+      const { rect } = one
+      if (
+        rect.left < box.left - slack ||
+        rect.right > box.right + slack ||
+        rect.top < box.top - slack ||
+        rect.bottom > box.bottom + slack
+      ) {
+        problems.push(`軌道図の札「${one.name}」が枠の外へ出ている`)
+      }
+      if (star && overlap(rect, star) > slack) {
+        problems.push(`軌道図の札「${one.name}」が星に重なる`)
+      }
+      for (const other of labels.slice(i + 1)) {
+        if (overlap(rect, other.rect) > slack) {
+          problems.push(`軌道図の札「${one.name}」と「${other.name}」が重なる`)
+        }
       }
     }
   }
@@ -370,7 +377,7 @@ const measure = ([layout, typeface, cfg]) => {
   /*
     (9) 錨の y。節の最初の h1 の上端——ただし h1 より前に別の子（作品のページの
     「← 一覧に戻る」）が立つページでは、その最初の子の上端。絶対配置の子
-    （月）と display: none の子は並びに数えない。ページの頭で測る。
+    と display: none の子は並びに数えない。ページの頭で測る。
   */
   const anchored = document.querySelector(cfg.anchored)
   let anchor = null
@@ -387,12 +394,12 @@ const measure = ([layout, typeface, cfg]) => {
   const tall = scroller.scrollHeight
 
   /*
-    (6) 目次の貼り付け。本文の下に画面3つぶんの空きを足し、ページを一番下まで
+    (6) 帯の貼り付け。本文の下に画面3つぶんの空きを足し、ページを一番下まで
     送る。いまの中身が1画面に収まるページでも、貼り付けが効いているかを必ず試せる。
   */
-  const railStyle = getComputedStyle(rail)
-  if (railStyle.position !== 'sticky') {
-    problems.push(`柱の position が ${railStyle.position}（sticky のはず）`)
+  const topStyle = getComputedStyle(top)
+  if (topStyle.position !== 'sticky') {
+    problems.push(`上の帯の position が ${topStyle.position}（sticky のはず）`)
   }
   const spacer = document.createElement('div')
   spacer.style.height = `${innerHeight * 3}px`
@@ -414,21 +421,19 @@ const measure = ([layout, typeface, cfg]) => {
     }
 
     /*
-      帯の姿では、本文を帯の下へ潜らせた位置で、帯が手前に描かれているか（印の
-      真ん中の点が柱の中の要素）と、地が透けていないか（背景が透明でない）
+      本文を帯の下へ潜らせた位置で、帯が手前に描かれているか（印の真ん中の点が
+      帯の中の要素）と、地が透けていないか（背景が透明でない）
     */
-    if (!beside) {
-      to(Math.max(0, mainBox.top - railBox.height + innerHeight / 3))
-      const probe = mark ?? toc
-      const at = probe.getBoundingClientRect()
-      const hit = document.elementFromPoint((at.left + at.right) / 2, (at.top + at.bottom) / 2)
-      if (hit && !rail.contains(hit)) {
-        problems.push(`送ると帯の上に本文が描かれる（${nameOf(hit)} が目次の上）`)
-      }
-      const paint = railStyle.backgroundColor
-      if (paint === 'transparent' || /rgba\(.*,\s*0\)$/.test(paint)) {
-        problems.push(`帯の地が透けている（background-color: ${paint}）`)
-      }
+    to(Math.max(0, mainBox.top - topBox.height + innerHeight / 3))
+    const probe = mark ?? toc
+    const at = probe.getBoundingClientRect()
+    const hit = document.elementFromPoint((at.left + at.right) / 2, (at.top + at.bottom) / 2)
+    if (hit && !top.contains(hit)) {
+      problems.push(`送ると帯の上に本文が描かれる（${nameOf(hit)} が目次の上）`)
+    }
+    const paint = topStyle.backgroundColor
+    if (paint === 'transparent' || /rgba\(.*,\s*0\)$/.test(paint)) {
+      problems.push(`帯の地が透けている（background-color: ${paint}）`)
     }
 
     /*
@@ -440,10 +445,10 @@ const measure = ([layout, typeface, cfg]) => {
     for (const target of [main, ...main.querySelectorAll('[id]')]) {
       if (target.getBoundingClientRect().height === 0) continue
       target.scrollIntoView({ block: 'start', behavior: 'instant' })
-      const floor = beside ? 0 : rail.getBoundingClientRect().bottom
-      const top = target.getBoundingClientRect().top
-      if (top < floor - slack)
-        hidden.push(`#${target.id} ${round(top)}px（帯の下端 ${round(floor)}px）`)
+      const floor = top.getBoundingClientRect().bottom
+      const at = target.getBoundingClientRect().top
+      if (at < floor - slack)
+        hidden.push(`#${target.id} ${round(at)}px（帯の下端 ${round(floor)}px）`)
     }
     if (hidden.length) problems.push(`送った先が帯の下に隠れる: ${list(hidden)}`)
   } finally {
@@ -455,11 +460,8 @@ const measure = ([layout, typeface, cfg]) => {
 }
 
 /*
-  (11) 目次の印。帯の姿（柱が本文の左に立たない骨格・幅）でだけ測る。
-
-  骨格は属性の差し替えではなく、サーバーの返す HTML の data-layout を書き換えて
-  開き直す。帯の最初のスクロール位置（scroll-initial-target）は読み込んだときに
-  決まるので、開いたあとで骨格を変えても「その骨格で開いた姿」にはならない。
+  (11) 目次の印。帯の最初のスクロール位置（scroll-initial-target）は読み込んだときに
+  決まるので、ページごとに開き直して測る。
 */
 const tocMark = ([slack]) => {
   const toc = document.querySelector('.toc')
@@ -477,54 +479,40 @@ const tocMark = ([slack]) => {
   }
 }
 
-async function tocPass(browser, base, paths, layouts) {
+async function tocPass(browser, base, paths) {
   const failures = []
   let checked = 0
   let scrolled = 0
   for (const viewport of VIEWPORTS) {
-    for (const layout of layouts) {
-      if (BESIDE[layout] !== undefined && viewport.width >= BESIDE[layout]) continue
-      const context = await browser.newContext({
-        viewport: { width: viewport.width, height: viewport.height },
-        hasTouch: viewport.touch,
-      })
-      const page = await context.newPage()
-      await page.route('**/*', async (route) => {
-        if (route.request().resourceType() !== 'document') return route.continue()
-        const response = await route.fetch()
-        const html = await response.text()
-        const opening = /<body data-layout="[a-z]+"/
-        if (!opening.test(html)) {
-          failures.push(`${route.request().url()} — body の data-layout を書き換えられない`)
-        }
-        const body = html.replace(opening, `<body data-layout="${layout}"`)
-        await route.fulfill({ response, body })
-      })
-      const where = `${layout} ${viewport.width}x${viewport.height}${viewport.touch ? ' 指' : ''}`
-      for (const path of paths) {
-        await page.goto(base + path, { waitUntil: 'load' })
-        await page.evaluate(() => document.fonts.ready.then(() => true))
-        const found = await page.evaluate(tocMark, [SLACK])
-        if (!found) continue
-        checked += 1
-        if (found.scrolled > 0) scrolled += 1
-        if (!found.inside) {
-          failures.push(
-            `${where} ${path} — 目次の印「${found.name}」が帯の見えている幅の外にある（帯は ${found.overflow}px 溢れ、${found.scrolled}px 送って開いた）`,
-          )
-        }
+    const context = await browser.newContext({
+      viewport: { width: viewport.width, height: viewport.height },
+      hasTouch: viewport.touch,
+    })
+    const page = await context.newPage()
+    const where = `${viewport.width}x${viewport.height}${viewport.touch ? ' 指' : ''}`
+    for (const path of paths) {
+      await page.goto(base + path, { waitUntil: 'load' })
+      await page.evaluate(() => document.fonts.ready.then(() => true))
+      const found = await page.evaluate(tocMark, [SLACK])
+      if (!found) continue
+      checked += 1
+      if (found.scrolled > 0) scrolled += 1
+      if (!found.inside) {
+        failures.push(
+          `${where} ${path} — 目次の印「${found.name}」が帯の見えている幅の外にある（帯は ${found.overflow}px 溢れ、${found.scrolled}px 送って開いた）`,
+        )
       }
-      await context.close()
     }
+    await context.close()
   }
   return { failures, checked, scrolled }
 }
 
 /*
-  (12) 全体ページが横に動かない。/all は節を縦に積んだ1本の文書で、柱を貼り付けない
+  (12) 全体ページが横に動かない。/all は節を縦に積んだ1本の文書で、帯を貼り付けない
   （app.css の「ページの外枠」の外）ので上の測り方には入れていない。横はどのページも動かない。
 */
-async function wholePass(browser, base, layouts, typefaces) {
+async function wholePass(browser, base, typefaces) {
   const failures = []
   let checked = 0
   for (const viewport of VIEWPORTS) {
@@ -540,23 +528,17 @@ async function wholePass(browser, base, layouts, typefaces) {
       continue
     }
     await page.evaluate(() => document.fonts.ready.then(() => true))
-    for (const layout of layouts) {
-      for (const typeface of typefaces) {
-        const wide = await page.evaluate(
-          ([layout, typeface]) => {
-            document.body.dataset.layout = layout
-            document.body.dataset.typeface = typeface
-            const root = document.documentElement
-            return root.scrollWidth - root.clientWidth
-          },
-          [layout, typeface],
+    for (const typeface of typefaces) {
+      const wide = await page.evaluate((typeface) => {
+        document.body.dataset.typeface = typeface
+        const root = document.documentElement
+        return root.scrollWidth - root.clientWidth
+      }, typeface)
+      checked += 1
+      if (wide > SLACK) {
+        failures.push(
+          `${typeface} ${viewport.width}x${viewport.height} /all — ページが横に ${wide}px 動く`,
         )
-        checked += 1
-        if (wide > SLACK) {
-          failures.push(
-            `${layout}/${typeface} ${viewport.width}x${viewport.height} /all — ページが横に ${wide}px 動く`,
-          )
-        }
       }
     }
     await context.close()
@@ -566,9 +548,9 @@ async function wholePass(browser, base, layouts, typefaces) {
 
 /*
   1つの中身（seed か fixture）を測る。base に立っているサーバの sitemap の全 URL を、
-  寸法3 × 姿（訪問者・ログイン）× 骨格3 × 書体3 で。
+  寸法3 × 姿（訪問者・ログイン）× 書体3 で。
 */
-async function measureRun(browser, base, run, layouts, typefaces) {
+async function measureRun(browser, base, run, typefaces) {
   const failures = []
   const anchors = new Map()
   let checked = 0
@@ -596,32 +578,29 @@ async function measureRun(browser, base, run, layouts, typefaces) {
           failures.push(`${where} ${path} — ${status} が返った（sitemap に載っているのに）`)
           continue
         }
-        // ログインした姿は柱に管理画面への入口が出る。出ていなければ、その姿は測れていない
-        if (pose === 'ログイン' && (await page.locator('.rail a[href^="/admin"]').count()) === 0) {
+        // ログインした姿は上の帯に管理画面への入口が出る。出ていなければ、その姿は測れていない
+        if (pose === 'ログイン' && (await page.locator('.top a[href^="/admin"]').count()) === 0) {
           failures.push(
-            `${where} ${path} — ログインしたのに柱に管理画面の入口が無い（姿を測れていない）`,
+            `${where} ${path} — ログインしたのに上の帯に管理画面の入口が無い（姿を測れていない）`,
           )
         }
         // 書体が決まる前に測ると、行の高さが見積もりとずれる
         await page.evaluate(() => document.fonts.ready.then(() => true))
 
-        for (const layout of layouts) {
-          for (const typeface of typefaces) {
-            const found = await page.evaluate(measure, [
-              layout,
-              typeface,
-              { slack: SLACK, anchored: ANCHORED, beside: BESIDE },
-            ])
-            checked += 1
-            const label = `${layout}/${typeface} ${where} ${path}`
-            if (found.anchor !== null) {
-              const key = `${layout}/${typeface} ${where}`
-              if (!anchors.has(key)) anchors.set(key, [])
-              anchors.get(key).push({ path, y: found.anchor })
-            }
-            for (const problem of found.problems) failures.push(`${label} — ${problem}`)
-            if (found.tall > longest.tall) longest = { tall: found.tall, where: label }
+        for (const typeface of typefaces) {
+          const found = await page.evaluate(measure, [
+            typeface,
+            { slack: SLACK, anchored: ANCHORED },
+          ])
+          checked += 1
+          const label = `${typeface} ${where} ${path}`
+          if (found.anchor !== null) {
+            const key = `${typeface} ${where}`
+            if (!anchors.has(key)) anchors.set(key, [])
+            anchors.get(key).push({ path, y: found.anchor })
           }
+          for (const problem of found.problems) failures.push(`${label} — ${problem}`)
+          if (found.tall > longest.tall) longest = { tall: found.tall, where: label }
         }
       }
       await context.close()
@@ -629,7 +608,7 @@ async function measureRun(browser, base, run, layouts, typefaces) {
   }
 
   /*
-    見出しの錨。同じ骨格・書体・寸法・姿の中で、いちばん上といちばん下の差が
+    見出しの錨。同じ書体・寸法・姿の中で、いちばん上といちばん下の差が
     SLACK を超えたら、外れたページを名指しする（多数派の y から離れているもの）。
   */
   let worstDrift = 0
@@ -653,8 +632,8 @@ async function measureRun(browser, base, run, layouts, typefaces) {
     }
   }
 
-  const toc = await tocPass(browser, base, paths, layouts)
-  const whole = await wholePass(browser, base, layouts, typefaces)
+  const toc = await tocPass(browser, base, paths)
+  const whole = await wholePass(browser, base, typefaces)
   failures.push(...toc.failures, ...whole.failures)
 
   return {
@@ -670,7 +649,6 @@ async function measureRun(browser, base, run, layouts, typefaces) {
 }
 
 async function main() {
-  const layouts = keysOf('LAYOUTS')
   const typefaces = keysOf('TYPEFACES')
   const port = Number(process.env.FIT_PORT ?? 8788)
 
@@ -731,7 +709,7 @@ async function main() {
         }
         server = await devServer(run.base, port, state?.dir)
         console.log(`測る — ${run.label}`)
-        results.push({ run, ...(await measureRun(browser, server.base, run, layouts, typefaces)) })
+        results.push({ run, ...(await measureRun(browser, server.base, run, typefaces)) })
       } finally {
         await server?.stop()
         await state?.cleanup()
@@ -741,7 +719,7 @@ async function main() {
     await browser.close()
   }
 
-  const shape = `${layouts.length}骨格 × ${typefaces.length}書体 × ${VIEWPORTS.length}寸法`
+  const shape = `${typefaces.length}書体 × ${VIEWPORTS.length}寸法`
   let failed = 0
   for (const result of results) {
     const poses = result.poses > 1 ? ` × ${result.poses}姿` : ''
@@ -756,7 +734,7 @@ async function main() {
     }
     console.log(
       `✓ ${result.run.label}: ${result.checked} 通り（${result.urls} URL × ${shape}${poses}）。` +
-        `横のはみ出し 0・切られた要素 0・h1 はどれも1つ・一番下まで送っても目次が見え、送った先は帯の下。` +
+        `横のはみ出し 0・切られた要素 0・h1 はどれも1つ・一番下まで送っても目次が見え、送った先は帯の下・軌道図の札は重ならない。` +
         `いちばん長いページ ${result.longest.tall}px（${result.longest.where}）。` +
         `見出しの錨のずれ 最大 ${result.drift}px。` +
         `目次の印 ${result.toc.checked} ページが帯の中（うち ${result.toc.scrolled} ページは送って開いた）。` +
@@ -766,11 +744,11 @@ async function main() {
 
   if (failed > 0) {
     console.error(
-      '\n横のはみ出し・切られた要素・柱の場所・貼り付けが出たら、app.css の「ページの外枠」が効いていない（後ろで上書きされた・条件が外れた）か、部品の幅の決め方（min-width: 0・長い1語）を疑う。' +
-        '\n送った先が帯の下に隠れたら、:root の --band-clear / --band-clear-wide（帯の高さ）と html の scroll-padding-top を見る。' +
+      '\n横のはみ出し・切られた要素・帯の場所・貼り付けが出たら、app.css の「ページの外枠」が効いていない（後ろで上書きされた・条件が外れた）か、部品の幅の決め方（min-width: 0・長い1語）を疑う。' +
+        '\n送った先が帯の下に隠れたら、:root の --top-clear（帯の高さ）と html の scroll-padding-top を見る。' +
         '\n見出しの錨がずれたら、節の寄せ方（app.css の align-content: safe start）か、見出しより前に置いた子を疑う。' +
-        '\n目次の印が帯の外なら app.css の scroll-initial-target（帯の姿の2か所）と、帯がスクロール容器か（overflow-x: auto）を見る。' +
-        '\n目次の的が --tap に合わなければ @media (pointer: coarse)、中央の軸がずれたら中央寄せの Hero の子の寄せ方、' +
+        '\n目次の印が帯の外なら app.css の scroll-initial-target と、帯がスクロール容器か（overflow-x: auto）を見る。' +
+        '\n目次の的が --tap に合わなければ .toc a の min-height、軌道図の札が重なったり枠を出たりしたら src/lib/orbits.ts の placeLabels（札の幅の見積もりは components.tsx の labelWidth）、' +
         '/all が横に動いたら目次の折り返し（flex-wrap）を見る。',
     )
     process.exitCode = 1

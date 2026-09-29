@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import adminCss from '../public/admin.css'
 import css from '../public/app.css'
-import { PROJECT_COLUMNS } from '../src/blocks'
 import * as schema from '../src/db/schema'
-import { ACCENTS, LAYOUTS, TYPEFACES } from '../src/theme'
+import {
+  ESCAPE_FRAME,
+  HERO_FRAME,
+  LABEL_GAP,
+  LABEL_MAX_WIDTH,
+  LABEL_MIN_WIDTH,
+} from '../src/lib/orbits'
+import { ACCENTS, THEME_KEYS, TYPEFACES } from '../src/theme'
 import { db, form, get, okText, resetDb, seedItem, seedMember, signIn } from './helpers'
 
 beforeEach(resetDb)
@@ -13,81 +19,88 @@ const save = async (values: Record<string, string>) => {
   return signed('/admin/appearance', { method: 'POST', body: form(values) })
 }
 
-const MAGAZINE = { layout: 'magazine', accent: 'ember', typeface: 'serif' }
+const PICKED = { accent: 'ember', typeface: 'serif' }
 
 describe('見た目のプリセット', () => {
   it('何も選んでいなければ既定の姿で出す', async () => {
     const html = await okText('/')
-    expect(html).toContain('data-layout="rail"')
-    expect(html).toContain('data-accent="iris"')
+    // 既定はモノクロ（黒の上に白。文字もボタンも白）
+    expect(html).toContain('data-accent="mono"')
     expect(html).toContain('data-typeface="sans"')
+    // 骨格は選ばせない（上の帯・本文・足元の1つだけ）ので、骨格の印は無い
+    expect(html).not.toContain('data-layout')
   })
 
   it('選んだものが公開ページに出る', async () => {
-    const response = await save(MAGAZINE)
+    const response = await save(PICKED)
     expect(response.status).toBe(303)
     expect(response.headers.get('location')).toBe('/admin/appearance?saved=1')
 
     const html = await okText('/')
-    expect(html).toContain('data-layout="magazine"')
     expect(html).toContain('data-accent="ember"')
     expect(html).toContain('data-typeface="serif"')
   })
 
   it('個人ページも同じ姿になる', async () => {
     await seedMember()
-    await save(MAGAZINE)
+    await save(PICKED)
 
     const html = await okText('/members/okazaki')
-    expect(html).toContain('data-layout="magazine"')
+    expect(html).toContain('data-accent="ember"')
   })
 
   it('二度保存しても行が増えない', async () => {
-    await save(MAGAZINE)
-    await save({ layout: 'center', accent: 'mint', typeface: 'mono' })
+    await save(PICKED)
+    await save({ accent: 'mint', typeface: 'mono' })
 
     const rows = await db().select().from(schema.settings)
-    expect(rows).toHaveLength(3)
-    expect(await okText('/')).toContain('data-layout="center"')
+    expect(rows).toHaveLength(2)
+    expect(await okText('/')).toContain('data-accent="mint"')
   })
 
   it('知らない値は保存しない', async () => {
-    const response = await save({ layout: 'chaos', accent: 'ember', typeface: 'serif' })
+    const response = await save({ accent: 'chaos', typeface: 'serif' })
     expect(response.status).toBe(400)
 
     // 1つでも知らなければ、まとめて受け取らない
     const html = await okText('/')
-    expect(html).toContain('data-layout="rail"')
-    expect(html).toContain('data-accent="iris"')
+    expect(html).toContain('data-accent="mono"')
+    expect(html).toContain('data-typeface="sans"')
   })
 
   it('DB に知らない値が入っていても既定に戻して描く', async () => {
     // プリセットを1つ減らした後の、選んだままのサイトを想定する
-    await db().insert(schema.settings).values({ key: 'theme.layout', value: '消えた骨格' })
+    await db().insert(schema.settings).values({ key: 'theme.accent', value: '消えた色' })
+    // 前に選べた骨格の行が残っていても、読まずに描く
+    await db().insert(schema.settings).values({ key: 'theme.layout', value: 'magazine' })
 
     const response = await get('/')
     expect(response.status).toBe(200)
-    expect(await response.text()).toContain('data-layout="rail"')
+    const html = await response.text()
+    expect(html).toContain('data-accent="mono"')
+    expect(html).not.toContain('data-layout')
   })
 
   it('ログインしていなければ見た目を変えられない', async () => {
-    const response = await get('/admin/appearance', { method: 'POST', body: form(MAGAZINE) })
+    const response = await get('/admin/appearance', { method: 'POST', body: form(PICKED) })
     expect(response.status).toBe(303)
     expect(response.headers.get('location')).toBe('/admin/login')
 
-    expect(await okText('/')).toContain('data-layout="rail"')
+    expect(await okText('/')).toContain('data-accent="mono"')
   })
 
   it('選べるものだけを並べ、いま選んでいるものに印を付ける', async () => {
-    await save(MAGAZINE)
+    await save(PICKED)
     const signed = await signIn()
     const html = await (await signed('/admin/appearance')).text()
 
-    expect(html).toContain('value="magazine" checked=""')
     expect(html).toContain('value="ember" checked=""')
     // 見本は全種類ぶん出るので、data-typeface を見ても選択中は分からない
     expect(html).toContain('value="serif" checked=""')
     expect(html).not.toContain('value="sans" checked=""')
+    // 骨格の組は並べない
+    expect(html).not.toContain('name="layout"')
+    expect(THEME_KEYS).toEqual(['accent', 'typeface'])
   })
 })
 
@@ -128,11 +141,13 @@ describe('プリセットと CSS', () => {
     expect(adminCss.length).toBeGreaterThan(1000)
   })
 
-  it('骨格には body[data-layout] の指定がある', () => {
-    for (const layout of LAYOUTS) {
-      if (layout.key === 'rail') continue // 既定。素の指定がそのまま骨格になる
-      expect(sheet).toContain(`body[data-layout='${layout.key}']`)
-    }
+  it('骨格のプリセットは持たない。公開ページの印は data-site', () => {
+    /*
+      骨格（左の柱・中央寄せ・雑誌風）を選べたころは、どの部品も3通りの並べ方で
+      崩れないかを見張っていた。いまは上の帯・本文・足元の1つだけ
+    */
+    expect(sheet).not.toContain('data-layout')
+    expect(sheet).toContain('body[data-site]')
   })
 
   it('アクセント色と書体には [data-accent] / [data-typeface] の指定がある', () => {
@@ -243,7 +258,7 @@ const blockAt = (raw: string, marker: string) => {
   効かない。並びの一部だけを後ろで差し替える（`.detail, .detail__text` の間隔を
   `.detail__text` だけ詰める）のは、共通の規則を細かくする正しい書き方なので数えない。見るのは、同じ括りか、
   より外側（条件の少ない）の括りに書いた規則だけ——@media (min-width: 900px) の
-  中で値を差し替えるのは、骨格や幅ごとの正しい書き方なので上書きとは数えない。
+  中で値を差し替えるのは、幅ごとの正しい書き方なので上書きとは数えない。
 
   字句の解析は素朴（入れ子の規則を持たず、文字列の中に { } ; が無い）で足りる。
   app.css と admin.css はそう書いてあり、書き方が変わったら閉じ括弧の数が合わず
@@ -427,8 +442,9 @@ describe('CSS を読む道具', () => {
     for (const decl of [
       'min-height: var(--screen-h)',
       'position: sticky',
-      'scroll-padding-top: var(--band-clear)',
+      'scroll-padding-top: var(--top-clear)',
       'align-content: safe start',
+      'min-height: var(--cover-h)',
     ]) {
       expect(() => ruleWith(frame, decl), decl).not.toThrow()
     }
@@ -436,7 +452,7 @@ describe('CSS を読む道具', () => {
 })
 
 /*
-  公開ページのレイアウトは app.css にしかない。骨格の1行が消えても TypeScript は
+  公開ページのレイアウトは app.css にしかない。外枠の1行が消えても TypeScript は
   黙っているし、描いた HTML も変わらない。出るのは「長い中身がページの外で切られる」
   「目次が一番上に置き去りになる」ページだけで、それに気付ける場所がここと
   npm run check:fit しかない。だから値ではなく規則の存在そのものを見張る。
@@ -475,7 +491,7 @@ describe('ページの外枠', () => {
     expect(sheet).not.toContain('scrollbar-gutter')
   })
 
-  it('画面1つぶんの高さを :root で持ち、読むのは .shell の min-height だけ', () => {
+  it('画面1つぶんの高さを :root で持ち、読むのは body の min-height と表紙の高さだけ', () => {
     // 値そのものを見る（'100svh' がどこかにある、では括りの条件にも当たる）
     expect(bodyOf(sheet, ':root {')).toContain('--screen-h: calc(100svh')
     expect(sheet).not.toContain('--screen-h: 100vh')
@@ -483,57 +499,49 @@ describe('ページの外枠', () => {
     /*
       height ではなく min-height。高さを決め打つと、中身が長い画面ではページの外へ
       切られる（以前はそれを避けるために中身を画面ごとに割っていた）。min-height
-      なら、短い画面（入口と締めの表紙）は画面いっぱいに月を敷き、長い画面は
-      ページごと伸びる。全体ページ（/all）は外枠の外
+      なら、短いページでも足元が画面の底に座り、長いページはページごと伸びる
     */
-    expect(sheet.match(/var\(--screen-h\)/g)).toHaveLength(1)
     const frame = blockAt(sheet, '@media screen')
-    const shell = ruleWith(frame, 'min-height: var(--screen-h)')
-    expect(shell.selector).toBe(':where(body[data-layout]:not([data-whole])) .shell')
-  })
+    expect(ruleWith(frame, 'min-height: var(--screen-h)').selector).toBe('body[data-site]')
 
-  it('帯の姿の .shell は縦の flex。grid の子の貼り付けは自分の段から出られない', () => {
-    /*
-      grid の子の position: sticky は、その子の grid area の中でしか動けない。
-      帯（.rail）の段は auto＝帯そのものの高さなので、grid のままでは1px も貼り付かない。
-      flex の子なら .shell 全体の中を動ける。柱が左に立つ rail の 900 以上だけは
-      2列の grid に戻す（柱の area がページの高さいっぱいで、素の sticky が効く）
-    */
-    const frame = blockAt(sheet, '@media screen')
-    const shell = bodyOf(frame, ':where(body[data-layout]:not([data-whole])) .shell {')
-    expect(shell).toContain('display: flex')
-    expect(shell).toContain('flex-direction: column')
-    expect(bodyOf(frame, ':where(body[data-layout]:not([data-whole])) main {')).toContain(
-      'flex: 1 0 auto',
+    // 表紙の高さは画面から帯と本文の上下の余白を除いたもの。:root で1つに決める
+    expect(bodyOf(sheet, ':root {')).toContain(
+      '--cover-h: calc(var(--screen-h) - var(--top-h) - var(--page-pad) * 2)',
     )
-    const wide = blockAt(frame, '@media (min-width: 900px)')
-    expect(ruleWith(wide, 'display: grid').selector).toBe(
-      ":where(body[data-layout='rail']:not([data-whole])) .shell",
+    expect(sheet.match(/var\(--screen-h\)/g)).toHaveLength(2)
+    const cover = ruleWith(frame, 'min-height: var(--cover-h)')
+    expect(cover.selector).toBe(
+      ':where(body[data-site]:not([data-whole])) main > :is(.hero--orbit, .orbital)',
     )
   })
 
-  it('節は grid で、残りの高さを受ける。flex のままだと寄せ方が黙って効かなくなる', () => {
+  it('body は縦の flex で、本文が残りを受ける（足元を画面の途中に浮かせない）', () => {
+    const frame = blockAt(sheet, '@media screen')
+    const body = bodyOf(frame, 'body[data-site] {')
+    expect(body).toContain('display: flex')
+    expect(body).toContain('flex-direction: column')
+    expect(bodyOf(frame, 'body[data-site] > main {')).toContain('flex: 1 0 auto')
+  })
+
+  it('節は grid で上から置く。flex のままだと寄せ方が黙って効かなくなる', () => {
     /*
-      この1行が落ちると、すぐ下の align-content（節は上揃え、Hero は中央か下）が
-      黙って効かなくなる。.hero は素で display: flex + flex-direction: column
-      ——縦並びの flex では交差軸が横なので、align-content は上下ではなく左右を
-      動かす指定に変わり、入口の字は表紙の上端から積まれたまま残る。
-      flex: 1 0 auto が無いと、節は中身の高さで止まり、表紙が画面を満たさない
+      この1行が落ちると、すぐ下の align-content（節は上揃え）が黙って効かなくなる。
+      .hero は素で display: flex + flex-direction: column——縦並びの flex では交差軸が
+      横なので、align-content は上下ではなく左右を動かす指定に変わる
     */
     const frame = blockAt(sheet, '@media screen')
     const panel = ruleWith(frame, 'align-content: safe start')
 
     expect(panel.body).toContain('display: grid')
-    expect(panel.body).toContain('flex: 1 0 auto')
     expect(panel.selector).toContain('main > :is(.hero, section)')
   })
 
-  it('カードの説明は行数で切らない。タグと行き先も畳まない（一覧は1ページに縦に並ぶ）', () => {
+  it('一覧の行の説明は行数で切らない。タグと行き先も畳まない（一覧は1ページに縦に並ぶ）', () => {
     /*
       1画面に収めていたころは、説明を行数で止め（--card-lines）、電話と画像の行では
       タグと行き先を畳んでいた（--card-extras）。「何であるか。何をしたか。」の2文目が
       カードからほぼ読めない幅があった。いまは Projects が1ページで縦に伸びるので、
-      カードは書いたぶんを全部出す。止める段が1つでも残ると、どこかの幅で黙って切れる
+      一覧の行は書いたぶんを全部出す。止める段が1つでも残ると、どこかの幅で黙って切れる
     */
     expect(sheet).not.toMatch(/line-clamp/)
     expect(sheet).not.toContain('--card-lines')
@@ -553,29 +561,17 @@ describe('ページの外枠', () => {
   it('節の見出しは上揃え。どの画面でも見出しが同じ高さから始まる', () => {
     /*
       上下中央に寄せていたころは、見出しの高さが中身の量で決まり、画面ごとに
-      跳ねていた（/projects 91px → /projects/2 124px → /projects/4 243px =
-      rail @390x844）。節は上端から置き、見出しを錨にする。そろっていることは
-      npm run check:fit が画素で測る（同じ骨格・寸法の中で 1px 以内）
+      跳ねていた。節は上端から置き、見出しを錨にする（帯の罫線から本文の上の余白
+      --page-pad ぶん下）。そろっていることは npm run check:fit が画素で測る
+      （同じ寸法の中で 1px 以内）
     */
     const frame = blockAt(sheet, '@media screen')
-    const panels = ':where(body[data-layout]:not([data-whole])) main > '
-    expect(bodyOf(frame, `${panels}:is(.hero, section) {`)).toContain('align-content: safe start')
-
-    /*
-      Hero と月の節は錨を持たない表紙。月の無い Hero は中央（個人ページの名札は下の
-      「最後の節だけが伸びる」で伸びないので、効くのは控えとして）、月のある入口と
-      締めの Contact は下。上揃えの規則より後ろに置いて上書きする
-      （同じ強さなので、順番が逆だと全部が上揃えになる）
-    */
-    expect(bodyOf(frame, `${panels}.hero {`)).toContain('align-content: safe center')
-    expect(bodyOf(frame, `${panels}.hero:has(> .moon) {`)).toContain('align-content: safe end')
-    expect(bodyOf(frame, `${panels}.moonlit {`)).toContain('align-content: safe end')
-    const order = [
-      `${panels}:is(.hero, section) {`,
-      `${panels}.hero {`,
-      `${panels}.hero:has(> .moon) {`,
-    ].map((selector) => frame.indexOf(selector))
-    expect(order).toEqual([...order].sort((a, b) => a - b))
+    expect(bodyOf(frame, ':where(body[data-site]) main > :is(.hero, section) {')).toContain(
+      'align-content: safe start',
+    )
+    expect(ruleWith(sheet, 'padding-block: var(--page-pad)').selector).toBe(
+      'body[data-site] > main',
+    )
 
     // 外枠のどの寄せ方にも safe を付ける。素の center / end は、中身が容器を超えた
     // 瞬間に上端を容器の外へ押し出す
@@ -583,86 +579,30 @@ describe('ページの外枠', () => {
     expect(sheet).not.toContain('align-content: center')
   })
 
-  it('節を2つ以上持つページでは、最後の節だけが残りの高さを受ける（名札を浮かせない）', () => {
-    /*
-      個人ページは 名札の Hero → About → Skills → Career を1ページに並べる。どの節も
-      flex: 1 0 auto のままだと、中身の短い人のページで余った高さが節ごとに割り振られ、
-      名札と About のあいだが空き、名札が画面の真ん中に浮く
-    */
+  it('上の帯は貼り付き、地を敷いて本文より手前に出る。全体ページでは貼り付けない', () => {
     const frame = blockAt(sheet, '@media screen')
-    const rest = ruleWith(frame, 'flex-grow: 0')
-    expect(rest.selector).toBe(
-      ':where(body[data-layout]:not([data-whole])) main > :is(.hero, section):not(:last-child)',
-    )
-    // 伸びる規則より後ろ。前に置くと、後ろの flex: 1 0 auto に上書きされる
-    expect(frame.indexOf(rest.selector)).toBeGreaterThan(
-      frame.indexOf(':where(body[data-layout]:not([data-whole])) main > :is(.hero, section) {'),
-    )
-  })
-
-  it('899 以下の帯は貼り付き、地を敷いて本文より手前に出る。貼り付く前の版面は動かさない', () => {
-    const narrow = blockAt(blockAt(sheet, '@media screen'), '@media (max-width: 899px)')
-    const band = bodyOf(narrow, ':where(body[data-layout]:not([data-whole])) .rail {')
-    expect(band).toContain('position: sticky')
-    expect(band).toContain('top: 0')
-    expect(band).toContain('background: var(--bg)')
+    const top = bodyOf(frame, ':where(body[data-site]:not([data-whole])) .top {')
+    expect(top).toContain('position: sticky')
+    expect(top).toContain('top: 0')
     /*
-      z-index は 2。Hero と月の節の中身（月より前に出す 1）と、カードの中のリンク
-      （覆いの上に出す 1）より上でないと、送った本文が帯の上に描かれる
+      z-index は 2。入口の軌道図の札（1）と、一覧の行の中のリンク（覆いの上に出す 1）
+      より上でないと、送った本文が帯の上に描かれる
     */
-    expect(band).toContain('z-index: 2')
+    expect(top).toContain('z-index: 2')
     expect(sheet.match(/z-index: 1;/g)?.length).toBeGreaterThan(0)
     expect(sheet).not.toMatch(/z-index: [3-9];/)
-    // 空きは負の margin で戻す。戻さないと表紙が縮み、月の大きさと字の位置が変わる
-    expect(band).toContain('margin-block: calc(var(--sp-3) * -1)')
-    expect(band).toContain('padding-block: var(--sp-3)')
+    // 地は素の .top が敷く（貼り付いた帯の下を本文が流れても、字が重ならない）
+    expect(bodyOf(sheet, '.top {')).toContain('background: var(--bg)')
   })
 
-  it('900 以上の上の帯（中央寄せ・雑誌風）も貼り付く。骨格の position: static に勝つ強さで', () => {
-    const wide = blockAt(blockAt(sheet, '@media screen'), '@media (min-width: 900px)')
-    const band = ruleWith(wide, 'position: sticky')
-    // :where() で包むと (0,1,0) になり、骨格の body[data-layout='center'] .rail（0,2,1）に負ける
-    expect(band.selector.split(/,\s*/)).toEqual([
-      "body[data-layout='center']:not([data-whole]) .rail",
-      "body[data-layout='magazine']:not([data-whole]) .rail",
-    ])
-    expect(band.body).toContain('background: var(--bg)')
-    expect(band.body).toContain('z-index: 2')
-    expect(band.body).toContain('margin-top: calc(var(--sp-3) * -1)')
-    expect(band.body).toContain('padding-top: var(--sp-3)')
-    // 外枠は柱を static に戻さない（以前はページが動かないので貼り付けを外していた）
-    expect(blockAt(sheet, '@media screen')).not.toContain('position: static')
-  })
-
-  it('柱が左に立つ 900 以上の rail は、素の規則で貼り付き、画面より高ければ柱の中だけが動く', () => {
-    // 最初の 900 以上の括りは素の骨格のもの（プリセットと外枠のものは後ろ）
-    const wide = blockAt(sheet, '@media (min-width: 900px)')
-    expect(wide).toContain('grid-template-columns: var(--nav-w) minmax(0, 1fr)')
-    const rail = bodyOf(wide, '.rail {')
-    expect(rail).toContain('position: sticky')
-    expect(rail).toContain('align-self: start')
-    expect(rail).toContain('max-height: calc(100dvh - var(--gutter) * 2)')
-    expect(rail).toContain('overflow-y: auto')
-  })
-
-  it('送った先を帯の下に止める。空きは :root の段で、帯の姿ごとに差し替える', () => {
-    const root = bodyOf(sheet, ':root {')
-    expect(root).toMatch(/--band-clear: calc\(var\(--tap\)/)
-    expect(root).toMatch(/--band-clear-wide: calc\(var\(--tap\) \* 2/)
-
+  it('送った先を帯の下に止める。空きは :root の段（帯の高さ + 間）', () => {
+    expect(bodyOf(sheet, ':root {')).toContain('--top-clear: calc(var(--top-h) + var(--sp-5))')
     const frame = blockAt(sheet, '@media screen')
-    expect(ruleWith(frame, 'scroll-padding-top: var(--band-clear)').selector).toBe(
-      ':where(html:has(> body[data-layout]:not([data-whole])))',
-    )
-    const wide = blockAt(frame, '@media (min-width: 900px)')
-    expect(ruleWith(wide, 'scroll-padding-top: var(--band-clear-wide)').selector).toContain(
-      "body[data-layout='center']",
-    )
-    expect(ruleWith(wide, 'scroll-padding-top: var(--sp-7)').selector).toContain(
-      "body[data-layout='rail']",
+    expect(ruleWith(frame, 'scroll-padding-top: var(--top-clear)').selector).toBe(
+      ':where(html:has(> body[data-site]:not([data-whole])))',
     )
     // なめらかに送るのは公開ページだけ。reduced-motion の素の html に譲る詳細度 0
-    expect(bodyOf(sheet, ':where(html:has(> body[data-layout])) {')).toContain(
+    expect(bodyOf(sheet, ':where(html:has(> body[data-site])) {')).toContain(
       'scroll-behavior: smooth',
     )
   })
@@ -670,21 +610,6 @@ describe('ページの外枠', () => {
   it('[hidden] の打ち消しを持つ', () => {
     // 節に display を与えるので、打ち消さないと hidden を付けた節が見えてしまう
     expect(sheet).toContain(':is(.hero, section)[hidden]')
-  })
-
-  it('狭い画面では、柱だけでなく名札の中身も横帯にする', () => {
-    // 柱を横に寝かせるだけでは足りない。名札の中身が縦積みのままだと帯が
-    // 何段にも伸び、貼り付いた帯が画面の上を食う（個人ページ専用の名札だった
-    // ころは帯だけで 188.7px = rail @390x844, Hiragino Sans, macOS Chromium）
-    const narrow = blockAt(blockAt(sheet, '@media screen'), '@media (max-width: 899px)')
-
-    expect(narrow).toContain('.identity {')
-    const band = narrow.slice(narrow.indexOf('.identity {'))
-    expect(band.slice(0, band.indexOf('}'))).toContain('flex-direction: row')
-
-    // 帯に入らないものは畳む（肩書き・ひとこと・柱の GitHub / メール）
-    expect(narrow).toContain('.identity__role')
-    expect(narrow).toContain('.identity__tagline')
   })
 
   it('全体ページの body にだけ、外枠を外す印が付く', async () => {
@@ -696,112 +621,64 @@ describe('ページの外枠', () => {
     expect(await okText('/members/okazaki')).not.toContain('data-whole')
   })
 
-  it('柱を上の帯にする骨格は、名札の中身も横に寝かせる', () => {
+  it('上の帯の目次は1行のまま横に送る。切れている端をぼかし、最後の行き先は薄めない', () => {
     /*
-      中央寄せと雑誌風は 900 以上でも柱を左に立てない（列を1つに戻している）。
-      名札が縦積みのまま残ると、それだけで約237px——トップの帯 30.1px の約8倍
-      （rail @390x844）——を取り、貼り付いた帯が画面の上の3割近くを食う。
+      帯の段の数を中身で変えない（折り返すと帯が2段になり、貼り付いた帯が画面の上を
+      食う）。切れた先に気づく手がかりはこのぼかししか無い——帯は横にしか動かず、
+      タッチ端末ではスクロールバーも出ない
     */
-    const presets = sheet.slice(sheet.indexOf("body[data-layout='magazine'] .shell"))
-    const rule = bodyOf(presets, "body[data-layout='center'] .identity,")
-
-    expect(rule).toContain('flex-direction: row')
-    expect(rule).toContain('align-items: center')
-    // 4行まとめて。flex-wrap が落ちると6つの子が狭い帯で1行に収まらず切れる
-    expect(rule).toContain('flex-wrap: wrap')
-    expect(rule).toContain('gap: var(--sp-4)')
-    // 雑誌風と同じ1本。片方にだけ書くと、また骨格ごとに違う名札ができる
-    expect(presets).toContain("body[data-layout='magazine'] .identity")
-  })
-
-  it('雑誌風の上の帯は、名札の行・目次・足元を縦の中心でそろえる', () => {
+    const toc = bodyOf(sheet, '.toc {')
+    for (const decl of [
+      'flex: 1 1 0',
+      'min-width: 0',
+      'overflow-x: auto',
+      'justify-content: safe flex-end',
+      'mask-image: var(--fade-right)',
+    ]) {
+      expect(toc, decl).toContain(decl)
+    }
+    expect(toc).not.toContain('flex-wrap: wrap')
     /*
-      下端（flex-end）でそろえていたころは、高さの違う3つ——名札の行（GitHub /
-      メールの札で 40px）・目次（28px）・足元（11px の字1行）——の箱の下端だけが
-      そろい、字は3段ばらばらの高さに座っていた。900 以上の帯にだけ効く規則
+      ぼかしの幅だけ右に空きを持ち、同じだけ右の余白へはみ出す。溢れていなければ
+      ぼかしは空きに掛かるだけで、最後の行き先（Contact）は薄まらない
     */
-    const presets = sheet.slice(sheet.indexOf("body[data-layout='magazine'] .shell {"))
-    const wide = blockAt(presets, '@media (min-width: 900px)')
-    // 題字の帯の規則（両端に振り分ける1本）。位置を戻す center との共通の規則とは別
-    const rail = ruleWith(wide, 'justify-content: space-between')
-    expect(rail.selector).toBe("body[data-layout='magazine'] .rail")
-    expect(rail.body).toContain('flex-direction: row')
-    expect(rail.body).toContain('align-items: center')
-    expect(rail.body).not.toContain('flex-end')
-  })
+    expect(toc).toContain('padding-inline-end: var(--fade-w)')
+    expect(toc).toContain('margin-inline-end: calc(var(--fade-w) * -1)')
+    // ぼかしの幅は余白に収まる幅（はみ出してもページを横に動かさない）
+    expect(bodyOf(sheet, ':root {')).toContain('--fade-w: min(var(--sp-6), var(--gutter))')
 
-  it('中央寄せの上の帯は著作権表示を持たず、全体ページへの1本を目次の行に置く', () => {
-    /*
-      柱が上の帯になる骨格には足元が無い。著作権表示が帯の真ん中に1段を取り、
-      その下から本文が始まっていた。899 以下の帯で畳むのと同じ扱いで、900 以上の
-      中央寄せでも出さない。全体ページへの1本は残し、目次と同じ行に並べる
-      （名札を1段目いっぱいにして、目次と足元を2段目へ送る）
-    */
-    const presets = sheet.slice(sheet.indexOf("body[data-layout='magazine'] .shell {"))
-    const wide = blockAt(presets, '@media (min-width: 900px)')
-
-    const rail = bodyOf(wide, "body[data-layout='center'] .rail {")
-    expect(rail).toContain('flex-direction: row')
-    expect(rail).toContain('flex-wrap: wrap')
-    expect(bodyOf(wide, "body[data-layout='center'] .rail > .identity {")).toContain(
-      'flex-basis: 100%',
-    )
-
-    // 畳むのは著作権表示（.rail__copy）だけ。足元ごと畳むと全体ページへの1本まで消える
-    const fold = ruleWith(wide, 'display: none')
-    expect(fold.selector).toContain("body[data-layout='center'] .rail__copy")
-    expect(fold.selector).not.toMatch(/center'\] \.rail__footer/)
-    // 足元ごと畳むのは全体ページ（自分への行き先を置かないので、著作権表示しか無い）だけ
-    expect(fold.selector).toContain("body[data-layout='center'][data-whole] .rail__footer")
-    // 900 以上の中央寄せの外では著作権表示を名指ししない（柱が左に立つ骨格の足元は残す）
-    expect(sheet.split('.rail__copy').length).toBe(wide.split('.rail__copy').length)
-  })
-
-  it('狭い画面の目次は折り返さず、切れている端をぼかす', () => {
-    /*
-      899 以下では目次も1行の横帯になる。折り返すと2段で場所を取り、中央寄せの
-      390px ではその1段ぶんで 6px 足りなくなっていた。
-
-      切れた先に気づく手がかりはこのぼかししか無い。帯は横にしか動かず、
-      タッチ端末ではスクロールバーも出ない。
-    */
+    // 絞り込みの帯も同じ手当て（899 以下）。片方だけだと、同じ形の帯が違う振る舞いをする
     const narrow = blockAt(blockAt(sheet, '@media screen'), '@media (max-width: 899px)')
-    const toc = ruleWith(narrow, 'mask-image: var(--fade-right)')
-
-    expect(toc.selector).toContain('.toc')
-    expect(toc.body).toContain('flex-wrap: nowrap')
-    // 絞り込みの帯も同じ手当て。片方だけだと、同じ形の帯が違う振る舞いをする
-    expect(narrow.match(/mask-image: var\(--fade-right\)/g)).toHaveLength(2)
+    const filters = ruleWith(narrow, 'mask-image: var(--fade-right)')
+    expect(filters.selector).toContain('.filters')
+    expect(filters.body).toContain('padding-inline-end: var(--fade-w)')
+    expect(filters.body).toContain('margin-inline-end: calc(var(--fade-w) * -1)')
     // 覆いは :root で決める。生の値を各セレクタに散らさない
     expect(sheet).toContain('--fade-right:')
   })
 
-  it('目次の1本だけ :where() を外し、他は外さない', () => {
-    /*
-      中央寄せの body[data-layout='center'] .toc は (0,2,1)。:where() で包んだ
-      外枠の指定は (0,1,0) なので、nowrap を足しても負ける。この1本だけ素で書く。
-      （900 以上の上の帯は骨格を名指しした (0,3,1) で書く——別の検査）
-
-      ほかは外さない。骨格のプリセットが後から部品を上書きする書き方なので、
-      外枠の側が強いと、プリセットの差し替えが黙って効かなくなる。
-    */
+  it('全体ページの目次は折り返す（貼り付かない頭の帯。ページを横に動かさない）', () => {
     const frame = blockAt(sheet, '@media screen')
-    expect(frame.match(/^\s*body\[data-layout\]/gm) ?? []).toHaveLength(1)
-    expect(ruleWith(frame, 'flex-wrap: nowrap').selector).not.toContain(':where(')
+    const whole = bodyOf(frame, ':where(body[data-site][data-whole]) .toc {')
+    expect(whole).toContain('flex-wrap: wrap')
+    expect(whole).toContain('mask-image: none')
   })
 
-  it('横帯の中央寄せにも safe を付ける', () => {
-    // 目次が溢れたとき、素の center は中身を左右へ等しくはみ出させ、左端が
-    // スクロールで戻せなくなる。align-content と同じ理屈で、ここも safe
-    expect(bodyOf(sheet, "body[data-layout='center'] .toc")).toContain(
-      'justify-content: safe center',
-    )
-    expect(sheet).not.toContain('justify-content: center;\n  flex-wrap: wrap')
+  it('外枠の目印は :where() で包み、詳細度を 0 にする', () => {
+    /*
+      骨格のプリセットは無くなったので、外枠が部品の規則に勝つための強さは要らない。
+      目印（body[data-site]）は全部 :where() の中に置き、外枠の規則の強さは部品の
+      セレクタだけで決まるようにする（body と main の名指しの2本だけは例外——
+      骨格そのもので、部品が上書きする相手が居ない）
+    */
+    const frame = blockAt(sheet, '@media screen')
+    const bare = (frame.match(/^\s*body\[data-site\][^\n]*\{/gm) ?? []).map((line) => line.trim())
+    expect(bare).toEqual(['body[data-site] {', 'body[data-site] > main {'])
   })
 })
 
 /*
-  骨格ではなく、部品の作法。どれも「壊れても HTML は変わらず、TypeScript も
+  外枠ではなく、部品の作法。どれも「壊れても HTML は変わらず、TypeScript も
   黙っている」種類の決まりなので、値ではなく規則の形を見張る。
 */
 /*
@@ -809,27 +686,6 @@ describe('ページの外枠', () => {
   付け先をここで見張り、効いているかは npm run check:fit が 27通りで測る。
 */
 describe('上限ちょうどの中身で収めるための組み方', () => {
-  const frame = () => blockAt(sheet, '@media screen')
-
-  it('上の帯の目次は 900 以上でも1行で、帯の行の残りを取る（件数で帯を伸ばさない）', () => {
-    const wide = blockAt(frame(), '@media (min-width: 900px)')
-    const toc = ruleWith(wide, 'flex: 1 1 0')
-    expect(toc.selector).toContain("body[data-layout='center']:not([data-whole]) .toc")
-    expect(toc.selector).toContain("body[data-layout='magazine']:not([data-whole]) .toc")
-    for (const decl of ['min-width: 0', 'flex-wrap: nowrap', 'mask-image: var(--fade-right)']) {
-      expect(toc.body).toContain(decl)
-    }
-  })
-
-  it('上の帯の職種は1行のまま末尾を省く（長い職種で帯を2段にしない）', () => {
-    const wide = blockAt(frame(), '@media (min-width: 900px)')
-    const role = ruleWith(wide, 'max-width: var(--role-w)')
-    expect(role.selector).toContain('.identity__role')
-    expect(role.body).toContain('text-overflow: ellipsis')
-    expect(role.body).toContain('white-space: nowrap')
-    expect(bodyOf(sheet, ':root {')).toMatch(/--role-w: \d+em/)
-  })
-
   it('リンク集の矢印は行の右上に据え、補足が長くても1行ぶんを取らない', () => {
     expect(bodyOf(sheet, '.linklist__go {')).toContain('position: absolute')
     const row = bodyOf(sheet, '.linklist li a {')
@@ -855,22 +711,20 @@ describe('部品の作法', () => {
     expect(projects).not.toContain('class="pager')
   })
 
-  it('柱の足元のリンクは、著作権表示と見分けが付く', () => {
+  it('足元のリンクは、著作権表示と見分けが付く', () => {
     /*
       素の a は color: inherit / text-decoration: none。全体ページへの1本を
-      .rail__footer に置くだけでは、隣の「© 2026 Noctifex」とまったく同じ姿に
-      なり、押せるものだと分からない（色の違いすら無い状態）。
-      当たり判定（min-height: var(--tap)）は付けない——柱が 40px 伸び、
-      中央寄せと雑誌風の 900 以上では、その 40px がそのまま貼り付いた帯を伸ばす。
+      .foot__meta に置くだけでは、隣の「© 2026 AstLog」とまったく同じ姿に
+      なり、押せるものだと分からない（色の違いすら無い状態）
     */
-    expect(bodyOf(sheet, '.rail__footer a {')).toContain('text-decoration: underline')
-    expect(bodyOf(sheet, '.rail__footer a {')).toContain('color: var(--ink-mid)')
-    expect(bodyOf(sheet, '.rail__footer a {')).not.toContain('min-height')
+    const link = bodyOf(sheet, '.foot__meta a {')
+    expect(link).toContain('text-decoration: underline')
+    expect(link).toContain('color: var(--ink-mid)')
   })
 
   it('外に出るリンクは1つの流儀に揃え、記号を薄くしない', () => {
     /*
-      カードの中のリンクは、このサイトでいちばん大事な操作子（初めて来た人を
+      作品の中のリンクは、このサイトでいちばん大事な操作子（初めて来た人を
       実物へ送り出す）なのに、本文と同じ --ink-mid だった。区別は opacity .6 の
       ↗（実効 3.97:1）と、地に対し 1.30:1 の罫線だけ。しかも色が変わるのは
       @media (hover: hover) の中だけで、タッチ端末では最後まで気づかれない。
@@ -883,103 +737,89 @@ describe('部品の作法', () => {
     expect(sheet).not.toContain('opacity: 0.6')
   })
 
-  it('カードは面ごと押せる。題のリンクの覆いをカードに被せ、ほかのリンクはその上に出す', () => {
+  it('一覧の行は面ごと押せる。題のリンクの覆いを行に被せ、ほかのリンクはその上に出す', () => {
     /*
-      題の字だけがリンクだったころ、.card:hover はカードごと浮かせていたのに、
-      浮いたカードの説明を押しても何も起きなかった。入れ子の <a> は作れず、
-      JavaScript も置かないので、題のリンクの ::after をカードいっぱいに広げる
+      題の字だけがリンクだと、押せる合図は行全体に出ているのに、説明を押しても
+      何も起きない。入れ子の <a> は作れず、JavaScript も置かないので、題のリンクの
+      ::after を行いっぱいに広げる
     */
-    const cover = bodyOf(sheet, '.card__link::after {')
+    const cover = bodyOf(sheet, '.entry__link::after {')
     expect(cover).toContain("content: ''")
     expect(cover).toContain('position: absolute')
     expect(cover).toContain('inset: 0')
-    // 覆いの基準はカード。外すと覆いが節か外枠まで広がり、画面のどこを押しても作品へ飛ぶ
-    expect(bodyOf(sheet, '.card {')).toContain('position: relative')
-    // カードの中のほかの行き先は覆いの上へ。出さないと、押しても覆いの下で作品のページへ行く
-    for (const selector of ['.links a {', '.card__member {']) {
+    // 覆いの基準は行。外すと覆いが節か外枠まで広がり、画面のどこを押しても作品へ飛ぶ
+    expect(bodyOf(sheet, '.entry {')).toContain('position: relative')
+    // 行の中のほかの行き先は覆いの上へ。出さないと、押しても覆いの下で作品のページへ行く
+    for (const selector of ['.links a {', '.entry__member {']) {
       const rule = bodyOf(sheet, selector)
       expect(rule, selector).toContain('position: relative')
       expect(rule, selector).toContain('z-index: 1')
     }
   })
 
-  it('カードのフォーカスはカード全体に、縁の内側に描く', () => {
+  it('一覧の行のフォーカスは行全体に、縁の内側に描く', () => {
     /*
-      押せる面はカード全体なので、輪郭もカード全体。題の字に描いたままだと、
-      輪郭だけが字幅に縮む。外へ離して描くと、並んだカードの間隔の中に輪郭が
-      出て、どちらのカードを囲んでいるのか読み分けにくい
+      押せる面は行全体なので、輪郭も行全体。題の字に描いたままだと、輪郭だけが
+      字幅に縮む。外へ離して描くと、上の行の罫線と重なって、どちらの行を囲んで
+      いるのか読み分けにくい
     */
-    expect(bodyOf(sheet, '.card__link:focus-visible {')).toContain('outline: none')
-    const ring = bodyOf(sheet, '.card__link:focus-visible::after {')
+    expect(bodyOf(sheet, '.entry__link:focus-visible {')).toContain('outline: none')
+    const ring = bodyOf(sheet, '.entry__link:focus-visible::after {')
     expect(ring).toContain('outline: var(--focus-ring) solid var(--accent)')
     expect(ring).toContain('outline-offset: calc(var(--focus-ring) * -1)')
-
-    /*
-      雑誌風のカードは左右の余白を持たず、内側の輪郭は字に掛かる。段を区切る
-      上の罫線を太線にする。box-shadow ではなく border——強制色モードで消えない
-    */
-    const magazine = bodyOf(
-      sheet,
-      "body[data-layout='magazine'] .card__link:focus-visible::after {",
-    )
-    expect(magazine).toContain('outline: none')
-    expect(magazine).toContain('border-top: var(--focus-ring) solid var(--accent)')
 
     // 輪郭の太さは素の :focus-visible と同じ段。値を写さない
     expect(bodyOf(sheet, ':focus-visible {')).toContain('outline: var(--focus-ring) solid')
     expect(sheet).not.toContain('outline: 2px')
   })
 
-  it('ホバーで浮かせるのは、題にリンクを持つカードだけ（雑誌風も同じ）', () => {
+  it('ホバーで応えるのは、題にリンクを持つ行だけ', () => {
     /*
-      slug の無いカードは押してもどこへも行かない。浮かせると、押せる合図だけ
-      出して押しても何も起きない面ができる——直したかったものそのもの
+      slug の無い行は押してもどこへも行かない。応えると、押せる合図だけ出して
+      押しても何も起きない面ができる。:has は :is() の中（知らないブラウザで列ごと
+      捨てられないように）
     */
     const hover = blockAt(sheet, '@media (hover: hover)')
-    expect(hover).not.toContain('.card:hover')
-    expect(ruleWith(hover, 'transform: translateY(-2px)').selector).toBe(
-      ':is(.card:has(.card__link), .member):hover',
-    )
-    expect(ruleWith(hover, 'border-top-color: var(--accent)').selector).toBe(
-      "body[data-layout='magazine'] :is(.card:has(.card__link), .member):hover",
+    expect(hover).not.toContain('.entry:hover')
+    expect(bodyOf(hover, ':is(.entry:has(.entry__link)):hover .entry__go {')).toContain(
+      'translate: var(--sp-2) 0',
     )
   })
 
   it('押して縮むのは面を押したときだけ。:has を手触りの列に混ぜない', () => {
     /*
-      .card:active にすると、中の Repository を押したときもカードごと縮む。
+      .entry:active にすると、中の Repository を押したときも行ごと縮む。
       列に :has を混ぜると、:has を知らないブラウザで列ごと捨てられ、ほかの
       部品の手触りまで消える
     */
-    // 手触りの列（.pill-cta:active から始まる1本）。管理画面の部品の列は admin.css に同じ形で
-    const head = sheet.indexOf('.pill-cta:active,')
+    // 手触りの列（.cta:active から始まる1本）。管理画面の部品の列は admin.css に同じ形で
+    const head = sheet.indexOf('.cta:active,')
     const list = sheet.slice(head, sheet.indexOf('{', head))
-    expect(bodyOf(sheet, '.pill-cta:active,')).toContain('scale: var(--press)')
+    expect(bodyOf(sheet, '.cta:active,')).toContain('scale: var(--press)')
     expect(list).toContain('.back:active')
+    expect(list).toContain('.toc a:active')
     expect(list).not.toContain(':has(')
     expect(bodyOf(adminSheet, '.btn:active,')).toContain('scale: var(--press)')
-    expect(bodyOf(sheet, '.card:has(.card__link:active) {')).toContain('scale: var(--press)')
+    expect(bodyOf(sheet, '.entry:has(.entry__link:active) {')).toContain('scale: var(--press)')
   })
 
-  it('「← 一覧に戻る」は丸い札。列いっぱいに伸びず、当たり判定は --tap', () => {
+  it('「← 一覧に戻る」は字の手。列いっぱいに伸びず、当たり判定は --tap', () => {
     // 節は grid。子の inline-flex は blockify され、既定の stretch で幅いっぱいに伸びる
-    const pill = bodyOf(sheet, '.back {')
-    expect(pill).toContain('justify-self: start')
+    const back = bodyOf(sheet, '.back {')
+    expect(back).toContain('justify-self: start')
     // pointer: coarse では --tap が 44px になる。ここで生の高さを書かない
-    expect(pill).toContain('min-height: var(--tap)')
+    expect(back).toContain('min-height: var(--tap)')
     // 見出しの上に立つので、見出しから離す
-    expect(pill).toContain('margin-bottom')
+    expect(back).toContain('margin-bottom')
     // 紙の上では押せない
     expect(ruleWith(blockAt(sheet, '@media print'), 'display: none').selector).toContain('.back')
-    // 押して縮み、ホバーで地が明るくなる
-    const head = sheet.indexOf('.pill-cta:active,')
+    // 押して縮み、ホバーで字が明るくなる
+    const head = sheet.indexOf('.cta:active,')
     expect(sheet.slice(head, sheet.indexOf('{', head))).toContain('.back:active')
-    expect(
-      ruleWith(
-        blockAt(sheet, '@media (hover: hover)'),
-        'background: var(--surface-hover);\n    color: var(--ink);',
-      ).selector,
-    ).toContain('.back:hover')
+    const hover = blockAt(sheet, '@media (hover: hover)')
+    const at = hover.indexOf('.filters a:not([aria-current]):hover,')
+    expect(hover.slice(at, hover.indexOf('{', at))).toContain('.back:hover')
+    expect(bodyOf(hover, '.filters a:not([aria-current]):hover,')).toContain('color: var(--ink)')
     // 対になっていた「くわしく読む →」は外した（本文は同じページのすぐ下の小節）
     expect(sheet).not.toContain('.more')
   })
@@ -1010,26 +850,6 @@ describe('部品の作法', () => {
     expect(bodyOf(sheet, '.head {')).not.toMatch(/justify-content: (safe )?center/)
   })
 
-  it('中央寄せの骨格でも、節の見出しは本文の列と同じ左の軸に立てる', () => {
-    /*
-      見出しだけを中央に置いていたころは、その下の本文（カード・紹介文・経歴）は
-      左から始まり、読む目が見出しの中心から本文の左端へ斜めに飛んでいた。
-      中央に組むのは入口・締め・ひとこと（Hero・Contact・Statement）だけで、
-      本文の列を持つ節の見出しは寄せない。骨格ごとの上書きを1本も書かない
-    */
-    expect(sheet).not.toMatch(/body\[data-layout='center'\] \.head\b/)
-    /*
-      「← 一覧に戻る」はすぐ下の見出しに付いて寄る札なので、見出しと一緒に左。
-      中央へ寄せる列（帯・名札・全体ページへの1本）に入れない
-    */
-    const band = "body[data-layout='center'] .hero:not(.hero--profile) > .band,"
-    const at = sheet.indexOf(band)
-    const centred = sheet.slice(at, sheet.indexOf('{', at))
-    expect(bodyOf(sheet, band)).toContain('justify-self: center')
-    expect(centred).toContain("body[data-layout='center'] .hero__whole")
-    expect(centred).not.toContain('.back')
-  })
-
   it('節の見出しは、h1 に上がっても字面が変わらない', () => {
     /*
       ページごとの URL（1ページ = 1ドキュメント）では節の見出しが h1、縦に積んだ
@@ -1039,7 +859,7 @@ describe('部品の作法', () => {
       何も言わないので、気づくのは見た目が跳ねたときだけ。
     */
     expect(sheet).not.toContain('.head h2 {')
-    expect(bodyOf(sheet, '.head :is(h1, h2) {')).toContain('font-size: var(--fs-display-xs)')
+    expect(bodyOf(sheet, '.head :is(h1, h2) {')).toContain('font-size: var(--fs-display-xl)')
 
     /*
       Contact の見出しは、ページごとの URL では読み上げ用の .sr-only、全体ページでは
@@ -1049,43 +869,42 @@ describe('部品の作法', () => {
     expect(sheet).not.toMatch(/\.contact (h1|h2|:is\(h1, h2\))/)
   })
 
-  it('締めの画面（Contact）は箱に入れず、入口と同じ組み方をする', () => {
-    /*
-      箱（枠・面・影）だったころは、広い画面の真ん中に小さな枠が浮いて周りが
-      空いていた。雑誌風の「箱をやめて罫線で区切る」一覧にも戻さない（そこに
-      居ると、雑誌風でだけ上に罫線が引かれる）
-    */
+  it('締めの画面（Contact）は箱に入れず、軌道図の下に字を置く', () => {
+    // 箱（枠・面・影）だったころは、広い画面の真ん中に小さな枠が浮いて周りが空いていた
     const contact = bodyOf(sheet, '.contact {')
     expect(contact).not.toMatch(/\bborder|background|box-shadow/)
-    expect(sheet).not.toContain("body[data-layout='magazine'] .contact")
 
-    // 月の受け皿になり、字を月より前に出す。字は入口と同じく画面の下へ
-    expect(bodyOf(sheet, '.moonlit {')).toContain('position: relative')
-    expect(bodyOf(sheet, '.moonlit > :not(.moon) {')).toContain('z-index: 1')
-    const frame = blockAt(sheet, '@media screen')
-    expect(
-      bodyOf(frame, ':where(body[data-layout]:not([data-whole])) main > .moonlit {'),
-    ).toContain('align-content: safe end')
+    // 軌道図は字の上の行。図だけ行いっぱいに伸ばし、縦横比は :root の段
+    const orbits = bodyOf(sheet, '.orbits {')
+    expect(orbits).toContain('align-self: stretch')
+    expect(orbits).toContain('aspect-ratio: var(--escape-ratio)')
+    expect(orbits).not.toContain('position: absolute')
+    // 表紙の中で、図の行と字の行。余りは字の上（1fr）が受け、900 以上で字は底に寄る
+    expect(bodyOf(sheet, '.orbital {')).toContain('grid-template-rows: auto 1fr')
+    expect(bodyOf(blockAt(sheet, '@media (min-width: 900px)'), '.orbital > .contact {')).toContain(
+      'align-self: end',
+    )
   })
 
-  it('締めの月は入口の月を返して小さく置き、動かさない', () => {
+  it('締めの軌道図は動かさない。動くのは入口の軌道図の中だけ', () => {
     /*
-      丈は :root の段（--moon-closing-h）から取る。セレクタに生の % を書くと、
-      check:contrast の前提（字と月の間隔）を動かした場所が :root から見えなくなる。
-      動かさないのは、途中の姿を測る段が締めの画面には無いため——ここで
-      月の出を掛けると、check:contrast が見ていない明るさが字の下を通りうる
+      入口で一度動けば足りる。締めにも動きを掛けると、npm run check:contrast に
+      途中の姿を測る段を締めの画面にも足すことになる（いまは入口だけを測る）
     */
-    const root = blockAt(sheet, ':root {')
-    const closing = Number(root.match(/--moon-closing-h:\s*([\d.]+)%/)?.[1])
-    const opening = Number(root.match(/--moon-h:\s*([\d.]+)%/)?.[1])
-    expect(closing).toBeGreaterThan(0)
-    expect(closing).toBeLessThan(opening)
-    expect(bodyOf(sheet, '.moon--closing {')).toContain('--moon-h: var(--moon-closing-h)')
-    expect(bodyOf(sheet, '.moon--closing .moon__mark {')).toContain('scale: -1 1')
-    // 2つを1つの規則で止めている。::before（光暈の広がり）だけ残すと、そちらが動く
-    expect(sheet).toMatch(
-      /\.moon--closing \.moon__mark,\s*\.moon--closing \.moon__mark::before \{\s*animation: none;\s*\}/,
+    const moving = rulesOf(sheet).filter((rule) =>
+      rule.decls.some(([name]) => name === 'animation' || name === 'animation-name'),
     )
+    for (const rule of moving) {
+      for (const selector of rule.selectors) {
+        if (!/orbit/.test(selector)) continue
+        expect(selector, `${selector} が動く`).toMatch(/^\.system__/)
+      }
+    }
+    expect(
+      moving.some((rule) =>
+        rule.selectors.some((one) => /\.(orbits|orbit-escape|orbit-probe|orbit-star)\b/.test(one)),
+      ),
+    ).toBe(false)
   })
 
   it('個人ページの名乗りは、要素とクラスの両方で段を下げる', () => {
@@ -1094,8 +913,8 @@ describe('部品の作法', () => {
       では .hero h1（0,1,1）に負け、大見出しの --fs-display を継ぐ。落ちても
       エラーは出ず、変わるのは「名乗りだけが画面の高さを食う」という結果だけ。
     */
-    expect(bodyOf(sheet, '.hero h1.hero__headline {')).toContain('font-size: var(--fs-display-sm)')
-    expect(bodyOf(sheet, '.hero h1 {')).toContain('font-size: var(--fs-display)')
+    expect(bodyOf(sheet, '.hero h1.hero__headline {')).toContain('font-size: var(--fs-display)')
+    expect(bodyOf(sheet, '.hero h1 {')).toContain('font-size: var(--fs-display-xl)')
 
     /*
       素の .hero__headline は置かない。付く先は必ず .hero の直接の子の h1 で、
@@ -1106,9 +925,11 @@ describe('部品の作法', () => {
     expect(sheet).not.toMatch(/^\.hero__headline\s*[,{]/m)
   })
 
-  it('句読点までの塊は中で折らせない。大見出しは塊を1行ずつに積む', () => {
-    expect(bodyOf(sheet, '.phrase {')).toContain('display: inline-block')
+  it('句読点までの塊は中で折らせない。大見出しと締めの1文は塊を1行ずつに積む', () => {
+    // 頭の改行は必須。.hero h1 .phrase { に当てないため
+    expect(bodyOf(sheet, '\n.phrase {')).toContain('display: inline-block')
     expect(bodyOf(sheet, '.hero h1 .phrase {')).toContain('display: block')
+    expect(bodyOf(sheet, '.contact__lead .phrase {')).toContain('display: block')
   })
 
   it('入口の浮かび上がりは出だしの姿だけを持つ。止めた姿が最後の姿になる', () => {
@@ -1123,24 +944,27 @@ describe('部品の作法', () => {
     expect(body).not.toMatch(/\bto\s*\{/)
   })
 
-  it('入口の下の余白は、浮かび上がりのずれ以上に取る。途中でページを伸ばさない', () => {
-    // 字を下に寄せた入口で、帯が下から浮かび上がる途中だけ 4px 溢れていた
-    expect(bodyOf(sheet, '.hero {')).toContain('padding-block: var(--sp-3) var(--enter-shift)')
-  })
-
-  it('三日月も光暈もパネルからはみ出させない。はみ出すと縦一直線に途切れて見える', () => {
+  it('入口の軌道図は層を枠いっぱいに重ね、星を前に出す。札の層も枠いっぱい', () => {
     /*
-      左へ寄せる量（--moon-shift）が、光暈が右へ広がる量より小さいと、光暈が
-      パネルの右端で断ち切られる。0 以上（右へ出す）なら三日月そのものが切れる
+      絵の層（軌道・走査線・天体）は枠（.system）いっぱいに重ねる。viewBox の真ん中
+      （焦点）が枠の真ん中に来て、grid の真ん中に置いた星がちょうど焦点に座る
     */
-    const root = blockAt(sheet, ':root {')
-    const shift = Number(root.match(/--moon-shift:\s*(-?[\d.]+)%/)?.[1])
-    const [, glowRight] = (root.match(/--moon-glow-inset:([^;]*);/)?.[1] ?? '')
-      .trim()
-      .split(/\s+/)
-      .map((part) => Number.parseFloat(part))
-    expect(shift).toBeLessThan(0)
-    expect(-shift).toBeGreaterThanOrEqual(-(glowRight ?? 0))
+    const layers = bodyOf(sheet, '.system__orbits,\n.system__beam,\n.system__bodies {')
+    expect(layers).toContain('position: absolute')
+    expect(layers).toContain('inset: 0')
+    // 前に出すのは星だけ（札の列まで位置の基準を変えない）
+    expect(bodyOf(sheet, '.system__star {')).toContain('z-index: 1')
+    expect(sheet).not.toContain('.system > :not(')
+    const system = bodyOf(sheet, '.system {')
+    expect(system).toContain('place-items: center')
+    expect(system).toContain('width: 100%')
+    expect(system).toContain('aspect-ratio: var(--system-ratio)')
+    // 札の層は流れの外（grid の行に入ると、星が真ん中から外れる）
+    const labels = bodyOf(sheet, '.system__labels {')
+    expect(labels).toContain('position: absolute')
+    expect(labels).toContain('inset: 0')
+    // 横だけ切る（見積もりより長い札でもページを横に動かさない）
+    expect(system).toContain('overflow-x: clip')
   })
 
   it('技術の小見出しは、見出しに上げても太さを変えない', () => {
@@ -1149,52 +973,23 @@ describe('部品の作法', () => {
     expect(bodyOf(sheet, '.side-head {')).toContain('font-weight: 400')
   })
 
-  it('狭い画面で畳むのは柱の中だけ', () => {
+  it('名乗りと連絡先は足元に置き、どの幅でも畳まない', () => {
     /*
-      畳んだぶんが「どこにも無くなる」ものを、この一覧に入れてはいけない。
-      素の .socials を隠していたせいで、GitHub のプロフィールが 899 以下で
-      ページのどこからも辿れなくなっていた（WCAG 1.4.10）。Contact の画面に
-      置いた同じ部品まで巻き添えで消えるので、柱の中（.identity の子）だけを
-      名指しする。
-
-      肩書きは入口の Hero（.hero__role）・個人ページの名札・<title> /
-      meta description / JSON-LD に残るので畳んでよい。名前（.identity__name）は
-      畳まない——1人のサイトの入口以外の画面で、帯の中で誰のサイトかを言うのは
-      そこだけになる。
+      柱のころは 899 以下で肩書き・一言・GitHub / メールを畳み、畳んだぶんが
+      「どこにも無くなる」ものを入れないよう見張っていた（素の .socials を隠して、
+      GitHub のプロフィールが電話から辿れなくなったことがある。WCAG 1.4.10）。
+      いまは上の帯にロゴと目次しか置かず、名乗りと連絡先は足元が受ける——
+      幅で畳む規則を1本も持たない
     */
-    const narrow = blockAt(blockAt(sheet, '@media screen'), '@media (max-width: 899px)')
-    const fold = ruleWith(narrow, 'display: none')
-
-    expect(fold.selector).toContain('.identity .socials')
-    // 柱の外に置いた .socials（Contact の画面）まで消さない
-    expect(fold.selector).not.toContain('[data-whole])) .socials')
-    expect(fold.selector).toContain('.identity__role')
-    // 本文の側の名札（個人ページの頭）は幅で畳まない。そこにしか顔が無い
-    expect(fold.selector).not.toContain('nameplate')
-    // 柱の名前は畳まない。代わりにワードマークを畳む（下の検査）
-    expect(fold.selector).not.toContain('identity__name')
-    expect(fold.selector).not.toContain('brand__word')
-  })
-
-  it('名乗る帯ではワードマークを見た目だけ畳む。ロゴのリンクの名前は残す', () => {
-    /*
-      899 以下の帯に名前（.identity__name）を入れる場所は、ワードマーク
-      （NOCTIFEX）を畳んで作る。ただし display: none にすると、ロゴのリンクの
-      名前がこの字しか無い（印の svg は aria-hidden）ので、名前の無いリンクに
-      なる（WCAG 4.1.2）。.sr-only と同じ手で版面からだけ外す。
-
-      名乗らない画面（入口・2人以上のサイト）では畳まない。.identity--named が
-      付いた柱だけを名指しすること
-    */
-    const narrow = blockAt(blockAt(sheet, '@media screen'), '@media (max-width: 899px)')
-    const hide = bodyOf(narrow, '.identity--named .brand__word {')
-    expect(hide).toContain('position: absolute')
-    expect(hide).toContain('clip-path: inset(50%)')
-    expect(hide).not.toContain('display: none')
-    expect(narrow).not.toContain(':not([data-whole])) .brand__word {')
-
-    // 名前は1行のまま。2段に折れると貼り付いた帯が伸び、画面の上を食う
-    expect(bodyOf(narrow, ' .identity__name {')).toContain('white-space: nowrap')
+    const folds = rulesOf(sheet).filter(
+      (rule) =>
+        rule.context.some((one) => /width/.test(one)) &&
+        rule.decls.some(([name, value]) => name === 'display' && value === 'none'),
+    )
+    expect(folds.map((rule) => rule.selectors.join(', '))).toEqual([])
+    // ロゴはワードマーク1枚（畳んだ Λ の絵は持たない）
+    expect(sheet).not.toContain('.brand__mark')
+    expect(bodyOf(sheet, '.brand__word {')).toContain('height: var(--brand-h)')
   })
 
   it('経歴とできごとの罫線は行のあいだだけ。見出しの線と2本並べない', () => {
@@ -1206,39 +1001,31 @@ describe('部品の作法', () => {
   it('行き先の列は折り返した行のあいだを空けない。札の的の高さが行の間隔', () => {
     // --sp-4 を足していたころ、2行に折れた行き先の行の間が 52px 開いていた
     const links = bodyOf(sheet, '.links {')
-    expect(links).toContain('gap: 0 var(--sp-4)')
+    expect(links).toContain('gap: 0 var(--sp-5)')
     expect(bodyOf(sheet, '.links a {')).toContain('min-height: var(--tap)')
   })
 
-  it('カードのサムネイルはどの幅でも出す。空の枠だけは 600 未満で出さない。縦横比は :root の段', () => {
+  it('一覧のサムネイルはどの幅でも出す。縦横比は :root の段', () => {
     /*
       1画面に収めていたころは 600 未満で畳んでいて、電話の一覧には作品の絵が
-      どこにも無かった。一覧は縦に読むので出す。行をそろえる空の枠（中身の無い
-      span）は、カードが1列に積まれる 600 未満ではそろえる相手が居ないので出さない
+      どこにも無かった。一覧は縦に読むので出す
     */
-    const thumb = bodyOf(sheet, '.card__thumb {')
+    const thumb = bodyOf(sheet, '.entry__thumb {')
     expect(thumb).toContain('display: block')
     expect(thumb).toContain('aspect-ratio: var(--thumb-ratio)')
+    expect(thumb).toContain('width: min(100%, var(--entry-thumb))')
     // 縦横比の箱は既定では中身の高さまで伸びる。読み込んだ絵が 120px の枠を 300px にしていた
     expect(thumb).toContain('min-height: 0')
-    expect(bodyOf(sheet, '.card__thumb:empty {')).toContain('display: none')
-    expect(bodyOf(blockAt(sheet, '@media (min-width: 600px)'), '.card__thumb:empty {')).toContain(
-      'display: block',
+    // 幅で畳まない
+    const hidden = rulesOf(sheet).filter(
+      (rule) =>
+        rule.selectors.some((one) => one.includes('entry__thumb')) &&
+        rule.decls.some(([name, value]) => name === 'display' && value === 'none'),
     )
+    expect(hidden).toEqual([])
     // 枠の形をそろえる。絵は枠いっぱいに切り抜く
-    expect(bodyOf(sheet, '.card__thumb img {')).toContain('object-fit: cover')
+    expect(bodyOf(sheet, '.entry__thumb img {')).toContain('object-fit: cover')
     expect(bodyOf(sheet, ':root {')).toContain('--thumb-ratio:')
-  })
-
-  it('雑誌風のサムネイルは横長の段に差し替える。生の比を骨格に書かない', () => {
-    /*
-      雑誌風は箱の余白が無く、1440 のカードが 655px——3:1 の枠だけで 218px に
-      なり、節の見出しを1段上げた日にいちばん高い行が 1440x900 で溢れた
-    */
-    expect(bodyOf(sheet, "body[data-layout='magazine'] {")).toContain(
-      '--thumb-ratio: var(--thumb-ratio-wide)',
-    )
-    expect(bodyOf(sheet, ':root {')).toMatch(/--thumb-ratio-wide:\s*\d+ \/ \d+/)
   })
 
   it('作品の画像は枠の高さを :root の段で決め、絵は切らずに枠へ貼る', () => {
@@ -1285,85 +1072,29 @@ describe('部品の作法', () => {
     expect(sheet).not.toContain('--focus-inset')
   })
 
-  it('指のときは目次の行き先も、ほかの押す手と同じ --tap の的', () => {
+  it('目次の行き先は、どの入力手段でもほかの押す手と同じ --tap の的', () => {
     /*
-      素の目次は字の高さ + 上下 4px の 30px で、電話の帯ではいちばんよく押す手が
-      いちばん小さかった。幅ではなく入力手段で分ける（iPad の横向きも指）
+      上の帯は --top-h の高さがあり、的を小さく詰める理由が無い。幅ではなく入力手段で
+      --tap が 40px / 44px に変わる（iPad の横向きも指）
     */
-    const coarse = blockAt(sheet, '@media (pointer: coarse)')
-    const target = ruleWith(coarse, 'min-height: var(--tap)')
-    expect(target.selector).toContain('.toc a')
-    expect(target.body).toContain('align-items: center')
+    expect(bodyOf(sheet, '.toc a {')).toContain('min-height: var(--tap)')
+    expect(bodyOf(sheet, '.top__admin {')).toContain('min-height: var(--tap)')
+    expect(bodyOf(blockAt(sheet, '@media (pointer: coarse)'), ':root {')).toContain('--tap: 44px')
   })
 
-  it('指のときは入口の「すべてを1ページで読む →」も --tap の的', () => {
-    // 字の1行ぶん（22px）だった。899 以下では柱の足元の1本を畳むので、指の画面で
-    // 全体ページへ行く手はこれだけになる
-    const coarse = blockAt(sheet, '@media (pointer: coarse)')
-    const whole = bodyOf(coarse, '.hero__whole {')
-    expect(whole).toContain('min-height: var(--tap)')
-    expect(whole).toContain('align-items: center')
-  })
-
-  it('目次のいまのページは、帯の見えている幅の中で開く（帯のときだけ）', () => {
+  it('目次のいまのページは、帯の見えている幅の中で開く（貼り付く帯のときだけ）', () => {
     /*
       JavaScript が無いので、帯は何もしなければいつも左端で開き、並びの後ろの
-      節に着くと印が帯の外に出ていた。scroll-initial-target は帯の姿（899 以下と、
-      上の帯になる骨格の 900 以上）にだけ掛ける——柱が縦に立つ rail では、
-      いちばん近いスクロール容器が柱そのものになり、柱を縦に送ってしまう
+      節に着くと印が帯の外に出ていた。全体ページの目次は折り返すので要らない
     */
     const frame = blockAt(sheet, '@media screen')
-    const narrow = blockAt(frame, '@media (max-width: 899px)')
-    const wide = blockAt(frame, '@media (min-width: 900px)')
-    for (const block of [narrow, wide]) {
-      const marker = ruleWith(block, 'scroll-initial-target: nearest')
-      expect(marker.selector).toContain(".toc a[aria-current='page']")
-      // 右端のぼかしの下に座らせない
-      expect(marker.body).toContain('scroll-margin-inline: var(--sp-6)')
-    }
-    expect(ruleWith(wide, 'scroll-initial-target: nearest').selector).not.toContain('rail')
-    // 素の外では掛けない（rail の縦の柱に当たる）
-    expect(sheet.split('scroll-initial-target').length).toBe(3)
-    /*
-      900 以上の上の帯は、素の 900 以上の .toc { overflow: visible }（縦の柱のため）を
-      受けたままではスクロール容器にならず、溢れた行き先がぼかしの外で切られていた
-    */
-    expect(ruleWith(wide, 'flex: 1 1 0').body).toContain('overflow-x: auto')
-  })
-
-  it('全体ページの雑誌風の目次は折り返す（ページを横に動かさない）', () => {
-    // 900 以上の雑誌風の .toc は素の overflow: visible を受ける。折り返さないと、
-    // はみ出しが目次の中ではなくページの幅になった（scrollWidth 1550 = @1440x900）
-    const wraps = rulesOf(sheet).filter(
-      (rule) =>
-        rule.selectors.includes("body[data-layout='magazine'] .toc") &&
-        rule.decls.some(([name, value]) => name === 'flex-wrap' && value === 'wrap'),
+    const marker = ruleWith(frame, 'scroll-initial-target: nearest')
+    expect(marker.selector).toBe(
+      ":where(body[data-site]:not([data-whole])) .toc a[aria-current='page']",
     )
-    expect(wraps).toHaveLength(1)
-    expect(wraps[0]?.context).toEqual(['@media (min-width: 900px)'])
-    expectNotOverridden(sheet, wraps[0]?.start ?? -1)
-  })
-
-  it('中央寄せでも、個人ページの頭（名札・大見出し）は本文の列と同じ左の軸に立てる', () => {
-    /*
-      個人ページは1ページで、頭のすぐ下に About・Skills・Career の本文が続く。
-      頭だけを中央に組んでいたころ（中央寄せ @1440x900）は、中央の大見出しから
-      左の About へ読む目が斜めに飛んでいた。中央に組むのは入口の表紙だけ
-    */
-    const head = "body[data-layout='center'] .rail,"
-    const at = sheet.indexOf(head)
-    const selector = sheet.slice(at, sheet.indexOf('{', at))
-    expect(bodyOf(sheet, head)).toContain('align-items: center')
-    expect(selector).toContain("body[data-layout='center'] .hero:not(.hero--profile)")
-    expect(selector).not.toMatch(/\.hero\s*(,|$)/)
-    expect(sheet).toContain("body[data-layout='center'] .hero:not(.hero--profile) p {")
-    // 全体ページの Profile の大見出し（Statement）も、名札と同じ左の軸
-    expect(
-      bodyOf(sheet, "body[data-layout='center'] .statement:not(.profile > .statement) {"),
-    ).toContain('align-items: center')
-    // 名札・その人の GitHub / メールを中央へ寄せる規則は無い
-    expect(sheet).not.toMatch(/body\[data-layout='center'\] \.nameplate/)
-    expect(sheet).not.toMatch(/body\[data-layout='center'\] \.hero > \.socials/)
+    // 右端のぼかしの下に座らせない
+    expect(marker.body).toContain('scroll-margin-inline: var(--fade-w)')
+    expect(sheet.split('scroll-initial-target').length).toBe(2)
   })
 
   it('読まれない値を :root に置かない', () => {
@@ -1375,50 +1106,42 @@ describe('部品の作法', () => {
 })
 
 /*
-  一覧の列の数。
-
-  列の数はサーバーが決める（src/blocks.ts の PROJECT_COLUMNS）。CSS の auto-fill に
-  任せると「広い画面ほど本文が細る」になり、CSS を見ても HTML を見ても気づけない。
+  一覧の行（Projects の索引）。列の数を数える規則は持たない——1列の行を縦に並べ、
+  行の中の区画の幅だけを :root の段で決める（広い画面ほど本文が細る、を起こさない）。
 */
-describe('一覧の列数', () => {
-  it('列を数える規則は CSS に無い（サーバーが渡した数を読むだけ）', () => {
-    /*
-      前は repeat(auto-fill, minmax(276px, 1fr))。画面が広いほど列が増えるので、
-      2件しか出さない画面でも3列ぶんの幅で割られ、説明の本文が 229px まで
-      細っていた（= rail @1440x900, Hiragino Sans, macOS Chromium。電話 390 の
-      308px より狭い）。雑誌風は5列で 243px。
-    */
-    const wide = blockAt(sheet, '@media (min-width: 600px)')
-    expect(bodyOf(wide, '.grid {')).toContain(
-      'grid-template-columns: repeat(var(--cols), minmax(0, 1fr))',
-    )
+describe('一覧の行', () => {
+  it('行は1列に縦に並べる。列を数える規則も、サーバーから数を受け取る口も持たない', async () => {
+    expect(sheet).not.toContain('--cols')
+    expect(sheet).not.toMatch(/repeat\(auto-fill, minmax\(2\d\dpx/)
+    expect(bodyOf(sheet, '.entries {')).toContain('flex-direction: column')
 
-    // 雑誌風も同じ1本に従う。列を数える規則を2つ持つと、片方だけ古くなる
-    expect(ruleWith(sheet, 'column-gap: var(--sp-7)').body).not.toContain('grid-template-columns')
-
-    // 600 未満は1列のまま。カードを2枚並べる幅が無い
-    expect(bodyOf(sheet, '.grid {')).toContain('grid-template-columns: minmax(0, 1fr)')
-  })
-
-  it('その数は PROJECT_COLUMNS そのもの', async () => {
     await seedItem({ title: 'アプリ' })
     await seedItem({ title: '業務', type: 'work' })
-
-    const cols = `<div class="grid" style="--cols:${PROJECT_COLUMNS}">`
-    expect(await okText('/projects')).toContain(cols)
-    // 全体ページも同じ。ここだけ別の数にすると、1枚の中で列の幅が変わる
-    expect(await okText('/all')).toContain(cols)
+    const html = await okText('/projects')
+    expect(html).toContain('<div class="entries">')
+    expect(html).not.toContain('--cols')
   })
 
-  it('渡さない一覧を作らない（渡し忘れると列が1つに落ちる）', async () => {
-    await seedItem({ title: 'アプリ' })
-    const html = await okText('/projects')
-    // repeat(var(--cols)) は --cols が無いと計算できず、規則ごと無かったことに
-    // なる（1列に戻る）。落ちてもエラーは出ないので、markup 側で数える
-    const grids = html.match(/<div class="grid"/g) ?? []
-    const withCols = html.match(/<div class="grid" style="--cols:\d+">/g) ?? []
-    expect(grids).toHaveLength(withCols.length)
-    expect(grids.length).toBeGreaterThan(0)
+  it('行の区画は幅ごとに組み替える。900 以上は横に並べ、区画の幅は :root の段', () => {
+    // 600 未満は縦に積む（番号と矢印の下に本文 → サムネイル → 札 → 技術）
+    expect(bodyOf(sheet, '.entry {')).toContain('grid-template-columns: minmax(0, 1fr) auto')
+    const wide = blockAt(sheet, '@media (min-width: 900px)')
+    const row = bodyOf(wide, '.entry {')
+    expect(row).toContain("'index main meta tags go'")
+    for (const token of ['--entry-index', '--entry-meta', '--entry-tags', '--entry-go']) {
+      expect(row, token).toContain(`var(${token})`)
+      expect(bodyOf(sheet, ':root {'), token).toMatch(new RegExp(`${token}:`))
+    }
+    // 本文の列が残りを受ける
+    expect(row).toContain('minmax(0, 1fr)')
+    // 番号と矢印は題の1行目の高さの真ん中（題の行の高さを :root で持つ）
+    expect(bodyOf(sheet, ':root {')).toContain('--entry-title-lh: calc(var(--fs-display-xs) * 1.3)')
+  })
+
+  it('行と行のあいだは1本の罫線。箱（枠・面・影・角）に入れない', () => {
+    const row = bodyOf(sheet, '.entry {')
+    expect(row).toContain('border-bottom: 1px solid var(--line)')
+    expect(row).not.toMatch(/border-radius|background|box-shadow/)
   })
 })
 
@@ -1462,17 +1185,34 @@ describe('文字の段', () => {
     body: found[2] ?? '',
   }))
 
-  it('和文の最小は --fs-meta。--fs-label（11px）は英大文字の小見出しだけ', () => {
+  it('和文の最小は --fs-meta。--fs-label（11px）は和文の入らない英字と数字の札だけ', () => {
     /*
       業界名の札・帯の件数・節の添え・経歴の期間・柱の足元が 11px（しかも等幅）
       で、和文の札がいちばん読みにくかった。11px を使ってよいのは、和文が入らない
-      英大文字の小見出し（技術の LANGUAGES・管理画面の ADMIN・404 の番号）だけ。
+      英大文字の小見出し（技術の LANGUAGES・管理画面の ADMIN・404 の番号）と、
+      英字か数字だけの札（目次の英字の行き先・入口の札と番号・件数・一覧の番号）だけ。
       ここに足すときは、和文が入らないことを確かめてから
     */
     const small = rules
       .filter((rule) => /font-size:\s*var\(--fs-label\)/.test(rule.body))
       .map((rule) => rule.selector)
-    expect(small.sort()).toEqual(['.login__label', '.oops__code', '.side-head:lang(en)'].sort())
+    expect(small.sort()).toEqual(
+      [
+        '.login__label',
+        '.oops__code',
+        '.side-head:lang(en)',
+        // 公開ページの英字だけの札（lang="en" か、数字だけのもの）
+        '.toc a:lang(en)',
+        '.eyebrow :lang(en)',
+        '.system__number',
+        '.system__label :lang(en)',
+        '.tally dt:lang(en)',
+        '.head__count',
+        '.entry__index',
+        '.entry__meta li:lang(en)',
+        '.contact__sub :lang(en)',
+      ].sort(),
+    )
   })
 
   it('等幅は英数字の札だけ。和文が入りうる所に --font-mono を書かない', () => {
@@ -1487,64 +1227,65 @@ describe('文字の段', () => {
       .map((rule) => rule.selector)
     expect(mono.sort()).toEqual(
       [
-        '.brand__word',
-        '.hero .hero__role:lang(en)',
         '.tags li:lang(en)',
         '.metric__value',
         '.side-head:lang(en)',
-        '.contact__address',
         '.oops__code',
         '.admin-nav__brand',
         '.row__col--num',
-        '.login__word',
         '.login__label',
+        '.toc a:lang(en)',
+        '.eyebrow :lang(en)',
+        '.system__number',
+        '.system__label :lang(en)',
+        '.tally dt:lang(en)',
+        '.head__count',
+        '.entry__index',
+        '.entry__meta li:lang(en)',
+        '.contact__sub :lang(en)',
       ].sort(),
     )
     // 年と期間は「2024 — 現在」と和文を含むので、等幅にせず数字の幅だけそろえる
-    for (const selector of ['.card__head .year {', '.career .period {']) {
+    for (const selector of ['.entry__year {', '.career .period {']) {
       expect(bodyOf(sheet, selector), selector).toContain('font-variant-numeric: tabular-nums')
     }
   })
 
-  it('本文の字: カードの説明は --fs-base、段落は --fs-md で1行 約40字まで', () => {
+  it('本文の字: 一覧の行の説明は --fs-base、段落は --fs-md で1行 約40字まで', () => {
     /*
       カードの説明 13px・段落 13px で、1440 の About は1行約65字だった。
       段落の1行の長さは :root の --measure（em なので字数のまま字の大きさに追う）
     */
-    expect(bodyOf(sheet, '.card p {')).toContain('font-size: var(--fs-base)')
+    expect(bodyOf(sheet, '.entry__main p {')).toContain('font-size: var(--fs-base)')
+    expect(bodyOf(sheet, '.entry__main p {')).toContain('max-width: var(--measure)')
     const bio = bodyOf(sheet, '.bio p {')
     expect(bio).toContain('font-size: var(--fs-md)')
     expect(bio).toContain('max-width: var(--measure)')
     expect(bodyOf(sheet, ':root {')).toMatch(/--measure:\s*\d+em/)
   })
 
-  it('節の見出しは連動の段のいちばん下。雑誌風はもう1段上げる', () => {
+  it('見出しの段: 節は最上段、個人ページの頭はその下、章はさらに下、小節と行の題は小さく', () => {
     /*
-      節の h1 が全部 18px（--fs-lg）で、カードの題 15px と 3px しか違わなかった。
-      雑誌風の説明は「見出しを大きく取り」なのに、大きいのは入口だけだった
+      ページの名前（Projects…）は大きな字で1つだけ置く（入口の大見出しと同じ段）。
+      個人ページは頭の大見出し（h1）が --fs-display で、章（About / Skills / Career の
+      h2）はそれより小さい --fs-display-sm——同じ大きさだと章が h1 と同じ格に見える
     */
-    expect(bodyOf(sheet, '.head :is(h1, h2) {')).toContain('font-size: var(--fs-display-xs)')
-    expect(
-      bodyOf(
-        sheet,
-        "body[data-layout='magazine'] .head:not(.head--sub, .head--chapter) :is(h1, h2) {",
-      ),
-    ).toContain('font-size: var(--fs-display-sm)')
-    /*
-      個人ページの章（About / Skills / Career の h2）も雑誌風で上げない。上げていた
-      ころは頭の大見出し（h1。--fs-display-sm）と同じ大きさで、字の重さでは h1 を
-      越えていた（= magazine @1440x900）。章の上は1段空ける
-    */
-    expect(bodyOf(sheet, '.hero h1.hero__headline {')).toContain('font-size: var(--fs-display-sm)')
+    expect(bodyOf(sheet, '.head :is(h1, h2) {')).toContain('font-size: var(--fs-display-xl)')
+    expect(bodyOf(sheet, '.hero h1.hero__headline {')).toContain('font-size: var(--fs-display)')
+    expect(bodyOf(sheet, '.head--chapter :is(h1, h2) {')).toContain(
+      'font-size: var(--fs-display-sm)',
+    )
     expect(bodyOf(sheet, '.head--chapter {')).toContain('margin-top: var(--sp-7)')
     /*
       小節の見出し（作品のページの Story の h2、/all の Profile の h3）は、節の見出しより
-      小さく本文より大きい。雑誌風でも上げない（上げると作品名の h1 と同じ格に見える）
+      ずっと小さく本文より大きい（大きくすると作品名の h1 と同じ格に見える）
     */
     expect(bodyOf(sheet, '.head--sub :is(h2, h3) {')).toContain('font-size: var(--fs-lg)')
+    // 一覧の行の題は節の見出しから2段以上離す
+    expect(bodyOf(sheet, '.entry__main h3 {')).toContain('font-size: var(--fs-display-xs)')
   })
 
-  it('見出し・カードの説明・段落は文節で折り、最後の行に1〜2字だけ落とさない', () => {
+  it('見出し・行の説明・段落は文節で折り、最後の行に1〜2字だけ落とさない', () => {
     /*
       和文はどの字の間でも折れるので「を1 / つの」のように語の途中で行が変わる。
       auto-phrase は Chromium だけの進歩的な強化で、知らないブラウザではこの
@@ -1553,10 +1294,11 @@ describe('文字の段', () => {
     */
     const wrap = ruleWith(sheet, 'word-break: auto-phrase')
     for (const part of [
+      '.hero h1',
       '.head :is(h1, h2, h3)',
-      '.card__head h3',
+      '.entry__main :is(h3, p)',
       '.statement__text',
-      '.card p',
+      '.contact__lead',
       '.bio p',
     ]) {
       expect(wrap.selector, part).toContain(part)
@@ -1596,219 +1338,227 @@ describe('文字の段', () => {
 })
 
 /*
-  入口の背景の月。装飾だが、置き方を1行間違えるとページが横に動く（光暈と
-  ずらした三日月がはみ出す）場所なので、外枠と同じ強さで見張る。
+  入口の軌道図。装飾だが、置き方を1行間違えるとページが横に動くか、星が焦点から
+  外れる場所なので、外枠と同じ強さで見張る。
 */
-describe('入口の月', () => {
-  it('溢れは clip で切る。hidden にも auto にもしない', () => {
-    /*
-      三日月は光暈のぶん左へずらし、光暈は三日月の箱より外へ広がる。clip 以外
-      だと溢れがページのスクロール可能領域になり、電話でページが横に動く。
-      hidden は「見えないだけのスクロール箱」で、しかもスクロールバーが
-      出ないので誰も戻せない。
-    */
-    const body = bodyOf(sheet, '.moon {')
-    expect(body).toContain('overflow: clip')
-    expect(body).not.toContain('overflow: hidden')
-    expect(body).not.toContain('overflow: auto')
-    // 受け皿。これが無いと絶対配置が画面全体に対して解決され、箱から逃げる
-    expect(bodyOf(sheet, '.hero {')).toContain('position: relative')
+describe('入口の軌道図', () => {
+  const root = () => blockAt(sheet, ':root {')
+  const token = (name: string) =>
+    Number.parseFloat(root().match(new RegExp(`${name}:\\s*([\\d.]+)`))?.[1] ?? 'NaN')
+
+  it('入口は 900 以上で2列。左に見出しの列、右に軌道図、底に件数の帯', () => {
+    // 1列のときは軌道図を上に（見出しの列が DOM の先頭。並べ替えは区画の名前だけ）
+    const hero = bodyOf(sheet, '.hero--orbit {')
+    expect(hero).toContain("grid-template-areas: 'map' 'copy' 'tally'")
+    const wide = bodyOf(blockAt(sheet, '@media (min-width: 900px)'), '.hero--orbit {')
+    expect(wide).toContain("grid-template-areas: 'copy map' 'tally tally'")
+    expect(wide).toContain('grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)')
+    // 区画の名前は部品の側が持つ
+    expect(bodyOf(sheet, '.hero__copy {')).toContain('grid-area: copy')
+    expect(bodyOf(sheet, '.system {')).toContain('grid-area: map')
+    expect(bodyOf(sheet, '.tally {')).toContain('grid-area: tally')
   })
 
-  it('大きさは窓ではなくパネルで決める', () => {
+  it('枠の縦横比は orbits.ts と同じ数。札を出す枠の幅と札のずれも同じ数', () => {
+    // SVG は枠いっぱいに貼るので、比がずれると焦点（星）が枠の真ん中から外れる
+    expect(root()).toContain(`--system-ratio: ${HERO_FRAME.width} / ${HERO_FRAME.height};`)
+    expect(root()).toContain(`--escape-ratio: ${ESCAPE_FRAME.width} / ${ESCAPE_FRAME.height};`)
+    // 札の置き場所は、この幅の枠とこのずれで重ならないように選んである（placeLabels）
+    expect(sheet).toContain(`@container (min-width: ${LABEL_MIN_WIDTH}px)`)
+    expect(root()).toContain(`--label-dx: ${LABEL_GAP.x}px;`)
+    expect(root()).toContain(`--label-dy: ${LABEL_GAP.y}px;`)
+    expect(root()).toContain(`--label-max: ${LABEL_MAX_WIDTH}px;`)
+    // 長い名前は札の幅で末尾を省く（置き場所の見積もりは、この幅で止まる）
+    expect(bodyOf(sheet, '.system__label > * > :last-child {')).toContain('text-overflow: ellipsis')
+    expect(bodyOf(sheet, '.system {')).toContain('container-type: inline-size')
+    // 札はふだん出さず、枠が広いときだけ出す
+    expect(bodyOf(sheet, '.system__labels {')).toContain('display: none')
+  })
+
+  it('線と点の色は使う場所で --accent と --ink から敷く。:root で焼き付けない', () => {
     /*
-      月が乗るのはパネルであって窓ではない。かつて clamp(280px, min(46vw,
-      46svh), 620px) と窓から測っていたころ、同じ数式が 1440x900 の rail では
-      パネルの 65%、1024x768 の center では 96% になっていた——器に対する
-      大きさが1.5倍ちがう。.moon はパネルに inset: 0 で貼ってあるので、
-      % で書けば器そのものを測れる。vw / vh / svh が戻ってきたら止める。
+      :root で color-mix(…var(--accent)…) を組み立てると、--accent は :root の既定の
+      色で解けてしまい、body の [data-accent] が効かない（前の月の光暈で5色すべてが
+      紫のまま残った）。:root が持つのは濃さと不透明度の坂だけ
     */
-    const root = blockAt(sheet, ':root {')
-    expect(root).toMatch(/--moon-h:\s*\d+(\.\d+)?%/)
-    expect(root).toMatch(/--moon-top:\s*\d+(\.\d+)?%/)
-    for (const token of ['--moon-h', '--moon-top']) {
-      const value = root.match(new RegExp(`${token}:([^;]*);`))?.[1] ?? ''
-      expect(value).not.toMatch(/\d(vw|vh|svh|dvh|lvh|px)/)
+    expect(root()).not.toMatch(
+      /--(orbit|star|system|beam|mask|ring|radar)[a-z-]*:[^;]*(color-mix|var\(--accent\))/,
+    )
+    for (const mask of ['--mask-on', '--mask-dim', '--beam-reach']) {
+      expect(root().match(new RegExp(`${mask}:([^;]*);`))?.[1] ?? '', mask).not.toContain('var(--')
     }
-    expect(bodyOf(sheet, '.moon__mark {')).toContain('height: var(--moon-h)')
+
+    const orbit = bodyOf(sheet, '.orbit {')
+    expect(orbit).toContain('stroke: var(--accent)')
+    expect(orbit).toContain('stroke-opacity: var(--orbit-ink)')
+    expect(bodyOf(sheet, '.orbit-body path {')).toContain('stroke: var(--ink)')
+    // 走査線は --accent を敷いて覆いで抜く。止まった姿では見えない
+    const beam = bodyOf(sheet, '.system__beam {')
+    expect(beam).toContain('background: var(--accent)')
+    expect(beam).toContain('opacity: 0')
+    expect(token('--orbit-ink')).toBeLessThan(1)
+    expect(token('--beam-ink')).toBeLessThan(0.5)
   })
 
-  it('逃がす量は絵の幅に対する割合。器の幅で測らない', () => {
-    /*
-      right や margin-right の % はパネルの幅に対して効く。パネルは実測で
-      358〜1342px と4倍ちがうので、同じ -12% でも狭い画面では少し欠け、
-      広い画面では月が丸ごと外へ出る。translate の % だけが自分の幅を見る。
-    */
-    const mark = bodyOf(sheet, '.moon__mark {')
-    expect(mark).toContain('translate: var(--moon-shift)')
-    expect(mark).not.toMatch(/margin-right|right:\s*var\(--moon-shift\)/)
+  it('線と点の太さは画面の px。枠が縮んでも点を潰さない', () => {
+    for (const selector of ['.orbit {', '.orbit-body path {', '.orbit-escape {']) {
+      expect(bodyOf(sheet, selector), selector).toContain('vector-effect: non-scaling-stroke')
+    }
+    expect(root()).toMatch(/--orbit-line:\s*\d+px;/)
+    expect(root()).toMatch(/--orbit-body:\s*clamp\(\d+px, [\d.]+vw, \d+px\);/)
   })
 
-  it('月あかりの色は使う場所で解く。:root で焼き付けない', () => {
-    /*
-      これが今回いちばん静かに壊れた所。カスタムプロパティの var() は
-      **宣言した要素**で解決される。:root で
-      `--moon-glow: radial-gradient(..., color-mix(in oklab, var(--accent) …))`
-      と組み立てると、--accent は :root の既定の色で確定し、body の
-      [data-accent] は二度と効かない。実際、5色すべてで光暈が rgb(45,45,72) の
-      紫のまま出ていた（アクセントを変えるとリンクだけが変わった）。
-
-      だから :root には色を持たせず、不透明度の坂だけを置く（--fade-right と
-      同じ作法）。色は使う側の規則で var(--accent) を敷く。
-    */
-    const root = blockAt(sheet, ':root {')
-    const glow = root.match(/--moon-glow:([\s\S]*?);/)?.[1] ?? ''
-    expect(glow).toContain('radial-gradient')
-    expect(glow).not.toContain('--accent')
-
-    const before = bodyOf(sheet, '.moon__mark::before {')
-    expect(before).toContain('background: var(--accent)')
-    expect(before).toContain('mask-image: var(--moon-glow)')
-
-    /*
-      三日月そのものも同じ罠にかかる。素材は無彩色（アルファ1面）で運び、
-      色はここで --accent から作る。:root が持てるのは「どれだけ寄せるか」の
-      割合だけで、color-mix の式を :root に書くと既定の色で焼き付く。
-    */
-    const after = bodyOf(sheet, '.moon__mark::after {')
-    expect(after).toMatch(/color-mix\([^;]*var\(--accent\)[^;]*var\(--moon-tint\)/)
-    expect(root).toMatch(/--moon-tint:\s*\d+(\.\d+)?%/)
-    expect(blockAt(sheet, ':root {')).not.toMatch(/--moon-[a-z-]*:\s*color-mix/)
+  it('業務は破線の軌道と輪の天体。区分を色だけで分けない', () => {
+    expect(bodyOf(sheet, '.orbit--work {')).toContain('stroke-dasharray: var(--orbit-dash)')
+    const hole = bodyOf(sheet, '.orbit-body .orbit-body__hole {')
+    expect(hole).toContain('stroke: var(--bg)')
+    expect(hole).toContain('stroke-width: calc(var(--orbit-body) / 2)')
   })
 
-  it('月の濃さは :root の1つが持つ', () => {
-    /*
-      三日月は見出しの後ろを通る。見出し #f2f2f4 に 3:1 を残せる地は 140/255
-      までで、月の点のいちばん明るい所は 255。濃さを選択子側に生で書くと、
-      この上限がどこにも書かれていない数になる。
-    */
-    expect(blockAt(sheet, ':root {')).toContain('--moon-ink:')
-    expect(bodyOf(sheet, '.moon__mark::after {')).toContain('opacity: var(--moon-ink)')
+  it('名前の札は地を塗る。小さい字の 4.5:1 を軌道の線に削らせない', () => {
+    const label = bodyOf(sheet, '.system__label > :is(a, span) {')
+    expect(label).toContain('background: var(--bg)')
+    expect(label).toContain('color: var(--ink-mid)')
+    // 札は枠の中で位置を持つ（天体の点が原点）
+    const place = bodyOf(sheet, '.system__label {')
+    expect(place).toContain('left: var(--x)')
+    expect(place).toContain('top: var(--y)')
   })
 
   it('はっきり見たい設定と、背の低い窓では出さない', () => {
-    /*
-      forced-colors（Windows のハイコントラスト）は文字だけをシステム色に
-      置き換え、画像は置き換えない。何もしないと、いちばん読みやすくしたい
-      設定で、白い月の上に白い文字だけが残る。
-      背の低い窓（400px 未満）では、貼り付いた帯を除いた表紙が月を絵として
-      置けるほど高くならない。
-    */
-    expect(blockAt(sheet, '@media (forced-colors: active), (prefers-contrast: more)')).toContain(
-      '.moon',
-    )
-    expect(blockAt(sheet, '@media (max-height: 400px)')).toContain('.moon')
+    for (const marker of [
+      '@media (forced-colors: active), (prefers-contrast: more)',
+      '@media (max-height: 400px)',
+    ]) {
+      const block = blockAt(sheet, marker)
+      const hidden = ruleWith(block, 'display: none').selector
+      expect(hidden, marker).toContain('.system')
+      expect(hidden, marker).toContain('.orbits')
+    }
   })
 
-  it('素材は CSS からだけ参照する（出さない場面で取りに行かせないため）', async () => {
+  it('素材のファイルを持たない。絵はページに直に描く SVG', async () => {
     /*
-      絵を <img> で貼っていたころは、.moon を display: none にしても
-      **取得は止まらなかった**（実測で、背の低い窓でもハイコントラストでも
-      moon.avif は 200 で落ちてきた）。当時は <picture> の先頭に空の1枚を
-      置いて打ち切っていた。
-
-      いまは CSS の mask なので、display: none の中の要素は mask を取りに
-      行かない。細工が要らなくなったかわりに、**素材の URL が
-      マークアップ側へ戻っていないこと**を見張る必要がある。戻った瞬間に
-      「隠しているのに取ってくる」が黙って復活する。
-
-      取得が実際に止まることは npm run check:contrast が本物のブラウザで測る
-      （vitest からは public/ が見えない——実測で 404）。
+      前の月は Blender で焼いたラスターを CSS の mask で抜いていた。軌道図は件数から
+      組む SVG なので、配る素材は無い。CSS から画像を取りに行く道も残さない
     */
+    expect(sheet).not.toMatch(/\/assets\/moon/)
+    expect(sheet).not.toMatch(/mask(-image)?:\s*url\(/)
+    await seedMember()
+    await seedItem({ type: 'app' })
     const html = await okText('/')
     expect(html).not.toContain('/assets/moon')
-
-    // AVIF が本命・WebP が控え。素の url() は image-set を知らない環境の受け
-    const after = bodyOf(sheet, '.moon__mark::after {')
-    expect(after).toContain("mask: url('/assets/moon.webp')")
-    expect(sheet).toContain("url('/assets/moon.avif') type('image/avif')")
-    expect(sheet).toContain("url('/assets/moon.webp') type('image/webp')")
+    expect(html).toContain('class="system__orbits"')
   })
 
-  it('動くのは着いたときの一度だけ。止まった姿がそのまま完成形', () => {
+  it('動くのは着いたときの一度だけ。止まった姿がそのまま完成形で、5 秒以内に止まる', () => {
     /*
-      三日月の欠け具合は焼いた絵そのものなので、満ち欠けの動きは作れない。
-      動かせるのは出かただけで、入口の字と同じく着いたときに一度だけ出てくる。
-      動きが持ち込みうる壊れ方は4つあり、ここで止める。
-
-      (1) 終わりの姿を keyframes に書くと、reduced-motion の人（animation: none）
-          の姿と動き終わった姿が別物になりうる。from だけにする
-      (2) check:contrast の本体は動きを止めて測る。途中の姿が止まった姿より
-          明るい・大きい・下にあると、そこでは見えない。だから from は
-          opacity 0 から、ずれは上向き（リード文から遠ざかる側）、光暈は縮めた所から
-      (3) ばね（--ease-spring）は 8% 行き過ぎる。月に掛けると止まった姿を
-          通り越して、(2) の外側へ一瞬出る。行き過ぎない --ease を使う
-      (4) 繰り返すと止める手段が要る（WCAG 2.2.2）が、JavaScript が無いので
-          置けない。一度きりで、遅れも含めて 5 秒以内に止める
+      出だしの姿（from）だけを書き、終わりの姿は持たせない——reduced-motion で
+      animation: none になった姿が、そのまま動き終わった姿になる。途中にだけ現れる
+      走査線と波紋は、止まった姿では見えない（opacity 0 が素の値）
     */
-    const settle = blockAt(sheet, '@keyframes moon-settle')
-    const bloom = blockAt(sheet, '@keyframes moon-bloom')
-    for (const frames of [settle, bloom]) {
-      expect(frames).toContain('from {')
-      expect(frames).not.toMatch(/\bto\s*\{|\d%\s*\{/)
-      expect(frames).toMatch(/opacity:\s*0;/)
+    for (const name of ['orbit-light', 'orbit-ping', 'orbit-sweep', 'orbit-count']) {
+      const frames = blockAt(sheet, `@keyframes ${name}`)
+      expect(frames, name).toContain('from {')
+      expect(frames, name).not.toMatch(/\bto\s*\{|\d+%\s*\{/)
     }
-    expect(settle).toContain('translate: var(--moon-shift) calc(-1 * var(--enter-shift))')
-    expect(bloom).toContain('scale: var(--moon-bloom)')
+    expect(bodyOf(sheet, '.system__bodies .orbit-ring {')).toContain('opacity: 0')
+    // 波紋は出だしの姿で待たない（backwards だと走査線が来る前から輪が出ている）
+    expect(bodyOf(sheet, '.system__bodies .orbit-ring {')).not.toContain('backwards')
+    // 走査線の角度は @property で角度として登録し、止まった姿は1周し終えた 360deg
+    expect(blockAt(sheet, '@property --sweep')).toContain('initial-value: 360deg')
 
-    const root = blockAt(sheet, ':root {')
-    const token = (name: string) => Number(root.match(new RegExp(`${name}:\\s*([\\d.]+);`))?.[1])
-    // 時間は単位ごと読む。1.6s を 1.6 と読むと、5 秒の上限が素通りになる
-    const ms = (name: string) => {
-      const [, value, unit] = root.match(new RegExp(`${name}:\\s*([\\d.]+)(ms|s);`)) ?? []
-      return Number(value) * (unit === 's' ? 1000 : 1)
-    }
-    expect(token('--moon-bloom')).toBeLessThan(1)
-
-    for (const selector of [
-      '.moon {',
-      '.moon__mark {',
-      '.moon__mark::before {',
-      '.moon__mark::after {',
-    ]) {
-      const rule = bodyOf(sheet, selector)
-      if (!rule.includes('animation')) continue
-      expect(rule, selector).toMatch(/animation: moon-[a-z]+ var\(--dur-slow\) var\(--ease\)[\s;]/)
-      expect(rule, selector).not.toContain('infinite')
+    // 繰り返さない
+    const moving = rulesOf(sheet).filter((rule) =>
+      rule.decls.some(([name, value]) => name === 'animation' && /orbit-/.test(value)),
+    )
+    expect(moving.length).toBeGreaterThanOrEqual(5)
+    for (const rule of moving) {
+      const [, value] = rule.decls.find(([name]) => name === 'animation') ?? ['', '']
+      expect(value, rule.selectors.join(', ')).not.toMatch(/infinite/)
     }
 
-    // 遅れのいちばん長い光暈が止まるまでで 5 秒
-    const delay = bodyOf(sheet, '.moon__mark::before {').match(/calc\((\d+) \* var\(--stagger\)\)/)
-    expect(ms('--dur-slow') + Number(delay?.[1]) * ms('--stagger')).toBeLessThanOrEqual(5000)
+    // 5 秒以内に止まる（WCAG 2.2.2）。いちばん遅いのは最後に灯る天体の波紋と札
+    const ms = (name: string) => token(name)
+    const ring = ms('--radar-delay') + ms('--radar-turn') + ms('--radar-ring')
+    const label = ms('--radar-delay') + ms('--radar-turn') + ms('--label-lag') + ms('--dur')
+    const count = ms('--radar-delay') + ms('--radar-turn') * 0.4 + ms('--count-dur')
+    for (const end of [ring, label, count]) {
+      expect(end).toBeGreaterThan(1000)
+      expect(end).toBeLessThanOrEqual(5000)
+    }
+    expect(root()).toContain('--count-delay: calc(var(--radar-delay) + var(--radar-turn) * 0.4)')
   })
 
   it('紙には刷らない', () => {
-    // 淡い装飾はインクを食うだけ。外枠を解く @media print の非表示リストに居ること
-    expect(blockAt(sheet, '@media print')).toContain('.moon')
+    // 装飾はインクを食うだけ。押し手も紙の上では押せない
+    const print = blockAt(sheet, '@media print')
+    for (const selector of ['.system', '.orbits', '.cta']) {
+      expect(print).toContain(selector)
+    }
   })
 
-  it('月の光暈の上に乗る小さい字は --ink-mid。--ink-weak では 4.5:1 に届かない', () => {
-    /*
-      入口の帯の下の「すべてを1ページで読む →」と、締めの Contact の誘いの1文。
-      どちらも月の光暈の上に乗る小さい字（WCAG 1.4.3 の 4.5:1）。帯の件数が
-      --ink-weak で 3.80:1 まで落ちたのと同じ形で落ちるので、字の色を段で縛る
-      （画素で測るのは npm run check:contrast）
-    */
-    // 頭の改行は必須。.hero > .hero__whole {（浮かび上がりの遅れ）に当てないため
-    expect(bodyOf(sheet, '\n.hero__whole {')).toContain('color: var(--ink-mid)')
-    expect(bodyOf(sheet, '.contact__lead {')).toContain('color: var(--ink-mid)')
-    // 全体ページへの1本は行いっぱいに伸ばさない（右の空白まで押せる面になる）
-    expect(bodyOf(sheet, '\n.hero__whole {')).toContain('justify-self: start')
-    // 紙の上では押せない。帯と同じく刷らない
-    expect(blockAt(sheet, '@media print')).toContain('.hero__whole')
+  it('入口と締めのまわりの小さい字は --ink-mid 以上。--ink-weak では札の 4.5:1 に届かない所がある', () => {
+    // 画素で測るのは npm run check:contrast
+    expect(bodyOf(sheet, '.hero__lead {')).toContain('color: var(--ink-mid)')
+    expect(bodyOf(sheet, '.contact__go {')).toContain('color: var(--ink-mid)')
+    expect(bodyOf(sheet, '.contact__sub {')).toContain('color: var(--ink-mid)')
+  })
+})
+
+/*
+  配色は黒基調の1つで、OS がライトでも白い地に切り替えない（「黒の上に白」が見た目の
+  芯。持ち主が白い地の姿を見て「黒基調で文字やボタンは白のつもりだった」と戻した）。
+  紙だけは白い地で刷る——黒い地のまま刷ると、白に近い字が白い紙に乗る（地の色は
+  既定では刷られない）。
+
+  紙の配色（@media print の :root）は同じ名前の色の段を差し替えるだけ。片方にしか
+  無い色の段があると、その色だけが紙に黒い地の色のまま残る（白い紙に白に近い字）。
+*/
+describe('配色（黒基調と紙）', () => {
+  // 覆い（--fade-right・--mask-*・--beam-reach）は不透明度の坂で、色の段ではない（地の色と関わらない）
+  const MASKS = new Set(['--fade-right', '--mask-on', '--mask-dim', '--beam-reach'])
+  const colorTokens = (body: string) =>
+    [...body.matchAll(/(--[\w-]+):\s*([^;]+);/g)]
+      .filter(
+        ([, name = '', value = '']) =>
+          !MASKS.has(name) && /#[0-9a-fA-F]{3,8}\b|\brgba?\(/.test(value),
+      )
+      .map(([, name = '']) => name)
+      .sort()
+
+  it('画面は黒基調の1つ。OS の配色の申告で白い地に切り替えない', async () => {
+    expect(sheets).not.toContain('prefers-color-scheme')
+    expect(bodyOf(sheet, ':root {')).toContain('color-scheme: dark;')
+    // 公開・404・管理画面の外枠がどれも同じ1本（components.tsx の ColorSchemeMeta）を置く
+    const meta = '<meta name="color-scheme" content="dark"/>'
+    expect(await okText('/')).toContain(meta)
+    const missing = await get('/no-such-page')
+    expect(missing.status).toBe(404)
+    expect(await missing.text()).toContain(meta)
+    const login = await get('/admin/login')
+    expect(login.status).toBe(200)
+    expect(await login.text()).toContain(meta)
   })
 
-  it('三日月の箱は :root の縦横比で決まる', () => {
-    /*
-      光暈は三日月の箱（height: --moon-h + aspect-ratio: --moon-ratio）を
-      基準に広がるので、比がずれると光だけが別の形で残る。
+  it('既定のアクセントはモノクロ。リンクもボタンも字と同じ白で、ボタンの字は黒', () => {
+    const root = bodyOf(sheet, ':root {')
+    const value = (name: string) => root.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1]
+    expect(value('--accent')).toBe('var(--mono)')
+    // 白は字の白と同じ1色（白を2種類持たない）
+    expect(value('--mono')).toBe(value('--ink'))
+    expect(bodyOf(sheet, "[data-accent='mono'] {")).toContain('--accent: var(--mono);')
+  })
 
-      **素材そのものの寸法との突き合わせは、ここではできない。**
-      vitest は workerd の中で動いていて public/ が配られない（実測で 404）。
-      比と実物が食い違っていないかは npm run check:contrast が本物のブラウザで
-      測る——あちらは mask の naturalWidth/Height を読める。
-    */
-    expect(blockAt(sheet, ':root {')).toMatch(/--moon-ratio:\s*\d+\s*\/\s*\d+/)
-    expect(bodyOf(sheet, '.moon__mark {')).toContain('aspect-ratio: var(--moon-ratio)')
+  it('紙の色の段は、黒い地の色の段をどれも差し替える。紙だけの段は作らない', () => {
+    const screen = bodyOf(sheet, ':root {')
+    const paper = bodyOf(blockAt(sheet, '@media print'), ':root {')
+    const screenColors = colorTokens(screen)
+    // 読めているか（地・面・線・字・モノクロとアクセント6色と薄い地・危険・スイッチ）
+    expect(screenColors.length).toBeGreaterThan(20)
+    expect(colorTokens(paper)).toEqual(screenColors)
+    for (const [, name] of paper.matchAll(/(--[\w-]+):/g)) {
+      expect(screen, `${name} は :root に無い`).toContain(`${name}:`)
+    }
   })
 })

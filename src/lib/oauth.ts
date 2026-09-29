@@ -195,7 +195,7 @@ async function identifyGithub(args: {
       headers: {
         accept: 'application/json',
         'content-type': 'application/x-www-form-urlencoded',
-        'user-agent': 'Noctifex',
+        'user-agent': 'AstLog',
       },
       body: new URLSearchParams({
         client_id: args.client.id,
@@ -217,7 +217,7 @@ async function identifyGithub(args: {
         accept: 'application/vnd.github+json',
         authorization: `Bearer ${token.access_token}`,
         // GitHub の API は User-Agent の無い要求を 403 で断る
-        'user-agent': 'Noctifex',
+        'user-agent': 'AstLog',
         'x-github-api-version': '2022-11-28',
       },
     }),

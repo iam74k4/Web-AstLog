@@ -4,7 +4,7 @@ import { pageCache } from './lib/page-cache'
 import { adminRoutes } from './routes/admin/index'
 import { publicRoutes } from './routes/public/routes'
 import { SITE } from './site'
-import { HtmlDocument, Stylesheets } from './ui/components'
+import { ColorSchemeMeta, HtmlDocument, Stylesheets } from './ui/components'
 import { MarkIcon } from './ui/icons'
 
 const app = new Hono<AppEnv>()
@@ -18,8 +18,10 @@ const app = new Hono<AppEnv>()
   1つ見つかっても、ここがあればスクリプトは走らない。
   - script-src 'none'——JSON-LD（type="application/ld+json"）はデータの塊で
     実行されないので、これで止まらない（ブラウザで確かめてある）
-  - style-src に 'unsafe-inline'——列の数（style="--cols:2"）とアバターの
-    寸法（--avatar-size）を style 属性で渡している。スクリプトではない
+  - style-src に 'unsafe-inline'——入口の軌道図の札の位置（--x / --y）と走査の順
+    （--at）、件数の数え上げの値（--to）、出る順（--i）、ページの切り替えの名前
+    （view-transition-name）、アバターの寸法（--avatar-size）を style 属性で渡して
+    いる。スクリプトではない
   - img-src に data:——ファビコンは data: の SVG（src/ui/Layout.tsx）
   - form-action 'self'——管理画面のフォームはどれも同じオリジンへ送る。
     OAuth の入口はフォームではなく GET のリンクなので、ここに掛からない
@@ -76,7 +78,7 @@ const ErrorPage = ({ code, title, detail }: { code: string; title: string; detai
     <head>
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <meta name="color-scheme" content="dark" />
+      <ColorSchemeMeta />
       <title>
         {code} — {SITE.name}
       </title>

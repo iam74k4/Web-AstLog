@@ -58,7 +58,7 @@ const blockLabel = (block: schema.Block) =>
 
 /*
   公開ページに出るかを決める、公開中のものの件数（src/blocks.ts の blockShown が
-  読む形）。項目の行そのものは引かない（数えるだけなら、カードの中身まで取って
+  読む形）。項目の行そのものは引かない（数えるだけなら、一覧の行の中身まで取って
   くる必要が無い）。公開中のメンバーが1人なら、Team の行はその人のプロフィールに
   置き換わる（src/routes/public/data.ts の profileOf。行の下にその旨を出す）。
 */

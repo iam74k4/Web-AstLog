@@ -1,5 +1,5 @@
 import type { Child } from 'hono/jsx'
-import { HtmlDocument, Stylesheets } from './components'
+import { ColorSchemeMeta, HtmlDocument, Stylesheets } from './components'
 import { MarkIcon } from './icons'
 
 /*
@@ -21,9 +21,9 @@ const AdminHead = ({ title }: { title: string }) => (
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="color-scheme" content="dark" />
+    <ColorSchemeMeta />
     <meta name="robots" content="noindex" />
-    <title>{title} — Noctifex Admin</title>
+    <title>{title} — AstLog Admin</title>
     <Stylesheets admin />
   </head>
 )

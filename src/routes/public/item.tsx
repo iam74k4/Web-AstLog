@@ -20,6 +20,7 @@ import {
   ItemStory,
   itemCardId,
   itemHref,
+  itemTransition,
   Screen,
   SectionHead,
   SiteIdentity,
@@ -79,12 +80,12 @@ export const itemFacts = (item: ItemView) =>
   日に、貼られた作品のリンクまで死んではいけない。出る条件は「作品が公開中」の
   1つだけ。
 
-  中身はカードを開いたもの（ItemDetail）と、本文の小節「Story」（#story。本文を
+  中身は一覧の行を開いたもの（ItemDetail）と、本文の小節「Story」（#story。本文を
   書いた作品にだけ。ItemStory）。以前は本文を次の画面（…/story）に分け、作品同士を
   画面の底の左右の手でめくっていた。1ページにまとめたので、前の本文の URL は
   #story へ 301（story が true）。
 
-  行き来は目次と「← 一覧に戻る」（見出しの上）。戻る先は一覧のこの作品のカード
+  行き来は目次と「← 一覧に戻る」（見出しの上）。戻る先は一覧のこの作品の行
   （/projects#item-<slug>）。
 */
 export async function renderItem(
@@ -136,7 +137,7 @@ export async function renderItem(
   const links = sitePageLinks(pages, NO_FILTER, solo)
 
   /*
-    「← 一覧に戻る」の行き先。一覧のこの作品のカード（ItemCard の id）。一覧は全件を
+    「← 一覧に戻る」の行き先。一覧のこの作品の行（id は itemCardId）。一覧は全件を
     1ページに並べるので、どこに載っているかを数えなくてよい。URL は自分で組まず、
     サイトの並びから Projects のページを引く——Projects を先頭に置いた構成では / に
     なり、置いていない構成ではそもそも一覧が無い（そのときは戻る道を出さない）。
@@ -144,14 +145,14 @@ export async function renderItem(
   const list = links.find((link) => link.key === 'projects')
 
   /*
-    見出しと添え（SectionHead）の下は ItemDetail——カードを開いたもの（なぜ
-    カードの部品かは ItemDetail に書いてある）。その下に本文の小節（ItemStory）。
+    見出しと添え（SectionHead）の下は ItemDetail——一覧の行を開いたもの（なぜ
+    行の部品かは ItemDetail に書いてある）。その下に本文の小節（ItemStory）。
   */
   const note = [item.platformLabel ?? item.category, item.year].filter(Boolean).join(' · ')
   const destinations = [
     ...item.links,
     /*
-      担当を出す条件はカードと同じ（showMemberOf）。サイトの中の行き先なので、
+      担当を出す条件は一覧の行と同じ（showMemberOf）。サイトの中の行き先なので、
       矢印は →・同じタブ（LinkRow が URL の頭の / で決める）
     */
     ...(showMemberOf(blocks, members) && item.memberName && item.memberSlug
@@ -170,7 +171,16 @@ export async function renderItem(
     node: (
       <Screen id="item" label={item.title}>
         {list ? <BackLink href={`${list.href}#${itemCardId(item)}`} label="一覧に戻る" /> : null}
-        <SectionHead title={item.title} note={note || undefined} h1 />
+        {/*
+          見出しは一覧の行の題と同じ名前でつなぐ（itemTransition）。一覧から開くと、
+          行の題がそのまま動いて見出しになる
+        */}
+        <SectionHead
+          title={item.title}
+          note={note || undefined}
+          h1
+          transition={itemTransition(item)}
+        />
         <ItemDetail item={item} links={destinations} />
         <ItemStory paragraphs={paragraphs} />
       </Screen>
@@ -196,7 +206,7 @@ export async function renderItem(
       ...(item.imageUrl ? { image: absoluteUrl(item.imageUrl) } : {}),
     },
     theme,
-    sidebar: <SiteIdentity solo={solo} />,
+    footer: <SiteIdentity solo={solo} />,
     adminPath: `/admin/items/${item.id}/edit`,
     // 貼られたときの札は、この作品の画像（あれば）
     image: itemOgImage(item),

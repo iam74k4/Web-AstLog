@@ -1,27 +1,48 @@
 /*
   アイコンはインライン SVG のみ。絵文字は使わない。
-  三日月は assets/noctifex-mark.svg と同じ形。currentColor を継ぐので、
-  置いた場所の文字色になる。
+  ロゴは assets/astlog-mark.svg / astlog-wordmark.svg と同じ形。currentColor を
+  継ぐので、置いた場所の文字色になる。
 */
 
 /*
-  三日月。明るい側が左（外周は x=5.68 まで張り出し、内周は x≈10.7〜12.1）。
-  入口の背景の月（scripts/moon/render.py）も同じ向きに光を当ててある。
+  AstLog のロゴ——字で組む ΛSTLOG。横棒の無い A（Λ）と、線の太さをそろえた幾何の
+  大文字で、宇宙機関の字の系譜。記号（軌道・星・アスタリスク）を足さず、名前そのものを
+  ロゴにする（記号の案はどれも持ち主に「ださい」と外された）。
+
+  - Λ だけは塗りの形で描く。線で描くと足の切り口が脚に直角になり、片方の角が
+    字の底より下へ出る。塗りなら足を水平に切れる
+  - 丸い字（O・G・S）と尖った頂（Λ）は字の高さから少しはみ出させる（0.3）。
+    そろえると、丸と尖りのほうが小さく見える
+  - 字間は字の高さの 0.34 を土台に、組み合わせごとに目で詰める（L の右は上が
+    空くので L→O を詰める、など）
+
+  WORDMARK は字の高さ 20 の格子（原点は左下、上が負）。MARK は Λ だけを 24 の
+  格子に置いたもの——favicon・404・管理画面の小さな印。
+
+  ここが正。同じ形が4か所にある——この部品、Layout.tsx の favicon（data URI）、
+  public/assets/astlog-mark.svg と astlog-wordmark.svg。前の2つはここから配り、
+  後の2つは別ファイルなので test/public.test.ts が一致を見張る。
 */
+export const WORDMARK = {
+  viewBox: '0 -20.31 131.67 20.62',
+  lambda: 'M0 0L9.2 -20.3L18.4 0L15.55 0L9.2 -14L2.85 0Z',
+  strokes:
+    'M35.94 -16.61A5.3 4.5 0 0 0 25.96 -14.5A5.3 4.5 0 0 0 31.26 -10A5.3 4.5 0 0 1 36.56 -5.5A5.3 4.5 0 0 1 26.58 -3.39M44.66 -18.7H60.26M52.46 -18.7V0M67.68 -20V-1.3H78.78M93.97 -19A9 9 0 1 1 93.97 -1A9 9 0 1 1 93.97 -19ZM128.46 -15.54A9 9 0 1 0 130.37 -10H122.45',
+  stroke: 2.6,
+} as const
+
+export const MARK = 'M3 21.93L12 2.07L21 21.93L18.21 21.93L12 8.23L5.79 21.93Z'
+
 /*
-  size は必須。app.css は svg に寸法を与える規則を1つも持たないので、
+  印の中身を SVG の文字列で（favicon の data URI に入れる。属性は ' で括る）。
+  MarkIcon と同じ MARK から組むので、2つの形はずれない
+*/
+export const markInner = (color: string) => `<path d='${MARK}' fill='${color}'/>`
+
+/*
+  size は必須。app.css はロゴの印に寸法を与える規則を持たないので、
   渡し忘れると素の 300x150 に落ちて版面が崩れる。
 */
-/*
-  三日月の7点。ここが正。
-
-  同じ列が3か所にある——この MarkIcon、Layout.tsx の favicon（data URI）、
-  public/assets/noctifex-mark.svg。1つめと2つめはここから配り、3つめは
-  別ファイルなので test/public.test.ts が一致を見張る。
-*/
-export const MARK_POINTS =
-  '14.96,2.50 7.71,6.10 5.68,13.93 10.27,20.60 18.32,21.50 12.09,16.78 10.73,9.07'
-
 export const MarkIcon = ({ size }: { size: number }) => (
   <svg
     viewBox="0 0 24 24"
@@ -31,9 +52,35 @@ export const MarkIcon = ({ size }: { size: number }) => (
     aria-hidden="true"
     focusable="false"
   >
-    <polygon points={MARK_POINTS} />
+    <path d={MARK} />
   </svg>
 )
+
+/*
+  ワードマーク（ΛSTLOG）。大きさは置く側の CSS が高さで決める（幅は viewBox の
+  縦横比から）。読み上げには出さない——名前は置く側が字で持つ（.sr-only の AstLog）
+*/
+export const Wordmark = ({ class: className }: { class: string }) => (
+  <svg
+    class={className}
+    viewBox={WORDMARK.viewBox}
+    fill="currentColor"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path d={WORDMARK.lambda} />
+    <path d={WORDMARK.strokes} fill="none" stroke="currentColor" stroke-width={WORDMARK.stroke} />
+  </svg>
+)
+
+/*
+  入口の真ん中の星（軌道図の恒星。components.tsx の OrbitSystem）。4つの角が尖り、
+  辺は内へへこむ曲線。縦の角を横より長くして、止まっていても瞬いて見える形にする。
+  24 の格子いっぱいに描いてあり、寸法は置く側の CSS が決める（app.css の
+  .system__star。枠と一緒に伸び縮みする）。
+*/
+export const STAR =
+  'M12 1Q13.14 10.86 20.76 12Q13.14 13.14 12 23Q10.86 13.14 3.24 12Q10.86 10.86 12 1Z'
 
 const stroke = {
   fill: 'none',
