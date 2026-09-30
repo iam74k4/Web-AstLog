@@ -42,6 +42,15 @@ declare module 'virtual:asset:*' {
 }
 
 /*
+  public/assets/ にあるファイルの名前の一覧（vitest.config.ts の assetPlugin）。
+  画像は中身を文字として読めないので、ページと CSS が読む素材が在るかだけを見る
+*/
+declare module 'virtual:assets' {
+  const files: string[]
+  export default files
+}
+
+/*
   リポジトリの設定ファイルを中身として読む（vitest.config.ts の repoPlugin。
   読めるのはそこの REPO_FILES に並べたものだけ）。本番へ出す道の決まり
   （test/deploy.test.ts）を確かめるため。

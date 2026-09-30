@@ -194,14 +194,10 @@ export async function countPublishedItems(db: Db, scope: ItemScope = {}) {
   return row?.n ?? 0
 }
 
-export function listPlatforms(db: Db) {
-  return db.query.platforms.findMany({ orderBy: [asc(schema.platforms.sortOrder)] })
-}
-
 /*
   区分ごとの公開中の件数。区分の絞り込み（両方の区分に項目があるときだけ並べる）
-  と、入口の件数と個人ページの帯の「個人開発 5 · 業務 2」に使う。memberId を渡せば
-  その人のぶん。
+  と、入口の軌道図と件数の帯（Tally）と、個人ページの帯の「個人開発 5 · 業務 2」に
+  使う。memberId を渡せばその人のぶん。
 
   絞り込みは絞り込む前の件数から決める。絞り込んだ結果から決めると、押すたびに
   絞り込みの並びが変わり、いま押した手が消えて戻れなくなる。
@@ -225,8 +221,8 @@ export async function countPublishedByKind(
 /* ------------------------------------------------------------- 見た目 */
 
 /*
-  settings は key-value なので、見た目の3つは接頭辞を付けて置く。
-  他の設定が増えても、この3行だけを拾えるようにするため。
+  settings は key-value なので、見た目の2つ（アクセント色と書体）は接頭辞を付けて
+  置く。他の設定が増えても、見た目の行だけを拾えるようにするため。
 */
 const THEME_PREFIX = 'theme.'
 
@@ -280,7 +276,7 @@ export async function findBlock(db: Db, id: number): Promise<schema.Block | unde
   位置と id で、どちらかが公開中なら公開。畳まれたほうの行は見えなくなるが、DB には
   残り、0004 がそのとき消す。
 */
-export function readLegacyBlocks(rows: schema.Block[]): schema.Block[] {
+function readLegacyBlocks(rows: schema.Block[]): schema.Block[] {
   const merged = new Map<string, schema.Block>()
   const out: schema.Block[] = []
   for (const row of rows) {

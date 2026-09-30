@@ -205,7 +205,7 @@ export function blockVisibleParts(key: BlockKey, parts: string[]): string[] {
 }
 
 // その中身が何単位あるか。0 ならページに出すものが無い（blockShown）
-export function blockUnitCount(key: BlockKey, body: string): number {
+function blockUnitCount(key: BlockKey, body: string): number {
   return key === 'note' ? blockTexts(body).length : blockLines(key, body).length
 }
 
@@ -233,7 +233,7 @@ export const MAX_STATEMENT_SENTENCE = 120
   列から消えたら落ちる行。行の番号は欄の中の行（空行も数える）で言う——書いた
   人が見ているのはその番号なので。
 */
-export function droppedLinkLines(body: string): string[] {
+function droppedLinkLines(body: string): string[] {
   return body.split('\n').flatMap((line, index) => {
     const [parts] = parseLines(line)
     if (!parts || blockLines('links', line).length > 0) return []

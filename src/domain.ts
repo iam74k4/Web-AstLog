@@ -27,7 +27,7 @@ export type ItemKind = (typeof ITEM_KINDS)[number]['key']
 
 export const ITEM_KIND_KEYS = ITEM_KINDS.map((kind) => kind.key) as [ItemKind, ...ItemKind[]]
 
-// 画面での呼び名。入口の件数・個人ページの帯（「個人開発 5 · 業務 2」）と管理画面のタブも同じ言葉
+// 画面での呼び名。入口の件数の帯（Tally）・個人ページの帯（「個人開発 5 · 業務 2」）と管理画面のタブも同じ言葉
 export const KIND_LABEL = Object.fromEntries(
   ITEM_KINDS.map((kind) => [kind.key, kind.label]),
 ) as Record<ItemKind, string>
@@ -37,7 +37,7 @@ export const KIND_PATH = Object.fromEntries(
   ITEM_KINDS.map((kind) => [kind.key, kind.path]),
 ) as Record<ItemKind, (typeof ITEM_KINDS)[number]['path']>
 
-export const isItemKind = (value: string): value is ItemKind =>
+const isItemKind = (value: string): value is ItemKind =>
   ITEM_KIND_KEYS.some((kind) => kind === value)
 
 // フォームと query の区分の読み方。知らない値・無い値は先頭の区分

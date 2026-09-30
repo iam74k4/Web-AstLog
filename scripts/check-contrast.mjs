@@ -2,13 +2,13 @@
   軌道図のまわりで、文字が読めるか（WCAG 1.4.3）を実際にブラウザで測る。
 
   軌道図が出るのはサイトの並びの最初と最後——入口（左に大見出しの列、右に作品の
-  軌道図と名前の札、底に件数の帯）と、締めの Contact（同じ星系から1本の軌道が
-  外へ抜ける。字は誘いの1文とメールと GitHub の手）。測る画面と字の一覧は下の SCREENS。
+  軌道図と番号の札、底に件数の帯）と、締めの Contact（同じ星系を上に置く。字は誘いの
+  1文とメールと GitHub の手）。測る画面と字の一覧は下の SCREENS。
 
-  軌道の線と走査線は字のそばを通る。線は細くても、濃さや置き方を間違えれば
+  軌道の線とブラックホールの光は字のそばを通る。線は細くても、濃さや置き方を間違えれば
   字の後ろが明るくなる——前の入口の月では、リード文が明るい縁に載って **1.00:1**、
   つまりその字は背景と同じ明るさで、完全に消えていた。軌道図の真ん中に名前を
-  置いていたころは、名前を横切る白い線で 3.08:1 まで寄った。いまの名前の札は
+  置いていたころは、名前を横切る白い線で 3.08:1 まで寄った。いまの番号の札は
   地（--bg）を塗って線を字の後ろに通さない。それが効いているかもここで測る。
 
   これは vitest では捕まらない。あちらは workerd の中で動くので版面を持たず、
@@ -21,17 +21,21 @@
   だから字を visibility: hidden にした「地だけ」を撮り、文字が実際に乗る
   行ボックス（Range.getClientRects）の下を読む。
 
-  面を持つもの（塗りの押し手「一覧で見る →」と、地を塗った名前の札）は、字の色だけを
+  面を持つもの（塗りの押し手「一覧で見る →」と、地を塗った番号の札）は、字の色だけを
   抜いて面を残す——面ごと隠すと、実際と違う地で測ることになる。
 
   動きは止めて測る（reducedMotion）。入口の字は浮かび上がって出てくるので、
-  止めないと、動いている途中の姿を測ることがある。そのうえで入口の動き（走査線が
-  1周して軌道と天体が灯る。名前が orbit- で始まる animation）だけは、途中の姿を
-  最後に別に測る——止めて測るだけでは、走査線が字の後ろを通る瞬間が見えない。
-  途中の姿では、まだ出ていない字（透明・薄くなっている札や数）は測らない。
+  止めないと、動いている途中の姿を測ることがある。そのうえで軌道図の動き（入口に着いた
+  とき、ブラックホールが大きく明るい姿から縮んで灯り、軌道と天体が渦を巻いて収まる。
+  そのあとも入口と締めで天体が回り、粒が落ち、光が流れる。名前が orbit- で始まる
+  animation）だけは、途中の姿を最後に別に測る——止めて測るだけでは、大きく広がった光や
+  回った天体が字の後ろに掛かる瞬間が見えない。途中の姿では、まだ出ていない字
+  （透明・薄くなっている札や数）は測らない。
 
-  画素は、撮った PNG をページへ戻して canvas から読む。Node 側に画像を
-  展開する道具を増やさずに済む。
+  画素は、撮った PNG を別の空のページ（about:blank）へ戻して canvas から読む。Node 側に
+  画像を展開する道具を増やさずに済む。測るページへは戻さない——サイトの CSP
+  （img-src 'self'）は data: の画像を読ませず、CSP を外して測ると、本物の CSP が
+  止めるもの（別オリジンの絵・書体）まで描いた姿で緑になる。
 
     npm run check:contrast
 */
@@ -52,7 +56,7 @@ const VIEWPORTS = [...DESIGN_SIZES, SHORT_WIDE]
   .map(({ width, height, touch }) => ({ width, height, touch: Boolean(touch) }))
   .sort((a, b) => a.width - b.width)
 
-// newPage に渡す形（touch は hasTouch へ）
+// newPage に渡す形（touch は hasTouch へ）。CSP はサイトのまま（上の「画素は」）
 const pageOptions = ({ width, height, touch }) => ({
   viewport: { width, height },
   hasTouch: touch,
@@ -64,15 +68,28 @@ const pageOptions = ({ width, height, touch }) => ({
 
   panel はその画面の節。targets は測る字（selector は panel の中で探す）で、
   required の無いものは出ていないサイトでは測らない（札は職種のある1人のサイトだけ、
-  名前の札と件数は作品のあるサイトだけ）。
+  番号の札と件数は作品のあるサイトだけ）。
 
   hide と ink は「地だけ」を撮るときに字を消すやり方。hide は丸ごと隠す
   （visibility）、ink は字の色だけを抜いて面を残す（color: transparent）。
   塗りの押し手と地を塗った札は、面ごと隠すと実際と違う地で測ることになるので ink で抜く。
 
-  minPixels は軌道図が「出ている」と言える画素数の下限。締めの星系は入口より
-  小さいので下げてある。motion は入口の動き（途中の姿）を測るか。締めは動かさない。
+  lines と art は、軌道図が「出ている」と言える画素数の下限（lines は軌道の線と点、
+  art はブラックホール。下の ORBIT_MIN_DELTA）。motion は動きの途中の姿を測るか——
+  入口は着いたときの動きと動き続けるもの、締めは動き続けるもの（天体が回り、粒が落ち、
+  ブラックホールの縁を光の点が回る）。
 */
+/*
+  画素数の下限（SCREENS の minPixels）。seed で測ったいちばん少ない姿（どれも
+  390x844 指）の約半分——入口の線と点 6656・ブラックホール 2954、締めの線と点 6648・
+  ブラックホール 2953 画素（締めの星系は入口と同じ大きさ）。「描かれていない」を止める
+  数で、1割の目減りを止める数ではない（下の ORBIT_MIN_DELTA）
+*/
+const LINES_HERO = 3000
+const ART_HERO = 1500
+const LINES_CONTACT = 3000
+const ART_CONTACT = 1500
+
 const SCREENS = [
   {
     name: '入口',
@@ -83,15 +100,14 @@ const SCREENS = [
       { selector: '.hero__lead', name: 'リード文', required: true },
       { selector: '.eyebrow', name: '職種と所在地の札' },
       { selector: '.cta', name: '一覧への押し手' },
-      { selector: '.system__label > *', name: '名前の札' },
-      { selector: '.system__number', name: '名前の札の番号' },
+      { selector: '.system__number', name: '作品の番号の札' },
       { selector: '.tally dt', name: '件数の見出し' },
       { selector: ':is(.tally__num, .tally__year)', name: '件数' },
     ],
     hide: 'main > .hero :is(h1, .eyebrow, .hero__lead, .tally dt, .tally dd)',
     // 札の番号は自分の色を持つので、札の中の子も抜く
     ink: 'main > .hero :is(.cta, .cta *, .system__label > *, .system__label > * *)',
-    minPixels: 3000,
+    minPixels: { lines: LINES_HERO, art: ART_HERO },
     motion: true,
   },
   {
@@ -108,32 +124,52 @@ const SCREENS = [
     // どれも面を持たないので丸ごと隠す
     hide: 'main > .orbital :is(.contact__lead, .contact__address, .contact__go, .contact__sub)',
     ink: null,
-    minPixels: 1200,
-    motion: false,
+    minPixels: { lines: LINES_CONTACT, art: ART_CONTACT },
+    motion: true,
   },
 ]
 
 /*
-  軌道図が地からどれだけ離れて見えるかの下限（描いた画素の明るさが、軌道図を消した
+  軌道図が地からどれだけ離れて見えるかの下限（描いた画素の明るさが、それを消した
   絵の同じ画素からどれだけ動いたかの中央値、0〜255）。画素数の下限は画面ごと
   （SCREENS の minPixels）。
 
   明るさそのものではなく差で見るのは、地の色に下限を縛らせないため。明るさで
   見ると、地を少し明るくしただけで線が「明るく」なったことになる。
 
-  線は 1px の細い線をアクセント色の --orbit-ink の濃さで引く。下限は実測（README の
-  「確かめる」）から大きく引いてある——見栄えを縛るのではなく、「描かれていない」
-  「ほぼ見えない」を止めるための数だから（地の明るさが 12 なので、明るさ 30 は差で 18）。
-  数えるのは線と点（SVG）だけで、名前の札や星は数えない。
+  軌道の線と点（SVG）と、ブラックホールは別々に消して測る。まとめて消すと、
+  ブラックホールだけで下限を越えてしまい、線が描かれなくなっても通る（光の縁は線の
+  何倍もの画素を持つ）。番号の札はどちらにも数えない。
+
+  下限は実測（成功行の「いちばん少ない」の行。線と点の中央値は 23）から引いて
+  ある——見栄えを縛るのではなく、「描かれていない」「ほぼ見えない」を止めるための
+  数だから（地の明るさが 12 なので、明るさ 30 は差で 18）。
 */
 const ORBIT_MIN_DELTA = 18
 
 /*
-  入口の動き（public/app.css の「入口に着いたとき」。orbit-sweep / orbit-beam /
-  orbit-ping / orbit-ring / orbit-light / orbit-count …）のどこで止めて測るか。止まるまでの
-  時間に対する割合。走査線が1周するあいだを3コマで挟む。
+  入口の動き（public/app.css の「入口に着いたとき」。orbit-ignite / orbit-infall /
+  orbit-light / orbit-count …）のどこで止めて測るか。:root の段（--ignite-* /
+  --infall-*）から時刻を組む（motionFrames）——動きは頭で速く進む曲線（--ease）なので、
+  止まるまでの時間の割合で刻むと、ほとんどのコマが止まった姿に近くなる。
+  ブラックホールがまだ大きく明るい頭と、軌道が回り込んでいる途中を3コマで挟む。
+  ignite / infall は、その動きの長さのどこか（0〜1）。
 */
-const MOTION_FRAMES = [0.2, 0.4, 0.6]
+const MOTION_FRAMES = [
+  { of: 'ignite', at: 0.1 },
+  { of: 'infall', at: 0.2 },
+  { of: 'infall', at: 0.5 },
+]
+
+// MOTION_FRAMES を、ページの :root の段から時刻（ms）に開く
+const motionFrames = (frames) => {
+  const root = getComputedStyle(document.documentElement)
+  const ms = (name) => {
+    const value = root.getPropertyValue(name).trim()
+    return value.endsWith('ms') ? Number.parseFloat(value) : Number.parseFloat(value) * 1000
+  }
+  return frames.map(({ of, at }) => Math.round(ms(`--${of}-delay`) + ms(`--${of}-dur`) * at))
+}
 
 // 軌道図の animation を頭から止め、ほかの動き（字の浮かび上がり）は終わらせる。止まる時刻を返す
 const holdOrbits = () => {
@@ -145,18 +181,27 @@ const holdOrbits = () => {
   */
   const off = document.createElement('style')
   off.textContent =
-    '.system, .system *, .tally *, .tally__num::after { animation: none !important }'
+    ':is(.system, .orbits), :is(.system, .orbits) *, .tally *, .tally__num::after { animation: none !important }'
   document.head.append(off)
   document.getAnimations()
   off.remove()
 
+  /*
+    止まる時刻は、名前が orbit- で始まる animation のいちばん遅い終わり。動き続けるもの
+    （orbit-turn / orbit-spin ほか）は終わらないので Infinity になる——そのときは
+    どの時刻のコマも動きの途中。ほかの動き（字の浮かび上がり）は終わらせる。終わらない
+    動きは finish() できない（投げる）ので止めるだけ
+  */
   let end = 0
   for (const animation of document.getAnimations()) {
+    const timing = animation.effect.getComputedTiming()
     if (animation.animationName?.startsWith('orbit-')) {
       animation.pause()
-      end = Math.max(end, animation.effect.getComputedTiming().endTime)
-    } else {
+      end = Math.max(end, timing.endTime)
+    } else if (Number.isFinite(timing.endTime)) {
       animation.finish()
+    } else {
+      animation.pause()
     }
   }
   return end
@@ -174,7 +219,7 @@ const seekOrbits = (at) => {
   測りたいのは版面であって、設定の保存経路ではない。
 
   まだ出ていない字（組まれていない・色が透明・自分か祖先が薄くなっている）は測らない。入口の動きの
-  途中では、札は走査線が通り過ぎてから出て、件数は数え上げのあいだ字を透明にする
+  途中では、札は回り込みが落ち着いてから出て、件数は数え上げのあいだ字を透明にする
   ——出ていない字の「読めなさ」を数えても意味が無い。
 */
 const collect = ([accent, screen]) => {
@@ -190,7 +235,7 @@ const collect = ([accent, screen]) => {
   */
   /*
     字の行ボックスは、切っている祖先（overflow が visible でない箱）の中に絞る。
-    末尾を省く札（入口の名前の札の text-overflow: ellipsis）は、字のノードの箱が
+    末尾を省く札（入口の札の名前の text-overflow: ellipsis。選んだときに出る）は、字のノードの箱が
     見えている幅より長く、切られた先の——字の描かれていない——地まで数えてしまう
   */
   const clipOf = (node) => {
@@ -365,15 +410,22 @@ async function main() {
 
   const accents = keysOf('ACCENTS')
   const browser = await chromium.launch()
+  // 撮った絵を読む空のページ（about:blank。サイトの CSP を持たない。上の「画素は」）
+  const decoder = await browser.newPage()
   const failures = []
   let checked = 0
   let tightest = { ratio: Number.POSITIVE_INFINITY, where: '' }
-  // いちばん薄かった軌道図は画面ごとに持つ。締めの星系は入口より小さいので、混ぜると入口の目減りが隠れる
+  /*
+    いちばん薄かった軌道図は画面ごと・描いたものごと（線と点・ブラックホール）に
+    持つ。混ぜると、片方の画面の目減りがもう片方に隠れる
+  */
   const dimmest = new Map(
-    SCREENS.map((screen) => [
-      screen.name,
-      { median: Number.POSITIVE_INFINITY, pixels: 0, where: '' },
-    ]),
+    SCREENS.flatMap((screen) =>
+      ['lines', 'art'].map((part) => [
+        `${screen.name}:${part}`,
+        { median: Number.POSITIVE_INFINITY, pixels: Number.POSITIVE_INFINITY, where: '' },
+      ]),
+    ),
   )
 
   // アクセントを一巡りして、字の下の地を読む。止まった姿も途中の姿もこれを通る
@@ -404,7 +456,7 @@ async function main() {
       const shot = (await page.screenshot({ type: 'png' })).toString('base64')
       await strip(false)
 
-      const found = await page.evaluate(worstIn, [`data:image/png;base64,${shot}`, targets])
+      const found = await decoder.evaluate(worstIn, [`data:image/png;base64,${shot}`, targets])
       checked += 1
 
       for (const one of found) {
@@ -429,7 +481,7 @@ async function main() {
   const poses = (screen) => 1 + (screen.motion ? MOTION_FRAMES.length : 0)
   const grid = VIEWPORTS.length * accents.length
   console.log(
-    `軌道図のまわりで文字が読めるか — ${VIEWPORTS.length}ビューポート × ${accents.length}アクセント × (${SCREENS.map((screen) => `${screen.name} ${poses(screen)}姿`).join(' + ')}) = ${grid * SCREENS.reduce((sum, screen) => sum + poses(screen), 0)}通り（入口は止まった姿 + 動きの途中 ${MOTION_FRAMES.length}コマ）`,
+    `軌道図のまわりで文字が読めるか — ${VIEWPORTS.length}ビューポート × ${accents.length}アクセント × (${SCREENS.map((screen) => `${screen.name} ${poses(screen)}姿`).join(' + ')}) = ${grid * SCREENS.reduce((sum, screen) => sum + poses(screen), 0)}通り（止まった姿 + 動きの途中 ${MOTION_FRAMES.length}コマ）`,
   )
 
   try {
@@ -463,48 +515,66 @@ async function main() {
         SVG が出ていない・線の色が地と同じ・--orbit-ink を下げすぎた、を止める
         ための下限で、見栄えの調整をここで縛るつもりは無い。
       */
-        const drawn = await (async () => {
-          const shown = await page.screenshot({ type: 'png' })
-          // 消すのは線と点（SVG）だけ。札や星まで消すと、中央値が線の明るさを言わなくなる
+        const png = (buffer) => `data:image/png;base64,${buffer.toString('base64')}`
+        const shown = png(await page.screenshot({ type: 'png' }))
+        // selector の要素だけを消して撮り、消す前と比べる。札まで消すと、中央値が図の明るさを言わなくなる
+        const drawnWithout = async (selector) => {
           const hide = await page.addStyleTag({
-            content:
-              '.system__orbits, .system__bodies, .orbits svg { visibility: hidden !important }',
+            content: `${selector} { visibility: hidden !important }`,
           })
-          const hidden = await page.screenshot({ type: 'png' })
+          const hidden = png(await page.screenshot({ type: 'png' }))
           await page.evaluate((node) => node.remove(), hide)
-          return page.evaluate(drawnBy, [
-            `data:image/png;base64,${shown.toString('base64')}`,
-            `data:image/png;base64,${hidden.toString('base64')}`,
-          ])
-        })()
-        if (drawn.pixels < screen.minPixels) {
-          failures.push(
-            `${where} — 軌道図が ${drawn.pixels} 画素しか描いていない（下限 ${screen.minPixels}）。SVG が出ていないか、線が見えていない`,
-          )
-        } else if (drawn.median < ORBIT_MIN_DELTA) {
-          failures.push(
-            `${where} — 軌道図の地からの離れの中央値が ${drawn.median.toFixed(1)}/255（下限 ${ORBIT_MIN_DELTA}）。薄すぎて出ていないのと変わらない`,
-          )
+          return decoder.evaluate(drawnBy, [shown, hidden])
         }
-        if (drawn.median < dimmest.get(screen.name).median) {
-          dimmest.set(screen.name, { ...drawn, where: size })
+        const parts = {
+          lines: {
+            label: '軌道の線と点',
+            // 締めは枠の直下の SVG だけ（.hole の中の SVG はブラックホールのほうで数える）
+            drawn: await drawnWithout('.system__orbits, .system__bodies, .orbits > svg'),
+            why: 'SVG が出ていないか、線が見えていない',
+          },
+          art: {
+            label: 'ブラックホール',
+            drawn: await drawnWithout('.hole'),
+            why: 'ロゴの O（.hole の SVG）が描かれていない',
+          },
+        }
+        for (const [part, { label, drawn, why }] of Object.entries(parts)) {
+          const floor = screen.minPixels[part]
+          if (drawn.pixels < floor) {
+            failures.push(
+              `${where} — ${label}が ${drawn.pixels} 画素しか描いていない（下限 ${floor}）。${why}`,
+            )
+          } else if (drawn.median < ORBIT_MIN_DELTA) {
+            failures.push(
+              `${where} — ${label}の地からの離れの中央値が ${drawn.median.toFixed(1)}/255（下限 ${ORBIT_MIN_DELTA}）。薄すぎて出ていないのと変わらない`,
+            )
+          }
+          const key = `${screen.name}:${part}`
+          const dim = dimmest.get(key)
+          dimmest.set(key, {
+            median: Math.min(dim.median, drawn.median),
+            pixels: Math.min(dim.pixels, drawn.pixels),
+            where: drawn.pixels < dim.pixels ? size : dim.where,
+          })
         }
 
         await sweep(page, where, screen)
         await page.close()
 
-        // 締めの軌道図は動かさない。途中の姿が無いので、ここで次のページへ
+        // 動かない画面は、途中の姿が無いので、ここで次のページへ
         if (!screen.motion) continue
 
         /*
-        入口の動きの途中の姿も測る。
+        動きの途中の姿も測る。
 
         上の一巡りは動きを止めて測っている（reducedMotion）。入口は着いたときに
-        一度だけ、走査線が1周して軌道と天体が灯り、天体のまわりに波紋が広がる
-        （public/app.css の「入口に着いたとき」）。走査線と波紋は止まった姿には無い
-        ので、字の後ろを通る瞬間は上では見えない。名前の札は走査線が通り過ぎてから
-        出る決まりで、test/theme.test.ts がその書き方を見張っているが、実際に描いて
-        確かめられるのはここだけ。
+        一度だけ、ブラックホールが大きく明るい姿から縮んで灯り、軌道と天体が渦を巻いて
+        収まる（public/app.css の「入口に着いたとき」）。そのあとは入口も締めも、天体が
+        公転し続け、ブラックホールの光が揺らぐ（「動き続ける」）。広がった光・回った軌道・
+        動いた天体は止まった姿には無いので、字の後ろに掛かる瞬間は上では見えない。
+        番号の札は回り込みが落ち着いてから出る決まりで、test/theme.test.ts がその書き方を
+        見張っているが、実際に描いて確かめられるのはここだけ。
 
         動きを止めずに開き、名前が orbit- で始まる animation だけを止めて途中の時刻へ
         送る。字の浮かび上がりは先に終わらせる——行ボックスを止まった位置で読むため。
@@ -515,11 +585,17 @@ async function main() {
         const end = await moving.evaluate(holdOrbits)
         if (end === 0) {
           failures.push(
-            `${where} — 入口の動きの animation（名前が orbit- で始まるもの）が見つからない。途中の姿を1つも測れていない（動かすのをやめたなら、この段ごと外すこと）`,
+            `${where} — 動きの animation（名前が orbit- で始まるもの）が見つからない。途中の姿を1つも測れていない（動かすのをやめたなら、その画面の motion を外すこと）`,
           )
         }
-        for (const share of end > 0 ? MOTION_FRAMES : []) {
-          const at = Math.round(end * share)
+        const frames = await moving.evaluate(motionFrames, MOTION_FRAMES)
+        for (const at of end > 0 ? frames : []) {
+          if (!(at > 0 && at < end)) {
+            failures.push(
+              `${where} — 動きの途中のコマ ${at}ms が動きの長さ（${Math.round(end)}ms）の外。:root の --ignite-* / --infall-* を読めているか`,
+            )
+            continue
+          }
           await moving.evaluate(seekOrbits, at)
           await sweep(moving, `${where} 動きの途中 ${at}ms`, screen)
         }
@@ -535,7 +611,7 @@ async function main() {
     console.error(`\n✗ ${failures.length} 件（${checked} 通り中）`)
     for (const line of failures) console.error(`  ${line}`)
     console.error(
-      '\n軌道を薄くするより先に、置き場所を疑う。名前の札は地（--bg）を塗っているか（app.css の .system__label）、札の置き場所は src/lib/orbits.ts の placeLabels、線の濃さは public/app.css の --orbit-ink、走査線は --beam-ink / --beam-reach。',
+      '\n軌道を薄くするより先に、置き場所を疑う。番号の札は地（--bg）を塗っているか（app.css の .system__label）、札の置き場所は src/lib/orbits.ts の placeLabels、線の濃さは public/app.css の --orbit-ink、着いたときの光の広がりは --ignite-scale / --ignite-glow、軌道の回り込みは --infall-turn。',
     )
     process.exitCode = 1
     return
@@ -544,9 +620,11 @@ async function main() {
   console.log(
     `✓ ${checked} 通り。基準を割った行 0（いちばん惜しいのは ${tightest.where} で ${tightest.ratio.toFixed(2)}:1）`,
   )
-  for (const [name, dim] of dimmest) {
+  for (const [key, dim] of dimmest) {
+    const [name, part] = key.split(':')
+    const label = part === 'lines' ? '軌道の線と点' : 'ブラックホール'
     console.log(
-      `  ${name}の軌道図はいちばん薄い ${dim.where} でも ${dim.pixels} 画素・地からの離れ ${dim.median.toFixed(1)}/255`,
+      `  ${name}の${label}はいちばん少ない ${dim.where} でも ${dim.pixels} 画素・地からの離れ（中央値の最小）${dim.median.toFixed(1)}/255`,
     )
   }
 }

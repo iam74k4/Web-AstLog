@@ -1,14 +1,17 @@
 import { env } from 'cloudflare:test'
-import markSvg from 'virtual:asset:astlog-mark.svg'
-import wordmarkSvg from 'virtual:asset:astlog-wordmark.svg'
+import wordmarkFile from 'virtual:asset:astlog-wordmark.svg'
+import faviconFile from 'virtual:asset:favicon.svg'
+import assetFiles from 'virtual:assets'
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import css from '../public/app.css'
 import * as schema from '../src/db/schema'
 import { ITEM_KINDS } from '../src/domain'
+import { CONTACT_FRAME } from '../src/lib/orbits'
 import { publicRoutes } from '../src/routes/public/routes'
 import { SITE } from '../src/site'
 import { itemHref, LinkList, LinkRow, splitPhrases } from '../src/ui/components'
-import { MARK, markInner, WORDMARK } from '../src/ui/icons'
+import { HOLE, iconSvg, wordmarkSvg } from '../src/ui/logo'
 import { db, form, get, okText, resetDb, seedItem, seedMember, signIn, touch } from './helpers'
 
 beforeEach(resetDb)
@@ -243,24 +246,12 @@ describe('名乗り', () => {
     expect(await okText('/members/okazaki')).toContain('worksFor')
   })
 
-  it('ロゴの形は1か所が正。配り先がずれたら落とす', async () => {
+  it('ロゴの形は1か所が正。素材のファイルがずれたら落とす', () => {
     /*
-      ロゴ（ΛSTLOG のワードマークと、Λ だけの印）の形は4か所にある——
-      src/ui/icons.tsx の WORDMARK / MARK（正）、Layout.tsx の favicon（data URI）、
-      public/assets/astlog-mark.svg と astlog-wordmark.svg。
-      前の2つは icons.tsx から配るので自動でそろうが、**素材の2つは別ファイル**
-      なので、ここで突き合わせる以外に一致を保つ手が無い。
-
-      ずれても型は黙るし、画面も一見それらしく出る（形が少し違うだけ）。
-    */
-    const html = await okText('/')
-    // favicon は data URI。属性の中の ' は &#39; になり、中身は URL の形に符号化してある
-    const href = html.match(/<link rel="icon" href="data:image\/svg\+xml,([^"]+)"/)?.[1] ?? ''
-    const icon = decodeURIComponent(href.replaceAll('&#39;', "'"))
-    expect(icon).toContain(markInner('#f2f2f4'))
-
-    /*
-      配っている素材の SVG も同じ形であること。
+      ロゴの形の正は src/ui/logo.ts で、ページはそこから直に描く。素材のファイル
+      （ワードマークと favicon の SVG）は scripts/logo/export.mjs が同じ形から書くが、
+      別ファイルなので、ここで突き合わせる以外に一致を保つ手が無い。ずれても型は
+      黙るし、画面も一見それらしく出る（形か色を変えたら export.mjs で書き直す）。
 
       **fetch では確かめられない。** workerd では public/ が配られず 404 に
       なるうえ、その 404 ページ自身がロゴを描いているので、
@@ -268,20 +259,52 @@ describe('名乗り', () => {
       （実際にそう書いて通ってしまった）。ファイルの中身は
       vitest.config.ts の assetPlugin が渡す。
     */
-    expect(markSvg).toContain(`d="${MARK}"`)
-    expect(markSvg.match(/<path /g)).toHaveLength(1)
-    expect(wordmarkSvg).toContain(`viewBox="${WORDMARK.viewBox}"`)
-    expect(wordmarkSvg).toContain(`d="${WORDMARK.lambda}"`)
-    expect(wordmarkSvg).toContain(`d="${WORDMARK.strokes}"`)
-    expect(wordmarkSvg).toContain(`stroke-width="${WORDMARK.stroke}"`)
-    // WORDMARK に無いものを素材だけが持っていない（Λ の塗りと、残りの字の線）
-    expect(wordmarkSvg.match(/<path /g)).toHaveLength(2)
+    expect(wordmarkFile).toBe(wordmarkSvg())
+    expect(faviconFile).toBe(iconSvg())
   })
 
-  it('上の帯のロゴはワードマークの絵1枚と、リンクの名前の字。絵は読み上げに出さない', async () => {
+  it('ページと CSS が読む素材は、どれも public/assets にある', async () => {
     /*
-      絵は aria-hidden なので、リンクの名前は .sr-only の字が持つ——名前の無い
-      リンクにならない（WCAG 4.1.2）
+      favicon と apple-touch-icon（scripts/logo/export.mjs）は素材のファイル。名前を
+      1字違えても型もテストも黙り、ブラウザでだけ黙って欠ける。
+      workerd では public/ が配られないので、ファイルの名前の一覧（assetPlugin）と
+      突き合わせる。逆に、ページも CSS も読まないファイルは、外で使う理由を持つもの
+      だけを置く（読まれない素材が黙って配られ続けない）
+    */
+    await seedMember()
+    await seedItem({ type: 'app' })
+    const html = await okText('/')
+    // CSS はコメントを落として読む（コメントに書いた素材の名前を、読む素材と数えない）
+    const rules = css.replace(/\/\*[\s\S]*?\*\//g, '')
+    const read = new Set(
+      [...`${html}\n${rules}`.matchAll(/\/assets\/([\w.-]+)/g)].map((found) => found[1]),
+    )
+    for (const file of ['favicon.svg', 'favicon-32.png', 'apple-touch-icon.png']) {
+      expect(read, file).toContain(file)
+    }
+    for (const file of read) expect(assetFiles, file).toContain(file)
+    const OUTSIDE = new Set([
+      // ページの外で使うワードマーク（ページはインラインの SVG で描く）
+      'astlog-wordmark.svg',
+      // GitHub の Organization の顔（scripts/blackhole/render.py の avatar。黒い地の、横から見た姿）
+      'astlog-avatar.png',
+    ])
+    for (const file of assetFiles) {
+      expect(read.has(file) || OUTSIDE.has(file), `${file} を読む所が無い`).toBe(true)
+    }
+    // favicon は画像ファイル（data URI の SVG はやめた。CSP の img-src は 'self' だけ）
+    expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg"/>')
+    expect(html).toContain(
+      '<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"/>',
+    )
+    expect(html).toContain('<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png"/>')
+    expect(html).not.toContain('data:image')
+  })
+
+  it('上の帯のロゴはワードマークと、リンクの名前の字。絵は読み上げに出さない', async () => {
+    /*
+      ワードマーク（O がブラックホール）は aria-hidden なので、リンクの名前は .sr-only の
+      字が持つ——名前の無いリンクにならない（WCAG 4.1.2）
     */
     const top = topOf(await okText('/'))
     const brand = top.slice(
@@ -289,8 +312,9 @@ describe('名乗り', () => {
       top.indexOf('</a>', top.indexOf('<a class="brand"')),
     )
     expect(brand).toContain('<svg class="brand__word"')
-    // 畳んだ Λ の絵は持たない（上の帯には名前を入れないので、ワードマークを畳む理由が無い）
-    expect(brand).not.toContain('brand__mark')
+    // O の黒い円は CSS の段（--hole-core）で塗る。焼いた画像は置かない
+    expect(brand).toContain('<circle class="logo-core"')
+    expect(brand).not.toContain('<img')
     expect(brand.match(/aria-hidden="true"/g)).toHaveLength(1)
     expect(brand).toContain(`<span class="sr-only">${SITE.name}</span>`)
   })
@@ -367,7 +391,7 @@ describe('入口の画面', () => {
     expect(hero).toContain(
       '<p class="eyebrow"><span lang="en">System Engineer</span><span>神奈川</span></p>',
     )
-    expect(hero).toContain('class="system__star"')
+    expect(hero).toContain('<span class="hole" aria-hidden="true"')
     for (const part of splitPhrases(SITE.heroLead)) {
       expect(hero).toContain(`>${part}</span>`)
     }
@@ -892,7 +916,7 @@ describe('連絡先の行き先', () => {
 })
 
 describe('締めのページ（Contact）', () => {
-  it('入口と同じ星系の軌道図を置き、1本の軌道が外へ抜ける', async () => {
+  it('入口と同じ星系の軌道図を置く。外へ抜ける道（脱出軌道と探査機）は持たない', async () => {
     await seedMember()
     await seedItem({ type: 'app' })
     await seedItem({ type: 'app' })
@@ -901,14 +925,69 @@ describe('締めのページ（Contact）', () => {
     const main = mainOf(await okText('/contact'))
     // 締めの表紙（見出しの錨を持たない節）。図は装飾なので読み上げに流さない
     expect(main).toContain('<section id="contact" class="orbital"')
-    expect(main).toContain('<div class="orbits"><svg viewBox="0 0 1000 320" aria-hidden="true"')
-    // 入口と同じ件数の天体（個人開発は点、業務は輪）と、抜けていく1本と探査機
+    expect(main).toContain(
+      `<div class="orbits"><svg viewBox="0 0 ${CONTACT_FRAME.width} ${CONTACT_FRAME.height}" aria-hidden="true"`,
+    )
+    // 入口と同じ件数の天体（個人開発は点、業務は輪）
     expect(main.match(/class="orbit-body orbit-body--app"/g)).toHaveLength(2)
     expect(main.match(/class="orbit-body orbit-body--work"/g)).toHaveLength(1)
-    expect(main.match(/class="orbit-escape"/g)).toHaveLength(1)
-    expect(main).toContain('class="orbit-probe"')
+    // 持ち主が外した（「スイングバイの軌道はいらない」）
+    expect(main).not.toMatch(/orbit-escape|orbit-probe/)
     // 図は誘いの1文より前（上）に置き、字には重ねない
     expect(main.indexOf('class="orbits"')).toBeLessThan(main.indexOf('contact__lead'))
+  })
+
+  it('入口と締めの図は動き続ける。止める手は置かない（JavaScript も置かない）', async () => {
+    await seedMember()
+    await seedItem({ type: 'app' })
+    await seedItem({ type: 'work' })
+    for (const path of ['/', '/contact']) {
+      const main = mainOf(await okText(path))
+      // 持ち主が外した（「動きを止める 不要」）。動きを減らす設定だけが止める
+      expect(main, path).not.toMatch(/motion-toggle|class="motion"|動きを止める/)
+      // 同じ天体を奥と手前の層に1つずつ（天体2つ × 2）
+      expect(main.match(/class="orbit-mover orbit-body/g), path).toHaveLength(4)
+      // 軌道を流れる光も奥と手前に。吸い込まれる粒はブラックホールの後ろの層にだけ
+      expect(main.match(/class="orbit-flow"/g), path).toHaveLength(4)
+      expect(main.match(/<g class="orbit-dust"/g), path).toHaveLength(1)
+      expect(main, path).toContain('class="orbit-grain__dot"')
+      // ブラックホールの縁を回る光の点
+      expect(main.match(/<svg class="hole__spin"/g), path).toHaveLength(1)
+      expect(
+        main.match(/<clipPath id="[a-z]+-(far|near)" clipPathUnits="userSpaceOnUse">/g),
+        path,
+      ).toHaveLength(2)
+      expect(main, path).not.toContain('<script')
+    }
+  })
+
+  it('入口と締めのブラックホールは、ロゴの O と同じ絵（光の縁の坂も黒い円の大きさも）', async () => {
+    /*
+      持ち主の「ワードマークのブラックホールと統一してほしい」。前は測地線を追って焼いた
+      絵（斜めから見た円盤が影の前を横切る姿）で、上の帯のロゴの O と別のものに見えた
+    */
+    await seedMember()
+    await seedItem({ type: 'app' })
+    const stopsOf = (html: string) =>
+      html.match(/<radialGradient[^>]*>(.*?)<\/radialGradient>/)?.[1] ?? ''
+    const logo = stopsOf(topOf(await okText('/')))
+    expect(logo).toContain('<stop')
+    for (const path of ['/', '/contact']) {
+      const main = mainOf(await okText(path))
+      const hole = main.slice(main.indexOf('<span class="hole" aria-hidden="true"'))
+      expect(stopsOf(hole), path).toBe(logo)
+      expect(hole, path).toContain(`<circle class="logo-core" cx="0" cy="0" r="${HOLE.core}"`)
+      expect(main, path).not.toContain('/assets/blackhole')
+    }
+  })
+
+  it('作品が0件でも、ブラックホールは粒を吸い込み、縁を光の点が回る', async () => {
+    await seedMember()
+    const main = mainOf(await okText('/'))
+    expect(main).toContain('class="orbit-grain__dot"')
+    expect(main).toContain('<svg class="hole__spin"')
+    // 回る天体は無い（入れ物の orbit-movers だけ）
+    expect(main).not.toContain('class="orbit-mover orbit-body')
   })
 
   it('ページに出すのは誘いの1文とメールと GitHub の手。見出しは読み上げのためにだけ置く', async () => {
@@ -1067,40 +1146,61 @@ describe('ページの URL', () => {
     expect(html.match(/aria-current="page"/g)).toHaveLength(1)
   })
 
-  it('入口の軌道図は、入口のページにだけ出る。真ん中の恒星は星、天体には作品の札', async () => {
+  it('入口の軌道図は、入口のページにだけ出る。真ん中はブラックホール、天体には作品の札', async () => {
     await seedMember()
     await seedItem({ type: 'app', title: 'AppMixer', slug: 'appmixer', year: '2026' })
     await seedItem({ type: 'work', title: '開発工程の効率化', slug: 'dev', year: '2024' })
 
     const home = mainOf(await okText('/'))
     expect(home).toContain('<header class="hero hero--orbit">')
-    // 絵の層は装飾なので読み上げに流さない
-    expect(home).toContain(
-      '<div class="system"><svg class="system__orbits" viewBox="0 0 1000 560" aria-hidden="true" focusable="false">',
-    )
-    expect(home).toContain('<span class="system__beam" aria-hidden="true"></span>')
-    // 星は絵の層のあと——枠の真ん中＝焦点に座る
+    /*
+      重なりの順は DOM の順——軌道の奥の半分、ブラックホール、手前の半分、天体。
+      絵の層は装飾なので読み上げに流さない
+    */
     const system = home.slice(home.indexOf('<div class="system">'))
-    expect(system).toContain('</svg><svg class="system__star" viewBox="0 0 24 24"')
-    // 作品1つに天体1つ。個人開発は点、業務は輪。走査線が通る時刻（--at）を持つ
-    expect(home.match(/class="orbit-body orbit-body--app" style="--at:[\d.]+"/g)).toHaveLength(1)
-    expect(home.match(/class="orbit-body orbit-body--work" style="--at:[\d.]+"/g)).toHaveLength(1)
+    const far = system.indexOf(
+      '<svg class="system__orbits system__orbits--far" viewBox="0 0 1000 560" aria-hidden="true" focusable="false">',
+    )
+    const hole = system.indexOf('<span class="hole" aria-hidden="true"')
+    const near = system.indexOf('<svg class="system__orbits system__orbits--near"')
+    const bodies = system.indexOf('<svg class="system__bodies"')
+    expect(far).toBeGreaterThan(-1)
+    expect(hole).toBeGreaterThan(far)
+    expect(near).toBeGreaterThan(hole)
+    expect(bodies).toBeGreaterThan(near)
+    /*
+      線は奥から手前へ続けて濃くなる坂を読む（層ごとに id を分けたグラデーション）。
+      手前の層にだけ、線の下に地の色の縁取りを敷く
+    */
+    expect(system.slice(far, hole)).toContain(
+      '<linearGradient id="system-far-depth" gradientUnits="userSpaceOnUse"',
+    )
+    expect(system.slice(far, hole)).toContain('stroke="url(#system-far-depth)"')
+    expect(system.slice(near, bodies)).toContain('stroke="url(#system-near-depth)"')
+    expect(system.slice(near, bodies)).toContain('class="orbit__casing"')
+    expect(system.slice(far, hole)).not.toContain('orbit__casing')
+    // レーダー（走査線・波紋・走査の時刻）はやめた
+    expect(home).not.toMatch(/system__beam|orbit-ring|--at:/)
+    // 作品1つに天体1つ。個人開発は点、業務は輪
+    expect(home.match(/class="orbit-body orbit-body--app"/g)).toHaveLength(1)
+    expect(home.match(/class="orbit-body orbit-body--work"/g)).toHaveLength(1)
     /*
       札は作品のページへのリンクで、一覧と同じ番号（一覧の並び: 年の新しい順）。
-      番号の順に並べる（位置は style で決まる。並びは読み上げと Tab の順）
+      天体の横に見えるのは番号だけで、名前は札の中（重ねたときと選んだときに見える。
+      読み上げとリンクの名前にはいつも入る）。番号の順に並べる
     */
     const labels = system.slice(system.indexOf('<ol class="system__labels"'))
     expect(labels).toContain('<ol class="system__labels" aria-label="つくったもの">')
     expect(labels).toContain(
-      '<a href="/apps/item/appmixer"><span class="system__number">01</span><span lang="en">AppMixer</span></a>',
+      '<a href="/apps/item/appmixer"><span class="system__number">01</span><span class="system__name" lang="en">AppMixer</span></a>',
     )
     expect(labels).toContain(
-      '<a href="/works/item/dev"><span class="system__number">02</span><span>開発工程の効率化</span></a>',
+      '<a href="/works/item/dev"><span class="system__number">02</span><span class="system__name">開発工程の効率化</span></a>',
     )
     expect(labels.indexOf('>01<')).toBeLessThan(labels.indexOf('>02<'))
     /*
-      絵は <img> で貼らず、素材のファイルも持たない。線と点の色は app.css が
-      --accent と --ink から敷くので、**見た目プリセットで軌道図の色も変わる**
+      ブラックホールはロゴの O と同じ SVG（<img> で貼らない。飾り）。軌道と天体の色は
+      app.css が --accent と --ink から敷くので、**見た目プリセットで軌道図の色も変わる**
     */
     expect(home).not.toContain('<img')
     expect(home).not.toMatch(/(?:stroke|fill)="#/)
@@ -1119,12 +1219,12 @@ describe('ページの URL', () => {
     expect(await okText('/members/okazaki')).not.toContain('class="system"')
   })
 
-  it('作品が1件も無いサイトの入口は、軌道も天体も札も無く星だけ', async () => {
+  it('作品が1件も無いサイトの入口は、軌道も天体も札も無くブラックホールだけ', async () => {
     await seedMember()
 
     const home = mainOf(await okText('/'))
     expect(home).toContain('<div class="system">')
-    expect(home).toContain('class="system__star"')
+    expect(home).toContain('<span class="hole" aria-hidden="true"')
     expect(home).not.toContain('class="orbit ')
     expect(home).not.toContain('class="orbit-body')
     expect(home).not.toContain('system__labels')
@@ -1422,6 +1522,38 @@ describe('作品1件の恒久リンク', () => {
       '<article class="entry"><span class="entry__index" aria-hidden="true">06</span><div class="entry__main"><h3>まだ無いほう</h3>',
     )
     expect(html).not.toContain('card--lean')
+  })
+
+  it('絞り込んでも行の番号は絞り込む前の並びのまま。入口の札と同じ番号で結ぶ', async () => {
+    /*
+      絞り込んだ行を 01 から数え直していたころ、入口の札で 03 の作品が、業務だけに
+      絞った一覧では 01 になっていた
+    */
+    await seedMember()
+    const rows: [string, 'app' | 'work'][] = [
+      ['A', 'app'],
+      ['B', 'work'],
+      ['C', 'app'],
+      ['D', 'work'],
+    ]
+    for (const [index, [title, type]] of rows.entries()) {
+      await seedItem({ title, slug: title.toLowerCase(), type, sortOrder: (index + 1) * 10 })
+    }
+    const numberOf = (html: string, slug: string) =>
+      html.match(
+        new RegExp(`id="item-${slug}"><span class="entry__index" aria-hidden="true">(\\d+)<`),
+      )?.[1]
+
+    const work = mainOf(await okText('/projects?kind=work'))
+    expect(numberOf(work, 'b')).toBe('02')
+    expect(numberOf(work, 'd')).toBe('04')
+    expect(numberOf(work, 'a')).toBeUndefined()
+    const apps = mainOf(await okText('/projects?kind=app'))
+    expect(numberOf(apps, 'a')).toBe('01')
+    expect(numberOf(apps, 'c')).toBe('03')
+    // 入口の札も同じ番号
+    const top = mainOf(await okText('/'))
+    expect(top).toMatch(/href="\/works\/item\/d"><span class="system__number">04<\/span>/)
   })
 
   it('画像のある作品の行にはサムネイル。飾りなので名前を持たず、遅延読み込み', async () => {
@@ -2539,6 +2671,8 @@ describe('管理画面への入口', () => {
 
     for (const path of ['/', '/projects', '/all', '/members/okazaki', '/apps/item/appmixer']) {
       const response = await get(path)
+      // 404 の空の本文で「含まない」が緑にならないように（okText と同じ見張り）
+      expect(response.status, path).toBe(200)
       expect(await response.text(), path).not.toContain('top__admin')
       expect(response.headers.get('cache-control'), path).toBeNull()
     }
@@ -2586,6 +2720,7 @@ describe('管理画面への入口', () => {
     await db().update(schema.sessions).set({ expiresAt: '2000-01-01T00:00:00.000Z' })
 
     const response = await signed('/')
+    expect(response.status).toBe(200)
     expect(await response.text()).not.toContain('top__admin')
     expect(response.headers.get('cache-control')).toBeNull()
   })

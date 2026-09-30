@@ -94,7 +94,7 @@ export const cameFromEdit = (c: Context<AppEnv>) => c.req.query('from') === 'edi
   数として読めなければ、黙って別の数に倒さず 400 で欄を示す（src/lib/format.ts の
   int）。返す text は描き直し用——打った字をそのまま返す。
 */
-export const SORT_ORDER_ERROR = '並び順は数字で入れてください（例: 10）'
+const SORT_ORDER_ERROR = '並び順は数字で入れてください（例: 10）'
 
 export function readSortOrder(form: FormData, current: number | undefined) {
   const text = str(form.get('sortOrder'))

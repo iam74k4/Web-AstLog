@@ -79,7 +79,7 @@ const backToLogin = (error: string, next?: string | null) => {
 
 const LoginBrand = () => (
   <span class="login__brand">
-    <Wordmark class="login__word" />
+    <Wordmark class="brand__word" />
     <span class="sr-only">{SITE.name}</span>
     <span class="login__label">ADMIN</span>
   </span>

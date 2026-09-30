@@ -32,8 +32,8 @@ function expectPageHeaders(response: Response, label: string) {
   expect(csp['base-uri'], label).toBe("'none'")
   expect(csp['form-action'], label).toBe("'self'")
   expect(csp['frame-ancestors'], label).toBe("'none'")
-  // ファビコンは data: の SVG。列の数とアバターの寸法は style 属性で渡す
-  expect(csp['img-src'], label).toBe("'self' data:")
+  // 画像は同じオリジンだけ（favicon も public/assets のファイル）。軌道図の札の位置や件数は style 属性で渡す
+  expect(csp['img-src'], label).toBe("'self'")
   expect(csp['style-src'], label).toBe("'self' 'unsafe-inline'")
   expect(response.headers.get('x-content-type-options'), label).toBe('nosniff')
   /*
@@ -174,7 +174,7 @@ describe('応答のヘッダ', () => {
     PERF-2。CSS は既定（public, max-age=0, must-revalidate）のまま配られ、ページを
     移るたびに描画を止めて条件付き GET を1往復していた。いまは中身から作った版を
     URL に付け（src/ui/components.tsx の Stylesheets）、_headers が1年・immutable で配る。
-    長く持たせてよいのは版つきの URL で読まれるものだけ——版の無い素材（ロゴ・月）を
+    長く持たせてよいのは版つきの URL で読まれるものだけ——版の無い素材（ロゴの素材・GitHub の顔）を
     immutable にすると、差し替えた絵が1年届かない
   */
   it('スタイルシートは版つきの URL で読み、1年・immutable で配る', async () => {

@@ -16,11 +16,12 @@
     (1) スクロールできる   html と body の overflow が visible（clip / hidden にすると
                           中身がページの外で黙って切られる）
     (2) 横にはみ出さない   ページの scrollWidth ≤ clientWidth、見えている要素の左右が
-                          画面の中（横に動く帯＝目次・絞り込みの中身と、軌道図の SVG の中は除く）
+                          画面の中（横に動く帯＝目次・絞り込みの中身と、SVG の中は除く）
     (3) 切られた要素が無い  overflow が hidden / clip の祖先の外へ出ている要素も、
                           自分の中身（字）を hidden / clip で切っている箱も無い
                           （行止め line-clamp・1行で末尾を省く ellipsis・読み上げ用の
-                          1px の箱・軌道図の SVG の中は除く）
+                          1px の箱・SVG の中は除く。SVG の箱そのもの——ロゴ・軌道図・
+                          アイコン——は測る）
     (4) h1 がちょうど1つ   1ページ = 1ドキュメント（WCAG 1.3.1）
     (5) 帯の場所           上の帯が本文の上、足元が本文の下
     (6) 帯の貼り付け       上の帯の position が sticky。本文の下に画面3つぶんの空きを
@@ -29,12 +30,14 @@
     (7) 送った先           main の中の id を持つ要素（#about など）へ送ると、上端が
                           帯の下端より下に来る（app.css の scroll-padding-top と :root の
                           --top-clear）
-    (8) 目次の的           目次の行き先と管理画面への入口の高さが --tap 以上（指の姿では 44px）
+    (8) 押す的             目次の行き先と管理画面への入口の高さが --tap 以上
+                          （指の姿では 44px）。入口の番号の札は、札の中心に重ねた透明の面
+                          （.system__label a::after）が縦横とも --tap 以上
     (9) 見出しの錨         同じ書体・寸法・姿の中で、節の見出しの上端の y が 1px 以内でそろう
-   (10) 入口の軌道図       星が枠の真ん中（焦点）に座り、名前の札が出ているときは、札どうしも
-                          札と星も重ならず、どの札も枠の中に収まる（札の置き場所は
-                          src/lib/orbits.ts の placeLabels が字の数から見積もって選ぶ。
-                          本物の書体で組んだ幅で確かめる）
+   (10) 入口の軌道図       ブラックホールが焦点に座り、番号の札が出ているときは、札どうしも
+                          札と光の縁も重ならず、どの札も枠の中に収まる（札の置き場所は
+                          src/lib/orbits.ts の placeLabels が番号の札の大きさの見積もり
+                          LABEL_SIZE で選ぶ。本物の書体で組んだ幅で確かめる）
 
   ほかに、読み込み直して測るものが2つある（measureRun の後半）。
 
@@ -189,6 +192,16 @@ const measure = ([typeface, cfg]) => {
   const to = (y) => scroller.scrollTo({ top: y, behavior: 'instant' })
   document.body.dataset.typeface = typeface
   to(0)
+  /*
+    着いたときの動き（入口のブラックホールが大きく灯り、軌道が回って収まる）は
+    終わらせてから測る。測るのは止まった版面で、動きの途中の箱の位置ではない
+    （途中の姿の読みやすさは check:contrast が測る）。終わらない動き（天体の公転や
+    ブラックホールの縁を回る光の点）は finish() できない（投げる）ので、外して止まった姿に戻す
+  */
+  for (const animation of document.getAnimations()) {
+    if (Number.isFinite(animation.effect.getComputedTiming().endTime)) animation.finish()
+    else animation.cancel()
+  }
 
   const slack = cfg.slack
   const problems = []
@@ -264,33 +277,36 @@ const measure = ([typeface, cfg]) => {
     }
     const style = getComputedStyle(el)
     const rect = el.getBoundingClientRect()
-    /*
-      SVG の中（軌道図の線と点）は測らない。SVG は viewBox の外を自分で切るので、
-      締めの脱出軌道のように枠の外まで伸ばした線も画面には出ない——ところが線の
-      箱（getBoundingClientRect）は切る前の形のままで、はみ出しに数えてしまう。
-      SVG の箱そのものは画面の中に居ること
-    */
-    const drawing = el.tagName.toLowerCase() === 'svg'
     if (
-      drawing ||
       (rect.width <= 1 && rect.height <= 1 && style.position === 'absolute') ||
       style.webkitLineClamp !== 'none'
     ) {
       skipped.add(el)
-      if (!drawing) continue
+      continue
     }
+    /*
+      SVG の中（ロゴの光・軌道図の線と点）は測らない。線の箱（getBoundingClientRect）は
+      線の形の外接の箱で、SVG が枠で切る前の形のまま——ロゴの O の光は字の箱の外へ
+      出して見せ、軌道を流れる光の破線の箱は軌道1周ぶんある。SVG の箱そのものは、
+      画面の中に居て、祖先に切られていないこと（下で測る）
+    */
+    const drawing = el.tagName.toLowerCase() === 'svg'
+    if (drawing) skipped.add(el)
     if (rect.width === 0 || rect.height === 0 || style.visibility === 'hidden') continue
     if (rect.right > innerWidth + slack || rect.left < -slack) {
       wide.push(`${nameOf(el)} ${round(rect.left)}〜${round(rect.right)}px`)
     }
-    if (scrolls(style)) skipped.add(el)
-    if (skipped.has(el)) continue
+    if (scrolls(style)) {
+      skipped.add(el)
+      continue
+    }
     /*
       自分の中身（字）を切っている箱。子の要素が無い段落を max-height と
       overflow: hidden で止めても、子の位置では見つからない。1行で末尾を省く箱
       （text-overflow: ellipsis。読み上げには全部が残る）は決まりどおりなので除く
     */
     if (
+      !drawing &&
       clips(style) &&
       style.textOverflow !== 'ellipsis' &&
       (el.scrollHeight > el.clientHeight + slack || el.scrollWidth > el.clientWidth + slack)
@@ -320,7 +336,7 @@ const measure = ([typeface, cfg]) => {
   if (wide.length) problems.push(`画面の横にはみ出している: ${list(wide)}`)
   if (cut.length) problems.push(`切られている: ${list(cut)}`)
 
-  // (8) 目次の的。目次の行き先と管理画面への入口は --tap（指の姿では 44px）
+  // (8) 押す的。目次の行き先と管理画面への入口は --tap（指の姿では 44px）
   const tap = parseFloat(getComputedStyle(root).getPropertyValue('--tap'))
   for (const hand of top.querySelectorAll('.toc a, .top__admin')) {
     const tall = hand.getBoundingClientRect().height
@@ -330,22 +346,44 @@ const measure = ([typeface, cfg]) => {
       )
     }
   }
+  /*
+    入口の番号の札は見た目が小さい（番号だけで 23×15px ほど）。押す的は、札の中心に
+    重ねた透明の面（.system__label a::after）。札が出ているときだけ測る
+  */
+  for (const hand of main.querySelectorAll('.system__label a')) {
+    if (hand.getBoundingClientRect().width === 0) continue
+    const face = getComputedStyle(hand, '::after')
+    const wide = Number.parseFloat(face.width)
+    const tall = Number.parseFloat(face.height)
+    if (!(wide >= tap - slack && tall >= tap - slack)) {
+      problems.push(
+        `入口の札の的「${hand.textContent.trim()}」が ${round(wide)}x${round(tall)}px（--tap は ${tap}px）`,
+      )
+    }
+  }
 
   /*
-    (10) 入口の軌道図。星は枠の真ん中（焦点）に座る。札が出ている（枠が
-    LABEL_MIN_WIDTH 以上）ときは、札どうしと札と星が重ならず、札が枠の中に収まる。
-    札の箱は字の箱（リンク）そのもの
+    (10) 入口の軌道図。ブラックホールは焦点（入口の枠の真ん中）に座る——箱は
+    回してあるが、回る中心が箱の真ん中なので、外接の箱の真ん中が焦点。札が出ている
+    （枠が LABEL_MIN_WIDTH 以上）ときは、札どうしと、札と光の縁が重ならず、札が枠の中に
+    収まる。札の箱は字の箱（リンク）そのもの（名前は重ねたときだけ出るので、ふだんは番号）
   */
   const system = document.querySelector('.system')
   if (system && getComputedStyle(system).display !== 'none') {
     const box = system.getBoundingClientRect()
-    const star = system.querySelector('.system__star')?.getBoundingClientRect()
-    if (star) {
-      const dx = (star.left + star.right) / 2 - (box.left + box.right) / 2
-      const dy = (star.top + star.bottom) / 2 - (box.top + box.bottom) / 2
+    const hole = system.querySelector('.hole')?.getBoundingClientRect()
+    // 光の縁の円（.hole__light の circle）の外接の箱。札が掛かってはいけない所
+    let star = null
+    if (hole) {
+      const dx = (hole.left + hole.right) / 2 - (box.left + box.right) / 2
+      const dy = (hole.top + hole.bottom) / 2 - (box.top + box.bottom) / 2
       if (Math.abs(dx) > slack || Math.abs(dy) > slack) {
-        problems.push(`星が枠の真ん中から ${round(dx)}, ${round(dy)}px ずれている`)
+        problems.push(`ブラックホールが焦点から ${round(dx)}, ${round(dy)}px ずれている`)
       }
+      star = system.querySelector('.hole__light circle')?.getBoundingClientRect() ?? null
+      if (!star) problems.push('入口のブラックホールに光の縁（.hole__light の circle）が無い')
+    } else {
+      problems.push('入口の軌道図にブラックホール（.hole）が無い')
     }
     const labels = [...system.querySelectorAll('.system__label > *')]
       .map((el) => ({ name: el.textContent.trim(), rect: el.getBoundingClientRect() }))
@@ -364,7 +402,7 @@ const measure = ([typeface, cfg]) => {
         problems.push(`軌道図の札「${one.name}」が枠の外へ出ている`)
       }
       if (star && overlap(rect, star) > slack) {
-        problems.push(`軌道図の札「${one.name}」が星に重なる`)
+        problems.push(`軌道図の札「${one.name}」がブラックホールの光の縁に重なる`)
       }
       for (const other of labels.slice(i + 1)) {
         if (overlap(rect, other.rect) > slack) {
@@ -748,7 +786,7 @@ async function main() {
         '\n送った先が帯の下に隠れたら、:root の --top-clear（帯の高さ）と html の scroll-padding-top を見る。' +
         '\n見出しの錨がずれたら、節の寄せ方（app.css の align-content: safe start）か、見出しより前に置いた子を疑う。' +
         '\n目次の印が帯の外なら app.css の scroll-initial-target と、帯がスクロール容器か（overflow-x: auto）を見る。' +
-        '\n目次の的が --tap に合わなければ .toc a の min-height、軌道図の札が重なったり枠を出たりしたら src/lib/orbits.ts の placeLabels（札の幅の見積もりは components.tsx の labelWidth）、' +
+        '\n目次の的が --tap に合わなければ .toc a の min-height（入口の札なら .system__label a::after）、軌道図の札が重なったり枠を出たりしたら src/lib/orbits.ts の placeLabels（札の大きさの見積もりは LABEL_SIZE）、' +
         '/all が横に動いたら目次の折り返し（flex-wrap）を見る。',
     )
     process.exitCode = 1

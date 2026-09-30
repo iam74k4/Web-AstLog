@@ -159,7 +159,7 @@ export async function devServer(given, port, persistTo) {
   使い捨ての D1（と KV）を作る。wrangler の --persist-to で、手元の .wrangler/state とは
   別の置き場に移行を流し、渡した SQL を順に当てる。
 
-  check:fit は seed（1人のサイト）と fixture（複数人・上限ちょうど）の2つの中身を
+  check:fit は seed（1人のサイト）と fixture（複数人・上限ちょうど）など4つの中身を
   測る。手元の D1 に流すと、開発中のデータを消してしまう（seed.sql も fixture も
   先に全部消してから入れる）。置き場を分ければ、手元の D1 には一切触らず、
   「migrate / seed を忘れたワークツリーで、ほとんど何も測らずに緑」も起きない。

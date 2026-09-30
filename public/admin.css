@@ -667,13 +667,6 @@
   margin-bottom: var(--sp-2);
 }
 
-/* ワードマーク（ΛSTLOG）。高さは上の帯のロゴと同じ段 */
-.login__word {
-  display: block;
-  height: var(--brand-h);
-  width: auto;
-}
-
 .login__label {
   font-family: var(--font-mono);
   font-size: var(--fs-label);

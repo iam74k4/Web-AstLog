@@ -46,7 +46,7 @@ flowchart LR
     Screen -->|"上の帯の目次（Hero は載らない）"| Screen
     Screen -->|"上の帯のロゴ"| Top
     Top -->|"一覧で見る →（件数の帯の上）"| Screen
-    Top -->|"軌道図の札（作品の番号と名前。枠が広いときだけ）"| Item
+    Top -->|"軌道図の札（作品の番号。名前は選んだとき・重ねたときに出る。枠が広いときだけ）"| Item
     OldPage -->|"301（同じページへ。query は付けたまま）"| Screen
     Moved -->|"301。同じ区分で絞る"| Filtered
 

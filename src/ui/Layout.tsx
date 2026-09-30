@@ -2,8 +2,15 @@ import type { Child } from 'hono/jsx'
 import { yearInJapan } from '../lib/format'
 import { SITE } from '../site'
 import type { Theme } from '../theme'
-import { AdminLink, Brand, ColorSchemeMeta, HtmlDocument, langOf, Stylesheets } from './components'
-import { markInner } from './icons'
+import {
+  AdminLink,
+  Brand,
+  ColorSchemeMeta,
+  FaviconLinks,
+  HtmlDocument,
+  langOf,
+  Stylesheets,
+} from './components'
 
 export type NavItem = { href: string; label: string; active?: boolean }
 
@@ -23,10 +30,8 @@ export type NavItem = { href: string; label: string; active?: boolean }
   1枚に戻す（X が og:image に読むのは JPEG / PNG / WebP / GIF だけ）。
 
   **それ以外のページはサイトの1枚**（SITE_IMAGE）。素材はリポジトリにある
-  public/assets/avatar.png。og:image に出せる raster はこれ1枚——ロゴ
-  （astlog-mark.svg）は SVG で、貼り先のどれも og:image の SVG を読まない
-  （Slack / LinkedIn / X）。入口の軌道図も SVG（ページに直に描く）で、素材の
-  ファイルを持たない。
+  public/assets/avatar.png（持ち主の顔）。このサイトは1人として名乗るので、貼られた
+  札に出すのはロゴではなく顔にする。
 
   twitter:card は画像の寸法で決める（cardOf）。横長で X の大きい札の下限
   （300x157）以上なら summary_large_image、それ以外は summary。サイトの1枚は
@@ -133,16 +138,7 @@ export const Layout = (props: {
       <meta property="og:locale" content="ja_JP" />
       <ShareImage image={props.image ?? SITE_IMAGE} />
 
-      {/*
-        印は 24 の格子いっぱい（余白 1）に描いてあるので、角の丸い地に載せると縁に触れる。
-        favicon でだけ 8 割に縮めて、地の中に余白を取る
-      */}
-      <link
-        rel="icon"
-        href={`data:image/svg+xml,${encodeURIComponent(
-          `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' rx='5' fill='#0c0c0e'/><g transform='translate(2.4 2.4) scale(.8)'>${markInner('#f2f2f4')}</g></svg>`,
-        )}`}
-      />
+      <FaviconLinks />
       <Stylesheets />
       {props.jsonLd ? (
         <script

@@ -56,7 +56,8 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
   /*
     続きの名前は決まった4つだけ。先に見ておくと、下の転送で Location に入れる
     文字列がこの4つに限られる（パスの一部をそのまま Location に入れない。
-    format.ts の isSafeRedirect のコメントに、CR/LF で 500 になった例がある）
+    c.req.param() は percent-decode するので、CR/LF が入ると Headers.set が例外を
+    投げて 500 になり、// で始まるとプロトコル相対の外の URL へ飛ぶ）
   */
   if (rest !== null && rest !== 'contact' && !isSection(rest)) return c.notFound()
   const db = drizzle(c.env.DB, { schema })

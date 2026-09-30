@@ -4,8 +4,8 @@ import { pageCache } from './lib/page-cache'
 import { adminRoutes } from './routes/admin/index'
 import { publicRoutes } from './routes/public/routes'
 import { SITE } from './site'
-import { ColorSchemeMeta, HtmlDocument, Stylesheets } from './ui/components'
-import { MarkIcon } from './ui/icons'
+import { ColorSchemeMeta, FaviconLinks, HtmlDocument, Stylesheets } from './ui/components'
+import { HoleMark } from './ui/icons'
 
 const app = new Hono<AppEnv>()
 
@@ -18,11 +18,11 @@ const app = new Hono<AppEnv>()
   1つ見つかっても、ここがあればスクリプトは走らない。
   - script-src 'none'——JSON-LD（type="application/ld+json"）はデータの塊で
     実行されないので、これで止まらない（ブラウザで確かめてある）
-  - style-src に 'unsafe-inline'——入口の軌道図の札の位置（--x / --y）と走査の順
-    （--at）、件数の数え上げの値（--to）、出る順（--i）、ページの切り替えの名前
-    （view-transition-name）、アバターの寸法（--avatar-size）を style 属性で渡して
-    いる。スクリプトではない
-  - img-src に data:——ファビコンは data: の SVG（src/ui/Layout.tsx）
+  - style-src に 'unsafe-inline'——入口の軌道図の札の位置（--x / --y）と出る順
+    （--i）、件数の数え上げの値（--to）、ブラックホールの置き場所と大きさ（--hole-x …）、
+    ページの切り替えの名前（view-transition-name）、アバターの寸法（--avatar-size）を
+    style 属性で渡している。スクリプトではない
+  - img-src は 'self' だけ——favicon は public/assets のファイル、ロゴはページに直に描く SVG
   - form-action 'self'——管理画面のフォームはどれも同じオリジンへ送る。
     OAuth の入口はフォームではなく GET のリンクなので、ここに掛からない
   - frame-ancestors 'none'——どのページもほかのサイトの枠に入れさせない
@@ -49,7 +49,7 @@ const PAGE_CSP = [
   "base-uri 'none'",
   "form-action 'self'",
   "frame-ancestors 'none'",
-  "img-src 'self' data:",
+  "img-src 'self'",
   "style-src 'self' 'unsafe-inline'",
 ].join('; ')
 
@@ -82,12 +82,13 @@ const ErrorPage = ({ code, title, detail }: { code: string; title: string; detai
       <title>
         {code} — {SITE.name}
       </title>
+      <FaviconLinks />
       <Stylesheets />
     </head>
     <body>
       <div class="oops">
         <span class="oops__mark">
-          <MarkIcon size={28} />
+          <HoleMark size={40} />
         </span>
         <span class="oops__code">{code}</span>
         <h1>{title}</h1>

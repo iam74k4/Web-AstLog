@@ -1,11 +1,11 @@
-# public/ の静的なファイル（app.css・admin.css・ロゴ・月・共有カードの画像）のヘッダ。
+# public/ の静的なファイル（app.css・admin.css・ロゴの素材・GitHub の顔・共有カードの画像）のヘッダ。
 # ここは Worker を通らない（wrangler.toml の [assets] が先に配る）ので、
 # src/index.tsx のミドルウェアは届かない。Workers Static Assets がこのファイルを
 # 読んで付け、このファイル自身は配らない。
 #
 # CSP は /images/* と同じ狭い約束。ここにあるのは文書ではなく素材なので、
 # SVG を直に開かれても何も読み込ませず、スクリプトも走らせない
-# （<img>・CSS の mask で使う分には効かず、邪魔もしない）。
+# （<img> や favicon で使う分には効かず、邪魔もしない）。
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
@@ -17,7 +17,7 @@
 # ままだと、ページを移るたびに描画を止めて条件付き GET を1往復していた。
 # 静的なファイルはパスで引かれ、?v= は見ない。版の無い /app.css を直に開いた人にも
 # 同じ値が付くが、ページはどれも版つきの URL しか書かないので、そこで掴んだ写しを
-# ページが使うことは無い。ロゴ・月の絵は版を持たないので既定（毎回確かめる）のまま。
+# ページが使うことは無い。ロゴの素材と画像は版を持たないので既定（毎回確かめる）のまま。
 /app.css
   Cache-Control: public, max-age=31536000, immutable
 

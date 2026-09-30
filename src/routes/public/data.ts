@@ -74,12 +74,22 @@ export const bandOf = (blocks: schema.Block[], counts: KindCounts, query = ''): 
 
   total は絞り込みを外したときの件数で、節を出すかどうかを決める
   （src/blocks.ts の blockShown）。行は絞り込んだあとの全件（Projects のページと
-  全体ページ）。ほかのページを描くときは空——Projects の行はそのページでだけ引く。
+  全体ページ）と、入口では軌道図の札のための公開中の全件。ほかのページを描くときは
+  空——作品の行は、それを描くページでだけ引く（site.ts の pageRows）。
+
+  numbers は絞り込んだ一覧の行の番号（作品の id → 絞り込む前の並びでの位置。1 から）。
+  番号は入口の軌道図の札と同じ番号で結ぶので、業務だけに絞っても 03 の作品は 03。
+  絞り込まない一覧では持たず、行の順がそのまま番号（rowNumber）。
 */
 export type ItemListData = {
   total: number
   rows: ItemView[]
+  numbers?: ReadonlyMap<number, number>
 }
+
+// 一覧の行の番号（1 から）。絞り込んだ一覧では、絞り込む前の並びでの位置
+export const rowNumber = (list: ItemListData, item: ItemView, order: number) =>
+  list.numbers?.get(item.id) ?? order + 1
 
 export type TopData = {
   members: schema.Member[]
@@ -96,9 +106,9 @@ export type TopData = {
   // 一覧の行に担当者を出すか（showMemberOf）
   showMember: boolean
   /*
-    入口（Hero のページ）に置く一覧への帯。件数は絞り込みを見ないサイト全体の数
-    （入口で見せたいのは「ここに何件あるか」）。全体ページ（/all）では null——
-    全部が同じ文書に並ぶので、送り出す先が無い。
+    入口（Hero のページ）に置く一覧への1本（「一覧で見る →」）と件数の帯（Tally）の
+    もと。件数は絞り込みを見ないサイト全体の数（入口で見せたいのは「ここに何件あるか」）。
+    全体ページ（/all）では null——全部が同じ文書に並ぶので、送り出す先が無い。
   */
   band: BandData | null
   /*
@@ -119,9 +129,10 @@ export const siteCountsOf = (data: TopData): SiteCounts => ({
   絞り込み（?kind= / ?member=）が効くページか。一覧を持つページ（Projects）だけで、
   区分もメンバーもそこに効く（scopeOf）。
 
-  目次の行き先に絞り込みを付けるか（site.ts の pageQuery）、DB から行を引くか
-  （pageRows）は、どちらもこの1本に聞く。効かないページに付けると、中身は1文字も
-  変わらないのに URL だけが増える（/contact?member=… のたぐい）。
+  目次の行き先に絞り込みを付けるか（site.ts の pageQuery）、DB から絞り込んだ行を
+  引くか（pageRows。入口だけは軌道図の札のために絞り込まずに全件を引く）は、どちらも
+  この1本に聞く。効かないページに付けると、中身は1文字も変わらないのに URL だけが
+  増える（/contact?member=… のたぐい）。
 */
 export const filterApplies = (key: string) => key === 'projects'
 

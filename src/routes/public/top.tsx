@@ -207,8 +207,8 @@ export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
   if (!link || current?.kind !== 'block') return c.notFound()
 
   // ここで初めて作品の行を引く（一覧と、入口の軌道図の札）。ほかのページでは1件も取ってこない
-  const rows = await pageRows(db, current, filter, memberId)
-  const data: TopData = { ...counted, projects: { ...counted.projects, rows } }
+  const listed = await pageRows(db, current, filter, memberId)
+  const data: TopData = { ...counted, projects: { ...counted.projects, ...listed } }
 
   const rendered = renderBlock(current.block, data, false)
   // sitePages が並べたページなので、ここで null は返らない

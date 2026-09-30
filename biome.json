@@ -34,11 +34,5 @@
       "drizzle.config.ts",
       "vitest.config.ts"
     ]
-  },
-  "overrides": [
-    {
-      "includes": ["public/assets/**"],
-      "linter": { "rules": { "a11y": { "noSvgWithoutTitle": "off" } } }
-    }
-  ]
+  }
 }

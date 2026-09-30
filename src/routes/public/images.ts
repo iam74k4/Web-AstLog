@@ -30,7 +30,7 @@ import { isImageType } from '../../lib/image'
   - 5種類に無い content-type（以前の image/svg+xml や image/heic）は
     application/octet-stream の添付として返す。画像としては描かせない
 */
-export const IMAGE_KEY = /^(?:avatars|items)\/[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/
+const IMAGE_KEY = /^(?:avatars|items)\/[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/
 
 export async function serveImage(c: Context<AppEnv>) {
   const key = c.req.path.replace(/^\/images\//, '')

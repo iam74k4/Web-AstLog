@@ -189,9 +189,9 @@ npm run check:restore  # deploy が残す D1 の写しを、空の D1 に戻せ�
 切っている箱も。行止めと1行で省く札は除く）、`h1` がちょうど1つか、上の帯が本文の上・足元が
 本文の下に居るか、**帯の貼り付け**（本文の下に画面3つぶんの空きを足して一番下まで送っても
 目次といまの印が画面の中にあり、帯が本文より手前に描かれ、地が透けていないか）、
-**送った先**（`main` の中の id へ送ると、上端が帯の下端より下に来るか）、目次の的が
-`--tap` 以上か、**見出しの錨**（どのページでも節の見出しが同じ高さに居るか）、**入口の軌道図**
-（星が枠の真ん中に座り、名前の札どうし・札と星が重ならず、札が枠の中に収まるか）。あわせて、
+**送った先**（`main` の中の id へ送ると、上端が帯の下端より下に来るか）、押す的
+（目次の行き先と、入口の番号の札の中心に重ねた透明の面）が `--tap` 以上か、**見出しの錨**（どのページでも節の見出しが同じ高さに居るか）、**入口の軌道図**
+（ブラックホールが焦点に座り、番号の札どうし・札と光の縁が重ならず、札が枠の中に収まるか）。あわせて、
 **目次の印**（いまのページの行き先）が帯の見えている幅の中にあるか——帯の最初の位置は
 読み込んだときに決まるので、ここだけはページごとに開き直して測る。
 
@@ -202,7 +202,7 @@ seed を先に流さなくてよい）。
 |---|---|---|
 | seed | `seed.sql`。本人のサイトそのもの | 11 |
 | seed＋ブロック3本 | seed に既定の見出しのブロックを3本（いま・数字・リンク集。`fit-fixture.mjs` の `seedBlocks`）。目次の帯が溢れる、ふつうの姿 | 14 |
-| fixture（複数人） | `scripts/lib/fit-fixture.mjs` が作る、重い中身のサイト。打ち込むブロック6種（長い段落・行の多い一覧・上限の見出し）・6人の Team・長い肩書き・上限の大見出し・長い紹介文と経歴・いちばん重い一覧の行（説明 100 字・実績値・タグとリンク5つずつ・担当者名・画像）・長い本文・上限の作品名（入口の札が末尾を省く） | 29 |
+| fixture（複数人） | `scripts/lib/fit-fixture.mjs` が作る、重い中身のサイト。打ち込むブロック6種（長い段落・行の多い一覧・上限の見出し）・6人の Team・長い肩書き・上限の大見出し・長い紹介文と経歴・いちばん重い一覧の行（説明 100 字・実績値・タグとリンク5つずつ・担当者名・画像）・長い本文・上限の作品名（一覧の行と作品のページの題。入口の札は番号だけ） | 29 |
 | fixture（1人） | 同じ中身で公開中のメンバーを1人にしたもの（Team の位置にプロフィール・足元が名前と長い職種で名乗る） | 23 |
 
 成功行は中身ごとに1行出る。
@@ -225,17 +225,22 @@ seed を先に流さなくてよい）。
 中身しだいで「送れないから試せない」ページを作らないため。fixture の中身が公開の関門
 （`publishErrors`）を通らないと、作る時点で止まる（公開できない中身を測らない）。
 
-`check:contrast` も同じ理由でブラウザが要る。入口では軌道図の上に作品の名前の札が乗り、
-走査線が字のそばを通る（前の入口の月では、リード文が明るい縁に載って **1.00:1** ——その字は
-背景と同じ明るさで、完全に消えていた）。4寸法（電話と板は指で）× 7アクセント（モノクロと6色）
-＝28通りをページごとに描き、入口（大見出し・札・リード文・一覧への押し手・名前の札・件数）と
-締め（Contact の1文・アドレス・「メールを送る」・GitHub）の字の行ボックスの下の画素を読んで
-WCAG 1.4.3 に照らす。入口は着いたときに一度だけ走査線が1周して軌道と天体が灯るので、その
-途中の3コマも同じ28通りで測る（入口 28 × 4姿 + 締め 28 × 1姿＝140通り。途中の姿では、まだ
-出ていない字は測らない）。あわせて**軌道図が出ていること**も見る（軌道図だけを消した絵との
-差分で、描いている画素数と、地からの離れ（明るさの差）に床を置く。いまは入口 33.1・締め 45.0
-/255 で、床は 18）。**文字を消した地だけを撮る**のが肝で、合成後の画面をそのまま読むと
-グリフ自身を背景として数えてしまい、どの組も 1.00:1 になって検査が意味を失う。
+`check:contrast` も同じ理由でブラウザが要る。入口では軌道図の上に作品の番号の札が乗り、
+軌道の線とブラックホールの光が字のそばを通る（前の入口の月では、リード文が明るい縁に載って
+**1.00:1** ——その字は背景と同じ明るさで、完全に消えていた）。4寸法（電話と板は指で）×
+7アクセント（モノクロと6色）＝28通りをページごとに描き、入口（大見出し・札・リード文・一覧への
+押し手・番号の札・件数）と締め（Contact の1文・アドレス・「メールを送る」・GitHub）の字の行ボックスの
+下の画素を読んで WCAG 1.4.3 に照らす。入口は着いたときに一度だけ、ブラックホールが大きく明るい
+姿から縮んで灯り、軌道と天体が渦を巻いて収まり、そのあとは入口も締めも天体が公転し続け、粒が落ち、光が
+流れるので、その途中の3コマも同じ28通りで測る（入口 28 × 4姿 + 締め 28 × 4姿＝224通り。途中の姿では、
+まだ出ていない字と、隠している番号の札は測らない）。あわせて
+**軌道図が出ていること**も見る（軌道の線と点、ブラックホールを別々に消した絵との差分で、
+描いている画素数と、地からの離れ（明るさの差）に床を置く。床は 18/255。まとめて消すと、ブラックホール
+だけで床を越えて、線が消えても通る）。成功行の下に、線と点・ブラックホールごとの「いちばん少ない」姿の
+画素数が出る。
+**文字を消した地だけを撮る**のが肝で、合成後の画面をそのまま読むと
+グリフ自身を背景として数えてしまい、どの組も 1.00:1 になって検査が意味を失う。撮った絵は CSP の
+無い空のページで読む（測るページはサイトの CSP のまま。外すと、本物の CSP が止めるものまで描いた姿で緑になる）。
 
 ```bash
 npx playwright install chromium   # 一度だけ
@@ -546,8 +551,9 @@ src/
     format.ts        テキストの解釈とフォーム値の受け取り（と、配列を束に分ける chunk）
     page-cache.ts    公開ページの写し（Cache API）と、その版（KV の site:version）の上げ方
     sequence.ts      サイトのページの並びから目次と印を組む（tableOfContents。重なりは例外）
-    orbits.ts        入口と締めの軌道図の形（件数から軌道と天体を置く orbitMap・脱出軌道 escapePath・
-                     天体と作品を結ぶ bodyItems・名前の札の置き場所 placeLabels）
+    orbits.ts        入口と締めの軌道図の形（件数から軌道と天体と動き続けるものを置く orbitMap・
+                     軌道の奥と手前の半分 orbitHalves・天体と作品を結ぶ bodyItems・番号の札の
+                     置き場所 placeLabels・見る角度 ELEVATION と傾き TILT）
   routes/
     public/          公開ページ
       routes.ts      URL の登録だけ（登録順の決まり。catch-all は最後）
@@ -579,7 +585,9 @@ src/
     AdminForm.tsx    管理画面のフォームの部品（欄・公開のトグル・確認）
     components.tsx   画面を組む部品。main の直接の子は Screen / Hero だけが作る
                      外枠はどれも HtmlDocument で <html> を開く（DOCTYPE を出す）
-    icons.tsx        インライン SVG
+    icons.tsx        インライン SVG（ロゴの Wordmark / HoleMark もここで描く）
+    logo.ts          ロゴの形と素材に焼く色の正（ΛSTLOG の O がブラックホール。入口と締めの軌道図の真ん中も
+                     同じ O。JSX を持たない）
 public/
   app.css            全画面のスタイル。値は :root のトークンだけで決める
                      色・書体のプリセットもここ（[data-accent] / [data-typeface]）
@@ -591,21 +599,29 @@ public/
                      Workers Static Assets が読む規則で、ファイルとしては配られない
                      2枚の CSS は 1年・immutable（HTML が中身の版つきの URL
                      /app.css?v=… で読むので、変えてデプロイすれば URL が変わる）
-  assets/            ロゴ（astlog-wordmark.svg・astlog-mark.svg。形の正は src/ui/icons.tsx の WORDMARK / MARK）・アバター
+  assets/            GitHub の Organization の顔（astlog-avatar.png）——scripts/blackhole/render.py が焼く。
+                     favicon（favicon.svg・favicon-32.png・apple-touch-icon.png）とページの外で使う
+                     ワードマーク（astlog-wordmark.svg）——scripts/logo/export.mjs が src/ui/logo.ts から
+                     書く。共有カードの絵（avatar.png）
                      ※ ここに robots.txt や sitemap.xml を置かないこと。
                        public/ は Worker より先に配られるので、置くと
                        Worker が組み立てているほうが静かに届かなくなる
 scripts/
   check-fit.mjs      npm run check:fit の中身。ブラウザでレイアウトを測る（seed と、上限ちょうどの fixture）。
-                     入口の軌道図の札が重ならず枠に収まるかも測る
+                     入口のブラックホールが焦点に座り、番号の札が重ならず枠に収まるかも測る
   check-contrast.mjs npm run check:contrast の中身。軌道図のまわりの文字を画素で測る
   check-restore.mjs  npm run check:restore の中身。deploy の写し（定義と中身の2本）を空の D1 に戻して突き合わせる
   check-ids.mjs      本番に触れる前の番兵。wrangler.toml の id がプレースホルダなら止める
   seed-remote.mjs    npm run db:seed:remote:destroys-prod の中身。本番が空のときだけ流す
   touch-site.mjs     公開ページの写しの版を上げる（npm run site:touch / db:seed:local の最後）
+  blackhole/         render.py。GitHub の顔のブラックホールの絵を焼く（シュワルツシルトの測地線を追う。
+                     numpy と Pillow）。python3 scripts/blackhole/render.py avatar で public/assets に書く
+                     （サイトの中のブラックホールはロゴの O と同じ SVG で、ここでは焼かない）
+  logo/              export.mjs。ロゴの素材（SVG と favicon・iPhone のホーム画面の PNG）を src/ui/logo.ts
+                     から書く（node scripts/logo/export.mjs。PNG は Playwright の Chromium で撮る）
   moon/              前の入口の月（記録として残す。いまのサイトでは使っていない）。
                      render.py が Blender で焼き、pack.py が配信用に詰めていた（docs/moon.md）
-  lib/               上の2本の共通部分。dev サーバの立て方と使い捨ての D1（dev-server.mjs）、
+  lib/               check-fit と check-contrast の共通部分。dev サーバの立て方と使い捨ての D1（dev-server.mjs）、
                      src/theme.ts の読み方（theme.mjs）、設計サイズ（viewports.mjs）。写しを2本持たない
                      wrangler.toml の id の読み方（wrangler-ids.mjs）も
                      fit-fixture.mjs は check:fit の上限ちょうどの中身を src/blocks.ts の

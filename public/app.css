@@ -11,7 +11,8 @@
 
   質感と手触りは React Bits（reactbits.dev）の Micro を手本にしている。
   向こうのコードは使っていない。JavaScript を持ち込まず、CSS だけで作り直した:
-  - 面は白をうっすら重ねた「ゴースト」と、上辺の 1px の光で立たせる。線はほぼ見せない
+  - 公開ページは箱（枠・面・影）を並べず、罫線で区切り、角を立てる。面（白をうっすら
+    重ねた「ゴースト」と、上辺の 1px の光）は管理画面の部品だけが持つ
   - 押すと縮み、離すとばねで戻る。ばねの曲線は :root の --ease-spring だけを使う
 */
 
@@ -19,8 +20,7 @@
   --font-sans:
     'Helvetica Neue', 'Hiragino Sans', 'Noto Sans JP', system-ui, -apple-system, sans-serif;
   /*
-    等幅は英数字の札だけ（実績値の数・タグ・英大文字の小見出し・
-    ワードマーク・メールのアドレス）。和文が入りうる所には使わない——等幅の書体は
+    等幅は英数字の札だけ（実績値の数・タグ・英大文字の小見出し・番号）。和文が入りうる所には使わない——等幅の書体は
     和文の字を持たず、字は結局ほかの書体に落ちる。残るのは等幅のための字間
     （letter-spacing）と小ささだけで、和文には読みにくさしか渡さない。
     打ち込んだ文字が入る札（タグ・肩書き・技術の小見出し）は、日本語を1字も
@@ -83,10 +83,9 @@
   */
   --w-page: 1344px;
   --gutter: clamp(16px, 3.4vw, 60px);
-  /* 面は大きく、操作部品は中くらい、札は小さく丸める */
+  /* 管理画面の面は大きく、操作部品は小さく丸める（公開ページは角を立てるので使わない） */
   --radius: 16px;
   --radius-sm: 10px;
-  --radius-xs: 6px;
 
   /*
     画面1つぶんの高さ。svh は道具の帯を出したときの高さなので、帯の出入りで
@@ -120,10 +119,13 @@
   --top-clear: calc(var(--top-h) + var(--sp-5));
 
   /*
-    上の帯のロゴ（ワードマーク ΛSTLOG）の字の高さ。幅は字の高さの約 6.4 倍（15px で
-    96px）。管理画面の入口の頭（admin.css の .login__word）も同じ段
+    上の帯のロゴ（ワードマーク ΛSTLOG。O がブラックホール）の字の高さ。字の幅は字の
+    高さの約 6.6 倍（15px で 99px）。ログイン画面のワードマークも同じ規則（.brand__word）。
+    --hole-core はロゴの O の黒い円（影）の色で、地より一段深い黒。src/ui/logo.ts の
+    LOGO_COLORS（素材のファイルに焼く色）と同じ値
   */
   --brand-h: 15px;
+  --hole-core: #000;
 
   /*
     段落（.bio p。紹介文・メモ・作品の説明と本文）の1行の長さ。約40字で止める。
@@ -169,17 +171,24 @@
   /*
     入口の軌道図（.system。components.tsx の OrbitSystem、形は src/lib/orbits.ts）。
 
-    --system-ratio / --escape-ratio は入口と締めの枠の縦横比。orbits.ts の
-    HERO_FRAME / ESCAPE_FRAME の width / height と同じ数（test/theme.test.ts が
+    --system-ratio / --contact-ratio は入口と締めの枠の縦横比。orbits.ts の
+    HERO_FRAME / CONTACT_FRAME の width / height と同じ数（test/theme.test.ts が
     突き合わせる）。SVG は枠いっぱいに貼るので、ずれると絵が枠の中で縮み、
-    焦点（真ん中の星）が真ん中から外れる。枠の幅は置かれた列の幅（入口の右の列、
-    900 未満は本文の列いっぱい）。
+    焦点（ブラックホール）が軌道の焦点から外れる。枠の幅は置かれた列の幅（入口の
+    右の列、900 未満は本文の列いっぱい）。
 
-    --star-size は真ん中の星の大きさ。図の中の印の1つで、字より前に出ない大きさ。
+    --system-tilt は軌道面の画面の中での傾き（orbits.ts の TILT と同じ数。test が
+    突き合わせる）。軌道は orbits.ts が傾けて描き、ブラックホールの横線（真横から見た
+    円盤。同じ面にある）はここで同じだけ回す。
   */
   --system-ratio: 1000 / 560;
-  --escape-ratio: 1000 / 320;
-  --star-size: clamp(14px, 1.6vw, 22px);
+  --contact-ratio: 1000 / 320;
+  --system-tilt: -8deg;
+  /*
+    締めの軌道図の幅の上限。星系は枠の幅いっぱいに描くので、広い画面で本文の列いっぱいに
+    伸ばすと、表紙の高さを図だけで食う
+  */
+  --contact-w: 900px;
 
   /*
     軌道の線と天体の点。
@@ -188,13 +197,17 @@
     358px から机の 650px まで縮み伸びしても、線は 1px、点は 5〜7px のまま
     （viewBox の単位で持つと、電話で点が 2px まで潰れた）。
 
-    線はアクセント色を --orbit-ink の濃さで、細く薄い製図の線にする。業務の軌道は
-    破線（--orbit-dash）。字は軌道の上に乗せない（名前の札は地を塗る）ので、濃さの
-    上限は見た目だけで決まり、下限は npm run check:contrast が測る（線が消えるのは
-    改善ではない）。
+    線はアクセント色で、細く薄い製図の線にする。業務の軌道は破線（--orbit-dash）。
+    濃さは軌道面の奥から手前へ続けて変わる——手前の端が --orbit-ink、奥の端はそれに
+    --orbit-far を掛けた薄さ（奥ほど遠い）。手前の半分の下には地の色の縁取り
+    （--orbit-casing の太さ）を敷く。字は軌道の上に乗せない（番号の札は地を塗る）ので、
+    濃さの上限は見た目だけで決まり、下限は npm run check:contrast が測る（線が消える
+    のは改善ではない）。
   */
   --orbit-line: 1px;
-  --orbit-ink: 0.3;
+  --orbit-ink: 0.42;
+  --orbit-far: 0.25;
+  --orbit-casing: 3px;
   --orbit-dash: 2px 5px;
   --orbit-body: clamp(5px, 0.5vw, 7px);
 
@@ -208,31 +221,41 @@
   --label-max: 180px;
 
   /*
-    入口のレーダー（「入口に着いたとき」）。見出しの列が浮かび上がったあと
-    （--radar-delay）、走査線が1周（--radar-turn）して、通った所の軌道と天体が灯る。
-    天体の波紋は --radar-ring かけて --ring-grow 倍まで広がって消え、名前の札は
-    走査線が天体を通り過ぎてから（--label-lag）出る。件数は1周の途中から
-    （--count-delay）数え上がる。いちばん遅い波紋でも 5 秒以内に止まる
-    （0.7 + 2.4 + 1.0 = 4.1 秒。WCAG 2.2.2）。
+    入口に着いたときの動き（「入口に着いたとき」）。見出しの列が浮かび上がるあいだに、
+    ブラックホールが灯り（--ignite-*。大きく霞んだ姿から、明るさを落としながら縮んで
+    締まる）、軌道と天体が渦を巻いて収まる（--infall-*。--infall-turn だけ回って霞んだ
+    姿から、焦点のまわりへ巻き込まれるように）。番号の札は収まった
+    あとに1つずつ（--label-delay から --stagger ずつ。8つ目より後はまとめて）、件数は
+    回り込みの途中から（--count-delay）数え上がる。
 
-    走査線は --beam-arc の幅の扇で、濃さは --beam-ink。扇はいちばん外の軌道の
-    あたりで消える（--beam-reach。軌道面を斜めから見た平たい楕円に合わせ、軌道の
-    無い上下へ光を出さない）。まだ走査線が通っていない軌道は
-    --mask-dim の薄さで見せる（覆いは色ではなく不透明度の坂。--fade-right と同じ）。
+    いちばん遅い札でも 5 秒以内に止まる（WCAG 2.2.2。test/theme.test.ts が足し算を見る）。
   */
-  --radar-delay: 700ms;
-  --radar-turn: 2400ms;
-  --radar-ring: 1000ms;
-  --label-lag: 250ms;
+  --ignite-delay: 150ms;
+  --ignite-dur: 1800ms;
+  --ignite-scale: 1.3;
+  --ignite-blur: 14px;
+  --ignite-glow: 2.4;
+  --infall-delay: 400ms;
+  --infall-dur: 2200ms;
+  --infall-turn: 28deg;
+  --infall-blur: 6px;
+  --label-delay: calc(var(--infall-delay) + var(--infall-dur) * 0.75);
   --count-dur: 1200ms;
-  --count-delay: calc(var(--radar-delay) + var(--radar-turn) * 0.4);
-  --beam-arc: 28deg;
-  --beam-ink: 0.32;
-  --ring-ink: 0.9;
-  --ring-grow: 4.5;
-  --mask-on: #000;
-  --mask-dim: rgb(0 0 0 / 22%);
-  --beam-reach: radial-gradient(ellipse 48% 40% at 50% 50%, #000 60%, transparent);
+  --count-delay: calc(var(--infall-delay) + var(--infall-dur) * 0.3);
+
+  /*
+    着いたあとも動き続けるもの（「動き続ける」）。天体の公転（1周の長さは orbits.ts の
+    INNER_PERIOD から。外側の軌道ほど長い）、軌道を流れる光（長さ --flow-len）、吸い込まれる
+    粒（落ち方の曲線 --fall-ease。落ちるほど速く回り、速く寄る）、ブラックホールの縁を回る
+    光の点（1周 --spin-dur）と光の揺らぎ（明るさが --breathe-low まで沈んで戻る。片道
+    --breathe-dur）。止める手は置かない（持ち主の判断。動きを減らす設定では全部止まる）
+  */
+  --breathe-dur: 4s;
+  --breathe-low: 0.68;
+  --spin-dur: 9s;
+  --fall-ease: cubic-bezier(0.5, 0, 0.85, 0.45);
+  /* 軌道を流れる光の長さ（軌道1周を 100 とした長さ） */
+  --flow-len: 3;
 
   /* 塗りの押し手（.cta）の高さ。指の的（--tap）より大きく取る、ページでいちばん強い1本 */
   --cta-h: 52px;
@@ -285,8 +308,9 @@
     地は色味を持たない黒にする。紫や青に寄せると、面も文字も全部その色に
     染まって見え、アクセントを変えても画面の印象が変わらなくなる。
 
-    面は不透明な色で塗らず、白をうっすら重ねて作る（ゴースト）。線はほとんど
-    見えないくらいに弱くし、代わりに上辺へ 1px の光（--highlight）を入れて面を立たせる
+    面は不透明な色で塗らず、白をうっすら重ねて作る（ゴースト。管理画面の部品だけ）。
+    上辺の 1px の光（--highlight）もその面を立たせるためのもの。公開ページは面を
+    持たず、罫線（--line / --line-strong）で区切る
   */
   color-scheme: dark;
   --bg: #0c0c0e;
@@ -567,11 +591,23 @@ body[data-site] > main {
   color: var(--ink);
 }
 
-/* ワードマーク（ΛSTLOG）。高さで大きさを決め、幅は縦横比から */
+/*
+  ロゴの O の黒い円（src/ui/icons.tsx の Hole。上の帯・ログイン画面・404・管理画面）。
+  光の縁と横線は currentColor（字の色）で、黒い円だけがこの段を読む
+*/
+.logo-core {
+  fill: var(--hole-core);
+}
+
+/*
+  ワードマーク（ΛSTLOG）。上の帯とログイン画面。高さで大きさを決め、幅は縦横比から。
+  O の光の縁と横線は字の箱の外へはみ出して見せる（箱を光に合わせると、字が小さくなる）
+*/
 .brand__word {
   display: block;
   height: var(--brand-h);
   width: auto;
+  overflow: visible;
 }
 
 /*
@@ -637,6 +673,9 @@ body[data-site] > main {
   いまのページ。字を --ink に上げ、頭に四角い印を1つ置く。色だけで分けない
   （印の形が残る。WCAG 1.4.1）。目次の行き先は節（#projects）ではなく画面の URL
   （/projects）なので、'true' ではなく 'page'
+
+  印は枠線で塗る。地（background）で塗ると、強制色モード（Windows のハイコントラスト）
+  では地の色に置き換わって消える——枠線は字の色になって残る
 */
 .toc a[aria-current='page'] {
   color: var(--ink);
@@ -646,7 +685,7 @@ body[data-site] > main {
   content: '';
   width: var(--dot);
   height: var(--dot);
-  background: var(--accent);
+  border: calc(var(--dot) / 2) solid var(--accent);
 }
 
 /*
@@ -848,9 +887,19 @@ body[data-site] > main {
   text-transform: uppercase;
 }
 
-/* 部分のあいだの区切り。飾りなので読み上げには流さない（/ の後ろの代わりの字が空） */
+/*
+  部分のあいだの区切り。飾りなので読み上げには流さない（/ の後ろの代わりの字が空）。
+  代わりの字は書けるブラウザにだけ渡す（@supports）——書けないブラウザは宣言ごと
+  捨て、区切りが消えて「SYSTEM ENGINEER神奈川」と続く
+*/
 .eyebrow > * + *::before {
-  content: ' — ' / '';
+  content: ' — ';
+}
+
+@supports (content: '' / '') {
+  .eyebrow > * + *::before {
+    content: ' — ' / '';
+  }
 }
 
 /*
@@ -914,32 +963,32 @@ body[data-site] > main {
 /* --- 入口の軌道図 --- */
 
 /*
-  入口の軌道図（components.tsx の OrbitSystem）。真ん中に星を1つ置き（恒星）、
+  入口の軌道図（components.tsx の OrbitSystem）。真ん中にブラックホールを置き、
   そのまわりに作品を1つずつ軌道に載せる（形は src/lib/orbits.ts。件数だけから
-  決まる）。天体には作品の番号と名前の札を添える。
+  決まる）。天体には作品の番号の札を添える（名前は札の中にあり、選んだときに出る）。
 
-  枠は grid で、星を縦横の真ん中に置く。絵の層（軌道・走査線・天体）は枠いっぱいに
-  重ね、viewBox の真ん中（焦点）が枠の真ん中に来るので、星がちょうど焦点に座る。
-  縦横比は :root の --system-ratio（orbits.ts の HERO_FRAME と同じ数）。
+  絵の層は枠いっぱいに重ねる——軌道の奥の半分・ブラックホール（.hole）・軌道の
+  手前の半分・天体の順（DOM の順がそのまま重なりの順）。縦横比は :root の
+  --system-ratio（orbits.ts の HERO_FRAME と同じ数）。
 
-  横だけ切る（overflow-x: clip。縦は出してよい——天体の波紋が枠の上下へ少し出る）。
-  札が見積もりより長い書体でも、ページを横に動かさない。
+  横だけ切る（overflow-x: clip。縦は出してよい——着いたときに灯るブラックホールと、
+  渦を巻いて収まる軌道が、枠の上下へ少し出る）。札が見積もりより長い書体でも、
+  ページを横に動かさない。
 
-  枠は札を出すかどうかを自分の幅で決める容れ物（container）。
+  枠は札を出すかどうかを自分の幅で決める容れ物（container）。札の重なりの順は枠の
+  中に閉じる（isolation。選んだ札を上に出しても、貼り付いた上の帯より上には来ない）。
 */
 .system {
   grid-area: map;
   position: relative;
-  display: grid;
-  place-items: center;
   width: 100%;
   aspect-ratio: var(--system-ratio);
   overflow-x: clip;
   container-type: inline-size;
+  isolation: isolate;
 }
 
 .system__orbits,
-.system__beam,
 .system__bodies {
   position: absolute;
   inset: 0;
@@ -948,29 +997,71 @@ body[data-site] > main {
 }
 
 /*
-  真ん中の星（形は src/ui/icons.tsx の STAR）。色は字と同じ --ink で、既定の
-  モノクロでは白い星になる。大きさは :root の --star-size。
+  ブラックホール（components.tsx の Hole。入口と締めで同じ）。ロゴの O と同じ絵
+  （黒い円・光の縁・後ろを通る横線。形は src/ui/logo.ts）を焦点に置き、枠と一緒に
+  伸び縮みさせる。置き場所（--hole-x / --hole-y）と大きさ（--hole-w）は、部品が
+  orbits.ts の数（枠の focus と hole）から組んで style で渡す。
 
-  絵の層より前に出すのは星だけを名指しする。「絵の層でない子すべて」にすると、
-  札の列まで位置の基準が変わる
+  光・縁を回る光の点・黒い円の3枚の SVG を同じ箱に重ねる（DOM の順が重なりの順）。
+  黒い円は不透明なので、奥を回る軌道はその後ろに隠れる。横線は軌道面と同じ傾きに
+  回す（--system-tilt。輪と円は回しても同じ）。
+
+  色はロゴと同じ——光は字の白（--ink）、黒い円は --hole-core（.logo-core）。見た目の
+  プリセットのアクセント色では塗らない（ロゴの O と同じ1つのものに見せる）。
 */
-.system__star {
-  position: relative;
-  z-index: 1;
-  width: var(--star-size);
-  height: var(--star-size);
+.hole {
+  position: absolute;
+  left: var(--hole-x);
+  top: var(--hole-y);
+  width: var(--hole-w);
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  rotate: var(--system-tilt);
   color: var(--ink);
+  pointer-events: none;
+}
+
+.hole > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
 
 /*
   軌道と天体（入口と締めで同じ）。絵は色を持たず、線はアクセント色、点は字の色。
   太さは画面の px（non-scaling-stroke。:root の --orbit-line / --orbit-body の話）。
+
+  線の色は、部品が線ごとに渡す坂（components.tsx の OrbitLines。stroke 属性の
+  url(#…)）が持つ。坂の両端の色と濃さはここで敷く——奥の端は --orbit-far を掛けて薄く、
+  手前へ続けて --orbit-ink まで濃くなる（奥ほど遠い）。.orbit に stroke を書かない
+  （書くと坂を上書きする）
 */
 .orbit {
   fill: none;
-  stroke: var(--accent);
-  stroke-opacity: var(--orbit-ink);
   stroke-width: var(--orbit-line);
+  vector-effect: non-scaling-stroke;
+}
+
+.orbit-depth__far {
+  stop-color: var(--accent);
+  stop-opacity: calc(var(--orbit-ink) * var(--orbit-far));
+}
+
+.orbit-depth__near {
+  stop-color: var(--accent);
+  stop-opacity: var(--orbit-ink);
+}
+
+/*
+  手前の半分の下に敷く地の色の縁取り。ブラックホールの光の縁の前を通る所で、白い線が
+  白い光に溶けずに前を横切って見える（地の上では地と同じ色なので見えない）
+*/
+.orbit__casing {
+  fill: none;
+  stroke: var(--bg);
+  stroke-width: var(--orbit-casing);
   vector-effect: non-scaling-stroke;
 }
 
@@ -1027,12 +1118,23 @@ body[data-site] > main {
   z-index: 1;
 }
 
+/* 選んだ札は隣の札より上に出す（名前が伸びて隣に重なっても、隣の札の地に隠れない） */
+.system__label:is(:hover, :focus-within) {
+  z-index: 2;
+}
+
+/*
+  札の幅の上限は、札の長さの上限（--label-max）と、札の伸びる向きの枠の端までの
+  空き（--room。部品が orbits.ts の labelRoom から cqi で渡す。枠の縁から --sp-1 だけ
+  離す）の小さいほう。名前を出して札が伸びても枠の外へ出ない——出ると枠の
+  overflow-x: clip に番号ごと切られ、フォーカスの輪も欠ける
+*/
 .system__label > :is(a, span) {
   position: absolute;
   display: flex;
   align-items: baseline;
   gap: var(--sp-3);
-  max-width: var(--label-max);
+  max-width: min(var(--label-max), calc(var(--room) - var(--label-dx) - var(--sp-1)));
   padding-inline: var(--sp-2);
   background: var(--bg);
   color: var(--ink-mid);
@@ -1119,14 +1221,44 @@ body[data-site] > main {
 }
 
 /*
-  長い名前は札の幅（--label-max）で末尾を省く。読み上げとリンクの名前には全部が
-  残り、全部は押した先の作品のページにある。札の幅に上限があるから、置き場所の
-  見積もり（placeLabels）がどんな名前でも枠の中に収められる
+  名前。ふだんは見せず（番号だけの札。名前まで並べると、札がブラックホールの影と弧に
+  掛かる）、札にマウスを重ねたときとキーボードで選んだときに番号の横へ出す。隠すのは
+  .sr-only と同じ手で、読み上げとリンクの名前にはいつも入る。
+
+  出したときの長い名前は札の幅（--label-max）で末尾を省く。全部は押した先の作品の
+  ページにある。
 */
-.system__label > * > :last-child {
-  min-width: 0;
+.system__name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
   overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.system__label a:focus-visible .system__name {
+  position: static;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  clip-path: none;
   text-overflow: ellipsis;
+}
+
+/*
+  指で押せる的。札の見た目（番号だけで 23×15px ほど）より大きい透明の面を、札の中心に
+  重ねる（--tap。指なら 44px）。見た目の札の箱は変えない——箱を広げると地の塗りが
+  軌道の線を広く隠し、札の置き場所（placeLabels）の見積もりもずれる
+*/
+.system__label a::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, var(--tap));
+  height: var(--tap);
+  translate: -50% -50%;
 }
 
 /*
@@ -1187,58 +1319,48 @@ body[data-site] > main {
 /* --- 締めの軌道図 --- */
 
 /*
-  締めの軌道図（components.tsx の OrbitEscape）。入口と同じ星系を小さく左に置き、
-  1本の軌道だけが右上の端から画面の外へ抜ける（src/lib/orbits.ts の escapePath）。
-  動かさない（入口で一度動けば足りる）。
+  締めの軌道図（components.tsx の ContactOrbits）。入口と同じ星系を、横長の枠に
+  描いて列の真ん中に置く。縦横比は :root の --contact-ratio（orbits.ts の
+  CONTACT_FRAME）、幅の上限は --contact-w。
 */
 .orbits {
+  position: relative;
   align-self: stretch;
-  aspect-ratio: var(--escape-ratio);
+  justify-self: center;
+  width: min(100%, var(--contact-w));
+  aspect-ratio: var(--contact-ratio);
 }
 
-.orbits svg {
-  display: block;
+/* 軌道の奥の半分・ブラックホール・手前の半分の順に重ねる（入口と同じ） */
+.orbits > svg {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-}
-
-/* 抜けていく1本は、ほかの軌道より濃く（そこへ目を送る） */
-.orbit-escape {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: var(--orbit-line);
-  vector-effect: non-scaling-stroke;
-}
-
-/* 恒星は入口と同じ星（塗り）。探査機は天体と同じ大きさの点 */
-.orbit-star path {
-  fill: var(--ink);
-}
-
-.orbit-probe path {
-  fill: none;
-  stroke: var(--ink);
-  stroke-linecap: round;
-  stroke-width: var(--orbit-body);
-  vector-effect: non-scaling-stroke;
 }
 
 /* --- 入口に着いたとき --- */
 
 /*
-  入口に着いたときの一度だけの動き。見出しの列が浮かび上がり、そのあと星から
-  走査線（.system__beam）が真上から時計回りに1周して、通った所の軌道が灯り、
-  天体が灯って波紋を1つ広げ、名前の札が出る（レーダー）。件数の帯は数え上がる。
+  入口に着いたときの一度だけの動き。見出しの列が浮かび上がるあいだに、ブラックホールが
+  灯り、軌道と天体が渦を巻いて焦点のまわりに収まり、番号の札が1つずつ出る。
+  件数の帯は数え上がる。
 
-  どれも一度きりで、5 秒以内に止まる（WCAG 2.2.2。止める手段を JavaScript 無しでは
-  置けない）。量と時刻は :root の段（--radar-delay・--radar-turn・--label-lag …）。
+  - ブラックホールは、大きく霞んで明るすぎる姿から、縮みながら締まって落ち着く
+    （orbit-ignite。重力で潰れていくように。量は --ignite-*）
+  - 軌道と天体は、回って霞んだ姿から、焦点のまわりへ巻き込まれるように収まる
+    （orbit-infall。奥と手前の軌道と天体を同じ1つの動きで。量は --infall-*）。
+    回る中心は焦点——入口の枠では真ん中（transform-origin の既定）。大きさは変えない
+    （広げると、軌道が枠の左右で断ち切られて見える）
+  - 曲線は --ease の1本（ばねは使わない。止まる向きを行き過ぎて、軌道が揺り戻して
+    見える）
 
-  keyframes には出だしの姿（from）だけを書き、終わりの姿を持たせない——止まった姿
-  （reduced-motion で animation: none になったとき）がそのまま完成形になる。
-  走査線と波紋だけは、止まった姿では見えない（途中にだけ現れる）。どちらも軌道図の
-  枠の中の、字の無い所を通る——名前の札は、走査線が通り過ぎてから出る（--label-lag）。
+  どれも一度きりで、5 秒以内に止まる（WCAG 2.2.2。着いたあとも続く公転や光の揺らぎは
+  下の「動き続ける」）。keyframes には出だしの姿（from）だけを書き、終わりの姿を
+  持たせない——止まった姿（reduced-motion で animation: none になったとき）が
+  そのまま完成形になる。
   npm run check:contrast は止めた姿に加えて、名前が orbit- で始まる animation を
-  途中で止めた姿も測る。
+  途中で止めた姿も測る（番号の札は、回り込みが落ち着いてから出る）。
 */
 @keyframes rise-in {
   from {
@@ -1261,7 +1383,7 @@ body[data-site] > main {
   animation: rise-in var(--dur-spring) var(--ease-spring) backwards;
 }
 
-/* 札 → 見出しの塊 → リード文 → 押し手。件数の帯は走査線が回り始めてから */
+/* 札 → 見出しの塊 → リード文 → 押し手。件数の帯は回り込みが始まってから */
 .hero h1 .phrase {
   animation-delay: calc((var(--i, 0) + 1) * var(--stagger));
 }
@@ -1275,118 +1397,204 @@ body[data-site] > main {
 }
 
 .tally__cell {
-  animation-delay: calc(var(--radar-delay) + var(--i, 0) * var(--stagger));
+  animation-delay: calc(var(--infall-delay) + var(--i, 0) * var(--stagger));
 }
 
-/*
-  走査線の角度。@property で角度として登録しておくと、keyframes が角度として
-  なめらかに動かせる（登録しないと途中の値を持てず、1周の終わりに一度に跳ぶ）。
-  止まった姿は 360deg（1周し終えた姿）。
-*/
-@property --sweep {
-  syntax: '<angle>';
-  inherits: false;
-  initial-value: 360deg;
-}
-
-@keyframes orbit-sweep {
-  from {
-    --sweep: 0deg;
-  }
-}
-
-/*
-  軌道は走査線が通った所だけ灯る。星（枠の真ん中）を中心に、真上から --sweep まで
-  を塗った覆いを掛け、まだ通っていない所は --mask-dim の薄さで見せる。
-  止まった姿（360deg）では覆いは全部を通す。
-*/
-.system__orbits {
-  mask-image: conic-gradient(
-    from 0deg at 50% 50%,
-    var(--mask-on) var(--sweep),
-    var(--mask-dim) var(--sweep)
-  );
-  animation: orbit-sweep var(--radar-turn) linear var(--radar-delay) backwards;
-}
-
-/*
-  走査線。--sweep を先端にした細い扇（--beam-arc の幅で、先端ほど濃い）を
-  --accent で塗り、枠の縁へ向かって消える楕円（--beam-reach）と重ねて抜く。
-  止まった姿では見えない（opacity 0）。
-*/
-.system__beam {
-  background: var(--accent);
-  opacity: 0;
-  mask-image:
-    conic-gradient(
-      from calc(var(--sweep) - var(--beam-arc)) at 50% 50%,
-      transparent,
-      var(--mask-on) var(--beam-arc),
-      transparent var(--beam-arc)
-    ),
-    var(--beam-reach);
-  mask-composite: intersect;
-  animation:
-    orbit-sweep var(--radar-turn) linear var(--radar-delay) backwards,
-    orbit-beam var(--radar-turn) linear var(--radar-delay);
-}
-
-@keyframes orbit-beam {
-  8%,
-  88% {
-    opacity: var(--beam-ink);
-  }
-}
-
-/*
-  天体は走査線が通ったとき（--at。orbits.ts の sweep）に灯る。点の太さを 0 から
-  ばねで戻す（太さは画面の px のまま——scale では non-scaling-stroke の点は縮まない）。
-*/
-@keyframes orbit-ping {
+@keyframes orbit-ignite {
   from {
     opacity: 0;
-    stroke-width: 0;
+    scale: var(--ignite-scale);
+    filter: blur(var(--ignite-blur)) brightness(var(--ignite-glow));
   }
 }
 
-.system__bodies .orbit-body path {
-  animation: orbit-ping var(--dur-spring) var(--ease-spring)
-    calc(var(--radar-delay) + var(--at, 0) * var(--radar-turn)) backwards;
+.system > .hole {
+  animation: orbit-ignite var(--ignite-dur) var(--ease) var(--ignite-delay) backwards;
+}
+
+@keyframes orbit-infall {
+  from {
+    opacity: 0;
+    rotate: var(--infall-turn);
+    filter: blur(var(--infall-blur));
+  }
+}
+
+.system__orbits,
+.system__bodies {
+  animation: orbit-infall var(--infall-dur) var(--ease) var(--infall-delay) backwards;
+}
+
+/* 番号の札は、回り込みが落ち着いてから番号の順に出る（8つ目より後はまとめて） */
+.system__label {
+  animation: orbit-light var(--dur) var(--ease)
+    calc(var(--label-delay) + min(var(--i, 0), 8) * var(--stagger)) backwards;
 }
 
 /*
-  波紋。灯った天体のまわりに輪を1つ広げて消す。止まった姿では見えない（opacity 0）
-  ので、出だしの姿を待つあいだに見せない——fill-mode を付けない（backwards だと、
-  走査線が来る前から輪が出ている）。
+  出る前（透明のあいだ）でも、キーボードで選んだ札はすぐ見せる。待たせると、見えない
+  リンクに見えない輪が付く。動きの値を上書きできるのは !important だけ（animation の
+  付け外しでは、外した日に出が頭からやり直しになり、選び終えた札が一度消える）
 */
-@keyframes orbit-ring {
+.system__label:focus-within {
+  /* biome-ignore lint/complexity/noImportantStyles: 上のコメントのとおり、動きの値に勝つ必要がある */
+  opacity: 1 !important;
+}
+
+/* --- 動き続ける --- */
+
+/*
+  着いたあとも動き続けるもの（components.tsx の Motion・Dust・Hole）。入口と締めで同じ。
+
+  - 天体がゆっくり公転する（orbit-turn）
+  - 軌道に沿って光が流れる（orbit-flow。軌道1周の path の破線を送る。天体より速い）
+  - 光の粒が渦を巻いてブラックホールへ吸い込まれ、黒い円の縁で光に溶ける（orbit-swirl で
+    1周回り、その中で orbit-fall が外から内へ寄せる。どちらも --fall-ease で、落ちるほど
+    速い）
+  - ブラックホールの縁を光の点が回り（orbit-spin）、光が明るさを沈めては戻す（orbit-breathe）
+
+  keyframes に var() を書かない（光の揺らぎの1つを除く）。var() を持つ keyframes は、
+  動いている要素ごとに毎コマ解き直され、粒の多い入口では style の計算だけでコマの予算を
+  食った（電話相当で 1 秒あたり 480ms。固定の値にして 75ms）。要素ごとに違う量——天体の
+  軌道の形、粒の向きと落ちる幅——は動かない親の transform 属性が持ち、動く子は同じ形を
+  回るだけ（1周・1 から 0 へ）にする。
+
+  - 公転する天体は単位円の点 (1, 0) で、親（orbits.ts の OrbitMover の at）がその単位円を
+    軌道へ写し、止まった場所まで回してある。子は1周前の姿から止まった姿まで回る——
+    keyframes には from だけ（入口の動きと同じ決まり）
+  - 動いているあいだは、止まった天体と番号の札を隠す（札は止まった場所に置いてあり、動く
+    天体には付いていけない）。図の中を選んだとき（札へのフォーカス）とマウスを重ねたとき
+    （手触りの括り）は、動く天体を隠して止まった天体と札に戻す
+  - 止める手は置かない（持ち主の判断。5 秒を超えて続く動きの止め方は、動きを減らす設定
+    だけが受ける）。動きを減らす設定では、動く層を出さない——止まった天体と札が完成形
+*/
+@keyframes orbit-turn {
   from {
-    opacity: var(--ring-ink);
-    scale: 1;
+    transform: rotate(-1turn);
+  }
+}
+
+@keyframes orbit-flow {
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
+@keyframes orbit-swirl {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* 粒は止まった姿を持たない（動かないときは層ごと隠す）ので、出だしと終わりの両方を書く */
+@keyframes orbit-fall {
+  from {
+    transform: translate(1px, 0px);
+    opacity: 0;
+  }
+
+  15%,
+  80% {
+    opacity: 1;
   }
 
   to {
+    transform: translate(0px, 0px);
     opacity: 0;
-    scale: var(--ring-grow);
   }
 }
 
-.system__bodies .orbit-ring {
-  fill: none;
-  stroke: var(--ink);
-  stroke-width: var(--orbit-line);
-  vector-effect: non-scaling-stroke;
-  opacity: 0;
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: orbit-ring var(--radar-ring) var(--ease)
-    calc(var(--radar-delay) + var(--at, 0) * var(--radar-turn));
+@keyframes orbit-spin {
+  to {
+    transform: rotate(1turn);
+  }
 }
 
-/* 名前の札は、走査線が天体を通り過ぎてから出る */
-.system__label {
-  animation: orbit-light var(--dur) var(--ease)
-    calc(var(--radar-delay) + var(--at, 0) * var(--radar-turn) + var(--label-lag)) backwards;
+/* 光の揺らぎは1つの要素だけなので、明るさの下限を :root の段から読む */
+@keyframes orbit-breathe {
+  from {
+    opacity: var(--breathe-low);
+  }
+}
+
+/* 軌道を流れる光。短い破線を1本だけ、軌道の線の上に */
+.orbit-flow {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: calc(var(--orbit-line) * 2);
+  stroke-linecap: round;
+  stroke-dasharray: var(--flow-len) calc(100 - var(--flow-len));
+  vector-effect: non-scaling-stroke;
+}
+
+.orbit-grain__dot {
+  fill: none;
+  stroke: var(--ink);
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0;
+}
+
+:is(.orbit-flows, .orbit-dust, .orbit-movers, .hole__spin) {
+  display: none;
+}
+
+/* 図の中を選んだとき（マウスを重ねたときは手触りの括り）は、止まった天体と札に戻す */
+.system:focus-within .orbit-movers {
+  opacity: 0;
+}
+
+.system:focus-within > :is(.system__bodies, .system__labels) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :is(.orbit-flows, .orbit-dust, .orbit-movers) {
+    display: inline;
+  }
+
+  .hole__spin {
+    display: block;
+  }
+
+  .orbit-mover {
+    animation: orbit-turn var(--period) linear infinite;
+  }
+
+  .orbit-flow {
+    animation: orbit-flow var(--dur) linear var(--delay) infinite;
+  }
+
+  .orbit-grain {
+    animation: orbit-swirl var(--dur) var(--fall-ease) var(--delay) infinite;
+  }
+
+  .orbit-grain__dot {
+    animation: orbit-fall var(--dur) var(--fall-ease) var(--delay) infinite;
+  }
+
+  .hole__spin {
+    animation: orbit-spin var(--spin-dur) linear infinite;
+  }
+
+  .hole__light {
+    animation: orbit-breathe var(--breathe-dur) var(--ease) infinite alternate;
+  }
+
+  /* 動いているあいだは、止まった天体と札を隠す（上の「図の中を選んだとき」で戻る） */
+  .system__bodies,
+  .orbit-rest,
+  .system__labels {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .orbit-movers,
+  .system__bodies,
+  .system__labels {
+    transition: opacity var(--dur) var(--ease);
+  }
 }
 
 /*
@@ -1430,6 +1638,11 @@ body[data-site] > main {
     orbit-count-cover var(--count-dur) linear var(--count-delay) backwards;
 }
 
+/*
+  数え上げの字。代わりの字を空にして読み上げに流さない——流すと、dd の字と合わせて
+  「07 07」と2度読まれる（opacity: 0 は読み上げの木から外さない）。代わりの字は
+  書けるブラウザにだけ渡す（区切りの字の .eyebrow と同じ）
+*/
 .tally__num::after {
   content: counter(n, decimal-leading-zero);
   position: absolute;
@@ -1437,6 +1650,12 @@ body[data-site] > main {
   color: var(--ink);
   opacity: 0;
   animation: orbit-count-show var(--count-dur) linear var(--count-delay) backwards;
+}
+
+@supports (content: '' / '') {
+  .tally__num::after {
+    content: counter(n, decimal-leading-zero) / '';
+  }
 }
 
 /* --- 句読点と折り返し --- */
@@ -1861,10 +2080,6 @@ body[data-site] > main {
   align-items: start;
   padding-block: var(--sp-6);
   border-bottom: 1px solid var(--line);
-}
-
-.entry[hidden] {
-  display: none;
 }
 
 /* 番号（01・02 …）。入口の軌道図の札と同じ番号で、飾りなので読み上げには流さない */
@@ -2557,15 +2772,6 @@ body[data-site] > main {
   gap: var(--sp-7);
 }
 
-/*
-  図は本文の上の余白（--page-pad）ぶん上へ上げ、帯の罫線に寄せる。抜けていく
-  軌道は帯の下をくぐって画面の外へ出る（帯は地を塗って貼り付いている）。字の
-  ための高さを表紙の中に残すためでもある。
-*/
-.orbital > .orbits {
-  margin-top: calc(var(--page-pad) * -1);
-}
-
 /* 字は 900 未満では残りの高さの真ん中に、900 以上では表紙の底に寄せる */
 .contact {
   display: flex;
@@ -2606,7 +2812,9 @@ body[data-site] > main {
   max-width: 100%;
   padding-bottom: var(--sp-4);
   border-bottom: 1px solid var(--line-strong);
-  transition: border-color var(--dur-fast) var(--ease);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
 }
 
 .contact__address {
@@ -2629,7 +2837,9 @@ body[data-site] > main {
   min-height: var(--tap);
   color: var(--ink-mid);
   font-size: var(--fs-meta);
-  transition: color var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
 }
 
 .contact__sub :lang(en) {
@@ -2658,18 +2868,18 @@ body[data-site] > main {
 }
 
 /*
-  display: flex は、ロゴの svg を行に載せないため。
+  ロゴの印（ブラックホールの O）。光の縁と横線は字の色（currentColor）で描くので、
+  色は字の白のまま——線の色（--line-strong）に落とすと光が暗い灰色になり、影の
+  黒い円だけが残って印に見えない。
 
-  この箱は .oops の列の中で block になり、中の svg は1行ぶんの行ボックスに
-  載る。標準モードの行ボックスは字が無くても書体の高さの支え（strut）を
-  持つので、svg がベースラインに座り、下に字の下がりぶんの隙間が付く——
-  28px のロゴの箱が 35.8px になる（= 404 @1440x900, 素の書体, Chromium）。
-  DOCTYPE が無かったころは互換モードで支えが無く、28px のままだった。
-  flex にすると svg は行ではなく flex の子になり、箱はロゴと同じ高さに戻る。
+  display: flex は、印の svg を行に載せないため。この箱は .oops の列の中で block に
+  なり、中の svg は1行ぶんの行ボックスに載る。標準モードの行ボックスは字が無くても
+  書体の高さの支え（strut）を持つので、svg がベースラインに座り、下に字の下がりぶんの
+  隙間が付いて、箱が印より高くなる。flex にすると svg は行ではなく flex の子になり、
+  箱は印と同じ高さに戻る。
 */
 .oops__mark {
   display: flex;
-  color: var(--line-strong);
 }
 
 .oops__code {
@@ -2887,7 +3097,9 @@ body[data-site] > main {
 .top__admin:active,
 .band:active,
 .member:active,
-.back:active {
+.back:active,
+.contact__mail:active,
+.contact__sub:active {
   scale: var(--press);
 }
 
@@ -2940,6 +3152,30 @@ body[data-site] > main {
 
   .system__label a:hover {
     color: var(--ink);
+  }
+
+  /* 図にマウスを重ねたら、止まった天体と札に戻す（札を読んで押せるように） */
+  .system:hover .orbit-movers {
+    opacity: 0;
+  }
+
+  .system:hover > :is(.system__bodies, .system__labels) {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /*
+    札の名前をマウスで出すのもここだけ。タッチで押した札は :hover が貼り付いたまま
+    残るので、指の端末では名前はキーボードで選んだとき（:focus-visible）と押した先の
+    ページだけが言う
+  */
+  .system__label a:hover .system__name {
+    position: static;
+    width: auto;
+    height: auto;
+    min-width: 0;
+    clip-path: none;
+    text-overflow: ellipsis;
   }
 
   .toc a:hover,
@@ -3018,6 +3254,29 @@ body[data-site] > main {
   .orbits {
     display: none;
   }
+
+  /* 図の区画も畳む（下の「表紙を1列に畳む」） */
+  .hero--orbit {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 1fr auto;
+    grid-template-areas: 'copy' 'tally';
+  }
+
+  .orbital {
+    grid-template-rows: 1fr;
+  }
+}
+
+/*
+  強制色モードでは、ロゴの O の影を地の色で抜く。光の縁と横線は字の色（強制色の
+  リンクの色）になるのに、影の黒はそのまま残るので、明るいテーマでは O が塗りの円に
+  見える。prefers-contrast: more の括りには入れない——強制色でないときの Canvas は
+  灰色の地で、影が灰色の円になる
+*/
+@media (forced-colors: active) {
+  .logo-core {
+    fill: Canvas;
+  }
 }
 
 /*
@@ -3031,6 +3290,20 @@ body[data-site] > main {
   .system,
   .orbits {
     display: none;
+  }
+
+  /*
+    表紙を1列に畳む。図を消しただけだと区画が残り、900 以上の入口は右半分が空き、
+    締めは字が図の行（auto）へ繰り上がって表紙の上に寄る
+  */
+  .hero--orbit {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 1fr auto;
+    grid-template-areas: 'copy' 'tally';
+  }
+
+  .orbital {
+    grid-template-rows: 1fr;
   }
 }
 
@@ -3204,15 +3477,6 @@ body[data-site] > main {
     overflow-x: visible;
     mask-image: none;
   }
-
-  /*
-    [hidden] の打ち消し。上で display を与えているので、このままだと hidden を
-    付けた節が見えてしまう（.entry[hidden]{display:none} と同じ罠）。
-    上の指定（0,1,1）に勝たせるため属性を足して（0,2,1）にし、必ず最後に置く。
-  */
-  :where(body[data-site]) main > :is(.hero, section)[hidden] {
-    display: none;
-  }
 }
 
 @media print {
@@ -3224,6 +3488,8 @@ body[data-site] > main {
     形は夜の地を裏返しただけ: 地は色味の無い白、面は黒をうっすら重ね、線は弱く、
     上辺の光は白。アクセントは同じ色相を暗くして、白い地で字が 4.5:1 に届く所へ
     置く（いちばん低いのはエンバーで 5.21:1）。モノクロは黒、塗りのボタンの字は白。
+    ロゴの O の影（--hole-core）は紙の色に抜く——光を墨で刷るので、黒のままだと光の
+    輪と影がつながって塗りの円になる。
   */
   :root {
     --bg: #ffffff;
@@ -3235,6 +3501,7 @@ body[data-site] > main {
     --ink: #111114;
     --ink-mid: #4a4a53;
     --ink-weak: #6a6a74;
+    --hole-core: #ffffff;
     --mono: #111114;
     --mono-soft: rgba(17, 17, 20, 0.06);
     --iris: #4c4cd9;
@@ -3258,8 +3525,7 @@ body[data-site] > main {
   /*
     紙の上ではリンクは押せない。サイトを通して刷るなら全体ページ（/all）を
     刷ること。軌道図はインクを食うだけの装飾なので、ここで落とす（/all には
-    元から出ないが、入口のページを直接刷られたときのため）。入口の枠は縦横比を
-    外して、名前の高さだけに縮める。
+    元から出ないが、入口のページを直接刷られたときのため）。
   */
   .top,
   .filters,

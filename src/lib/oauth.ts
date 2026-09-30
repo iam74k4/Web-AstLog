@@ -69,7 +69,7 @@ export function clientFor(env: ClientEnv, provider: ProviderKey): Client | null 
 /*
   提供元から見た「この人」。subject が照合の鍵で、label は画面に出す写し。
   email は Google のときだけ入り、emailVerified が true のときだけ最初の
-  紐づけに使ってよい（src/lib/auth.ts の isOwnerIdentity）。
+  紐づけに使ってよい（src/lib/auth.ts の ownerValue）。
 */
 export type Identity = {
   provider: ProviderKey

@@ -31,7 +31,7 @@ import {
   Tally,
   Timeline,
 } from '../../ui/components'
-import { siteCountsOf, soloMember, type TopData } from './data'
+import { rowNumber, siteCountsOf, soloMember, type TopData } from './data'
 import {
   describe,
   excerpt,
@@ -185,7 +185,7 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
                 type: item.type,
                 title: item.title,
                 href: itemHref(item),
-                number: order + 1,
+                number: rowNumber(projects, item, order),
               }))}
             />
             {band ? (
@@ -257,11 +257,16 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
             {projects.rows.length ? (
               /*
                 番号付きの行を縦に並べる（索引）。番号は一覧での並び順で、入口の
-                軌道図の札と同じ番号
+                軌道図の札と同じ番号。絞り込んでも絞り込む前の番号のまま（rowNumber）
               */
               <div class="entries">
                 {projects.rows.map((item, order) => (
-                  <ItemRow key={item.id} item={item} number={order + 1} showMember={showMember} />
+                  <ItemRow
+                    key={item.id}
+                    item={item}
+                    number={rowNumber(projects, item, order)}
+                    showMember={showMember}
+                  />
                 ))}
               </div>
             ) : (

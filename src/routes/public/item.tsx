@@ -62,7 +62,7 @@ function itemOgImage(item: ItemView): OgImage | undefined {
   プラットフォームか業界・年）とタグを添える。どれも作品ごとに違うので、
   説明の無い作品が2つあっても同じ文にならない（作品名は作品ごとに違う）。
 */
-export const itemFacts = (item: ItemView) =>
+const itemFacts = (item: ItemView) =>
   joinParts(
     `${item.title}（${[KIND_LABEL[item.type], item.platformLabel ?? item.category, item.year]
       .filter(Boolean)

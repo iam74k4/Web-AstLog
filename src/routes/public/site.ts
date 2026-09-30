@@ -1,12 +1,18 @@
-import { countPublishedByKind, type Db, listPublishedItems } from '../../db/queries'
+import {
+  countPublishedByKind,
+  type Db,
+  listPublishedItemKeys,
+  listPublishedItems,
+} from '../../db/queries'
 import type * as schema from '../../db/schema'
-import { type ItemFilter, type ItemView, type KindCounts, totalOf } from '../../domain'
+import { type ItemFilter, type KindCounts, totalOf } from '../../domain'
 import type { Page } from '../../lib/sequence'
 import { filterQuery } from '../../ui/components'
 import { renderBlock } from './blocks'
 import {
   bandOf,
   filterApplies,
+  type ItemListData,
   kindsOf,
   profileOf,
   scopeOf,
@@ -89,23 +95,32 @@ function pageList(blocks: schema.Block[], data: TopData): SitePage[] {
   残る。一覧の無いページには付けて回らない」）。落とすのは、そのページでは何の
   意味も持たない項目だけ。
 */
-export const pageQuery = (slug: string, filter: ItemFilter): string =>
+const pageQuery = (slug: string, filter: ItemFilter): string =>
   filterApplies(slug) ? filterQuery(filter) : ''
 
 /*
   いま出すページの行を引く。一覧（Projects）は絞り込みを効かせて、入口は軌道図の札の
   ために公開中の全件を（入口に絞り込みは効かない）。ほかのページでは1件も引かない
   ——そのページに作品は出ない。
+
+  絞り込んだ一覧は、行の番号のために公開中の並び（id だけ）も引く。番号は絞り込む
+  前の並びでの位置で、入口の軌道図の札と同じ番号（data.ts の ItemListData）。
 */
 export async function pageRows(
   db: Db,
   page: BlockPage,
   filter: ItemFilter,
   memberId: number | null,
-): Promise<ItemView[]> {
-  if (page.block.type === 'hero') return listPublishedItems(db)
-  if (!filterApplies(page.block.type)) return []
-  return listPublishedItems(db, scopeOf(filter, memberId))
+): Promise<Pick<ItemListData, 'rows' | 'numbers'>> {
+  if (page.block.type === 'hero') return { rows: await listPublishedItems(db) }
+  if (!filterApplies(page.block.type)) return { rows: [] }
+  const scope = scopeOf(filter, memberId)
+  if (!scope.kind && !scope.memberId) return { rows: await listPublishedItems(db) }
+  const [rows, order] = await Promise.all([
+    listPublishedItems(db, scope),
+    listPublishedItemKeys(db),
+  ])
+  return { rows, numbers: new Map(order.map((key, index) => [key.id, index + 1])) }
 }
 
 /*

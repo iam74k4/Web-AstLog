@@ -16,16 +16,19 @@ import {
 import { initials, isHttpsUrl, isSafeUrl, type SkillGroup, skillRows } from '../lib/format'
 import {
   bodyItems,
-  ESCAPE_FRAME,
-  escapePath,
+  CONTACT_FRAME,
   HERO_FRAME,
   type LabelSide,
+  labelRoom,
   type OrbitBody,
+  type OrbitFrame,
+  type OrbitMap,
   orbitMap,
   placeLabels,
 } from '../lib/orbits'
 import { SITE } from '../site'
-import { GithubIcon, MailIcon, PencilIcon, STAR, Wordmark } from './icons'
+import { GithubIcon, HoleCore, HoleLight, HoleSpot, MailIcon, PencilIcon, Wordmark } from './icons'
+import { HOLE, MARK_HALF, MARK_VIEWBOX } from './logo'
 
 /*
   画面はこの部品だけで組む。新しい見た目が要るときは、まずここに足してから使う。
@@ -104,7 +107,7 @@ const cssVersion = (text: string) => {
   return (hash >>> 0).toString(36)
 }
 
-export const STYLESHEETS = {
+const STYLESHEETS = {
   app: `/app.css?v=${cssVersion(appCss)}`,
   admin: `/admin.css?v=${cssVersion(adminCss)}`,
 } as const
@@ -124,11 +127,26 @@ export const Stylesheets = ({ admin = false }: { admin?: boolean }) => (
 export const ColorSchemeMeta = () => <meta name="color-scheme" content="dark" />
 
 /*
-  上の帯の左端のロゴ（ワードマーク ΛSTLOG）。押すと入口へ。大きさは1つだけ
-  （app.css の --brand-h）。
+  favicon。ロゴの印（ブラックホールの O を1つで）を地の色の正方形に載せたもの
+  （src/ui/logo.ts の iconSvg）を SVG のまま読ませ、読めない環境には同じ絵の PNG を渡す
+  （どちらも scripts/logo/export.mjs が書き出す）。地を敷くのは、光が白いから——透明の
+  ままだと明るいタブの帯では輪も横線も消え、黒い点だけになる。公開・管理・404 の
+  外枠がどれも置く。
+*/
+export const FaviconLinks = () => (
+  <>
+    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+  </>
+)
 
-  絵は aria-hidden で、リンクの名前は .sr-only の字（サイトの名前）が持つ
-  （WCAG 4.1.2。絵だけのリンクは名前を持たない）。
+/*
+  上の帯の左端のロゴ（ワードマーク ΛSTLOG。O がブラックホール）。押すと入口へ。
+  大きさは1つだけ（app.css の --brand-h）。
+
+  絵は aria-hidden で、リンクの名前は .sr-only の字（サイトの名前）が持つ（WCAG 4.1.2。
+  絵だけのリンクは名前を持たない）。
 */
 export const Brand = () => (
   <a class="brand" href="/">
@@ -271,8 +289,9 @@ export const HiddenHeading = ({ text, h1 }: { text: string; h1?: boolean }) =>
   region は読み上げに現れないので、見出しを持たない箱（ひとこと・帯）には
   付けない。渡す文字列は見出しと同じ変数から取ること。
 
-  orbital は「軌道図を置く締めの節」（Contact。OrbitEscape）。見出しの錨（節は
-  上揃え）を持たない表紙で、中身を画面の縦の真ん中に置く（app.css の
+  orbital は「軌道図を置く締めの節」（Contact。ContactOrbits）。見出しの錨（節は
+  上揃え）を持たない表紙で、図を上の帯の罫線に寄せ、字は残りの高さの真ん中
+  （900 以上は表紙の底）に置く（app.css の「締めの軌道図」と .contact。表紙の高さは
   「ページの外枠」の main > .orbital）。
 */
 export const Screen = ({
@@ -362,20 +381,11 @@ export const Phrases = ({ text }: { text: string }) => (
   viewBox と一緒に縮み、電話では 2px ほどまで潰れた）。
 
   業務の天体は輪。同じ点を2回描き、2回目を地の色で小さく抜く。
-
-  radar は入口の軌道図の印。走査線がその天体を通る時刻（--at。orbits.ts の sweep）を
-  持たせ、通ったときに灯って波紋（.orbit-ring）を1つ広げる。締めの図は動かないので
-  付けない。
 */
-const Bodies = ({ bodies, radar }: { bodies: OrbitBody[]; radar?: boolean }) => (
+const Bodies = ({ bodies }: { bodies: OrbitBody[] }) => (
   <>
     {bodies.map((body) => (
-      <g
-        key={`${body.x},${body.y}`}
-        class={`orbit-body orbit-body--${body.kind}`}
-        style={radar ? `--at:${body.sweep}` : undefined}
-      >
-        {radar ? <circle class="orbit-ring" cx={body.x} cy={body.y} r="8" /> : null}
+      <g key={`${body.x},${body.y}`} class={`orbit-body orbit-body--${body.kind}`}>
         <path d={`M${body.x} ${body.y}h0`} />
         {body.kind === 'work' ? (
           <path class="orbit-body__hole" d={`M${body.x} ${body.y}h0`} />
@@ -385,8 +395,165 @@ const Bodies = ({ bodies, radar }: { bodies: OrbitBody[]; radar?: boolean }) => 
   </>
 )
 
+/*
+  軌道の線（入口と締め）。奥の半分（side = far。ブラックホールの後ろの層）か手前の半分
+  （near。前の層）を描く。
+
+  - 濃さは奥から手前へ続けて変わる坂（orbits.ts の OrbitMap の depth）。奥の半分と手前の
+    半分が同じ坂を読むので、継ぎ目で濃さが跳ばない（半分ずつの濃さを変えていたころは、
+    楕円の左右の端で線が急に濃くなった）。坂の色と濃さは app.css の .orbit-depth__*。
+    グラデーションは層ごとに id を分けて持つ（id は置く部品が渡す）
+  - 手前の半分の下には地の色の縁取り（.orbit__casing）を敷く。ブラックホールの光の縁の
+    前を通る所で白い線が白い光に溶けず、前を横切るのが見える。縁取りを先に全部描いてから
+    線を描く（隣の軌道の縁取りが線を削らない）
+*/
+const OrbitLines = ({ map, side, id }: { map: OrbitMap; side: 'far' | 'near'; id: string }) => (
+  <>
+    <defs>
+      <linearGradient
+        id={id}
+        gradientUnits="userSpaceOnUse"
+        x1={map.depth.x1}
+        y1={map.depth.y1}
+        x2={map.depth.x2}
+        y2={map.depth.y2}
+      >
+        <stop class="orbit-depth__far" offset="0" />
+        <stop class="orbit-depth__near" offset="1" />
+      </linearGradient>
+    </defs>
+    {side === 'near'
+      ? map.orbits.map((orbit) => (
+          <path key={`casing-${orbit.near}`} class="orbit__casing" d={orbit.near} />
+        ))
+      : null}
+    {map.orbits.map((orbit) => (
+      <path
+        key={orbit[side]}
+        class={`orbit orbit--${orbit.kind}`}
+        d={orbit[side]}
+        stroke={`url(#${id})`}
+      />
+    ))}
+  </>
+)
+
+/*
+  動き続けるもの（入口と締め）のうち、軌道に沿うもの。軌道を流れる光（orbit-flow）と、
+  公転する天体（orbit-mover）。どちらも同じものを奥の層と手前の層に1つずつ置き、それぞれを
+  軌道面の奥と手前の半面で切る（orbits.ts の OrbitMap の halves）——ブラックホールの向こうを
+  回るあいだは後ろに、こちらへ来るあいだは前に見える。動かし方は app.css の「動き続ける」。
+  動きを減らす設定では隠し、止まった天体（Bodies）と札だけが残る。
+
+  天体は、動かない親（orbits.ts の OrbitMover の at。SVG の transform 属性）が単位円を
+  軌道へ写し、動く子は単位円を1周回るだけ——keyframes に天体ごとの数を持たせない
+  （app.css の「動き続ける」の、var() を keyframes に書かない話）
+*/
+const Motion = ({ map, side, id }: { map: OrbitMap; side: 'far' | 'near'; id: string }) => {
+  const clip = `url(#${id})`
+  return (
+    <>
+      <defs>
+        <clipPath id={id} clipPathUnits="userSpaceOnUse">
+          <path d={map.halves[side]} />
+        </clipPath>
+      </defs>
+      <g class="orbit-flows" clip-path={clip}>
+        {map.orbits.map((orbit, i) => (
+          <path
+            key={orbit.d}
+            class="orbit-flow"
+            d={orbit.d}
+            pathLength="100"
+            style={`--dur:${map.flows[i]}s;--delay:-${Math.round((map.flows[i] ?? 0) * ((i * 0.618) % 1) * 10) / 10}s`}
+          />
+        ))}
+      </g>
+      <g class="orbit-movers" clip-path={clip}>
+        {map.movers.map((mover, i) => (
+          <g key={i} transform={mover.at}>
+            <g
+              class={`orbit-mover orbit-body orbit-body--${mover.kind}`}
+              style={`--period:${mover.period}s`}
+            >
+              <path d="M1 0h0" />
+              {mover.kind === 'work' ? <path class="orbit-body__hole" d="M1 0h0" /> : null}
+            </g>
+          </g>
+        ))}
+      </g>
+    </>
+  )
+}
+
+/*
+  ブラックホールへ吸い込まれる光の粒（入口と締め。orbits.ts の OrbitDust）。軌道面
+  （plane）の上で、粒ごとの向き（a）に回した所から1周渦を巻いて落ちる。
+
+  動くのは粒ごとに2つ——回る子（orbit-grain。1周）と、その中で外から内へ寄る点
+  （orbit-grain__dot。明るさの出入りも）。落ちる幅は動かない親の transform（r1 へ寄せて
+  r0 − r1 倍に伸ばす）が持ち、点は keyframes の中で 1 から 0 へ動くだけ。
+
+  奥と手前に分けず、ブラックホールの後ろの層にだけ置く——黒い円の上を横切る粒は、ロゴと
+  同じ円を汚す。光の縁に掛かる所で、粒は光に溶けて見えなくなる
+*/
+const Dust = ({ map }: { map: OrbitMap }) => (
+  <g class="orbit-dust" transform={map.plane}>
+    {map.dust.map((grain, i) => (
+      <g key={i} transform={`rotate(${grain.a})`}>
+        <g class="orbit-grain" style={`--dur:${grain.dur}s;--delay:${grain.delay}s`}>
+          <g
+            transform={`translate(${grain.r1} 0) scale(${Math.round((grain.r0 - grain.r1) * 10) / 10})`}
+            opacity={grain.o}
+          >
+            <path class="orbit-grain__dot" d="M0 0h0" style={`stroke-width:${grain.w}px`} />
+          </g>
+        </g>
+      </g>
+    ))}
+  </g>
+)
+
 // 2桁にそろえた番号（01・02 …）。入口の軌道図の札と件数の帯で同じ書き方
 const twoDigits = (value: number) => String(value).padStart(2, '0')
+
+/*
+  ブラックホール（入口と締め）。ロゴの O と同じ絵——黒い円（影）、縁でくっきり光って外へ
+  消える輪、その後ろを通る横線（真横から見た円盤）——を、軌道図の焦点に大きく置く（形は
+  src/ui/logo.ts、描き方は icons.tsx の HoleLight / HoleCore）。ロゴと同じ1つのものに
+  見せるため、比も色（字の白と --hole-core）も変えない。横線は軌道面の傾きに合わせて回す
+  （app.css の .hole の --system-tilt。輪と円は回しても同じ）。
+
+  大きさは枠の hole（黒い円の半径）から、置き場所は枠の focus から組んで style で渡す
+  （CSS に写すと、枠を変えた日に片方だけ古くなる）。
+
+  3枚の SVG を重ねる: 光（横線と輪。明るさがゆっくり揺らぐ）→ 縁を回る光の点（HoleSpot。
+  回り続ける）→ 黒い円。動くのは SVG ごとの明るさと回転だけで、中を描き直さない。
+  id はグラデーションの名前の頭（入口と締めは別のページだが、ロゴの wm / mk とは分ける）。
+  飾りなので読み上げには出さない。
+*/
+const Hole = ({ frame, id }: { frame: OrbitFrame; id: string }) => {
+  const pct = (value: number) => `${Math.round(value * 10000) / 100}%`
+  // 印の枠（±MARK_HALF）が黒い円の半径（HOLE.core）の何倍か
+  const width = (2 * MARK_HALF * frame.hole) / HOLE.core
+  return (
+    <span
+      class="hole"
+      aria-hidden="true"
+      style={`--hole-x:${pct(frame.focus.x / frame.width)};--hole-y:${pct(frame.focus.y / frame.height)};--hole-w:${pct(width / frame.width)}`}
+    >
+      <svg class="hole__light" viewBox={MARK_VIEWBOX} aria-hidden="true" focusable="false">
+        <HoleLight cx={0} cy={0} id={id} />
+      </svg>
+      <svg class="hole__spin" viewBox={MARK_VIEWBOX} aria-hidden="true" focusable="false">
+        <HoleSpot id={id} />
+      </svg>
+      <svg class="hole__core" viewBox={MARK_VIEWBOX} aria-hidden="true" focusable="false">
+        <HoleCore cx={0} cy={0} />
+      </svg>
+    </span>
+  )
+}
 
 /*
   入口の軌道図の札に載せる作品。number は一覧（Projects）の並びでの番号（1 から）で、
@@ -395,34 +562,28 @@ const twoDigits = (value: number) => String(value).padStart(2, '0')
 export type OrbitItem = { type: ItemKind; title: string; href: string | null; number: number }
 
 /*
-  札の幅の見積もり（px）。重なりを避ける置き場所（orbits.ts の placeLabels）が読む。
-  番号（等幅の2字と間）、英字だけの題は等幅の大文字（--fs-label 11px・字間 0.16em で
-  1字 約 8.4px）、和文を含む題は本文の書体（--fs-meta 12px。和文 12px・英数字 7px）、
-  地の左右の余白。字の段を変えたら、ここも見直す。
-*/
-const labelWidth = (item: OrbitItem) =>
-  2 * 8.4 +
-  8 +
-  (langOf(item.title) === 'en'
-    ? item.title.length * 8.4
-    : [...item.title].reduce((sum, char) => sum + (/[ -~]/.test(char) ? 7 : 12), 0)) +
-  8
-
-/*
-  入口の軌道図。真ん中に星を1つ置き（恒星）、公開中の作品を1つずつ楕円の軌道に
+  入口の軌道図。真ん中にブラックホールを置き、公開中の作品を1つずつ楕円の軌道に
   載せる（形は src/lib/orbits.ts の orbitMap。件数だけから決まる）。
 
-  - 天体に作品の番号と名前の札を添える（作品のページへのリンク）。札を出すのは枠が
-    十分に広いときだけ（app.css の @container。orbits.ts の LABEL_MIN_WIDTH）で、
-    狭い枠では点だけになる——作品の名前はすぐ下の「一覧で見る →」の先に全部ある
+  - 軌道はブラックホールの円盤と同じ面にあり、奥の半分はブラックホールの後ろ、手前の
+    半分は前を通る（奥と手前で SVG を分け、そのあいだに Hole を挟む）。どの軌道も同じ形の
+    入れ子で交わらず、線は奥ほど薄い（OrbitLines）
+  - 天体に作品の番号の札を添える（作品のページへのリンク）。名前は札の中にあり、
+    マウスを重ねたときとキーボードで選んだときに見える（app.css の .system__name。
+    読み上げとリンクの名前にはいつも入る）。札を出すのは枠が十分に広いときだけ
+    （app.css の @container。orbits.ts の LABEL_MIN_WIDTH）で、狭い枠では点だけに
+    なる——作品の名前はすぐ下の「一覧で見る →」の先に全部ある
   - 札の置き場所は、重ならない向きを orbits.ts の placeLabels が選ぶ
   - 個人開発は塗りの点、業務は輪と破線の軌道（区分の呼び名は KIND_LABEL）
-  - 天体は星のまわりの矩形（HERO_FRAME の clear）の外にだけ置く
-  - 絵は色を持たない。線と点と星の色は app.css が --accent と --ink から敷く
-    （.system__orbits・.system__star）ので、見た目のプリセットで色が変わる
-  - 軌道と天体と星の絵は aria-hidden。札（リンク）だけが読み上げに出る
-  - 着いたときに一度だけ、星から走査線が1周して、通った所の軌道と天体が灯る
-    （レーダー。app.css の「入口の軌道図」）。止まった姿がそのまま完成形
+  - 天体はブラックホールのまわりの矩形（HERO_FRAME の clear）の外にだけ置く
+  - 線と点の色は app.css が --accent と --ink から敷く（見た目のプリセットで変わる）。
+    ブラックホールだけはロゴの O と同じ色（字の白と --hole-core）
+  - 軌道・天体・ブラックホールは aria-hidden。札（リンク）だけが読み上げに出る
+  - 着いたときに一度だけ、ブラックホールが灯り、軌道と天体が渦を巻いて収まる
+    （app.css の「入口に着いたとき」）。そのあとも動き続ける——天体がゆっくり公転し、軌道を
+    光が流れ、光の粒が渦を巻いて吸い込まれ、ブラックホールの縁を光の点が回り、光が揺らぐ
+    （Motion・Dust・Hole。動いているあいだは札を隠し、札を選ぶかマウスを重ねると止まった
+    天体と札に戻る）。止まった姿がそのまま完成形
 
   呼ぶのは renderBlock の case 'hero' だけで、全体ページ（/all）には置かない
   （印刷・Ctrl-F・翻訳の宛先）。
@@ -430,11 +591,7 @@ const labelWidth = (item: OrbitItem) =>
 export const OrbitSystem = ({ counts, items }: { counts: KindCounts; items: OrbitItem[] }) => {
   const map = orbitMap(counts, HERO_FRAME)
   const onBody = bodyItems(map.bodies, items)
-  const sides = placeLabels(
-    HERO_FRAME,
-    map.bodies,
-    onBody.map((item) => (item ? labelWidth(item) : 0)),
-  )
+  const sides = placeLabels(HERO_FRAME, map.bodies)
   // 札は番号の順に並べる（位置は style で決まるので、並びは読み上げと Tab の順だけ）
   const labels = map.bodies
     .map((body, i) => ({ body, item: onBody[i], side: sides[i] }))
@@ -443,51 +600,48 @@ export const OrbitSystem = ({ counts, items }: { counts: KindCounts; items: Orbi
     )
     .sort((a, b) => a.item.number - b.item.number)
   const at = (value: number, whole: number) => `${Math.round((value / whole) * 10000) / 100}%`
+  const view = `0 0 ${map.width} ${map.height}`
   return (
     <div class="system">
       <svg
-        class="system__orbits"
-        viewBox={`0 0 ${map.width} ${map.height}`}
+        class="system__orbits system__orbits--far"
+        viewBox={view}
         aria-hidden="true"
         focusable="false"
       >
-        {map.orbits.map((orbit) => (
-          <path key={orbit.d} class={`orbit orbit--${orbit.kind}`} d={orbit.d} />
-        ))}
+        <OrbitLines map={map} side="far" id="system-far-depth" />
+        <Motion map={map} side="far" id="system-far" />
+        <Dust map={map} />
       </svg>
-      {/* 走査線。着いたときに1周だけ回って消える（止まった姿には無い） */}
-      <span class="system__beam" aria-hidden="true" />
+      <Hole frame={HERO_FRAME} id="system-hole" />
       <svg
-        class="system__bodies"
-        viewBox={`0 0 ${map.width} ${map.height}`}
+        class="system__orbits system__orbits--near"
+        viewBox={view}
         aria-hidden="true"
         focusable="false"
       >
-        <Bodies bodies={map.bodies} radar />
+        <OrbitLines map={map} side="near" id="system-near-depth" />
+        <Motion map={map} side="near" id="system-near" />
       </svg>
-      <svg
-        class="system__star"
-        viewBox="0 0 24 24"
-        fill="currentColor"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <path d={STAR} />
+      <svg class="system__bodies" viewBox={view} aria-hidden="true" focusable="false">
+        <Bodies bodies={map.bodies} />
       </svg>
       {labels.length ? (
         <ol class="system__labels" aria-label="つくったもの">
-          {labels.map(({ body, item, side }) => {
+          {labels.map(({ body, item, side }, order) => {
             const text = (
               <>
                 <span class="system__number">{twoDigits(item.number)}</span>
-                <span lang={langOf(item.title)}>{item.title}</span>
+                <span class="system__name" lang={langOf(item.title)}>
+                  {item.title}
+                </span>
               </>
             )
             return (
               <li
                 key={item.number}
                 class={`system__label system__label--${side}`}
-                style={`--x:${at(body.x, map.width)};--y:${at(body.y, map.height)};--at:${body.sweep}`}
+                style={`--x:${at(body.x, map.width)};--y:${at(body.y, map.height)};--room:${labelRoom(HERO_FRAME, body, side)}cqi;--i:${order}`}
               >
                 {item.href ? <a href={item.href}>{text}</a> : <span>{text}</span>}
               </li>
@@ -567,32 +721,30 @@ export const Cta = ({ href, children }: { href: string; children: Child }) => (
 )
 
 /*
-  締めの軌道図。入口と同じ星系を小さく左に置き、1本の軌道だけが右上の端から
-  画面の外へ抜けていく（脱出軌道。escapePath）。道の上の点は探査機——「次の
-  軌道を探している」を、言葉を足さずに図で言う。
+  締めの軌道図。入口と同じ件数の星系（同じブラックホール）を、横長の帯の真ん中に置く
+  （枠は orbits.ts の CONTACT_FRAME）。番号の札は持たない——作品へは目次と入口から行く。
 
-  恒星は入口と同じ星（icons.tsx の STAR）を焦点に小さく置く。24 の格子の星を
-  viewBox の単位で STAR_SCALE 倍にして、枠と一緒に伸び縮みさせる。
-  動かさない。入口で一度動けば足りる（締めの月と同じ決まり）。
+  入口と同じく、軌道の奥の半分はブラックホールの後ろ、手前の半分は前に描き、止まった天体
+  （.orbit-rest）はいちばん上。動き続けるものも入口と同じ（Motion・Dust・Hole。動いている
+  あいだは止まった天体を隠す）。着いたときの一度きりの動きは持たない——入口で一度動けば
+  足りる。
 */
-const STAR_SCALE = 1.55
-export const OrbitEscape = ({ counts }: { counts: KindCounts }) => {
-  const map = orbitMap(counts, ESCAPE_FRAME)
-  const exit = escapePath(ESCAPE_FRAME)
-  const starAt = `translate(${ESCAPE_FRAME.focus.x - 12 * STAR_SCALE} ${ESCAPE_FRAME.focus.y - 12 * STAR_SCALE}) scale(${STAR_SCALE})`
+export const ContactOrbits = ({ counts }: { counts: KindCounts }) => {
+  const map = orbitMap(counts, CONTACT_FRAME)
+  const view = `0 0 ${map.width} ${map.height}`
   return (
     <div class="orbits">
-      <svg viewBox={`0 0 ${map.width} ${map.height}`} aria-hidden="true" focusable="false">
-        {map.orbits.map((orbit) => (
-          <path key={orbit.d} class={`orbit orbit--${orbit.kind}`} d={orbit.d} />
-        ))}
-        <Bodies bodies={map.bodies} />
-        <path class="orbit-escape" d={exit.d} />
-        <g class="orbit-star" transform={starAt}>
-          <path d={STAR} />
-        </g>
-        <g class="orbit-probe">
-          <path d={`M${exit.probe.x} ${exit.probe.y}h0`} />
+      <svg viewBox={view} aria-hidden="true" focusable="false">
+        <OrbitLines map={map} side="far" id="contact-far-depth" />
+        <Motion map={map} side="far" id="contact-far" />
+        <Dust map={map} />
+      </svg>
+      <Hole frame={CONTACT_FRAME} id="contact-hole" />
+      <svg viewBox={view} aria-hidden="true" focusable="false">
+        <OrbitLines map={map} side="near" id="contact-near-depth" />
+        <Motion map={map} side="near" id="contact-near" />
+        <g class="orbit-rest">
+          <Bodies bodies={map.bodies} />
         </g>
       </svg>
     </div>
@@ -1074,14 +1226,10 @@ export const MemberCardCompact = ({ member }: { member: Member }) => (
 /*
   一覧への帯。件数を添えて、押す前に「ここに何件あるか」を見せる。
 
-  使うのは2か所——トップの入口（Hero のページ）と、2人以上のサイトの個人ページの
-  名札の下。どちらも「作品そのものは別の URL にある」ページなので、そこに何が
-  あるかを数で示してから送り出す。行き先は呼ぶ側が決める（項目のある側へ送ること。
-  0件の側へ送ると、0件の知らせだけのページに着く）。
-
-  置く先は Hero の中、リード文のすぐ下。画面の底に横いっぱいの帯として置いて
-  いたころは、見出しと帯のあいだに画面の半分ほどの空白ができ、帯そのものも
-  入力欄のように見えていた。大見出しから続けて読める位置に、押せる形で置く。
+  使うのは、2人以上のサイトの個人ページの名札の下（入口は同じことを「一覧で見る →」
+  と件数の帯 Tally で言う）。作品そのものは別の URL（その人で絞った一覧）にあるので、
+  そこに何があるかを数で示してから送り出す。行き先は呼ぶ側が決める（項目のある側へ
+  送ること。0件の側へ送ると、0件の知らせだけのページに着く）。
 
   題（label）は「何が入っているか」、右端は「どうするか（一覧で見る）」で、言葉を
   分ける。「つくったものの一覧」と書くと、1枚の札の中で「一覧」を2度言う。
@@ -1452,8 +1600,8 @@ export const OwnSocials = ({ member }: { member: Member }) => {
   連絡先のページ。サイトの並びの最後で、入口と対になる締め。
 
   ページに出すのは軌道図と、誘う1文（SITE.contactLead）と、メールと GitHub の手。
-  軌道図は入口と同じ星系を小さく置き、1本の軌道だけが画面の外へ抜ける
-  （OrbitEscape）。字は図の下に置き、図の上には乗せない。
+  軌道図は入口と同じ星系を、帯の真ん中に置く（ContactOrbits）。字は図の下に置き、
+  図の上には乗せない。
 
   - 誘いの1文は、何の相談なら送ってよいかを言う唯一の言葉なので、大きく置く
     （句読点の塊を1行ずつ。入口の大見出しと同じ Phrases）。目に見える見出しは
@@ -1485,7 +1633,7 @@ export const Contact = ({
 }) => (
   <Screen id="contact" label="Contact" orbital={!whole}>
     {whole ? <SectionHead title="Contact" /> : <HiddenHeading text="Contact" h1 />}
-    {whole ? null : <OrbitEscape counts={counts} />}
+    {whole ? null : <ContactOrbits counts={counts} />}
     <div class="contact">
       <p class="contact__lead">
         <Phrases text={SITE.contactLead} />
