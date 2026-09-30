@@ -25,7 +25,7 @@ export const nameWithRole = (member: Pick<schema.Member, 'name' | 'role'>) =>
   検索結果から選び直せるように）。
     - 名前の無いページ（ひとこと・見出しの無いメモ）は、そのページに出ている文の
       頭を抜き出す（excerpt。入口と同じ題にしない）
-    - 個人ページは人の名前（「岡崎 昂功 — Noctifex」）、作品のページは作品名
+    - 個人ページは人の名前（「岡崎 昂功 — AstLog」）、作品のページは作品名
 */
 export const pageTitle = (...parts: string[]) =>
   `${parts.filter((part) => part !== '').join(' · ')} — ${SITE.name}`
@@ -80,7 +80,7 @@ export const lineDigest = (key: BlockKey, rows: string[][]) =>
   rows.map((parts) => blockVisibleParts(key, parts).join(' ')).join('、')
 
 /*
-  カードの実績値（.metric）を説明文に畳む。値・単位・添えの順は、カードに
+  一覧の行の実績値（.metric）を説明文に畳む。値・単位・添えの順は、行に
   出ている順そのもの。並べ替えると、書いた人の数字がこちらの都合で別の意味に
   なる（「見込み 40人日から半減」は 20 の添えであって、20 の言い換えではない）。
   添えを「値のあとに続けて読んで意味が通る」形で書く決まりは、管理画面の

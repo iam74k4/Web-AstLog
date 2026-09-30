@@ -111,26 +111,6 @@ export function isHttpsUrl(url: string | undefined | null): url is string {
   }
 }
 
-/*
-  Location に入れてよい行き先か。isSafeUrl より狭い——あちらは管理画面が
-  受け取る「人が書いた URL」用で https:// と mailto: を通すが、こちらは
-  自分のサイトの中へ戻す用なので、絶対パスだけを通す。
-
-  2つ見る。
-
-  1. `//` と `/\` を弾く。ブラウザはこれをプロトコル相対の外部 URL として
-     解決するので、`/%2F%2Fevil.com/1` のような URL が 303 で evil.com へ
-     飛ばす踏み台になっていた（実際に飛んだ）。Hono は生のパスで照合するが
-     c.req.param() は percent-decode するので、パスの一部から作った文字列は
-     先頭の1文字から信用できない。
-  2. 制御文字を弾く。CR/LF が入ると workerd の Headers.set が例外を投げ、
-     それが 500 になっていた（`/ab%0d%0aX/1`）。無い URL は 404 が正しい。
-*/
-export function isSafeRedirect(path: string): boolean {
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: 制御文字を弾くのがこの検査の目的
-  return /^\/(?![/\\])[^\x00-\x1f\x7f]*$/.test(path)
-}
-
 // 空行で段落を分ける
 export function paragraphs(text: string): string[] {
   return text
@@ -140,7 +120,7 @@ export function paragraphs(text: string): string[] {
 }
 
 /*
-  いまが日本で何年か。柱の足元の著作権表示（© 2026 Noctifex）に使う。
+  いまが日本で何年か。足元の著作権表示（© 2026 AstLog）に使う。
 
   以前は「© 2026」と字で書いてあった。年が明けると、どの画面の足元も
   去年のまま残る——しかも誰も直す日を覚えていない種類の古さで、
@@ -245,9 +225,7 @@ export function toSlug(value: string): string {
 
 /*
   size 件ずつの配列に割る。0件なら空配列。使うのは、1文の束縛変数の上限を超えない
-  ように複数行の INSERT を分けるとき（src/routes/admin/items.tsx の childWrites）と、
-  Projects のカードを1行ぶんずつ数えるとき（src/routes/public/blocks.tsx。行ごとに
-  画像の枠をそろえる）。
+  ように複数行の INSERT を分けるとき（src/routes/admin/items.tsx の childWrites）。
 
   size が 1 未満だと1件も進まず終わらないので、下限を 1 に切り上げる。
 */

@@ -27,8 +27,8 @@ export const BLOCK_TYPES = [
   /*
     個人開発（app）と業務（work）を1つの一覧に並べる。見る側にとってはどちらも
     「つくったもの」で、節を分けると目次が2倍に伸びる。区分はデータに
-    残り（src/domain.ts の ITEM_KINDS）、カードの札（プラットフォーム / 業界）と
-    絞り込みのピル（すべて・個人開発・業務）で見分ける。並びは新しい順
+    残り（src/domain.ts の ITEM_KINDS）、一覧の行の札（プラットフォーム / 業界・区分）と
+    絞り込み（すべて・個人開発・業務）で見分ける。並びは新しい順
     （src/db/queries.ts の itemOrder）
   */
   {
@@ -97,30 +97,19 @@ export const BLOCK_TYPES = [
 ] as const
 
 /*
-  Projects のカードを1行に何枚並べるか（600 以上。600 未満は1列）。CSS の値ではなく
-  サーバーが決める数で、src/routes/public/blocks.tsx が style="--cols:2" で渡し、
-  app.css は repeat(var(--cols), minmax(0, 1fr)) と書くだけ。
-
-  auto-fill にしないのは、画面が広いほど列が増えて本文が細るため（ある骨格の 1440 では
-  3列 229px——電話 390 の 308px より狭かった）。同じ数で行を数え、画像の枠をそろえる
-  （components.tsx の shotRow。同じ行に画像の有る無しが混ざったら空の枠を置く）。
-*/
-export const PROJECT_COLUMNS = 2
-
-/*
   書く場所の上限。どれも「名前」か「目録の1文」の長さで、ページの高さの都合ではない
   （ページは縦にスクロールするので、段落や行の数には上限を置かない）。
 
-    itemTitle       作品名。カードの題・作品のページの見出し・<title> と共有カードの題に
-                    出る名前。32 字は、カードの題が 390 の電話で2行に収まる長さ
-    itemSummary     カードの説明（目録の文。「何であるか。何をしたか。」の2文）。カードは
-                    説明を行数で切らずに全部出すので、長いと同じ行のカードがその高さまで
-                    伸びる。2文ぶんの 100 字で止める
-    memberHeadline  個人ページの大見出し。連動の大きな段で出る1つの文で、長いと見出しが
-                    ページの頭を何行も食う
+    itemTitle       作品名。一覧の行の題・入口の軌道図の札・作品のページの見出し・<title> と
+                    共有カードの題に出る名前。32 字は、行の題が 390 の電話で2行に収まる長さ
+    itemSummary     一覧の行の説明（目録の文。「何であるか。何をしたか。」の2文）。行は
+                    説明を行数で切らずに全部出すので、長いと一覧が縦に伸びる。2文ぶんの
+                    100 字で止める
+    memberHeadline  大見出し（入口と個人ページ）。連動の大きな段で出る1つの文で、長いと
+                    見出しがページの頭を何行も食う
     blockHeading    打ち込むブロックの見出し（ひとことを除く）。目次の1行の名前で、目次は
-                    899 以下では1行の横帯に並ぶ。10 字を超える名前が並ぶと、帯の見えている
-                    幅に行き先が1つか2つしか入らない
+                    上の帯に1行で並ぶ。10 字を超える名前が並ぶと、帯の見えている幅に
+                    行き先が1つか2つしか入らない
 
   下書きでは見ない。公開になるときだけ（publishErrors）。
 */
@@ -162,7 +151,7 @@ export function blockType(key: string): BlockType | undefined {
   Apps と Works を Projects に畳んだとき、行の書き換え（drizzle/0004_merge_apps_works）
   と読む側の変更を同じリリースに入れていた。書き換えを流さずに出す（手元の
   npm run deploy・移行の失敗・移行より先に出た版）と、apps / works の行は「知らない
-  種類」として落ち、作品の一覧・入口の帯・/apps と /works の 301 先がどれも 404 に
+  種類」として落ち、作品の一覧・入口の件数・/apps と /works の 301 先がどれも 404 に
   なって、500 ではないので誰も気づかない。
 
   だから読む側を先に広げる（expand）。構成の行を読むところ（src/db/queries.ts の
@@ -216,7 +205,7 @@ export function blockVisibleParts(key: BlockKey, parts: string[]): string[] {
 }
 
 // その中身が何単位あるか。0 ならページに出すものが無い（blockShown）
-export function blockUnitCount(key: BlockKey, body: string): number {
+function blockUnitCount(key: BlockKey, body: string): number {
   return key === 'note' ? blockTexts(body).length : blockLines(key, body).length
 }
 
@@ -244,7 +233,7 @@ export const MAX_STATEMENT_SENTENCE = 120
   列から消えたら落ちる行。行の番号は欄の中の行（空行も数える）で言う——書いた
   人が見ているのはその番号なので。
 */
-export function droppedLinkLines(body: string): string[] {
+function droppedLinkLines(body: string): string[] {
   return body.split('\n').flatMap((line, index) => {
     const [parts] = parseLines(line)
     if (!parts || blockLines('links', line).length > 0) return []
@@ -351,7 +340,7 @@ function blockPublishErrors(
 /*
   作品。作品名と説明は長さで止める（MAX_CHARS の itemTitle / itemSummary）。
 
-  説明文は公開するときは必須。カードの本文で、作品のページの説明文（description）
+  説明文は公開するときは必須。一覧の行の本文で、作品のページの説明文（description）
   でもある——空のまま公開すると、そのページの description が入口と同じサイトの
   紹介文になり、検索結果でも共有カードでもどの作品か見分けられなかった。
 
@@ -367,9 +356,9 @@ function itemPublishErrors(target: Extract<PublishTarget, { kind: 'item' }>) {
   }
   const summary = chars(target.summary)
   if (!summary) {
-    errors.summary = '公開するときは説明文が要ります。カードと作品のページの説明文になります'
+    errors.summary = '公開するときは説明文が要ります。一覧と作品のページの説明文になります'
   } else if (summary > MAX_CHARS.itemSummary) {
-    errors.summary = `説明文は ${MAX_CHARS.itemSummary} 字までです（いま ${summary} 字）。カードに出る2文です`
+    errors.summary = `説明文は ${MAX_CHARS.itemSummary} 字までです（いま ${summary} 字）。一覧に出る2文です`
   }
   if (target.hasImage && !target.imageAlt) {
     errors.imageAlt = '画像を公開するときは、代替テキストが要ります'
@@ -440,8 +429,8 @@ export type SiteCounts = {
   種類を足し忘れる方向は型が守る（switch に default を置かないので TS2366 で落ちる）。
 
   - 下書き（published が 1 でない）は出ない。公開ページは publishedBlocks が先に落とす
-  - Projects は、公開中が0件なら出ない。絞り込んで0件になっただけなら出す（ピルを
-    残して絞り込みを外す手をページに置く。こちらは件数を絞り込む前で数える）
+  - Projects は、公開中が0件なら出ない。絞り込んで0件になっただけなら出す（絞り込みを
+    残して、外す手をページに置く。こちらは件数を絞り込む前で数える）
   - 1人のサイトの Team は、その人のプロフィールのページに置き換わって出る
     （src/routes/public/site.ts の pageList）
 */

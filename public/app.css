@@ -1,5 +1,5 @@
 /*
-  Noctifex — 公開ページと管理画面の共通スタイル。
+  AstLog — 公開ページと管理画面の共通スタイル。
 
   値を決めるのはこのファイルの :root だけ。各セレクタに生の色やサイズを
   書かないこと。値が散ると、差に意味があるのか後から分からなくなる。
@@ -11,7 +11,8 @@
 
   質感と手触りは React Bits（reactbits.dev）の Micro を手本にしている。
   向こうのコードは使っていない。JavaScript を持ち込まず、CSS だけで作り直した:
-  - 面は白をうっすら重ねた「ゴースト」と、上辺の 1px の光で立たせる。線はほぼ見せない
+  - 公開ページは箱（枠・面・影）を並べず、罫線で区切り、角を立てる。面（白をうっすら
+    重ねた「ゴースト」と、上辺の 1px の光）は管理画面の部品だけが持つ
   - 押すと縮み、離すとばねで戻る。ばねの曲線は :root の --ease-spring だけを使う
 */
 
@@ -19,8 +20,7 @@
   --font-sans:
     'Helvetica Neue', 'Hiragino Sans', 'Noto Sans JP', system-ui, -apple-system, sans-serif;
   /*
-    等幅は英数字の札だけ（実績値の数・タグ・英大文字の小見出し・
-    ワードマーク・メールのアドレス）。和文が入りうる所には使わない——等幅の書体は
+    等幅は英数字の札だけ（実績値の数・タグ・英大文字の小見出し・番号）。和文が入りうる所には使わない——等幅の書体は
     和文の字を持たず、字は結局ほかの書体に落ちる。残るのは等幅のための字間
     （letter-spacing）と小ささだけで、和文には読みにくさしか渡さない。
     打ち込んだ文字が入る札（タグ・肩書き・技術の小見出し）は、日本語を1字も
@@ -40,7 +40,7 @@
     和文の最小は --fs-meta（12px）。--fs-label（11px）は英大文字の小見出し
     （Skills の LANGUAGES・管理画面の ADMIN・404 の番号）だけに使う。11px の
     和文は画数の多い字が潰れる——以前は業界名・帯の件数・節の添え・経歴の
-    期間・柱の足元が 11px（しかも等幅）で、和文の札がいちばん読みにくかった。
+    期間・足元が 11px（しかも等幅）で、和文の札がいちばん読みにくかった。
     どこに使ってよいかは test/theme.test.ts の「文字の段」が名指しで数えている。
   */
   --fs-label: 11px;
@@ -62,10 +62,10 @@
 
     可変部は幅と高さの小さいほう（下の @supports で svh を足す）。
   */
-  --fs-display-xl: clamp(32px, 6.4vw, 76px);
+  --fs-display-xl: clamp(30px, 4.3vw, 62px);
   --fs-display: clamp(28px, 4vw, 52px);
   --fs-display-sm: clamp(24px, 3vw, 38px);
-  --fs-display-xs: clamp(20px, 2.4vw, 30px);
+  --fs-display-xs: clamp(19px, 1.7vw, 24px);
 
   /* 余白の段。7つから選ぶ */
   --sp-1: 2px;
@@ -76,45 +76,56 @@
   --sp-6: 24px;
   --sp-7: 32px;
 
-  --nav-w: 264px;
-  /* ページの最大幅。骨格のプリセットで使い分ける */
-  --w-page: 1280px;
-  --w-center: 880px;
-  --w-wide: 1440px;
+  /*
+    版面の幅。上の帯・本文・足元の中身をこの幅にそろえ、広い画面では左右に
+    余りを均等に置く（「骨格」の .top / main / .foot の padding-inline）。
+    地と帯の罫線だけは画面の端まで伸びる。
+  */
+  --w-page: 1344px;
   --gutter: clamp(16px, 3.4vw, 60px);
-  /* 面は大きく、操作部品は中くらい、札は小さく丸める */
+  /* 管理画面の面は大きく、操作部品は小さく丸める（公開ページは角を立てるので使わない） */
   --radius: 16px;
   --radius-sm: 10px;
-  --radius-xs: 6px;
 
   /*
-    画面1つぶんの高さ。公開ページの .shell はこの高さを下限に持ち（「ページの外枠」）、
-    入口と締めの表紙が画面いっぱいに月を敷く。svh は道具の帯を出したときの高さ
-    なので、帯の出入りで表紙の高さが跳ねない。
+    画面1つぶんの高さ。svh は道具の帯を出したときの高さなので、帯の出入りで
+    表紙の高さが跳ねない。
 
     100vh の控えは置かない。svh を知らない環境ではこの値が計算できず、min-height が
     素の auto に落ちる——表紙が中身の高さになるだけで、読めなくなるものは無い。
   */
   --screen-h: calc(100svh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
-  /*
-    貼り付いた目次の帯の下に、送った先（#about などのフラグメント・フォーカス）を
-    止める空き（html の scroll-padding-top。「ページの外枠」）。帯のいちばん高い形
-    ＋ --sp-5 で持つ。
-      --band-clear       899 以下の帯。1段で、高さは目次の的（--tap）と上下の --sp-3
-      --band-clear-wide  中央寄せ・雑誌風の 900 以上の帯。中央寄せは2段（名札の行は
-                         GitHub / メールの札で --tap、段の間は柱の --sp-6、目次の行も
-                         --tap）で、雑誌風（1段）もこの値で足りる
-    npm run check:fit が、節の id へ送った先の上端が帯の下端より下にあることを測る。
-  */
-  --band-clear: calc(var(--tap) + var(--sp-3) * 2 + var(--sp-5));
-  --band-clear-wide: calc(var(--tap) * 2 + var(--sp-6) + var(--sp-3) * 2 + var(--sp-5));
 
   /*
-    上の帯（中央寄せ・雑誌風の 900 以上）の職種の幅の上限。和文で16字。
-    中央寄せの 1440 で、名前（5字）・一言と並んで GitHub / メールが1行に残る幅
-    （19字までは1行、20字で2段目へ落ちた。「ページの外枠」の .identity__role）。
+    上の帯（.top）の高さ。ロゴと目次の1行で、行き先の的（--tap）が入る高さ。
+    帯の段の数を中身で変えない（目次は1行のまま横に送る）ので、高さはいつもこれ。
   */
-  --role-w: 16em;
+  --top-h: 64px;
+  /*
+    本文（main）の上下の余白。帯の罫線から節の見出しまで、どのページも同じだけ
+    空ける（見出しの錨。「ページの外枠」）。
+  */
+  --page-pad: clamp(32px, 5vw, 72px);
+  /*
+    表紙（入口と締めの Contact）の高さの下限。帯と本文の上下の余白を除いた、
+    画面の残りいっぱい。表紙の下端が画面の下端に来て、足元は次の画面に回る。
+  */
+  --cover-h: calc(var(--screen-h) - var(--top-h) - var(--page-pad) * 2);
+  /*
+    貼り付いた上の帯の下に、送った先（#about などのフラグメント・フォーカス）を
+    止める空き（html の scroll-padding-top。「ページの外枠」）。帯の高さ＋ --sp-5。
+    npm run check:fit が、節の id へ送った先の上端が帯の下端より下にあることを測る。
+  */
+  --top-clear: calc(var(--top-h) + var(--sp-5));
+
+  /*
+    上の帯のロゴ（ワードマーク ΛSTLOG。O がブラックホール）の字の高さ。字の幅は字の
+    高さの約 6.6 倍（15px で 99px）。ログイン画面のワードマークも同じ規則（.brand__word）。
+    --hole-core はロゴの O の黒い円（影）の色で、地より一段深い黒。src/ui/logo.ts の
+    LOGO_COLORS（素材のファイルに焼く色）と同じ値
+  */
+  --brand-h: 15px;
+  --hole-core: #000;
 
   /*
     段落（.bio p。紹介文・メモ・作品の説明と本文）の1行の長さ。約40字で止める。
@@ -133,11 +144,9 @@
     寸法の分からない画像でも、読み込む前から高さが決まっている（DB の寸法は
     共有カードのためだけのもので、この列より前の画像には無い。枠には使わない）。
 
-    --thumb-ratio はカードのサムネイルの縦横比。横長に寄せてあるのは、一覧を
-    画像で縦に伸ばさないため——カードの主役は題と説明で、画像は作品のページで
-    大きく見られる。いちばん幅の広いカードは雑誌風の 1440（1枚 655px）で、そこで
-    16:9 にすると枠だけで 368px になり、カード1行が画面の高さをほぼ使い切る。
-    3:1 なら 218px（雑誌風は下の --thumb-ratio-wide）。電話（1列・358px）では 119px。
+    --thumb-ratio は一覧のサムネイルの縦横比。横長に寄せてあるのは、一覧を
+    画像で縦に伸ばさないため——一覧の主役は題と説明で、画像は作品のページで
+    大きく見られる。
 
     --shot-h は作品ページの画像の枠の高さ。絵はこの中に縮めて収める
     （object-fit: contain。切らない）。可変部は幅と高さの小さいほうで、
@@ -145,165 +154,124 @@
     なく説明の頭まで入るように。
   */
   --thumb-ratio: 3 / 1;
-  /*
-    雑誌風のサムネイル（骨格: 雑誌風 が --thumb-ratio をこれに差し替える）。
-    雑誌風は箱の余白を持たず、1440 のカードは 655px——ほかの骨格の倍近い幅で、
-    3:1 の枠だけで 218px になる。4:1 なら 164px で、ほかの骨格の枠と同じくらい。
-  */
-  --thumb-ratio-wide: 4 / 1;
   --shot-h: clamp(120px, min(30vw, 20svh), 280px);
 
   /*
-    横帯（狭い画面の目次と絞り込み）の右端のぼかし。切れていることを見せる。
-    覆いなので色ではなく不透明度の坂で、地の色とは関わらない。
+    横に送る帯（上の帯の目次と、狭い画面の絞り込み）の右端のぼかし。切れている
+    ことを見せる。覆いなので色ではなく不透明度の坂で、地の色とは関わらない。
+
+    ぼかす幅（--fade-w）は、帯の右の余白（--gutter）に収まる幅。帯は右端に同じ幅の
+    空き（padding）を持ち、同じだけ右の余白へはみ出して置く（「骨格」の .toc）——
+    溢れていなければ、ぼかしは何も無い空きに掛かるだけで、最後の行き先は薄まらない。
+    溢れたときだけ、送れる中身がぼかしの下に入る。
   */
-  --fade-right: linear-gradient(to right, #000 calc(100% - var(--sp-6)), transparent);
+  --fade-w: min(var(--sp-6), var(--gutter));
+  --fade-right: linear-gradient(to right, #000 calc(100% - var(--fade-w)), transparent);
 
   /*
-    入口の月（.moon）。素材は三日月だけで、光暈はここの --moon-glow が描く。
+    入口の軌道図（.system。components.tsx の OrbitSystem、形は src/lib/orbits.ts）。
 
-    丈はパネルの高さに対する割合で持つ。以前は clamp(280px, min(46vw, 46svh),
-    620px) と窓の寸法から測っていたが、月が乗るのはパネルであって窓ではない。
-    46svh は 1440x900 の rail（パネル 869x639）で 414px ＝ パネルの 65% になり、
-    1024x768 の center（パネル 810x366）では 353px ＝ パネルの 96% になる——
-    同じ数式なのに、器に対する大きさが1.5倍ちがう。.moon はパネルに
-    inset: 0 で貼ってあるので、% で書けば器そのものを測れる。
+    --system-ratio / --contact-ratio は入口と締めの枠の縦横比。orbits.ts の
+    HERO_FRAME / CONTACT_FRAME の width / height と同じ数（test/theme.test.ts が
+    突き合わせる）。SVG は枠いっぱいに貼るので、ずれると絵が枠の中で縮み、
+    焦点（ブラックホール）が軌道の焦点から外れる。枠の幅は置かれた列の幅（入口の
+    右の列、900 未満は本文の列いっぱい）。
 
-    10% と 45% の出どころ。**三日月は見出しの後ろには入ってよいが、リード文の
-    後ろには入れない。** 文字の色が2段あるので、許される明るさも2段ある。
-
-      見出し #f2f2f4 は大きい文字なので 3:1。地は 140/255 まで許される
-      リード文 #b4b4c2 は通常の文字なので 4.5:1。地は 71/255 まで
-
-    月の点はいちばん明るい所が 255。--moon-ink で 0.50 まで落とすと 133/255 に
-    なり、見出しは 3.27:1 で通る。リード文を通すには 0.25 あたりまで
-    落とすことになり、そこまで行くと月が見えない。だから**見出しは横切らせ、
-    リード文は避ける**——オーナーが選んだ「見出しがその手前を横切る」構図は
-    そのまま、下だけを切る。
-
-    いまは字（肩書き・名前・リード文・帯・全体ページへの1本）を画面の下に寄せて
-    あるので、三日月の下端（10% + 45% ＝ 55%）と字の上端は縦に 14〜123px 離れる
-    （rail の4寸法と、390 / 768 の全骨格 = 既定書体, macOS Chromium。入口に
-    ページャを出さなくなってパネルが伸び、そのぶん月も大きくなって、前の
-    29〜137px から詰まった）。中央寄せと雑誌風の 1024 以上だけは字の塊が 55% より
-    上から始まるが、そこでは字が左（中央）・月が右で横に分かれていて重ならない。
-    上の 10% は光暈の上への広がり（0.20丈 ＝ パネルの 9%）から決めている——
-    これより上に置くと、光暈がパネルの上端で断ち切られる。
-    値 = 全プリセット共通 + 1024x768, 既定書体, Chromium
-
-    --moon-shift は横へのずらし（負は左＝内側）。パネル幅ではなく**絵そのものの
-    幅**に対する割合で効かせたいので、translate で渡す（right: 40% だと器の幅に
-    対する割合になり、358px と 1342px のパネルで寄り方が4倍ちがう）。
-
-    光暈が右へ広がるぶん（0.40幅、--moon-glow-inset）と同じだけ左へ寄せる。
-    こうすると光暈の右端がパネルの右端にちょうど着き、どこでも断ち切られない。
-    かつては逆に 12% 右へはみ出させてパネルの端で断っていたが、三日月の先が
-    縦一直線に切れて「途切れている」と読まれた。三日月は丸ごと器の中に置く。
-
-    --moon-ratio は素材の寸法。src/ui/components.tsx の width/height と同じ数。
+    --system-tilt は軌道面の画面の中での傾き（orbits.ts の TILT と同じ数。test が
+    突き合わせる）。軌道は orbits.ts が傾けて描き、ブラックホールの横線（真横から見た
+    円盤。同じ面にある）はここで同じだけ回す。
   */
-  --moon-ratio: 370 / 574;
-  --moon-top: 10%;
-  --moon-h: 45%;
-  --moon-shift: -40%;
+  --system-ratio: 1000 / 560;
+  --contact-ratio: 1000 / 320;
+  --system-tilt: -8deg;
   /*
-    締めの画面（Contact）の月の丈。入口の --moon-h より小さい。
-
-    締めは入口より一段静かに置く。入口の月が画面の主役なのに対して、ここの
-    主役は下の誘いの1文とボタン2つで、月は「最初の画面と対になっている」ことを
-    示せれば足りる。見出し・リード文・アドレスの塊を置いていたころは、字の塊との
-    間隔でも縛られていた（入口と同じ 45% では 390 で三日月の下端が字の上端に
-    触れた）。いまは1文とボタンだけで、三日月の下端と1文の上端は縦に 143〜325px
-    離れる（4寸法 × 3骨格 = 既定書体, macOS Chromium）。
-    **動かしたら npm run check:contrast。** 締めの画面の1文とボタンも測っている。
+    締めの軌道図の幅の上限。星系は枠の幅いっぱいに描くので、広い画面で本文の列いっぱいに
+    伸ばすと、表紙の高さを図だけで食う
   */
-  --moon-closing-h: 34%;
+  --contact-w: 900px;
 
   /*
-    三日月をどれだけアクセント色に寄せるか。残りは白。
+    軌道の線と天体の点。
 
-    0% なら銀の月（色は光暈だけが持つ）、100% ならアクセントそのもの。
-    月あかりを浴びた月、という理屈で 62% に置いている。
+    線と点の太さは画面の px（vector-effect: non-scaling-stroke）。枠が電話の
+    358px から机の 650px まで縮み伸びしても、線は 1px、点は 5〜7px のまま
+    （viewBox の単位で持つと、電話で点が 2px まで潰れた）。
 
-    **色を混ぜる式そのものは :root に置けない。** ここに書けるのは割合だけで、
-    color-mix は使う側（.moon__mark::after）に書く——:root で var(--accent) を
-    畳むと既定の色で焼き付いて [data-accent] が効かなくなるため。同じ罠に
-    --moon-glow で一度はまっている。
+    線はアクセント色で、細く薄い製図の線にする。業務の軌道は破線（--orbit-dash）。
+    濃さは軌道面の奥から手前へ続けて変わる——手前の端が --orbit-ink、奥の端はそれに
+    --orbit-far を掛けた薄さ（奥ほど遠い）。手前の半分の下には地の色の縁取り
+    （--orbit-casing の太さ）を敷く。字は軌道の上に乗せない（番号の札は地を塗る）ので、
+    濃さの上限は見た目だけで決まり、下限は npm run check:contrast が測る（線が消える
+    のは改善ではない）。
   */
-  --moon-tint: 62%;
-  /*
-    三日月の濃さ。上限は文字のコントラスト、下限は check:contrast の
-    「月が出ている」床（明るさの中央値 45/255）が決めている。
-
-    この数は**素材の持ち方と対になっている**。いまの素材は「どこがどれだけ
-    光っているか」をアルファ1面で運び、色は CSS が敷く（.moon__mark::after）。
-    合成の結果は「アクセント色 x アルファ x この数」なので、アルファに濃淡を
-    移した時点で、前の 0.70 は意味が変わった。
-
-    0.52 → 0.58 に上げたのは下限のため。球として照らした素材
-    （scripts/moon/render.py の sphere）は明暗の境目と尖りへ向けて点が細るので、
-    0.52 のままでは 1024x768 で中央値が 46.3/255 まで下がり、床にほぼ
-    着いていた。0.58 で 48.2/255（= 1024x768, Chromium, Linux）。
-    上限には余裕がある。三日月を内側へ入れ、字を画面の下に寄せてからは、
-    字が三日月の後ろに入らない。72通りでいちばん惜しいのは帯の件数の
-    8.90:1 で、見出しもリード文もそれより上。以前の「0.58 で見出し 3.19:1」は、
-    見出しが三日月を横切っていたころの数。
-    **素材を焼き直したら必ず npm run check:contrast を回し直すこと。**
-  */
-  --moon-ink: 0.58;
+  --orbit-line: 1px;
+  --orbit-ink: 0.42;
+  --orbit-far: 0.25;
+  --orbit-casing: 3px;
+  --orbit-dash: 2px 5px;
+  --orbit-body: clamp(5px, 0.5vw, 7px);
 
   /*
-    月あかりの形。--fade-right と同じで、**色ではなく不透明度の坂**として
-    持つ。使う側は var(--accent) を敷いて、これで抜く。
-
-    色を混ぜた形（color-mix(in oklab, var(--accent) …)）でここに書いては
-    いけない。カスタムプロパティの var() は**宣言した要素**で解決されるので、
-    :root で組み立てると --accent は :root の既定の色で焼き付き、
-    body の [data-accent] は二度と効かない。実際そうなっていて、5色すべてで
-    光暈が rgb(45,45,72) の紫のまま——アクセントを変えてもリンクだけが
-    変わり、月は動かなかった。坂だけなら色を含まないので、この罠が無い。
-
-    段を4つ刻んであるのは、2点だけの radial-gradient が暗い地の上で縞に
-    なるため。closest-side なので、置いた箱に内接するところで 0 に着く。
-    circle ではなく ellipse——三日月は縦長で、円にすると幅が余る。
+    天体の札（.system__label）を天体からずらす量と、札の幅の上限（長い名前は末尾を
+    省く）。src/lib/orbits.ts の LABEL_GAP / LABEL_MAX_WIDTH と同じ数（札の重なりを
+    避ける置き場所は、この量で測ってある）。
   */
-  --moon-glow: radial-gradient(
-    closest-side ellipse,
-    rgb(0 0 0 / 100%) 0%,
-    rgb(0 0 0 / 58%) 30%,
-    rgb(0 0 0 / 23%) 58%,
-    rgb(0 0 0 / 6%) 80%,
-    transparent 100%
-  );
-  /* 光のいちばん濃い所。上限はコントラストで決まる（--moon-glow-inset を見ること） */
-  --moon-glow-ink: 0.26;
+  --label-dx: 10px;
+  --label-dy: 6px;
+  --label-max: 180px;
 
   /*
-    光暈を置く箱。三日月の箱からどれだけ外へ広げるかで持つ。
-    **上下左右に同じだけ**広げ、三日月の箱と同じ中心に置く（左右へ 0.40幅、
-    上下へ 0.20丈）。箱の中心は、三日月が欠けた円盤の中心に近い——月の暈は
-    円盤を囲んで光るので、光の芯が三日月と重なって見える。
+    入口に着いたときの動き（「入口に着いたとき」）。見出しの列が浮かび上がるあいだに、
+    ブラックホールが灯り（--ignite-*。大きく霞んだ姿から、明るさを落としながら縮んで
+    締まる）、軌道と天体が渦を巻いて収まる（--infall-*。--infall-turn だけ回って霞んだ
+    姿から、焦点のまわりへ巻き込まれるように）。番号の札は収まった
+    あとに1つずつ（--label-delay から --stagger ずつ。8つ目より後はまとめて）、件数は
+    回り込みの途中から（--count-delay）数え上がる。
 
-    以前は右へ広げず、左へ 1.15幅・下へ 1.25丈と大きく偏らせていた。三日月を
-    パネルの右端からはみ出させていたので、右へ広げると濃い所で断ち切られた
-    （実測 右 40.6/255 の段差）ための逃がし方だったが、三日月を内側へ入れた
-    あとも偏りだけが残り、光の芯が三日月の左下へ外れて「月の位置がおかしい」と
-    見えていた。
-
-    0.40幅は、いちばん狭い 390 の縦長から決めている。パネル 358px・三日月
-    198px なので、左右に残るのは (358 − 198) / 2 = 0.40幅ずつ。三日月を
-    同じ 0.40幅だけ左へ寄せる（--moon-shift）と、光暈の右端がパネルの右端に
-    ちょうど着き、390 では三日月が真ん中に来る。上の 0.20丈は --moon-top を
-    見ること。設計サイズ3つで四辺の段差は 0〜1/255。
-
-    濃さの上限 26% はコントラストで決まっている。この光は見出しもリード文も
-    横切るので、いちばん明るいアクセント（mint）で測って、リード文 #b4b4c2 が
-    5.59:1（要 4.5:1）・見出し #f2f2f4 が 11.7:1（要 3:1）。
-    値 = 全プリセット共通 + 1024x768, 既定書体, Chromium
-
-    数を動かしたら npm run check:contrast で測り直すこと。
+    いちばん遅い札でも 5 秒以内に止まる（WCAG 2.2.2。test/theme.test.ts が足し算を見る）。
   */
-  --moon-glow-inset: -20% -40% -20% -40%;
+  --ignite-delay: 150ms;
+  --ignite-dur: 1800ms;
+  --ignite-scale: 1.3;
+  --ignite-blur: 14px;
+  --ignite-glow: 2.4;
+  --infall-delay: 400ms;
+  --infall-dur: 2200ms;
+  --infall-turn: 28deg;
+  --infall-blur: 6px;
+  --label-delay: calc(var(--infall-delay) + var(--infall-dur) * 0.75);
+  --count-dur: 1200ms;
+  --count-delay: calc(var(--infall-delay) + var(--infall-dur) * 0.3);
+
+  /*
+    着いたあとも動き続けるもの（「動き続ける」）。天体の公転（1周の長さは orbits.ts の
+    INNER_PERIOD から。外側の軌道ほど長い）、軌道を流れる光（長さ --flow-len）、吸い込まれる
+    粒（落ち方の曲線 --fall-ease。落ちるほど速く回り、速く寄る）、ブラックホールの縁を回る
+    光の点（1周 --spin-dur）と光の揺らぎ（明るさが --breathe-low まで沈んで戻る。片道
+    --breathe-dur）。止める手は置かない（持ち主の判断。動きを減らす設定では全部止まる）
+  */
+  --breathe-dur: 4s;
+  --breathe-low: 0.68;
+  --spin-dur: 9s;
+  --fall-ease: cubic-bezier(0.5, 0, 0.85, 0.45);
+  /* 軌道を流れる光の長さ（軌道1周を 100 とした長さ） */
+  --flow-len: 3;
+
+  /* 塗りの押し手（.cta）の高さ。指の的（--tap）より大きく取る、ページでいちばん強い1本 */
+  --cta-h: 52px;
+
+  /*
+    一覧の行（.entry）の区画の幅。番号の列・札の列・技術の列・矢印の列で、本文の列が
+    残りを受ける。サムネイルは本文の下に、--entry-thumb を上限に列いっぱいまで。
+    --entry-title-lh は行の題（--fs-display-xs）の1行の高さで、番号と矢印を題の
+    1行目の高さの真ん中に置くために読む。
+  */
+  --entry-index: 56px;
+  --entry-meta: 160px;
+  --entry-tags: 200px;
+  --entry-thumb: 320px;
+  --entry-go: var(--sp-6);
+  --entry-title-lh: calc(var(--fs-display-xs) * 1.3);
 
   --ease: cubic-bezier(0.23, 1, 0.32, 1);
   --dur-fast: 180ms;
@@ -328,32 +296,23 @@
   --stagger: 90ms;
 
   /*
-    入口の月の出かた。着いたときに一度だけ、上からわずかに降りながら焦点が合い
-    （ずれとぼかしは字と同じ --enter-shift / --enter-blur）、字が出そろう頃に
-    月あかりが --moon-bloom の大きさから広がる。字より長く（--dur-slow）かけて、
-    字が止まったあとも少しだけ動いている——この画面の主役は月なので。
+    配色は黒基調の1つ（夜の地）。文字もボタンも白で組む——アクセントの既定は
+    白黒（--mono。管理画面の「見た目」でほかの色も選べる）。OS がライトを選んで
+    いても白い地には切り替えない。「黒の上に白」がこのサイトの見た目の芯で、
+    白い地に裏返すと別のサイトに見える。紙だけは白い地で刷る（末尾の @media print）。
 
-    曲線はばねではなく --ease。ばねは 8% 行き過ぎて戻るので、月に掛けると
-    止まった姿を一度通り越す。下へ行き過ぎればリード文に近づき、光暈が
-    行き過ぎれば字の下が明るくなる——どちらも check:contrast が測った上限の
-    外側に出る。行き過ぎない曲線なら、動いている途中のどの姿も止まった姿より
-    暗く・小さく・上にある。
-
-    一度きりで、5 秒以内に止まる（WCAG 2.2.2）。繰り返す動き（ゆらぎ・瞬き）に
-    すると止める手段を別に置かなければならず、このサイトには JavaScript が無い。
-  */
-  --dur-slow: 1600ms;
-  --moon-bloom: 0.8;
-
-  /*
-    夜の地。OS の設定に関わらずこの配色を既定にする。
+    color-scheme は、フォームの部品やスクロールバーのようなブラウザが描くものも
+    暗い側にそろえるため（<meta name="color-scheme"> と同じ値。components.tsx の
+    ColorSchemeMeta）。
 
     地は色味を持たない黒にする。紫や青に寄せると、面も文字も全部その色に
     染まって見え、アクセントを変えても画面の印象が変わらなくなる。
 
-    面は不透明な色で塗らず、白をうっすら重ねて作る（ゴースト）。線はほとんど
-    見えないくらいに弱くし、代わりに上辺へ 1px の光（--highlight）を入れて面を立たせる
+    面は不透明な色で塗らず、白をうっすら重ねて作る（ゴースト。管理画面の部品だけ）。
+    上辺の 1px の光（--highlight）もその面を立たせるためのもの。公開ページは面を
+    持たず、罫線（--line / --line-strong）で区切る
   */
+  color-scheme: dark;
   --bg: #0c0c0e;
   --surface: rgba(255, 255, 255, 0.04);
   --surface-hover: rgba(255, 255, 255, 0.07);
@@ -363,7 +322,13 @@
   --ink: #f2f2f4;
   --ink-mid: #b4b4c2;
   --ink-weak: #8a8a96;
-  /* アクセントの候補。どれを使うかは管理画面の「見た目」で選ぶ */
+  /*
+    アクセントの候補。どれを使うかは管理画面の「見た目」で選ぶ。既定はモノクロ
+    （--mono）で、リンク・塗りのボタン・選んだ印・軌道の線がどれも白になり、
+    塗りのボタンの字（--accent-ink）は黒になる
+  */
+  --mono: #f2f2f4;
+  --mono-soft: rgba(242, 242, 244, 0.1);
   --iris: #8f8ff5;
   --iris-soft: rgba(143, 143, 245, 0.13);
   --violet: #b58cf8;
@@ -377,8 +342,8 @@
   --rose: #f0899f;
   --rose-soft: rgba(240, 137, 159, 0.13);
 
-  --accent: var(--iris);
-  --accent-soft: var(--iris-soft);
+  --accent: var(--mono);
+  --accent-soft: var(--mono-soft);
   --accent-ink: #12121a;
   --danger: #e5848a;
   --danger-soft: rgba(229, 132, 138, 0.14);
@@ -397,9 +362,9 @@
 
   /*
     フォーカスの輪郭の太さと、要素からの離し方。素の :focus-visible と、
-    輪郭を自分で描く3か所（カードの面・スイッチ・見た目の見本）が同じ段を
-    読む。カードの面（.card__link::after）は輪郭をリンクではなくカードに
-    描くので、素の規則をそのまま受けられず、値を写すことになる——写した値は
+    輪郭を自分で描く3か所（一覧の行の面・スイッチ・見た目の見本）が同じ段を
+    読む。行の面（.entry__link::after）は輪郭をリンクではなく行に描くので、
+    素の規則をそのまま受けられず、値を写すことになる——写した値は
     いつか食い違うので、ここで1つにしておく。
   */
   --focus-ring: 2px;
@@ -459,10 +424,10 @@
 */
 @supports (font-size: 1svh) {
   :root {
-    --fs-display-xl: clamp(32px, min(6.4vw, 9svh), 76px);
+    --fs-display-xl: clamp(30px, min(4.3vw, 6.9svh), 62px);
     --fs-display: clamp(28px, min(4vw, 6svh), 52px);
     --fs-display-sm: clamp(24px, min(3vw, 4.4svh), 38px);
-    --fs-display-xs: clamp(20px, min(2.4vw, 3.4svh), 30px);
+    --fs-display-xs: clamp(19px, min(1.7vw, 2.7svh), 24px);
   }
 }
 
@@ -474,13 +439,13 @@
 
 /*
   ページの中の節へのリンク（#about など）では、なめらかに動かす。公開ページだけ
-  （body[data-layout]）で、管理画面には持たせない。送った先の上の空きは、
-  帯の下に隠れないよう「ページの外枠」が貼り付く帯の姿ごとに差し替える
-  （全体ページと、柱が左に立つ rail の 900 以上はこの --sp-7 のまま）。
+  （body[data-site]）で、管理画面には持たせない。送った先の上の空きは、
+  貼り付いた上の帯の下に隠れないよう「ページの外枠」が帯の高さぶんに差し替える
+  （帯が貼り付かない全体ページはこの --sp-7 のまま）。
   詳細度を 0 にしてあるのは、下の prefers-reduced-motion で素の html の
   指定に譲るため。
 */
-:where(html:has(> body[data-layout])) {
+:where(html:has(> body[data-site])) {
   scroll-behavior: smooth;
   scroll-padding-top: var(--sp-7);
 }
@@ -537,7 +502,6 @@ img {
 :focus-visible {
   outline: var(--focus-ring) solid var(--accent);
   outline-offset: var(--focus-offset);
-  border-radius: var(--radius-sm);
 }
 
 /*
@@ -566,7 +530,6 @@ img {
   top: -80px;
   z-index: 10;
   padding: var(--sp-3) var(--sp-5);
-  border-radius: var(--radius-sm);
   background: var(--accent);
   color: var(--accent-ink);
   font-size: var(--fs-sm);
@@ -579,54 +542,205 @@ img {
 
 /* ============================================================ 骨格 */
 
-.shell {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--sp-7);
-  max-width: var(--w-page);
-  margin-inline: auto;
-  padding: var(--gutter);
+/*
+  公開ページの骨格は body の直下の3つ——上の帯（.top）・本文（main）・足元（.foot）
+  （src/ui/Layout.tsx）。どのページも同じ骨格で、見た目のプリセットで並べ方は
+  変えない（src/theme.ts）。
+
+  3つとも中身を同じ版面の幅（--w-page）にそろえ、地と罫線だけを画面の端まで
+  伸ばす。左右の余白は --gutter と、版面より広い画面で余った幅の半分の大きいほう。
+  箱で包まずに余白で版面を作るのは、帯と足元の罫線を画面の端から端まで引くため。
+
+  本文は data-site（公開ページの印）の下の main だけを名指しする。管理画面の
+  main（admin.css の .admin-main）には当てない。
+*/
+:is(.top, .foot),
+body[data-site] > main {
+  padding-inline: max(var(--gutter), (100% - var(--w-page)) / 2);
 }
 
-.rail {
+body[data-site] > main {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-5);
-}
-
-main {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-7);
+  gap: calc(var(--sp-7) * 2);
   min-width: 0;
+  padding-block: var(--page-pad);
 }
 
-/* --- 名札 --- */
+/* --- 上の帯 --- */
 
-.identity {
+/*
+  ロゴ（入口へ）を左に、目次を右に置く1行の帯。下に1本の罫線を引き、面は持たない
+  （地の --bg のまま。貼り付いたとき、下を流れる本文の字が透けないように地を敷く）。
+  高さは --top-h で決め打ちにせず下限にする——字を大きくした人の帯を切らない。
+*/
+.top {
   display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  align-items: flex-start;
+  align-items: center;
+  gap: var(--sp-5);
+  min-height: var(--top-h);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
 }
 
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-3);
+  flex-shrink: 0;
+  min-height: var(--tap);
   color: var(--ink);
 }
 
-.brand__word {
-  font-family: var(--font-mono);
-  font-size: var(--fs-md);
-  font-weight: 700;
-  letter-spacing: 0.03em;
+/*
+  ロゴの O の黒い円（src/ui/icons.tsx の Hole。上の帯・ログイン画面・404・管理画面）。
+  光の縁と横線は currentColor（字の色）で、黒い円だけがこの段を読む
+*/
+.logo-core {
+  fill: var(--hole-core);
 }
 
-.identity__tagline {
+/*
+  ワードマーク（ΛSTLOG）。上の帯とログイン画面。高さで大きさを決め、幅は縦横比から。
+  O の光の縁と横線は字の箱の外へはみ出して見せる（箱を光に合わせると、字が小さくなる）
+*/
+.brand__word {
+  display: block;
+  height: var(--brand-h);
+  width: auto;
+  overflow: visible;
+}
+
+/*
+  目次。帯の残りの幅を取り、行き先は右へ寄せる（safe: 溢れたら左から並べる）。
+  1行のまま横に送れる帯で、折り返さない——折り返すと帯が2段になり、貼り付いた帯が
+  画面の上を食う（帯の段の数を中身で変えない）。
+
+  右端のぼかし（--fade-right）のぶん、帯は右に空き（padding）を持ち、同じだけ右の
+  余白へはみ出して置く（負の margin）。溢れていなければ最後の行き先は薄まらず、
+  版面の右端（ほかの行の右端と同じ縦の線）にそろう。理由は :root の --fade-w。
+*/
+.toc {
+  display: flex;
+  flex: 1 1 0;
+  justify-content: safe flex-end;
+  gap: var(--sp-5);
+  min-width: 0;
+  margin-inline-end: calc(var(--fade-w) * -1);
+  padding-inline-end: var(--fade-w);
+  overflow-x: auto;
+  scrollbar-width: none;
+  mask-image: var(--fade-right);
+}
+
+/*
+  目次に番号は振らない。目次の番号はブロックの並び順でしかなく、読む人に言う
+  ことが無い（src/ui/Layout.tsx の目次の注記）。
+
+  英字だけの行き先（Projects・Contact…）は、等幅の小さな大文字の札にする。
+  打ち込んだ見出し（「あとがき」）が行き先の名前になることもあるので、和文の
+  行き先は本文の書体のまま（lang="en" は Layout.tsx が langOf で付ける。
+  :root の --font-mono を見ること）。
+*/
+.toc a {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: var(--sp-3);
+  min-height: var(--tap);
   color: var(--ink-weak);
-  font-size: var(--fs-meta);
+  font-size: var(--fs-sm);
+  transition:
+    color var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
+}
+
+.toc a:lang(en) {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/*
+  帯は横に送れる箱で、はみ出した輪郭は箱の縁で切られる。フォーカスの輪郭は
+  行き先の内側に描く（一覧の行の面と同じ扱い。.entry__link:focus-visible::after）
+*/
+.toc a:focus-visible {
+  outline-offset: calc(var(--focus-ring) * -1);
+}
+
+/*
+  いまのページ。字を --ink に上げ、頭に四角い印を1つ置く。色だけで分けない
+  （印の形が残る。WCAG 1.4.1）。目次の行き先は節（#projects）ではなく画面の URL
+  （/projects）なので、'true' ではなく 'page'
+
+  印は枠線で塗る。地（background）で塗ると、強制色モード（Windows のハイコントラスト）
+  では地の色に置き換わって消える——枠線は字の色になって残る
+*/
+.toc a[aria-current='page'] {
+  color: var(--ink);
+}
+
+.toc a[aria-current='page']::before {
+  content: '';
+  width: var(--dot);
+  height: var(--dot);
+  border: calc(var(--dot) / 2) solid var(--accent);
+}
+
+/*
+  管理画面への入口（AdminLink）。ログインしている人にだけ、目次の右に出る。
+  目次の行と同じ的の高さで、色だけアクセントに寄せる——目次（画面の移動）とは
+  別の行き先だと見分けるため。鉛筆の形も添えるので、色だけには頼っていない。
+  npm run check:fit はログインした姿でも測る。
+*/
+.top__admin {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: var(--sp-2);
+  min-height: var(--tap);
+  color: var(--accent);
+  font-size: var(--fs-sm);
+  transition: scale var(--dur-spring) var(--ease-spring);
+}
+
+/* --- 足元 --- */
+
+/*
+  足元。誰のサイトか（名前・職種・一言）と連絡先、その下に著作権表示と全体ページへの
+  1本。上に1本の罫線を引き、面は持たない。どの幅でも畳まない（上の帯には
+  ロゴと目次しか置かないので、名乗りと連絡先はここが受ける）。
+*/
+.foot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  padding-block: var(--sp-7) calc(var(--sp-7) + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+}
+
+.identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-5) var(--sp-6);
+}
+
+.identity__who {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+/* 名前が主、職種が添え、一言がその下。字の段も色も1段ずつ下げる */
+.identity__name {
+  color: var(--ink);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .identity__role {
@@ -634,22 +748,58 @@ main {
   font-size: var(--fs-sm);
 }
 
-/*
-  柱の名乗り（1人のサイトの、入口以外の画面。src/ui/components.tsx の SiteIdentity）。
-
-  入口の外の画面——検索や貼られたリンクから直接着く画面——には、誰のサイトかが
-  どこにも出ていなかった。名乗りは入口の Hero の h1 にしか無く、柱には置かない
-  と決めていたため。入口だけは今も置かない（Hero の h1 と2度並ぶ）。
-
-  職種（.identity__role）より1段上の字で、色も1段濃い。名前が主、職種が添え。
-  899 以下の帯では職種とワードマークを畳み、名前だけを残す（「ページの外枠」）。
-*/
-.identity__name {
-  color: var(--ink);
-  font-size: var(--fs-md);
-  font-weight: 600;
-  line-height: 1.4;
+.identity__tagline {
+  color: var(--ink-weak);
+  font-size: var(--fs-meta);
 }
+
+/*
+  GitHub とメール（components.tsx の Socials）。足元と、Contact のページの本文で
+  同じ部品。札の面は持たず、字と印だけの行き先にする（的の高さは --tap）。
+*/
+.socials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--sp-5);
+}
+
+.socials a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--tap);
+  color: var(--ink-mid);
+  font-size: var(--fs-sm);
+  transition:
+    color var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
+}
+
+/*
+  著作権表示と「全体を1ページで見る →」。和文が入るので等幅にせず、和文の最小の
+  段（--fs-meta）。
+*/
+.foot__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-5);
+  color: var(--ink-weak);
+  font-size: var(--fs-meta);
+}
+
+/*
+  「全体を1ページで見る →」。素の a は color: inherit / text-decoration: none
+  なので、置くだけでは著作権表示と同じ姿になり、押せるものだと分からない
+  （WCAG 1.4.1）。下線を引き、色も1段上げる（--ink-weak → --ink-mid）。
+  文の中のリンクのままにしてある（WCAG 2.5.8 の inline の例外）。
+*/
+.foot__meta a {
+  color: var(--ink-mid);
+  text-decoration: underline;
+  text-underline-offset: var(--sp-1);
+}
+
+/* --- 顔 --- */
 
 .avatar {
   position: relative;
@@ -678,316 +828,837 @@ main {
   font-weight: 600;
 }
 
-/* --- 目次 --- */
+/* ============================================================ 本文 */
 
-.toc {
+/*
+  入口と個人ページの頭（components.tsx の Hero。<header class="hero">）と、全体ページの頭。
+*/
+.hero {
   display: flex;
-  gap: var(--sp-2);
-  overflow-x: auto;
-  scrollbar-width: thin;
-  border-top: 1px solid var(--line);
-  padding-top: var(--sp-4);
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+/* --- 入口 --- */
+
+/*
+  入口（.hero--orbit）。左に大見出しの列（.hero__copy）、右に作品の軌道図
+  （.system）、底に件数の帯（.tally）。900 未満は1列に積み、軌道図を上に置く。
+
+  見出しの列が DOM の先頭なのは、読み上げと Tab の順を見出しから始めるため。
+  並べ替えは grid-template-areas だけで、字の並びは変えない。
+
+  表紙の高さ（--cover-h。「ページの外枠」）の余りは 1fr の行が受け、件数の帯は底に
+  座る。1列のときは見出しの列を軌道図のすぐ下に置き（余りは件数の帯の上に残る）、
+  2列のときは見出しの列と軌道図を残りの高さの縦の真ん中に置く。
+*/
+.hero--orbit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas: 'map' 'copy' 'tally';
+  gap: var(--sp-7);
+}
+
+.hero__copy {
+  grid-area: copy;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sp-5);
+  min-width: 0;
 }
 
 /*
-  目次に番号は振らない。目次の番号はブロックの並び順でしかなく、読む人に言う
-  ことが無い（src/ui/Layout.tsx の目次の注記）。
+  見出しの上の小さな札（components.tsx の Eyebrow。入口の「職種 — 所在地」）。
+  英字だけなら等幅の小さな大文字（--fs-label を使ってよい「和文が入らない英大文字の
+  小見出し」）、和文を含めば本文の書体で和文の最小の段。
 */
-.toc a {
-  display: inline-flex;
-  align-items: baseline;
-  flex-shrink: 0;
-  padding: var(--sp-2) var(--sp-3);
-  border-radius: var(--radius-sm);
-  color: var(--ink-weak);
-  font-size: var(--fs-sm);
-  transition:
-    color var(--dur-fast) var(--ease),
-    background var(--dur-fast) var(--ease),
-    scale var(--dur-spring) var(--ease-spring);
-}
-
-/* 目次の行き先は節（#projects）ではなく画面の URL（/projects）。だから 'true' ではなく 'page' */
-.toc a[aria-current='page'] {
-  color: var(--accent);
-  background: var(--accent-soft);
-  box-shadow: var(--highlight);
-}
-
-.socials {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-}
-
-.socials a {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  min-height: var(--tap);
-  padding: var(--sp-2) var(--sp-4);
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: var(--surface);
-  box-shadow: var(--highlight);
-  color: var(--ink-mid);
-  font-size: var(--fs-sm);
-  transition:
-    background var(--dur-fast) var(--ease),
-    color var(--dur-fast) var(--ease),
-    scale var(--dur-spring) var(--ease-spring);
-}
-
-/*
-  柱の足元（著作権表示と「全体を1ページで見る →」）。和文が入るので等幅にせず、
-  字も和文の最小の段（--fs-meta）。11px の等幅だったころは「全体を1ページで
-  見る」の和文が等幅の字間のまま 11px で組まれていた。
-*/
-.rail__footer {
+.eyebrow {
   color: var(--ink-weak);
   font-size: var(--fs-meta);
 }
 
-/*
-  足元の「全体を1ページで見る →」。素の a は color: inherit /
-  text-decoration: none なので、置くだけでは著作権表示と同じ姿になり、
-  押せるものだと分からない（WCAG 1.4.1 は色に頼るなと言うが、ここは色の
-  違いすら無い状態だった）。下線を引き、色も1段上げる
-  （--ink-weak 5.73:1 → --ink-mid 9.54:1 on --bg）。
-
-  高さは足さない。当たり判定（min-height: var(--tap)）を付けると柱が 40px
-  伸び、中央寄せと雑誌風の 900 以上では貼り付いた帯の高さがそのまま画面の上を
-  食う——ここは文の中のリンクのままにしてある（WCAG 2.5.8 の inline の例外。
-  上の目次とは --sp-6 = 24px 空いている）。「© 2026 Noctifex · 全体を1ページで
-  見る →」が 264px（--nav-w）の柱に1行で収まる（足元の高さ 19px = rail
-  @1440x900, Hiragino Sans, macOS Chromium）。
-*/
-.rail__footer a {
-  color: var(--ink-mid);
-  text-decoration: underline;
-  text-underline-offset: var(--sp-1);
+.eyebrow :lang(en) {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
 /*
-  管理画面への入口（AdminLink）。ログインしている人にだけ出る。
-
-  目次の行と同じ大きさ・同じ手触りにして、柱に新しい段を増やさない。色だけ
-  アクセントに寄せる——目次（画面の移動）とは別の行き先だと見分けるため。
-  鉛筆の形も添えるので、色だけには頼っていない。
-
-  899 以下の横帯では目次が縮んで場所を譲る（目次はもともと横に送れる帯）
-  （390 の帯で目次 137px・入口 86px = rail, macOS Chromium）。npm run check:fit は
-  ログインした姿でも測る。
+  部分のあいだの区切り。飾りなので読み上げには流さない（/ の後ろの代わりの字が空）。
+  代わりの字は書けるブラウザにだけ渡す（@supports）——書けないブラウザは宣言ごと
+  捨て、区切りが消えて「SYSTEM ENGINEER神奈川」と続く
 */
-.rail__admin {
+.eyebrow > * + *::before {
+  content: ' — ';
+}
+
+@supports (content: '' / '') {
+  .eyebrow > * + *::before {
+    content: ' — ' / '';
+  }
+}
+
+/*
+  大見出し（入口の一文、全体ページの頭の名前、個人ページの大見出し）。
+
+  塊（、。まで）を1行ずつに積む。1行に流していたころは、幅しだいで
+  「置いてお / く。」と語の途中で折れていた（名前は句読点を持たないので1つの塊のまま）。
+
+  palt は和文を詰める字形。仮名と約物（、。）の空きが半分になり、見出しの
+  大きさでもスカスカに見えない。本文には掛けない（小さい字で詰めると読みにくい）。
+  大きさははしごの最上段（--fs-display-xl）。個人ページの名乗りは下の
+  .hero__headline で段を下げる。
+*/
+.hero h1 {
+  font-family: var(--font-display);
+  font-size: var(--fs-display-xl);
+  font-weight: 600;
+  font-feature-settings: 'palt';
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.hero h1 .phrase {
+  display: block;
+}
+
+/* リード文。入口と全体ページの頭の1文。小さい字なので 4.5:1 が要る（--ink-mid） */
+.hero__lead {
+  max-width: 32em;
+  color: var(--ink-mid);
+  font-size: var(--fs-md);
+  line-height: 1.9;
+  /* 塊より細かい所の折れ（1語だけ次の行へ落ちる）を、対応する環境では避ける */
+  text-wrap: pretty;
+}
+
+/*
+  塗りの押し手（components.tsx の Cta。入口の「一覧で見る →」）。ページで
+  いちばん強い1本。角は立て、面は --accent で塗る（既定のモノクロでは白い面に黒い字）。
+  600 未満は列いっぱいに伸ばして、字を左・矢印を右に置く（指で押す的を広く）。
+*/
+.cta {
   display: inline-flex;
   align-items: center;
-  flex-shrink: 0;
-  gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-3);
-  border-radius: var(--radius-sm);
-  color: var(--accent);
-  font-size: var(--fs-sm);
-  transition:
-    background var(--dur-fast) var(--ease),
-    scale var(--dur-spring) var(--ease-spring);
+  justify-content: space-between;
+  gap: var(--sp-6);
+  min-height: var(--cta-h);
+  margin-top: var(--sp-3);
+  padding-inline: var(--sp-6);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: var(--fs-base);
+  font-weight: 600;
+  transition: scale var(--dur-spring) var(--ease-spring);
 }
 
-/* ============================================================ 本文 */
+.cta__arrow {
+  transition: translate var(--dur-spring) var(--ease-spring);
+}
 
-.hero {
-  /* 月（.moon）の絶対配置の受け皿。これが無いと画面の外まで伸びる */
+/* --- 入口の軌道図 --- */
+
+/*
+  入口の軌道図（components.tsx の OrbitSystem）。真ん中にブラックホールを置き、
+  そのまわりに作品を1つずつ軌道に載せる（形は src/lib/orbits.ts。件数だけから
+  決まる）。天体には作品の番号の札を添える（名前は札の中にあり、選んだときに出る）。
+
+  絵の層は枠いっぱいに重ねる——軌道の奥の半分・ブラックホール（.hole）・軌道の
+  手前の半分・天体の順（DOM の順がそのまま重なりの順）。縦横比は :root の
+  --system-ratio（orbits.ts の HERO_FRAME と同じ数）。
+
+  横だけ切る（overflow-x: clip。縦は出してよい——着いたときに灯るブラックホールと、
+  渦を巻いて収まる軌道が、枠の上下へ少し出る）。札が見積もりより長い書体でも、
+  ページを横に動かさない。
+
+  枠は札を出すかどうかを自分の幅で決める容れ物（container）。札の重なりの順は枠の
+  中に閉じる（isolation。選んだ札を上に出しても、貼り付いた上の帯より上には来ない）。
+*/
+.system {
+  grid-area: map;
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-5);
-  /*
-    下の余白は、浮かび上がりのずれ（--enter-shift）ぶん以上に取る。入口は字を
-    表紙の下に寄せているので、帯が下から浮かび上がる途中で余白を越えると、その間
-    だけページの下端が伸び、着いた瞬間にスクロールバーが出て消える
-  */
-  padding-block: var(--sp-3) var(--enter-shift);
+  width: 100%;
+  aspect-ratio: var(--system-ratio);
+  overflow-x: clip;
+  container-type: inline-size;
+  isolation: isolate;
+}
+
+.system__orbits,
+.system__bodies {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 /*
-  入口の背景の月。点で焼いた三日月（部品は components.tsx の MoonField、
-  作り直しは scripts/moon/render.py → scripts/moon/pack.py）と、その周りの
-  光暈。光暈は絵ではなく radial-gradient なので、アクセント色に追従する。
+  ブラックホール（components.tsx の Hole。入口と締めで同じ）。ロゴの O と同じ絵
+  （黒い円・光の縁・後ろを通る横線。形は src/ui/logo.ts）を焦点に置き、枠と一緒に
+  伸び縮みさせる。置き場所（--hole-x / --hole-y）と大きさ（--hole-w）は、部品が
+  orbits.ts の数（枠の focus と hole）から組んで style で渡す。
 
-  overflow: clip がこの節の要。三日月は光暈のぶん左へずらし（--moon-shift）、
-  光暈は三日月の箱より外へ広がるので、切らなければそれがページのスクロール
-  可能領域になり、電話でページが横に動く。clip はスクロールコンテナを作らない
-  ので、溢れは祖先に伝わらず、ここで終わる。hidden に書き換えないこと——hidden は
-  「見えないだけのスクロール箱」で、この箱は誰も戻せない（npm run check:fit が
-  横のはみ出しを測る）。
+  光・縁を回る光の点・黒い円の3枚の SVG を同じ箱に重ねる（DOM の順が重なりの順）。
+  黒い円は不透明なので、奥を回る軌道はその後ろに隠れる。横線は軌道面と同じ傾きに
+  回す（--system-tilt。輪と円は回しても同じ）。
+
+  色はロゴと同じ——光は字の白（--ink）、黒い円は --hole-core（.logo-core）。見た目の
+  プリセットのアクセント色では塗らない（ロゴの O と同じ1つのものに見せる）。
 */
-.moon {
+.hole {
   position: absolute;
-  inset: 0;
-  overflow: clip;
-  z-index: 0;
+  left: var(--hole-x);
+  top: var(--hole-y);
+  width: var(--hole-w);
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  rotate: var(--system-tilt);
+  color: var(--ink);
   pointer-events: none;
 }
 
-/*
-  三日月の箱。ここが位置と大きさの正で、光暈はこの箱を基準に広がる。
-
-  上に寄せて、リード文より上で終わらせる（--moon-h の説明を見ること）。
-  右は光暈の広がりぶんだけ内側へ寄せ（--moon-shift）、はみ出させない。
-  はみ出させて断っていたころは、三日月の先が縦一直線に切れて「途切れて
-  いる」と読まれた。光暈も箱ごとパネルの内側に収まる。
-
-  translate は % が自分の幅に対して効く。パネル幅に対して効く right や
-  margin-right では、パネルが 358px のときと 1342px のときで切れる量が
-  4倍ちがってしまう。
-*/
-/*
-  三日月。**絵は色を持たない。** 運んでくるのはアルファ1面だけで、
-  「どこがどれだけ光っているか」がそこに入っている（scripts/moon/pack.py）。
-  色はここで --accent から作って敷き、その絵で抜く。
-
-  こうしてあるので、見た目プリセットを変えると**光暈だけでなく三日月そのものの
-  色も変わる**。焼き込むと色がそこで固定され、アクセントの色の多くと喧嘩する
-  （実際にそうなっていた）。
-
-  色を混ぜる式をここに書いているのは、:root に置けないため。カスタム
-  プロパティの var() は**宣言した要素**で解決されるので、:root で
-  color-mix(..., var(--accent) ...) と組み立てると --accent が :root の既定
-  の色で焼き付き、body の [data-accent] が二度と効かない。
-  :root が持てるのは「どれだけアクセントに寄せるか」の数だけ。
-
-  mask は image-set で形式を選ばせる。<picture> を置かなくても AVIF と WebP の
-  出し分けができ、しかも .moon が display: none のときは**取りに行かない**
-  （空の1枚を先頭に置く細工が要らなくなった）。image-set を知らない環境では
-  上の素の url() が残る。
-*/
-.moon__mark {
-  position: absolute;
-  top: var(--moon-top);
-  right: 0;
-  display: block;
-  height: var(--moon-h);
-  aspect-ratio: var(--moon-ratio);
-  translate: var(--moon-shift) 0;
-  /* 光暈（::before）を三日月（::after）の裏に回すための重なりの文脈 */
-  isolation: isolate;
-  /*
-    着いたときに一度だけ、上から降りて焦点が合う（--dur-slow の説明を見ること）。
-    ぼかしは親のここに掛ける。filter は mask より先に効くので、::after に
-    掛けても平らな色がぼけるだけで、点はぼけない
-  */
-  animation: moon-settle var(--dur-slow) var(--ease) backwards;
-}
-
-/*
-  三日月そのもの。
-
-  ここを親（.moon__mark）ではなく ::after に置いているのは、mask が
-  **子孫まで切る**ため。親に掛けると、中に居る光暈まで三日月の形に
-  切り抜かれて、光が月の外に出られなくなる。
-*/
-.moon__mark::after {
-  content: '';
+.hole > svg {
   position: absolute;
   inset: 0;
-  background: color-mix(in oklab, var(--accent) var(--moon-tint), #fff);
-  mask: url('/assets/moon.webp') no-repeat center / 100% 100%;
-  opacity: var(--moon-ink);
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
 
-@supports (mask-image: image-set(url('/assets/moon.avif') type('image/avif'))) {
-  .moon__mark::after {
-    mask-image: image-set(
-      url('/assets/moon.avif') type('image/avif'),
-      url('/assets/moon.webp') type('image/webp')
-    );
+/*
+  軌道と天体（入口と締めで同じ）。絵は色を持たず、線はアクセント色、点は字の色。
+  太さは画面の px（non-scaling-stroke。:root の --orbit-line / --orbit-body の話）。
+
+  線の色は、部品が線ごとに渡す坂（components.tsx の OrbitLines。stroke 属性の
+  url(#…)）が持つ。坂の両端の色と濃さはここで敷く——奥の端は --orbit-far を掛けて薄く、
+  手前へ続けて --orbit-ink まで濃くなる（奥ほど遠い）。.orbit に stroke を書かない
+  （書くと坂を上書きする）
+*/
+.orbit {
+  fill: none;
+  stroke-width: var(--orbit-line);
+  vector-effect: non-scaling-stroke;
+}
+
+.orbit-depth__far {
+  stop-color: var(--accent);
+  stop-opacity: calc(var(--orbit-ink) * var(--orbit-far));
+}
+
+.orbit-depth__near {
+  stop-color: var(--accent);
+  stop-opacity: var(--orbit-ink);
+}
+
+/*
+  手前の半分の下に敷く地の色の縁取り。ブラックホールの光の縁の前を通る所で、白い線が
+  白い光に溶けずに前を横切って見える（地の上では地と同じ色なので見えない）
+*/
+.orbit__casing {
+  fill: none;
+  stroke: var(--bg);
+  stroke-width: var(--orbit-casing);
+  vector-effect: non-scaling-stroke;
+}
+
+/* 業務の軌道は破線。区分を色だけで分けない（天体も塗りと輪で分ける） */
+.orbit--work {
+  stroke-dasharray: var(--orbit-dash);
+}
+
+/*
+  天体は長さ0の線に丸い線端を付けた点（components.tsx の Bodies）。業務は輪で、
+  同じ点を地の色で半分の太さに抜く。
+*/
+.orbit-body path {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: var(--orbit-body);
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.orbit-body .orbit-body__hole {
+  stroke: var(--bg);
+  stroke-width: calc(var(--orbit-body) / 2);
+}
+
+/*
+  天体の札（作品の番号と名前。作品のページへのリンク）。置き場所は天体の右上・
+  左上・右下・左下のどれか（.system__label--ne …。重ならない向きを orbits.ts の
+  placeLabels が選ぶ）。天体の点を原点に置き、札の箱をその向きへずらす。ずらす量は
+  orbits.ts の LABEL_GAP と同じ数（:root の --label-dx / --label-dy）。
+
+  札は枠が十分に広いときだけ出す（下の @container。orbits.ts の LABEL_MIN_WIDTH と
+  同じ数）。狭い枠では点だけ——作品の名前は「一覧で見る →」の先に全部ある。
+
+  札の地は --bg で塗る。軌道の線が字の後ろを横切らないように（小さい字なので
+  4.5:1 が要る。npm run check:contrast が札の字も測る）。
+*/
+.system__labels {
+  position: absolute;
+  inset: 0;
+  display: none;
+}
+
+@container (min-width: 520px) {
+  .system__labels {
+    display: block;
   }
 }
 
-.moon__mark::before {
-  content: '';
+.system__label {
   position: absolute;
-  z-index: -1;
-  inset: var(--moon-glow-inset);
-  /* 色はここで敷く。この規則の中なら var(--accent) は body の
-     [data-accent] を見るので、見た目プリセットで月あかりの色も変わる */
-  background: var(--accent);
-  mask-image: var(--moon-glow);
-  opacity: var(--moon-glow-ink);
-  /* 月あかりは帯のあと（肩書き 0 → 見出し → リード文 → 帯 3 → ここ 4）に広がる */
-  animation: moon-bloom var(--dur-slow) var(--ease) calc(4 * var(--stagger)) backwards;
+  left: var(--x);
+  top: var(--y);
+  z-index: 1;
+}
+
+/* 選んだ札は隣の札より上に出す（名前が伸びて隣に重なっても、隣の札の地に隠れない） */
+.system__label:is(:hover, :focus-within) {
+  z-index: 2;
 }
 
 /*
-  月の出。rise-in と同じく出だしの姿（from）だけを書き、終わりの姿は持たせない
-  ——reduced-motion で animation: none になった姿が、そのまま動き終わった姿になる。
-
-  **from に書いてよいのは、止まった姿より「暗い・小さい・上」だけ。**
-  check:contrast の本体は動きを止めて測るので、動いている途中に止まった姿より
-  明るくなる瞬間があっても、そこでは見えない（途中の姿は同じ検査の最後に
-  別に測っている）。下へずらす（リード文に近づく）、光暈を大きくする、
-  opacity を上げる、のどれも入れないこと。
+  札の幅の上限は、札の長さの上限（--label-max）と、札の伸びる向きの枠の端までの
+  空き（--room。部品が orbits.ts の labelRoom から cqi で渡す。枠の縁から --sp-1 だけ
+  離す）の小さいほう。名前を出して札が伸びても枠の外へ出ない——出ると枠の
+  overflow-x: clip に番号ごと切られ、フォーカスの輪も欠ける
 */
-@keyframes moon-settle {
+.system__label > :is(a, span) {
+  position: absolute;
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  max-width: min(var(--label-max), calc(var(--room) - var(--label-dx) - var(--sp-1)));
+  padding-inline: var(--sp-2);
+  background: var(--bg);
+  color: var(--ink-mid);
+  font-size: var(--fs-meta);
+  line-height: 1.4;
+  white-space: nowrap;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.system__label--ne > :is(a, span) {
+  left: var(--label-dx);
+  bottom: var(--label-dy);
+}
+
+.system__label--nw > :is(a, span) {
+  right: var(--label-dx);
+  bottom: var(--label-dy);
+}
+
+.system__label--se > :is(a, span) {
+  left: var(--label-dx);
+  top: var(--label-dy);
+}
+
+.system__label--sw > :is(a, span) {
+  right: var(--label-dx);
+  top: var(--label-dy);
+}
+
+/*
+  天体から札の角へ引く細い線。札の箱の、天体に向いた角の外に --label-dx × --label-dy
+  の箱を置き、その対角線を1本だけ描く。
+*/
+.system__label > :is(a, span)::before {
+  content: '';
+  position: absolute;
+  width: var(--label-dx);
+  height: var(--label-dy);
+  background: linear-gradient(
+    var(--leader-to),
+    transparent calc(50% - var(--orbit-line)),
+    var(--ink-weak) 50%,
+    transparent calc(50% + var(--orbit-line))
+  );
+}
+
+.system__label--ne > :is(a, span)::before {
+  --leader-to: to bottom right;
+  right: 100%;
+  top: 100%;
+}
+
+.system__label--nw > :is(a, span)::before {
+  --leader-to: to top right;
+  left: 100%;
+  top: 100%;
+}
+
+.system__label--se > :is(a, span)::before {
+  --leader-to: to top right;
+  right: 100%;
+  bottom: 100%;
+}
+
+.system__label--sw > :is(a, span)::before {
+  --leader-to: to bottom right;
+  left: 100%;
+  bottom: 100%;
+}
+
+/* 番号は英数字の札なので等幅。名前は英字だけなら等幅の小さな大文字、和文ならそのまま */
+.system__number {
+  color: var(--ink-weak);
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  letter-spacing: 0.08em;
+}
+
+.system__label :lang(en) {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/*
+  名前。ふだんは見せず（番号だけの札。名前まで並べると、札がブラックホールの影と弧に
+  掛かる）、札にマウスを重ねたときとキーボードで選んだときに番号の横へ出す。隠すのは
+  .sr-only と同じ手で、読み上げとリンクの名前にはいつも入る。
+
+  出したときの長い名前は札の幅（--label-max）で末尾を省く。全部は押した先の作品の
+  ページにある。
+*/
+.system__name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.system__label a:focus-visible .system__name {
+  position: static;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  clip-path: none;
+  text-overflow: ellipsis;
+}
+
+/*
+  指で押せる的。札の見た目（番号だけで 23×15px ほど）より大きい透明の面を、札の中心に
+  重ねる（--tap。指なら 44px）。見た目の札の箱は変えない——箱を広げると地の塗りが
+  軌道の線を広く隠し、札の置き場所（placeLabels）の見積もりもずれる
+*/
+.system__label a::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, var(--tap));
+  height: var(--tap);
+  translate: -50% -50%;
+}
+
+/*
+  札の箱は横に送れる箱の中ではないが、隣の札に近い。フォーカスの輪郭は札の内側に
+  描く（外へ出すと、隣の札の字に掛かる）
+*/
+.system__label a:focus-visible {
+  outline-offset: calc(var(--focus-ring) * -1);
+  border-radius: 0;
+}
+
+/* --- 入口の件数の帯 --- */
+
+/*
+  件数の帯（components.tsx の Tally）。表紙の底に、上に1本の罫線を引いて、
+  セルを同じ幅で横に並べる（セルの数は区分の数で変わる）。値が上・見出しが下
+  （<dl> の dt が先なので、並べ替えは column-reverse。読む順は「見出し → 値」）。
+*/
+.tally {
+  grid-area: tally;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: var(--sp-5);
+  border-top: 1px solid var(--line);
+}
+
+.tally__cell {
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  padding-top: var(--sp-5);
+}
+
+.tally dt {
+  color: var(--ink-weak);
+  font-size: var(--fs-meta);
+}
+
+.tally dt:lang(en) {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* 値。字は細く大きく、数字の幅をそろえる（数え上げで幅が揺れない） */
+.tally__num,
+.tally__year {
+  font-size: var(--fs-display-sm);
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- 締めの軌道図 --- */
+
+/*
+  締めの軌道図（components.tsx の ContactOrbits）。入口と同じ星系を、横長の枠に
+  描いて列の真ん中に置く。縦横比は :root の --contact-ratio（orbits.ts の
+  CONTACT_FRAME）、幅の上限は --contact-w。
+*/
+.orbits {
+  position: relative;
+  align-self: stretch;
+  justify-self: center;
+  width: min(100%, var(--contact-w));
+  aspect-ratio: var(--contact-ratio);
+}
+
+/* 軌道の奥の半分・ブラックホール・手前の半分の順に重ねる（入口と同じ） */
+.orbits > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* --- 入口に着いたとき --- */
+
+/*
+  入口に着いたときの一度だけの動き。見出しの列が浮かび上がるあいだに、ブラックホールが
+  灯り、軌道と天体が渦を巻いて焦点のまわりに収まり、番号の札が1つずつ出る。
+  件数の帯は数え上がる。
+
+  - ブラックホールは、大きく霞んで明るすぎる姿から、縮みながら締まって落ち着く
+    （orbit-ignite。重力で潰れていくように。量は --ignite-*）
+  - 軌道と天体は、回って霞んだ姿から、焦点のまわりへ巻き込まれるように収まる
+    （orbit-infall。奥と手前の軌道と天体を同じ1つの動きで。量は --infall-*）。
+    回る中心は焦点——入口の枠では真ん中（transform-origin の既定）。大きさは変えない
+    （広げると、軌道が枠の左右で断ち切られて見える）
+  - 曲線は --ease の1本（ばねは使わない。止まる向きを行き過ぎて、軌道が揺り戻して
+    見える）
+
+  どれも一度きりで、5 秒以内に止まる（WCAG 2.2.2。着いたあとも続く公転や光の揺らぎは
+  下の「動き続ける」）。keyframes には出だしの姿（from）だけを書き、終わりの姿を
+  持たせない——止まった姿（reduced-motion で animation: none になったとき）が
+  そのまま完成形になる。
+  npm run check:contrast は止めた姿に加えて、名前が orbit- で始まる animation を
+  途中で止めた姿も測る（番号の札は、回り込みが落ち着いてから出る）。
+*/
+@keyframes rise-in {
   from {
     opacity: 0;
     filter: blur(var(--enter-blur));
-    translate: var(--moon-shift) calc(-1 * var(--enter-shift));
+    translate: 0 var(--enter-shift);
   }
 }
 
-@keyframes moon-bloom {
+@keyframes orbit-light {
   from {
     opacity: 0;
-    scale: var(--moon-bloom);
   }
 }
 
-/* 月より前に出す。月は z-index: 0 の背景。見出し・リード文・帯のどれも同じ */
-.hero > :not(.moon) {
-  position: relative;
-  z-index: 1;
+.hero h1 .phrase,
+.hero__copy > :not(h1),
+.hero > .nameplate,
+.tally__cell {
+  animation: rise-in var(--dur-spring) var(--ease-spring) backwards;
+}
+
+/* 札 → 見出しの塊 → リード文 → 押し手。件数の帯は回り込みが始まってから */
+.hero h1 .phrase {
+  animation-delay: calc((var(--i, 0) + 1) * var(--stagger));
+}
+
+.hero__copy > .hero__lead {
+  animation-delay: calc(3 * var(--stagger));
+}
+
+.hero__copy > .cta {
+  animation-delay: calc(4 * var(--stagger));
+}
+
+.tally__cell {
+  animation-delay: calc(var(--infall-delay) + var(--i, 0) * var(--stagger));
+}
+
+@keyframes orbit-ignite {
+  from {
+    opacity: 0;
+    scale: var(--ignite-scale);
+    filter: blur(var(--ignite-blur)) brightness(var(--ignite-glow));
+  }
+}
+
+.system > .hole {
+  animation: orbit-ignite var(--ignite-dur) var(--ease) var(--ignite-delay) backwards;
+}
+
+@keyframes orbit-infall {
+  from {
+    opacity: 0;
+    rotate: var(--infall-turn);
+    filter: blur(var(--infall-blur));
+  }
+}
+
+.system__orbits,
+.system__bodies {
+  animation: orbit-infall var(--infall-dur) var(--ease) var(--infall-delay) backwards;
+}
+
+/* 番号の札は、回り込みが落ち着いてから番号の順に出る（8つ目より後はまとめて） */
+.system__label {
+  animation: orbit-light var(--dur) var(--ease)
+    calc(var(--label-delay) + min(var(--i, 0), 8) * var(--stagger)) backwards;
 }
 
 /*
-  月を敷く節（入口以外。いまは Contact だけ。components.tsx の Screen の moonlit）。
-  .hero と同じく月の絶対配置の受け皿になり、中身を月より前に出す。
-  字を表紙の下に寄せるのは「ページの外枠」の側（入口と同じ場所）。
+  出る前（透明のあいだ）でも、キーボードで選んだ札はすぐ見せる。待たせると、見えない
+  リンクに見えない輪が付く。動きの値を上書きできるのは !important だけ（animation の
+  付け外しでは、外した日に出が頭からやり直しになり、選び終えた札が一度消える）
 */
-.moonlit {
-  position: relative;
+.system__label:focus-within {
+  /* biome-ignore lint/complexity/noImportantStyles: 上のコメントのとおり、動きの値に勝つ必要がある */
+  opacity: 1 !important;
 }
 
-.moonlit > :not(.moon) {
-  position: relative;
-  z-index: 1;
+/* --- 動き続ける --- */
+
+/*
+  着いたあとも動き続けるもの（components.tsx の Motion・Dust・Hole）。入口と締めで同じ。
+
+  - 天体がゆっくり公転する（orbit-turn）
+  - 軌道に沿って光が流れる（orbit-flow。軌道1周の path の破線を送る。天体より速い）
+  - 光の粒が渦を巻いてブラックホールへ吸い込まれ、黒い円の縁で光に溶ける（orbit-swirl で
+    1周回り、その中で orbit-fall が外から内へ寄せる。どちらも --fall-ease で、落ちるほど
+    速い）
+  - ブラックホールの縁を光の点が回り（orbit-spin）、光が明るさを沈めては戻す（orbit-breathe）
+
+  keyframes に var() を書かない（光の揺らぎの1つを除く）。var() を持つ keyframes は、
+  動いている要素ごとに毎コマ解き直され、粒の多い入口では style の計算だけでコマの予算を
+  食った（電話相当で 1 秒あたり 480ms。固定の値にして 75ms）。要素ごとに違う量——天体の
+  軌道の形、粒の向きと落ちる幅——は動かない親の transform 属性が持ち、動く子は同じ形を
+  回るだけ（1周・1 から 0 へ）にする。
+
+  - 公転する天体は単位円の点 (1, 0) で、親（orbits.ts の OrbitMover の at）がその単位円を
+    軌道へ写し、止まった場所まで回してある。子は1周前の姿から止まった姿まで回る——
+    keyframes には from だけ（入口の動きと同じ決まり）
+  - 動いているあいだは、止まった天体と番号の札を隠す（札は止まった場所に置いてあり、動く
+    天体には付いていけない）。図の中を選んだとき（札へのフォーカス）とマウスを重ねたとき
+    （手触りの括り）は、動く天体を隠して止まった天体と札に戻す
+  - 止める手は置かない（持ち主の判断。5 秒を超えて続く動きの止め方は、動きを減らす設定
+    だけが受ける）。動きを減らす設定では、動く層を出さない——止まった天体と札が完成形
+*/
+@keyframes orbit-turn {
+  from {
+    transform: rotate(-1turn);
+  }
+}
+
+@keyframes orbit-flow {
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
+@keyframes orbit-swirl {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* 粒は止まった姿を持たない（動かないときは層ごと隠す）ので、出だしと終わりの両方を書く */
+@keyframes orbit-fall {
+  from {
+    transform: translate(1px, 0px);
+    opacity: 0;
+  }
+
+  15%,
+  80% {
+    opacity: 1;
+  }
+
+  to {
+    transform: translate(0px, 0px);
+    opacity: 0;
+  }
+}
+
+@keyframes orbit-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* 光の揺らぎは1つの要素だけなので、明るさの下限を :root の段から読む */
+@keyframes orbit-breathe {
+  from {
+    opacity: var(--breathe-low);
+  }
+}
+
+/* 軌道を流れる光。短い破線を1本だけ、軌道の線の上に */
+.orbit-flow {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: calc(var(--orbit-line) * 2);
+  stroke-linecap: round;
+  stroke-dasharray: var(--flow-len) calc(100 - var(--flow-len));
+  vector-effect: non-scaling-stroke;
+}
+
+.orbit-grain__dot {
+  fill: none;
+  stroke: var(--ink);
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0;
+}
+
+:is(.orbit-flows, .orbit-dust, .orbit-movers, .hole__spin) {
+  display: none;
+}
+
+/* 図の中を選んだとき（マウスを重ねたときは手触りの括り）は、止まった天体と札に戻す */
+.system:focus-within .orbit-movers {
+  opacity: 0;
+}
+
+.system:focus-within > :is(.system__bodies, .system__labels) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :is(.orbit-flows, .orbit-dust, .orbit-movers) {
+    display: inline;
+  }
+
+  .hole__spin {
+    display: block;
+  }
+
+  .orbit-mover {
+    animation: orbit-turn var(--period) linear infinite;
+  }
+
+  .orbit-flow {
+    animation: orbit-flow var(--dur) linear var(--delay) infinite;
+  }
+
+  .orbit-grain {
+    animation: orbit-swirl var(--dur) var(--fall-ease) var(--delay) infinite;
+  }
+
+  .orbit-grain__dot {
+    animation: orbit-fall var(--dur) var(--fall-ease) var(--delay) infinite;
+  }
+
+  .hole__spin {
+    animation: orbit-spin var(--spin-dur) linear infinite;
+  }
+
+  .hole__light {
+    animation: orbit-breathe var(--breathe-dur) var(--ease) infinite alternate;
+  }
+
+  /* 動いているあいだは、止まった天体と札を隠す（上の「図の中を選んだとき」で戻る） */
+  .system__bodies,
+  .orbit-rest,
+  .system__labels {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .orbit-movers,
+  .system__bodies,
+  .system__labels {
+    transition: opacity var(--dur) var(--ease);
+  }
 }
 
 /*
-  締めの月（Contact）。入口の三日月を左右に返し、ひとまわり小さく、動かさずに置く。
-
-  左右に返すのは、最初と最後の画面を同じ構図の裏表にするため——入口では
-  右へ開いていた三日月が、締めでは左（字の側）へ開く。scale は translate と
-  別の性質なので、--moon-shift の寄せはそのまま効く。光暈は上下左右に同じだけ
-  広がる形（--moon-glow-inset）なので、返しても位置は変わらない。
-
-  動かさない。月の出は「着いた」ことの合図で、入口で一度見せれば足りる。
-  ここでも動かすと、check:contrast が途中の姿を測る段をこの画面にも要る。
-
-  丈は --moon-closing-h（:root の説明を見ること）。
+  件数の数え上げ。値の字（07）はページにそのまま置き、数え上げは ::after の
+  counter() が上に重なるだけ——止まった姿は字そのもので、読み上げも Ctrl-F も
+  字を読む。数えるあいだだけ、字を透明にして ::after を見せる。
+  --n は @property で整数として登録する（登録しないと途中の値を持てず、跳ぶ）。
 */
-.moon--closing {
-  --moon-h: var(--moon-closing-h);
+@property --n {
+  syntax: '<integer>';
+  inherits: false;
+  initial-value: 0;
 }
 
-.moon--closing .moon__mark {
-  scale: -1 1;
+@keyframes orbit-count {
+  from {
+    --n: 0;
+  }
 }
 
-.moon--closing .moon__mark,
-.moon--closing .moon__mark::before {
-  animation: none;
+@keyframes orbit-count-cover {
+  from,
+  to {
+    color: transparent;
+  }
 }
+
+@keyframes orbit-count-show {
+  from,
+  to {
+    opacity: 1;
+  }
+}
+
+.tally__num {
+  position: relative;
+  --n: var(--to);
+  counter-reset: n var(--n);
+  animation:
+    orbit-count var(--count-dur) var(--ease) var(--count-delay) backwards,
+    orbit-count-cover var(--count-dur) linear var(--count-delay) backwards;
+}
+
+/*
+  数え上げの字。代わりの字を空にして読み上げに流さない——流すと、dd の字と合わせて
+  「07 07」と2度読まれる（opacity: 0 は読み上げの木から外さない）。代わりの字は
+  書けるブラウザにだけ渡す（区切りの字の .eyebrow と同じ）
+*/
+.tally__num::after {
+  content: counter(n, decimal-leading-zero);
+  position: absolute;
+  inset: 0;
+  color: var(--ink);
+  opacity: 0;
+  animation: orbit-count-show var(--count-dur) linear var(--count-delay) backwards;
+}
+
+@supports (content: '' / '') {
+  .tally__num::after {
+    content: counter(n, decimal-leading-zero) / '';
+  }
+}
+
+/* --- 句読点と折り返し --- */
 
 /*
   句読点までの塊（src/ui/components.tsx の Phrases）。塊の中では折らせない。
@@ -998,7 +1669,7 @@ main {
 }
 
 /*
-  見出し・カードの説明・段落の折り返し。語の途中で折らない。
+  見出し・一覧の行の説明・段落の折り返し。語の途中で折らない。
 
   和文は既定だとどの字の間でも折れるので、「プラットフォームを1 / つの」
   「置いてお / く。」のように語の途中で行が変わる。word-break: auto-phrase は
@@ -1014,96 +1685,36 @@ main {
   ここは文節を知っているブラウザに任せる。入口の大見出しを入れてあるのは、
   塊が1行より長くなった（背の低い窓で字が大きい）ときに、塊の中でも文節で折るため。
 */
-:is(.hero h1, .head :is(h1, h2, h3), .card__head h3, .statement__text, .card p, .bio p) {
+:is(
+  .hero h1,
+  .head :is(h1, h2, h3),
+  .entry__main :is(h3, p),
+  .statement__text,
+  .contact__lead,
+  .bio p
+) {
   word-break: auto-phrase;
   text-wrap: pretty;
 }
 
-/* 素の .hero__headline は置かない。付く先は必ず .hero の直接の子の h1 で、
-   こちら（0,1,1）が勝つ。クラスが要るのは下の1段小さくする規則のほうだけ */
-/*
-  大見出し。
-
-  塊（、。まで）を1行ずつに積む。「つくったものを、/ 置いておく。」の2行が
-  左に座り、右の月と画面を分け合う。1行に流していたころは、見出しが月の
-  下を横切り、幅しだいで「置いてお / く。」と語の途中で折れていた。
-
-  palt は和文を詰める字形。仮名と約物（、。）の空きが半分になり、見出しの
-  大きさでもスカスカに見えない。本文には掛けない（小さい字で詰めると読みにくい）。
-
-  声は張らない。この画面の主役は背景の月で、見出し（入口では名前）はその前に
-  静かに置く。大きさははしごの2段目（--fs-display）、太さは 500 に留める。
-  いちばん上の段（--fs-display-xl）と 700 にしたときは、文字が月より前に出て
-  主張が強すぎた。個人ページの名乗りは下の .hero__headline でさらに段を下げる。
-*/
-.hero h1 {
-  font-family: var(--font-display);
-  font-size: var(--fs-display);
-  font-weight: 500;
-  font-feature-settings: 'palt';
-  line-height: 1.3;
-  letter-spacing: -0.01em;
-}
-
-.hero h1 .phrase {
-  display: block;
-}
-
-/* 見出しとリード文のあいだは1段ぶん広く（gap の --sp-5 に足して 24px）。
-   肩書き → 名前は近く、名前 → 説明は離して、名乗りと説明を2つの組に見せる */
-.hero > h1 {
-  margin-bottom: var(--sp-3);
-}
+/* --- 個人ページの頭 --- */
 
 /*
-  名前の上に添える肩書き。札なので名詞のまま、小さく置く。英字だけの肩書き
-  （System Engineer）は等幅の札にし、和文の肩書きは本文の書体のまま
-  （lang="en" は components.tsx の langOf が決める。等幅の決まりは :root の
-  --font-mono を見ること）。
-
-  先頭の点はアクセント色。月と同じ色の粒を1つだけ字の側に置いて、右上の月と
-  左下の名乗りを結ぶ。display: block + 点は inline-block にしてあるのは、
-  中央寄せの骨格で text-align: center がそのまま効くようにするため
-  （flex にすると、そちらだけ別の寄せ方を書くことになる）。
-*/
-.hero .hero__role {
-  color: var(--ink-mid);
-  font-size: var(--fs-meta);
-}
-
-.hero .hero__role:lang(en) {
-  font-family: var(--font-mono);
-  letter-spacing: 0.08em;
-}
-
-.hero__role::before {
-  content: '';
-  display: inline-block;
-  width: var(--dot);
-  height: var(--dot);
-  margin-right: var(--sp-3);
-  border-radius: 50%;
-  background: var(--accent);
-  vertical-align: middle;
-}
-
-/*
-  個人ページの名乗りは、トップの大見出しより段を下げる（--fs-display-sm）。
-  名乗りは大見出しより長い文になりやすく、同じ大きさでは2行に収まらない。
+  個人ページの名乗りは、入口の大見出しより1段下げる（--fs-display）。章の見出し
+  （About…。--fs-display-sm）よりは大きく、ページの h1 として立つ。
 
   要素とクラスの両方で書いてあるのは必須。この見出しは <h1 class="hero__headline">
-  になったので、素の .hero__headline（0,1,0）では上の .hero h1（0,1,1）に負け、
-  大見出しの --fs-display を継いでしまう。CSS は何も言わず、変わるのは
-  「名乗りだけが画面の高さを食う」という結果だけ。
+  なので、素の .hero__headline（0,1,0）では上の .hero h1（0,1,1）に負け、
+  大見出しの段を継いでしまう。
 */
 .hero h1.hero__headline {
-  font-size: var(--fs-display-sm);
+  font-size: var(--fs-display);
 }
 
 /*
   個人ページの頭の名札（components.tsx の Nameplate）。Team のカードと同じ
   並び——顔・名前・肩書きと所在地——で、カードを押した先で同じ顔に着く。
-  柱はサイトのものなので、その人の顔と名前はここにしか出ない。
+  足元はサイトのものなので、その人の顔と名前はここにしか出ない。
 
   名前は h1 になることがある（大見出しを書いていない人）。上の .hero h1
   （0,1,1）の大見出しの書き方を継がないよう、2つのクラス（0,2,0）で書き、
@@ -1137,65 +1748,12 @@ main {
   font-size: var(--fs-sm);
 }
 
-.hero p {
-  max-width: 54ch;
-  color: var(--ink-mid);
-  font-size: var(--fs-md);
-  /* 塊より細かい所の折れ（1語だけ次の行へ落ちる）を、対応する環境では避ける */
-  text-wrap: pretty;
-}
-
 /*
-  入口に着いたときに、見出しの塊 → リード文 → 帯の順に浮かび上がる。
-
-  出だしの姿は keyframes の from にだけ書き、both で終わりの姿を持たせない
-  ——止まった姿（reduced-motion で animation: none になったとき）がそのまま
-  最後の姿になる。印刷では月と帯ごと落ちるので、ここは何もしない。
-*/
-@keyframes rise-in {
-  from {
-    opacity: 0;
-    filter: blur(var(--enter-blur));
-    translate: 0 var(--enter-shift);
-  }
-}
-
-.hero h1 .phrase,
-.hero > p,
-.hero > .nameplate,
-.hero > .band,
-.hero > .hero__whole {
-  animation: rise-in var(--dur-spring) var(--ease-spring) backwards;
-}
-
-/* 肩書き（個人ページでは名札） → 見出しの塊 → リード文 → 帯 → 全体ページへの1本の順 */
-.hero h1 .phrase {
-  animation-delay: calc((var(--i, 0) + 1) * var(--stagger));
-}
-
-.hero > p {
-  animation-delay: calc(2 * var(--stagger));
-}
-
-.hero > .hero__role,
-.hero > .nameplate {
-  animation-delay: 0s;
-}
-
-.hero > .band {
-  animation-delay: calc(3 * var(--stagger));
-}
-
-.hero > .hero__whole {
-  animation-delay: calc(4 * var(--stagger));
-}
-
-/*
-  見出しと添え（件数・年など）は1組。空いた幅ぶん引き離さない。
+  見出しと添え（件数・業界と年など）は1組。空いた幅ぶん引き離さない。
+  下に1本の罫線を引いて、見出しと本文を分ける（箱には入れない）。
 
   space-between だと 1440 で2つが 782px 離れ、同じ組に見えなくなる。
-  並びは素の flex-start のまま、どの骨格でも上書きしない——中央寄せの骨格でも
-  見出しは本文の列と同じ左の軸に立てる（理由は「骨格: 中央寄せ」の .head の話）。
+  見出しは本文の列と同じ左の軸に立てる。
 
   折り返したとき（狭い画面の作品のページ。「金融系基幹システム · 2024 — 現在」は
   390 では見出しの隣に入らない）の行の間は --sp-2。横の間隔と同じ 16px を
@@ -1207,7 +1765,7 @@ main {
   gap: var(--sp-2) var(--sp-5);
   flex-wrap: wrap;
   border-bottom: 1px solid var(--line);
-  padding-bottom: var(--sp-4);
+  padding-bottom: var(--sp-5);
   margin-bottom: var(--sp-5);
 }
 
@@ -1216,22 +1774,16 @@ main {
   全体ページ（/all）では h2。要素が変わっても字面は同じでなければならない
   ——見出しの階層は読み上げと検索のためのもので、大きさの段ではない。
 
-  大きさは画面に連動するはしごのいちばん下（--fs-display-xs。390 で 20px、
-  1440 で 30px）。入口の大見出し（--fs-display）より小さく、カードの題
-  （--fs-md）より2段以上大きい。以前は --fs-lg（18px）で、カードの題 15px と
-  3px しか違わず、1440 では本文の列の中に見出しが埋もれていた——節の h1 が
-  全部 18px で、画面の見出しなのかカードの題なのかを大きさで読めなかった。
-  雑誌風はもう1段上げる（骨格: 雑誌風）。
-
-  行の高さは入口の大見出しと同じ 1.3。本文の 1.7 を継いだままだと、30px の
-  見出しが 51px の行を取り、1行ぶんの空きが見出しの上下に余る。
+  大きさは画面に連動するはしごの最上段（--fs-display-xl。入口の大見出しと同じ）。
+  ページの名前（Projects・Contact…）を大きな字で1つだけ置き、その下の行の題
+  （--fs-display-xs）と2段以上離す。太さは入口の大見出しより1段軽く。
 */
 .head :is(h1, h2) {
   font-family: var(--font-display);
-  font-size: var(--fs-display-xs);
-  font-weight: 600;
-  line-height: 1.3;
-  letter-spacing: 0.01em;
+  font-size: var(--fs-display-xl);
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
 }
 
 /* 添え（作品の「業界 · 年」、区分名）。和文が入るので本文の書体で、和文の最小の段 */
@@ -1241,11 +1793,23 @@ main {
 }
 
 /*
+  見出しのすぐ後ろの件数（Projects の「07」。SectionHead の count）。見出しの字の
+  右上に、等幅の小さな数字で添える（英数字の札）。
+*/
+.head__count {
+  align-self: flex-start;
+  color: var(--ink-weak);
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  letter-spacing: 0.1em;
+}
+
+/*
   ページの中の小節の見出し（components.tsx の SectionHead の sub）。作品のページの
   本文「Story」（h1 の作品名の下の h2）と、全体ページ（/all）の Profile の節の
   About / Skills / Career と作品の本文（h2 の下の h3）。
 
-  節の見出し（--fs-display-xs）より小さく、静的な段のいちばん上（--fs-lg）にし、
+  節の見出し（--fs-display-xl）よりずっと小さく、静的な段のいちばん上（--fs-lg）にし、
   下の線を引かない。線まで同じだと、作品のページの Story が見出し（作品名）と
   同じ格に見え、Profile の中の About が Projects や Contact と同じ格の節に見えて、
   見出しの階層が字面から読めなくなる。要素の段（h2 / h3）は置かれる場所の
@@ -1266,13 +1830,16 @@ main {
 
 /*
   個人ページの章の見出し（components.tsx の SectionHead の chapter。About /
-  Skills / Career）。字面は節の見出しのまま（線と --fs-display-xs）で、上を1段
-  空けて章の切れ目にする。ページの間隔（main の gap の --sp-5）だけだと、前の章の
-  最後の段落と次の章の見出しが 30px ほどしか離れず、見出しが前の章の最後の行に
-  見えた（= rail @390x844）。大きさを雑誌風で上げない理由は SectionHead に。
+  Skills / Career）。節の見出しと同じ線で、字は頭の大見出し（h1。--fs-display）より
+  小さい --fs-display-sm に下げる（同じ大きさだと、章が h1 と同じ格に見える）。
+  上を1段空けて章の切れ目にする。
 */
 .head--chapter {
   margin-top: var(--sp-7);
+}
+
+.head--chapter :is(h1, h2) {
+  font-size: var(--fs-display-sm);
 }
 
 /*
@@ -1287,9 +1854,9 @@ main {
 }
 
 /*
-  全体ページ（/all）の Projects の節の、カードの下に並べる作品の本文
+  全体ページ（/all）の Projects の節の、一覧の行の下に並べる作品の本文
   （components.tsx の ItemStories）。1作品ずつが Profile の小節と同じ組
-  （h3 の見出しと段落）なので、間隔も .profile と同じ段。カードの grid とのあいだも
+  （h3 の見出しと段落）なので、間隔も .profile と同じ段。一覧の行とのあいだも
   同じだけ空ける。ページごとの URL では作品のページの小節（下の .story）。
 */
 .stories {
@@ -1312,44 +1879,72 @@ main {
 
 /*
   絞り込みを持つ節の中は「見出しの箱」と「本文の箱」の2つだけ（src/ui/components.tsx の
-  ScreenSection）。見出し側には、見出しと Projects の絞り込みのピルが入る。
+  ScreenSection）。見出し側には、見出しと Projects の絞り込みが入る。
 
-  ここに寸法は書かない。中身は自分の高さのまま、節の上揃え（「ページの
-  外枠」）に任せる。min-width だけは 0 にする（節は grid なので、
-  既定の auto のままだと長い1語が箱を押し広げる）。
+  見出しの箱は、見出しを左・絞り込みを右に置き、下の罫線は箱が1本だけ引く
+  （見出しの .head の線は外す。見出しと絞り込みの下に1本の線）。狭ければ絞り込みは
+  見出しの下へ折り返す。min-width は 0 にする（節は grid なので、既定の auto の
+  ままだと長い1語が箱を押し広げる）。
 */
 .screen-head,
 .screen-body {
   min-width: 0;
 }
 
+.screen-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-3) var(--sp-6);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: var(--sp-3);
+}
+
 /*
-  作品1件のページの「← 一覧に戻る」（components.tsx の BackLink）。丸い札で、
-  一覧（1つ上の階層）へ上がる手なので見出しの上に置く。行き先は一覧のその作品の
-  カード（/projects#item-<slug>）。
+  見出しの箱は絞り込みの的（--tap）より低くならない。低いと、下端でそろえる並びの中で
+  見出しだけが押し下げられ、ほかのページの見出しと上端がそろわなくなる（見出しの錨。
+  390 と 768 の指の姿で、見出しの字が --tap より低い）
+*/
+.screen-head > .head {
+  min-height: var(--tap);
+  border-bottom: 0;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+/*
+  絞り込みは見出しの隣に入りきらなければ、縮まずに次の行へ落ちる（縮むと、
+  入る幅があるのに横に送る帯になる）。1行より長いときだけ、その行の中で横に送る
+  （「ページの外枠」の 899 以下の .filters）。
+*/
+.screen-head > .filters {
+  flex-shrink: 0;
+  max-width: 100%;
+}
+
+/*
+  作品1件のページの「← 一覧に戻る」（components.tsx の BackLink）。一覧（1つ上の
+  階層）へ上がる手なので見出しの上に置く。行き先は一覧のその作品の行
+  （/projects#item-<slug>）。面を持たない字の手で、当たり判定は --tap
+  （pointer: coarse では 44px）。
 
   justify-self は必須。節は grid なので、子になった inline-flex は blockify され、
-  既定の stretch で幅いっぱいに伸びる。当たり判定は --tap（pointer: coarse では 44px）。
+  既定の stretch で幅いっぱいに伸びる（右の空白まで押せる面になる）。
 */
 .back {
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: var(--sp-3);
   justify-self: start;
   min-height: var(--tap);
-  padding: var(--sp-2) var(--sp-5);
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: var(--surface);
-  box-shadow: var(--highlight);
   color: var(--ink-mid);
   font-size: var(--fs-sm);
   transition:
-    background var(--dur-fast) var(--ease),
     color var(--dur-fast) var(--ease),
     scale var(--dur-spring) var(--ease-spring);
-  /* 見出しの上に立つ札。見出しとのあいだを空ける */
-  margin-bottom: var(--sp-5);
+  /* 見出しの上に立つ手。見出しとのあいだを空ける */
+  margin-bottom: var(--sp-4);
 }
 
 /* --- 絞り込み --- */
@@ -1357,38 +1952,34 @@ main {
 .filters {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--sp-2);
-  margin-bottom: var(--sp-5);
+  gap: 0 var(--sp-5);
 }
 
 /*
-  ピルはボタンではなくリンク。絞り込みはサーバーが持っていて、押した先は
-  絞り込んだ一覧の URL になる（公開ページは JavaScript を持たない）。
-  リンクは inline なので、当たり判定の高さ（--tap）を効かせるために
-  inline-flex にする。
+  絞り込みは字の手（タブ）。ボタンではなくリンクで、押した先は絞り込んだ一覧の
+  URL になる（絞り込みはサーバーが持っていて、公開ページは JavaScript を持たない）。
+  リンクは inline なので、当たり判定の高さ（--tap）を効かせるために inline-flex にする。
 */
 .filters a {
   display: inline-flex;
   align-items: center;
   min-height: var(--tap);
-  padding: var(--sp-2) var(--sp-5);
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: var(--surface);
-  box-shadow: var(--highlight);
-  color: var(--ink-mid);
+  color: var(--ink-weak);
   font-size: var(--fs-sm);
   transition:
-    background var(--dur-fast) var(--ease),
     color var(--dur-fast) var(--ease),
     scale var(--dur-spring) var(--ease-spring);
 }
 
-/* いま効いている絞り込み。もう一度押すと、その軸だけ外れる */
+/*
+  いま効いている絞り込み。字を --ink に上げ、下線を引く（色だけで分けない。
+  WCAG 1.4.1）。もう一度押すと、その軸だけ外れる
+*/
 .filters a[aria-current] {
-  border-color: transparent;
-  background: var(--accent);
-  color: var(--accent-ink);
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-thickness: var(--orbit-line);
+  text-underline-offset: var(--sp-3);
 }
 
 .filter-empty {
@@ -1407,12 +1998,11 @@ main {
   900 未満は縦に積む（画像が見出しのすぐ下）。900 以上で画像がある作品は、
   文の列を左・画像を右に並べる（下の「900px 以上」の .detail--shot）。
   横に並べると、画像の高さが文の列の高さに重なって消える——縦に積んだときの
-  「画像ぶんの高さ」が丸ごと本文に回る。背の低い 1440x900 の中央寄せ
-  （節の高さ 564px）で本文を置けるのは、この並べ方があるから。
+  「画像ぶんの高さ」が丸ごと本文に回る。
 
   間隔は gap で決める。節は grid で行の間を空けないので、子を節の直下に
   並べていたころは、説明と実績値の箱がくっついていた。文の列の中（段落の
-  列・実績値・タグ・行き先）はカードと同じ --sp-4——カードを開いたものなので、
+  列・実績値・タグ・行き先）は一覧の行と同じ --sp-4——行を開いたものなので、
   同じ詰め方で並ぶ。画像と文の列のあいだは1段広い --sp-5。
 
   flex ではなく grid。高さの足りない箱に入った flex の子は中身より小さく
@@ -1446,9 +2036,7 @@ main {
 .shot {
   position: relative;
   height: var(--shot-h);
-  border-radius: var(--radius-sm);
   background: var(--surface);
-  box-shadow: var(--highlight);
   overflow: clip;
 }
 
@@ -1460,204 +2048,202 @@ main {
   object-fit: contain;
 }
 
-/* --- カード --- */
-
-.grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--sp-5);
-}
+/* --- 一覧の行 --- */
 
 /*
-  カードは押せる面。位置の基準（position: relative）はカード自身で、題のリンクの
-  ::after（.card__link）がここを inset: 0 で覆う。基準を外すと ::after は
-  いちばん近い位置の基準——節か外枠——まで広がり、画面のどこを押しても
-  その作品へ飛ぶ。
+  一覧（Projects）は番号付きの行を縦に並べた索引（components.tsx の ItemRow）。
+  行と行のあいだに1本の罫線を引き、箱（枠・面・影）には入れない。
 
-  内側の余白は 600 未満で1段詰める（--sp-5。600 以上は下で --sp-6）。電話では
-  カードが1列に縦に積まれ、本文の列が 358px しか無い。32px の内側の余白を
-  取ると、説明の1行が 294px まで細る。16px は電話の外枠の余白（--gutter の
-  下限）と同じ段。
+  行の中は grid の区画（番号・本文・サムネイル・札・技術・矢印）で組む。
+    600 未満   番号と矢印の下に、本文 → サムネイル → 札 → 技術を縦に積む
+    600 以上   左に番号の列を立て、本文・サムネイル・札・技術をその右に積む
+    900 以上   番号・本文・札・技術・矢印を横に並べ、サムネイルは本文の下
+               （下の「900px 以上」）
+  区画の幅は :root の --entry-*。本文の列が残りを受ける。
 */
-.card {
+.entries {
+  display: flex;
+  flex-direction: column;
+}
+
+.entry {
   position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'index go'
+    'main main'
+    'thumb thumb'
+    'meta meta'
+    'tags tags';
+  gap: var(--sp-4) var(--sp-6);
+  align-items: start;
+  padding-block: var(--sp-6);
+  border-bottom: 1px solid var(--line);
+}
+
+/* 番号（01・02 …）。入口の軌道図の札と同じ番号で、飾りなので読み上げには流さない */
+.entry__index {
+  grid-area: index;
+  color: var(--ink-weak);
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  letter-spacing: 0.14em;
+  line-height: var(--entry-title-lh);
+}
+
+.entry__main {
+  grid-area: main;
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
-  padding: var(--sp-5);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--highlight);
-  transition:
-    background var(--dur-fast) var(--ease),
-    border-color var(--dur-fast) var(--ease),
-    transform var(--dur) var(--ease),
-    scale var(--dur-spring) var(--ease-spring);
+  min-width: 0;
 }
 
-.card[hidden] {
-  display: none;
+/* 行の題。節の見出し（--fs-display-xl）から2段以上離した --fs-display-xs */
+.entry__main h3 {
+  font-family: var(--font-display);
+  font-size: var(--fs-display-xs);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
 }
 
 /*
-  カードのサムネイル（components.tsx の ItemCard）。どの幅でも出す。一覧は1ページに
-  縦に並ぶので、電話で1列に積んだカードが画像のぶん伸びても、次のカードは送れば
-  見える。画像は一覧の中で作品を見分ける手がかりで、以前（1画面に収めていたころ）は
-  600 未満で畳んでいた——畳んだ電話では、一覧のどこにも作品の絵が無かった。
+  行の説明。本文の段（--fs-base = 14px）。
+
+  行数では切らない（上限 100 字の2文が、どの幅でも全部出る）。以前は1画面に
+  収めるために行数で止めていて、「何であるか。何をしたか。」の2文目がほぼ
+  読めない幅があった。1行は約40字（--measure）で止める。
+*/
+.entry__main p {
+  max-width: var(--measure);
+  color: var(--ink-mid);
+  font-size: var(--fs-base);
+  line-height: 1.85;
+}
+
+/*
+  行ごと押せるようにする（stretched link）。題のリンクの ::after を、位置の基準に
+  した行（.entry）いっぱいに被せる。
+
+  行そのものを <a> にはできない——中に外へのリンク（.links a）と担当者名
+  （.entry__member）があり、<a> は入れ子にできない。公開ページに JavaScript も
+  置かない。だから押せる面だけを広げて、リンクは題の1本のままにする。読み上げで
+  リンクの名前が作品名なのも、Tab で止まるのが1回なのも変わらない。
+
+  カーソルは書かない。::after は <a> の一部なので、リンクの指差しのカーソルが
+  行の面にそのまま出る。代わりに、行の説明の字はなぞって選べなくなる（面を
+  押すとリンクになる）。承知のうえ——同じ説明は押した先の作品のページにもあり、
+  そちらはふつうの本文なので選べる。
+*/
+.entry__link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+/*
+  フォーカスの輪郭は行全体に描く。リンクそのもの（題の字）に描くと、押せる面は
+  行全体なのに、輪郭だけが題の字幅に縮んで見える。太さは素の :focus-visible と
+  同じ段（--focus-ring）。
+
+  輪郭は行の縁の**内側**に描く（離し方は太さぶんの負）。外へ 3px 離すと、上の
+  行の罫線と重なって、どちらの行を囲んでいるのか読み分けにくい。
+*/
+.entry__link:focus-visible {
+  outline: none;
+}
+
+.entry__link:focus-visible::after {
+  outline: var(--focus-ring) solid var(--accent);
+  outline-offset: calc(var(--focus-ring) * -1);
+}
+
+/*
+  札（プラットフォームか業界・区分・年・担当）。600 未満は1行に並べ、600 以上は
+  区画の中で縦に積む。英字だけの札（macOS）は等幅の小さな大文字、和文の札
+  （金融系基幹システム・個人開発）は本文の書体で和文の最小の段。年は和文を含む
+  書き方（「2024 — 現在」）なので等幅にせず、数字の幅だけそろえる。
+*/
+.entry__meta {
+  grid-area: meta;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-4);
+  color: var(--ink-mid);
+  font-size: var(--fs-meta);
+  line-height: 1.9;
+}
+
+.entry__meta li:lang(en) {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.entry__year {
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+  行の中の、題とは別の行き先（担当者名と、.links の外へのリンク）。題のリンクの
+  ::after（.entry__link）が行の面を覆っているので、重ねの順でその上に出す。
+  出さないと、担当者名を押しても Repository を押しても、覆いの下で作品のページへ行く。
+*/
+.entry__member {
+  position: relative;
+  z-index: 1;
+  color: var(--ink-mid);
+  text-decoration: underline;
+  text-underline-offset: var(--sp-1);
+}
+
+/*
+  サムネイル（画像のある作品だけ）。どの幅でも出す——一覧は1ページに縦に並ぶので、
+  画像のぶん行が伸びても次の行は送れば見える。画像は一覧の中で作品を見分ける
+  手がかりで、以前（1画面に収めていたころ）は電話で畳んでいた——畳んだ電話では、
+  一覧のどこにも作品の絵が無かった。
 
   縦横比は :root の --thumb-ratio で固定し、絵は枠いっぱいに切り抜く（cover）。
-  カードは並べて見比べる場所なので、枠の形がそろっていることを優先する。
   切り抜く位置は上寄せ——画面のスクリーンショットは上に題や道具の帯があり、
   そこがいちばんその作品らしい。全体は作品のページで見られる。
 
-  同じ行で画像の有る無しが混ざったら、無いほうにも空の枠を置く（ItemCard の
-  framed。理由はそこに書いてある）。空の枠は面（--surface）だけで、字も印も
-  置かない。**空の枠は 600 未満では出さない**（:empty）。そこではカードが1列で、
-  そろえる相手が横に居ない——絵の無いカードの頭に何も無い箱が載るだけになる。
-*/
-/*
   min-height: 0 は必須。縦横比を持つ箱は、既定（auto）の最小の高さが「中身の
-  高さ」になる。読み込んだ絵が自分の寸法（300x300 の絵なら 300px）で箱を
-  押し広げ、縦横比が黙って外れる——読み込む前の 120px が、読み込んだ瞬間に
-  300px になっていた（= rail @768x1024, Hiragino Sans, macOS Chromium）。
+  高さ」になる。読み込んだ絵が自分の寸法で箱を押し広げ、縦横比が黙って外れる。
 */
-.card__thumb {
+.entry__thumb {
+  grid-area: thumb;
   display: block;
+  width: min(100%, var(--entry-thumb));
   aspect-ratio: var(--thumb-ratio);
   min-height: 0;
-  border-radius: var(--radius-sm);
   background: var(--surface);
-  box-shadow: var(--highlight);
   overflow: clip;
 }
 
-.card__thumb:empty {
-  display: none;
-}
-
-.card__thumb img {
+.entry__thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   object-position: center top;
 }
 
-.card__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-4);
+/* 技術（components.tsx の Tags）。区画に名前を付けて置き場所を決める */
+.entry > .tags {
+  grid-area: tags;
 }
 
-.card__head h3 {
-  font-size: var(--fs-md);
-  font-weight: 600;
-  letter-spacing: 0.01em;
-}
-
-/*
-  カードごと押せるようにする（stretched link）。題のリンクの ::after を、
-  位置の基準にしたカード（.card）いっぱいに被せる。
-
-  カードそのものを <a> にはできない——中に外へのリンク（.links a）と担当者名
-  （.card__member）があり、<a> は入れ子にできない。公開ページに JavaScript も
-  置かない。だから押せる面だけを広げて、リンクは題の1本のままにする。読み上げで
-  リンクの名前が作品名なのも、Tab で止まるのが1回なのも変わらない。
-
-  以前は題の字だけがリンクだった。その一方で .card:hover はカードごと浮いて
-  いたので、浮いたカードの説明を押しても何も起きなかった。
-
-  カーソルは書かない。::after は <a> の一部なので、リンクの指差しのカーソルが
-  カードの面にそのまま出る。
-
-  代わりに、カードの説明の字はなぞって選べなくなる（面を押すとリンクになる）。
-  承知のうえ——同じ説明は押した先の作品のページにもあり、そちらはふつうの
-  本文なので選べる。
-*/
-.card__link::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: var(--radius);
-}
-
-/*
-  フォーカスの輪郭はカード全体に描く。リンクそのもの（題の字）に描くと、
-  押せる面はカード全体なのに、輪郭だけが題の字幅に縮んで見える。
-  太さは素の :focus-visible と同じ段（--focus-ring）。
-
-  輪郭はカードの縁の**内側**に描く（離し方は太さぶんの負）。素の
-  :focus-visible のように外へ 3px 離すと、並んだカードの間隔の中に輪郭が
-  出て、隣のカードの縁とのあいだで、どちらを囲んでいるのか読み分けにくい。
-  内側なら、どの幅でもカードの縁と重なって一周する。
-*/
-.card__link:focus-visible {
-  outline: none;
-}
-
-.card__link:focus-visible::after {
-  outline: var(--focus-ring) solid var(--accent);
-  outline-offset: calc(var(--focus-ring) * -1);
-}
-
-/*
-  年（「2026」「2024 — 現在」）。和文を含む書き方なので等幅にせず、数字の幅
-  だけをそろえる（:root の --font-mono を見ること）。
-*/
-.card__head .year {
-  flex-shrink: 0;
+/* 矢印。押せる行（題にリンクのある行）にだけ出る。飾りなので読み上げには流さない */
+.entry__go {
+  grid-area: go;
   color: var(--ink-weak);
-  font-size: var(--fs-meta);
-  font-variant-numeric: tabular-nums;
-}
-
-/*
-  カードの説明。本文の段（--fs-base = 14px）。
-
-  行数では切らない（上限 100 字の2文が、どの幅でも全部出る）。以前は1画面に
-  収めるために行数で止めていて、「何であるか。何をしたか。」の2文目がカードから
-  ほぼ読めない幅があった。
-*/
-.card p {
-  color: var(--ink-mid);
-  font-size: var(--fs-base);
-  line-height: 1.75;
-}
-
-/*
-  カードの中の、題とは別の行き先（担当者名と、.links の外へのリンク）。
-  題のリンクの ::after（.card__link）がカードの面を覆っているので、重ねの順で
-  その上に出す。出さないと、担当者名を押しても Repository を押しても、
-  覆いの下で作品のページへ行く。
-*/
-.card__member {
-  position: relative;
-  z-index: 1;
-  align-self: flex-start;
-  color: var(--ink-weak);
-  font-size: var(--fs-meta);
-}
-
-.card__member:hover {
-  color: var(--accent);
-}
-
-/*
-  カードの札（プラットフォーム名 / 業界名）。業界名は「金融系基幹システム」の
-  ような和文なので、本文の書体で和文の最小の段。11px の等幅だったころは、
-  カードでいちばん目立つ色の札が、いちばん読みにくい字で組まれていた。
-*/
-.chip {
-  display: inline-flex;
-  align-self: flex-start;
-  padding: 0 var(--sp-3);
-  border-radius: var(--radius-xs);
-  box-shadow: var(--highlight);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: var(--fs-meta);
-  line-height: 1.9;
+  font-size: var(--fs-lg);
+  line-height: var(--entry-title-lh);
+  transition:
+    color var(--dur-fast) var(--ease),
+    translate var(--dur-spring) var(--ease-spring);
 }
 
 .tags {
@@ -1691,21 +2277,18 @@ main {
   行き先の列。折り返した行のあいだは空けない（row-gap 0）。どの札も的の高さ
   （--tap。40px、指では 44px）を持っていて、それがそのまま行の間隔になる。
   --sp-4 を足していたころは、行き先5本が2行に折れた作品で行の間が 52px 開き、
-  2行目の札が次の段の頭に見えた（= rail @1440x900 のカード）。
+  2行目の札が次の段の頭に見えた。
 */
 .links {
   display: flex;
   flex-wrap: wrap;
-  gap: 0 var(--sp-4);
-  margin-top: auto;
-  border-top: 1px solid var(--line);
-  padding-top: var(--sp-4);
+  gap: 0 var(--sp-5);
 }
 
 /*
-  カードの外に出るリンクは --accent。このサイトの仕事は、初めて来た人を
+  作品の外に出るリンクは --accent。このサイトの仕事は、初めて来た人を
   GitHub なり公開ページなりの実物へ送り出すことで、その操作子が本文と同じ色
-  （--ink-mid）だと、カードの中でいちばん目立たないものになる。区別が
+  （--ink-mid）だと、行の中でいちばん目立たないものになる。区別が
   @media (hover: hover) の :hover にしか無いと、タッチ端末では最後まで
   気づかれない。
 
@@ -1714,7 +2297,7 @@ main {
   で AA を割るうえ、:root の段に無い生の値を1か所に書くことになる。
 */
 .links a {
-  /* 題のリンクの覆い（.card__link::after）より上に出す。.card__member を見ること */
+  /* 題のリンクの覆い（.entry__link::after）より上に出す。.entry__member を見ること */
   position: relative;
   z-index: 1;
   display: inline-flex;
@@ -1767,27 +2350,25 @@ main {
 
 /* --- Team --- */
 
+/*
+  Team のカード（components.tsx の MemberCardWide / MemberCardCompact）。一覧の行と
+  同じく箱に入れず、罫線で区切る（2人は横長の行を縦に、3人以上は格子に）。
+*/
 .team-list {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-4);
 }
 
 .team-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--sp-4);
+  gap: 0 var(--sp-5);
 }
 
 .member {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--highlight);
+  border-bottom: 1px solid var(--line);
   transition:
     background var(--dur-fast) var(--ease),
-    border-color var(--dur-fast) var(--ease),
-    transform var(--dur) var(--ease),
     scale var(--dur-spring) var(--ease-spring);
 }
 
@@ -1797,7 +2378,7 @@ main {
   align-items: center;
   flex-wrap: wrap;
   gap: var(--sp-3) var(--sp-5);
-  padding: var(--sp-5);
+  padding-block: var(--sp-6);
 }
 
 .member--wide .member__go {
@@ -1966,7 +2547,6 @@ main {
   align-items: baseline;
   padding: var(--sp-1) var(--sp-3);
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
   font-size: var(--fs-sm);
   color: var(--ink-mid);
 }
@@ -2012,21 +2592,24 @@ main {
 
 /* できごとは .career、メモは .bio をそのまま使う。同じものを別の名前で増やさない */
 
+/*
+  ひとこと（1文だけのページ）。大見出しと同じ組みで、大きな1文を置くだけ
+  （箱や線で囲まない）。
+*/
 .statement {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
-  border-left: 2px solid var(--accent);
-  padding-left: var(--sp-5);
+  gap: var(--sp-4);
 }
 
 .statement__text {
   font-family: var(--font-display);
-  font-size: var(--fs-display-xs);
-  font-weight: 600;
+  font-size: var(--fs-display);
+  font-weight: 500;
+  font-feature-settings: 'palt';
   line-height: 1.4;
   letter-spacing: -0.01em;
-  max-width: 28em;
+  max-width: 24em;
 }
 
 .statement__note {
@@ -2053,21 +2636,19 @@ main {
   font-size: var(--fs-meta);
 }
 
+/* 数字のブロック。入口の件数の帯と同じく、上に罫線を引いたセルを並べる（箱は持たない） */
 .numbers {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: var(--sp-4);
+  gap: 0 var(--sp-5);
 }
 
 .numbers__item {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-  padding: var(--sp-5);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--highlight);
+  padding-block: var(--sp-5);
+  border-top: 1px solid var(--line);
 }
 
 .numbers__note {
@@ -2114,15 +2695,14 @@ main {
   font-size: var(--fs-sm);
 }
 
-/* --- 一覧への帯（トップの入口と、2人以上のサイトの個人ページの名札の下） --- */
+/* --- 一覧への帯（2人以上のサイトの個人ページの名札の下） --- */
 
 /*
-  大見出しの下に置く、丸い札。左に何が入っているか（「つくったもの」）と件数、
-  右端にアクセントで塗った「一覧で見る →」。横いっぱいには伸ばさない——伸ばすと
-  入力欄に見える。
+  2人以上のサイトの個人ページの名札の下に置く、一覧への1本（components.tsx の Band）。
+  左に何が入っているか（「このメンバーのつくったもの」）と件数、右端に塗りの
+  「一覧で見る →」。上下に罫線を引いた1行で、箱には入れない。
 
-  justify-self（Hero が grid のとき）と align-self（/all で flex のとき）の
-  両方で左に寄せる。中央寄せの骨格は下で center に差し替える。
+  justify-self（Hero が grid のとき）と align-self（flex のとき）の両方で左に寄せる。
 */
 .band {
   display: inline-flex;
@@ -2132,13 +2712,9 @@ main {
   gap: var(--sp-6);
   max-width: 100%;
   margin-top: var(--sp-4);
-  padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-6);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  box-shadow: var(--highlight);
+  padding-block: var(--sp-3);
+  border-block: 1px solid var(--line);
   transition:
-    background var(--dur-fast) var(--ease),
     border-color var(--dur-fast) var(--ease),
     scale var(--dur-spring) var(--ease-spring);
 }
@@ -2156,12 +2732,8 @@ main {
 }
 
 /*
-  件数は --ink-mid。帯は入口の光暈の上に乗るので、--ink-weak では 390 の幅で
-  3.80:1 まで落ちる（要 4.5:1。center mint 390x844, 既定書体, Chromium。
-  npm run check:contrast が帯の字も測っている）。
-
-  字は本文の書体で和文の最小の段。件数は「個人開発 5 · 業務 2」と和文なので、
-  11px の等幅だったころは帯の中でいちばん読みにくかった。
+  件数は --ink-mid。字は本文の書体で和文の最小の段。件数は「個人開発 5 · 業務 2」と
+  和文なので、11px の等幅だったころは帯の中でいちばん読みにくかった。
 */
 .band__meta {
   color: var(--ink-mid);
@@ -2176,7 +2748,6 @@ main {
   flex-shrink: 0;
   min-height: var(--tap);
   padding: var(--sp-2) var(--sp-5);
-  border-radius: 999px;
   background: var(--accent);
   color: var(--accent-ink);
   font-size: var(--fs-sm);
@@ -2188,92 +2759,94 @@ main {
   transition: translate var(--dur-spring) var(--ease-spring);
 }
 
-/*
-  入口から全体ページ（/all）への控えめな1本（components.tsx の WholeLink）。
-  帯のすぐ下に、柱の足元（.rail__footer a）と同じ下線の文字リンクとして置く。
-  丸い札にしないのは、帯と札が2枚並ぶとどちらが本筋か分からなくなるため。
-
-  字は --ink-mid。月の光暈の上に乗る小さい字なので 4.5:1 が要る
-  （--ink-weak では帯の件数と同じく 390 の幅で足りない。npm run check:contrast が
-  この字も測っている）。justify-self と align-self は帯と同じ理由——Hero は
-  grid（ページの外枠）でも flex でも、子が行いっぱいに伸びて、下線の無い
-  右の空白まで押せる面になる。
-*/
-.hero__whole {
-  justify-self: start;
-  align-self: flex-start;
-  color: var(--ink-mid);
-  font-size: var(--fs-sm);
-  text-decoration: underline;
-  text-underline-offset: var(--sp-1);
-}
-
 /* --- Contact --- */
 
 /*
-  サイトの並びの最後のページ。入口（.hero）と対になる締めで、同じ組み方をする——
-  月を右上に（.moon--closing）、誘いの1文とボタンを表紙の下に（.moonlit）。
-
-  ページに出すのは月と、誘いの1文（.contact__lead）と、ボタン2つ。見出しは
-  読み上げ用の .sr-only（理由は src/ui/components.tsx の Contact）。箱（枠・面・
-  影）には入れない。箱だったころは、広い画面の真ん中に小さな枠が浮き、周りの
-  大半が空いたままだった（1440 でパネル 869x802 のうち枠が 869x281）。
-  下の余白は .hero と同じ。
+  サイトの並びの最後のページ（components.tsx の Contact）。入口と対になる締めで、
+  入口と同じ星系の軌道図（.orbits）を上に、誘いの1文とメールと GitHub の手を
+  その下に置く。字は表紙（--cover-h。「ページの外枠」）の底に寄せる（図と字の
+  あいだの余りは 1fr の行が受ける）。箱（枠・面・影）には入れない。
 */
+.orbital {
+  grid-template-rows: auto 1fr;
+  gap: var(--sp-7);
+}
+
+/* 字は 900 未満では残りの高さの真ん中に、900 以上では表紙の底に寄せる */
 .contact {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-5);
   align-items: flex-start;
-  padding-block: var(--sp-3) var(--enter-shift);
+  gap: var(--sp-5);
+  align-self: center;
+  min-width: 0;
 }
 
 /*
-  誘いの1文。入口のリード文（.hero p）と同じ字・同じ幅の上限で、入口と締めを
-  同じ声にそろえる。字は --ink-mid——締めの月の光暈の上に乗る小さい字なので
-  4.5:1 が要る（npm run check:contrast がこの1文も測っている）。
+  誘いの1文。大きく、句読点の塊を1行ずつ（入口の大見出しと同じ組み）。
+  見出しではない（見出しは読み上げ用の h1 が持つ）ので、太さは本文に近く。
 */
 .contact__lead {
-  max-width: 54ch;
-  color: var(--ink-mid);
-  font-size: var(--fs-md);
-  text-wrap: pretty;
+  font-size: var(--fs-display-sm);
+  font-weight: 500;
+  font-feature-settings: 'palt';
+  line-height: 1.45;
+  letter-spacing: -0.01em;
 }
 
-/* メール（塗りのピル）と GitHub（柱と同じ .socials）を横に並べる。狭ければ折り返す */
-.contact__actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-3);
+.contact__lead .phrase {
+  display: block;
 }
 
 /*
-  メールのアドレス。全体ページ（/all）にだけ字で置く——あそこは印刷の宛先で、
-  紙の上ではボタンの行き先（mailto）が読めない。user-select: all で、1回
-  押せば全部選べる。小さい字なので 4.5:1 が要り、--ink-weak では足りない。
+  メールの手。アドレスそのものを大きな細い字にし、下に1本の罫線を引く。
+  操作の言葉（→ メールを送る）はアドレスの後ろに小さく添える。狭い画面では
+  アドレスの下へ折り返す。アドレスは英数字の札なので、長くても語の途中で
+  折らない（1語が列より長いときだけ、どこででも折る）。
 */
-.contact__address {
-  color: var(--ink-mid);
-  font-family: var(--font-mono);
-  font-size: var(--fs-meta);
-  letter-spacing: 0.04em;
-  user-select: all;
+.contact__mail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2) var(--sp-5);
+  max-width: 100%;
+  padding-bottom: var(--sp-4);
+  border-bottom: 1px solid var(--line-strong);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
 }
 
-.pill-cta {
+.contact__address {
+  min-width: 0;
+  font-size: var(--fs-display-sm);
+  font-weight: 300;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.contact__go {
+  color: var(--ink-mid);
+  font-size: var(--fs-meta);
+}
+
+/* GitHub。入口の札と同じ、等幅の小さな大文字（英字だけの札） */
+.contact__sub {
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-2);
   min-height: var(--tap);
-  padding: var(--sp-3) var(--sp-6);
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-size: var(--fs-md);
+  color: var(--ink-mid);
+  font-size: var(--fs-meta);
   transition:
-    opacity var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
     scale var(--dur-spring) var(--ease-spring);
+}
+
+.contact__sub :lang(en) {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
 .empty {
@@ -2295,18 +2868,18 @@ main {
 }
 
 /*
-  display: flex は、ロゴの svg を行に載せないため。
+  ロゴの印（ブラックホールの O）。光の縁と横線は字の色（currentColor）で描くので、
+  色は字の白のまま——線の色（--line-strong）に落とすと光が暗い灰色になり、影の
+  黒い円だけが残って印に見えない。
 
-  この箱は .oops の列の中で block になり、中の svg は1行ぶんの行ボックスに
-  載る。標準モードの行ボックスは字が無くても書体の高さの支え（strut）を
-  持つので、svg がベースラインに座り、下に字の下がりぶんの隙間が付く——
-  28px のロゴの箱が 35.8px になる（= 404 @1440x900, 素の書体, Chromium）。
-  DOCTYPE が無かったころは互換モードで支えが無く、28px のままだった。
-  flex にすると svg は行ではなく flex の子になり、箱はロゴと同じ高さに戻る。
+  display: flex は、印の svg を行に載せないため。この箱は .oops の列の中で block に
+  なり、中の svg は1行ぶんの行ボックスに載る。標準モードの行ボックスは字が無くても
+  書体の高さの支え（strut）を持つので、svg がベースラインに座り、下に字の下がりぶんの
+  隙間が付いて、箱が印より高くなる。flex にすると svg は行ではなく flex の子になり、
+  箱は印と同じ高さに戻る。
 */
 .oops__mark {
   display: flex;
-  color: var(--line-strong);
 }
 
 .oops__code {
@@ -2338,28 +2911,27 @@ main {
 
 @media (min-width: 600px) {
   /*
-    列の数は画面幅ではなくサーバーが決める。--cols は src/blocks.ts の
-    PROJECT_COLUMNS をそのまま渡すので、ここに数を書かない（数を変えても CSS は
-    触らない。style を落とすと --cols が無くなり、repeat() が計算できずに規則ごと
-    無効になって静かに1列へ落ちる）。
-
-    auto-fill をやめたのは、幅が広いほど列が増えて本文が細るため——2列で読める
-    説明が3列ぶんの幅で割られる（229px = rail @1440x900, Hiragino Sans, macOS
-    Chromium。電話 390 の 308px より狭い。雑誌風は5列で 243px）。「広い画面ほど
-    読めない」にしないために、列の数を固定する。
+    上の帯の間隔。600 未満は1段詰めて、電話（390）でも3つの行き先（Projects /
+    Profile / Contact）とロゴが1行に収まるようにする
   */
-  .grid {
-    grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  .top,
+  .toc {
+    gap: var(--sp-6);
   }
 
-  /* 行をそろえる空の枠。600 未満で出さない理由は素の .card__thumb に */
-  .card__thumb:empty {
-    display: block;
+  /* 押し手は列いっぱいに伸ばさず、字の幅に戻す（600 未満で伸ばす理由は素の .cta に） */
+  .cta {
+    align-self: flex-start;
   }
 
-  /* カードの内側の余白。600 未満で詰める理由は素の .card に */
-  .card {
-    padding: var(--sp-6);
+  /* 一覧の行: 左に番号の列を立て、本文・サムネイル・札・技術をその右に積む */
+  .entry {
+    grid-template-columns: var(--entry-index) minmax(0, 1fr) auto;
+    grid-template-areas:
+      'index main go'
+      '. thumb .'
+      '. meta .'
+      '. tags .';
   }
 
   .team-grid {
@@ -2378,9 +2950,43 @@ main {
 /* ============================================================ 900px 以上 */
 
 @media (min-width: 900px) {
-  .shell {
-    grid-template-columns: var(--nav-w) minmax(0, 1fr);
-    gap: var(--gutter);
+  /*
+    入口は2列。左に見出しの列、右に作品の軌道図、底に件数の帯（2列にまたがる）。
+    見出しの列と軌道図は、表紙の残りの高さの縦の真ん中に座る。
+  */
+  .hero--orbit {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: 1fr auto;
+    grid-template-areas: 'copy map' 'tally tally';
+    column-gap: calc(var(--sp-7) * 1.5);
+  }
+
+  .hero--orbit > :is(.hero__copy, .system) {
+    align-self: center;
+  }
+
+  /*
+    一覧の行: 番号・本文・札・技術・矢印を横に並べ、サムネイルは本文の下に置く。
+    本文の列が残りを受け、札は区画の中で縦に積む。区画の幅は行をまたいで同じ
+    なので、札と技術の縦の線が一覧の上から下までそろう
+  */
+  .entry {
+    grid-template-columns:
+      var(--entry-index) minmax(0, 1fr) var(--entry-meta) var(--entry-tags)
+      var(--entry-go);
+    grid-template-areas:
+      'index main meta tags go'
+      'index thumb meta tags go';
+    grid-template-rows: auto 1fr;
+  }
+
+  .entry__meta {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .orbital > .contact {
+    align-self: end;
   }
 
   /*
@@ -2410,31 +3016,6 @@ main {
     grid-column: 1;
     grid-row: 1;
   }
-
-  .rail {
-    position: sticky;
-    top: var(--gutter);
-    align-self: start;
-    gap: var(--sp-6);
-    max-height: calc(100dvh - var(--gutter) * 2);
-    overflow-y: auto;
-  }
-
-  .toc {
-    flex-direction: column;
-    overflow: visible;
-    gap: var(--sp-1);
-    padding-top: var(--sp-5);
-  }
-
-  .toc a,
-  .rail__admin {
-    margin-left: calc(var(--sp-3) * -1);
-  }
-
-  main {
-    gap: calc(var(--sp-7) * 2);
-  }
 }
 
 /* ====================================================== 見た目のプリセット */
@@ -2453,6 +3034,11 @@ main {
   body だけでなく要素単位でも効かせる。管理画面の見本が、同じ指定で
   そのまま色を出せるようにするため（見本用の色を別に持たない）。
 */
+[data-accent='mono'] {
+  --accent: var(--mono);
+  --accent-soft: var(--mono-soft);
+}
+
 [data-accent='iris'] {
   --accent: var(--iris);
   --accent-soft: var(--iris-soft);
@@ -2497,294 +3083,6 @@ main {
   --font-display: var(--font-mono);
 }
 
-/* --- 骨格: 中央寄せ --- */
-
-body[data-layout='center'] .shell {
-  max-width: var(--w-center);
-}
-
-/*
-  中央に組むのは表紙（入口の Hero と締めの Contact）と柱。個人ページの頭
-  （.hero--profile。名札・大見出し）は入れない——すぐ下に About からの本文が
-  続く読み物の頭で、本文の列と同じ左の軸に立てる（components.tsx の Hero）。
-*/
-body[data-layout='center'] .rail,
-body[data-layout='center'] .identity,
-body[data-layout='center'] .hero:not(.hero--profile),
-body[data-layout='center'] .contact {
-  align-items: center;
-  text-align: center;
-}
-
-/*
-  中央寄せには必ず safe を付ける。目次は 899 以下で1行の横帯（overflow-x: auto）
-  になるので、素の center は溢れた瞬間に中身を左右へ等しくはみ出させ、左端が
-  スクロールで戻せなくなる。safe なら溢れた時点で start に戻るので、切れるとしても
-  必ず右端からになり、そちらは端のぼかしで見える。align-content と同じ理屈。
-
-  flex-wrap: wrap は全体ページ（/all）のためのもの。あちらの柱は貼り付かないので、
-  折り返すほうが1行の横スクロール帯より読みやすい。ほかのページでは目次が
-  貼り付く帯になり、「ページの外枠」が nowrap で上書きする（そのために、
-  あの規則だけ :where() を外してある）。
-*/
-body[data-layout='center'] .toc {
-  justify-content: safe center;
-  flex-wrap: wrap;
-  border-top: 0;
-  padding-top: 0;
-}
-
-body[data-layout='center'] .hero:not(.hero--profile) p {
-  margin-inline: auto;
-}
-
-/*
-  帯と入口の「すべてを1ページで読む →」は、素の姿では左に寄せてある
-  （justify-self / align-self）。入口の Hero の中の子なので、ここで中央へ。
-
-  「← 一覧に戻る」（.back）はここに入れない。すぐ下の節の見出し（.head）に付いて
-  寄る札で、見出しは中央寄せでも左に置く（下の .head の話）。個人ページの頭
-  （.hero--profile）の子——名札・その人の GitHub / メール・2人以上のサイトの帯——も
-  入れない。頭ごと左の軸に立つ（上の話）。npm run check:fit が「中央寄せの入口の
-  Hero の直接の子の中心がそろう」を測っている。
-*/
-body[data-layout='center'] .hero:not(.hero--profile) > .band,
-body[data-layout='center'] .hero__whole {
-  justify-self: center;
-  align-self: center;
-  text-align: start;
-}
-
-/*
-  節の見出し（.head）は、中央寄せの骨格でも左に置く。
-
-  中央に置いていたころは、見出しだけが真ん中で、その下の本文（カード・紹介文・
-  経歴）は左から始まっていた——読む目は見出しの中心から本文の左端へ、行ごとに
-  斜めに飛ぶ。中央寄せの骨格が中央に組むのは入口・締め・ひとこと（Hero と
-  Contact と Statement）で、本文の列を持つ節ではない。見出しは本文の列と同じ
-  軸（左）に立てる。だからこの骨格には .head の規則を1本も書かない。
-*/
-
-/*
-  ひとことは中央に組む。ただし全体ページ（/all）の Profile の節の大見出し（同じ
-  Statement の部品。.profile の直接の子）は除く——名札と About の本文に挟まれた
-  1文で、個人ページの頭と同じく左の軸に立てる（.hero--profile の話）。:not() の中の
-  複合セレクタを知らないブラウザは規則ごと捨て、ひとことが左に残るだけ。
-*/
-body[data-layout='center'] .statement:not(.profile > .statement) {
-  align-items: center;
-  text-align: center;
-  border-left: 0;
-  padding-left: 0;
-}
-
-/* --- 骨格: 雑誌風 --- */
-
-body[data-layout='magazine'] {
-  --fs-display: var(--fs-display-xl);
-  /* サムネイルを横長に。理由は :root の --thumb-ratio-wide */
-  --thumb-ratio: var(--thumb-ratio-wide);
-}
-
-body[data-layout='magazine'] .shell {
-  max-width: var(--w-wide);
-}
-
-/* 箱を並べず、罫線で段を区切る */
-/* 帯（.band）は箱ではなく押すもの（丸い札）なので、ここには入れない。
-   Contact も入口と同じく箱を持たない（月の下に置く1枚の構図）ので入れない */
-body[data-layout='magazine'] .card,
-body[data-layout='magazine'] .member,
-body[data-layout='magazine'] .numbers__item {
-  border: 0;
-  border-top: 1px solid var(--line-strong);
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  padding: var(--sp-5) 0 0;
-}
-
-/*
-  雑誌風のカードのフォーカスは、輪郭ではなく罫線で見せる。
-
-  このカードは箱を持たず、左右の余白も無い——字がカードの縁まで来る。輪郭を
-  一周させると、内側に描けば字の頭に掛かり（= magazine @390x844, Hiragino Sans,
-  macOS Chromium）、外側に描けば罫線で段を区切る骨格の中に箱が1つだけ現れる。
-  だから段を区切る上の罫線を、アクセントの太線（--focus-ring）に
-  替える。ホバーで罫線をアクセントにするのと同じ場所で、同じ言葉を使う。
-
-  覆い（::after）は上へ罫線の太さ（1px）だけ伸ばして、太線がカードの罫線に
-  重なるようにする。伸ばさないと罫線の下に太線が付いて、灰と色の2段になる。
-  線は border で描く。box-shadow は強制色モード（forced-colors）で消える。
-*/
-body[data-layout='magazine'] .card__link::after {
-  inset: -1px 0 0;
-  border-radius: 0;
-}
-
-body[data-layout='magazine'] .card__link:focus-visible::after {
-  outline: none;
-  border-top: var(--focus-ring) solid var(--accent);
-}
-
-body[data-layout='magazine'] .grid {
-  gap: var(--sp-6);
-}
-
-/* 画像の枠も角を立てる。箱を丸めない骨格の中で、画像だけが丸いと浮く */
-body[data-layout='magazine'] :is(.card__thumb, .shot) {
-  border-radius: 0;
-}
-
-body[data-layout='magazine'] .head {
-  border-bottom-color: var(--line-strong);
-}
-
-/*
-  「見出しを大きく取り」（src/theme.ts のこの骨格の説明）。入口の大見出しを
-  はしごの最上段に上げる（上の --fs-display の差し替え）だけでは、見出しが
-  大きいのは入口の1枚だけで、奥の画面の節見出しはほかの骨格と同じ大きさ
-  だった。節の見出しも1段上げる（--fs-display-xs → --fs-display-sm）。
-  全体ページ（/all）の h2 も同じ規則。小節の見出し（.head--sub。作品のページの
-  Story の h2）は上げない——上げると見出し（作品名）と同じ格に見える。個人ページの
-  章の見出し（.head--chapter）も上げない——頭の大見出し（h1）と同じ大きさになる。
-*/
-body[data-layout='magazine'] .head:not(.head--sub, .head--chapter) :is(h1, h2) {
-  font-size: var(--fs-display-sm);
-}
-
-@media (min-width: 600px) {
-  /*
-    雑誌風も列の数は --cols に従う（列を数える規則は素の .grid の1本だけ）。
-    ここで変えるのは段の間隔だけ。前は 240px の auto-fill で、1440 では5列に
-    割れて本文が 243px しか無かった（= magazine @1440x900, Hiragino Sans,
-    macOS Chromium）。罫線で段を区切る設計では箱の枠が無いぶん、細い段は
-    段組みではなく「切れた文」に見える
-  */
-  body[data-layout='magazine'] .grid {
-    column-gap: var(--sp-7);
-  }
-}
-
-@media (min-width: 900px) {
-  /* 中央寄せと雑誌風は、広い画面でも左に柱を立てない */
-  body[data-layout='center'] .shell,
-  body[data-layout='magazine'] .shell {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--sp-7);
-  }
-
-  body[data-layout='center'] .rail,
-  body[data-layout='magazine'] .rail {
-    position: static;
-    max-height: none;
-    overflow: visible;
-  }
-
-  body[data-layout='center'] .toc,
-  body[data-layout='magazine'] .toc {
-    flex-direction: row;
-    padding-top: 0;
-  }
-
-  body[data-layout='center'] .toc a,
-  body[data-layout='magazine'] .toc a,
-  body[data-layout='center'] .rail__admin,
-  body[data-layout='magazine'] .rail__admin {
-    margin-left: 0;
-  }
-
-  /*
-    雑誌風の名札は、ページの上に渡す題字になる。
-
-    帯の3つ（名札の行・目次・足元）は縦の中心でそろえる。下端（flex-end）で
-    そろえていたころは、高さの違う3つ——名札の行は GitHub / メールの札で 40px、
-    目次の行き先は 28px、足元は 11px の字1行——の下端だけが同じ線に乗り、
-    字のほうは3段ばらばらの高さに座っていた（札の枠の下端と、字の下端は別物）。
-    中心でそろえれば、どれも帯の同じ高さを通る1本の行に読める。字の中心の高さ
-    （名前 / 目次 / 足元）は 68.5 / 73.4 / 78.8px → 68.5 / 68.4 / 68.1px
-    （= magazine @1440x900, 既定書体, macOS Chromium）。帯の高さは 57px のまま。
-    幅が足りずに折り返す（920 あたりで足元が2段目へ落ちる）ときも、1段目の
-    名札と目次は同じ規則で中心がそろう。
-  */
-  body[data-layout='magazine'] .rail {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: var(--sp-5);
-    border-bottom: 1px solid var(--line-strong);
-    padding-bottom: var(--sp-5);
-  }
-
-  /*
-    中央寄せの柱も上の帯になる。帯は2段——1段目に名札、2段目に目次と
-    全体ページへの1本（足元の「全体を1ページで見る →」）を同じ行に並べる。
-
-    著作権表示はここでは出さない。柱が左に立つ骨格では足元（柱の底）の役を
-    持つが、上の帯になった柱には足元が無い——帯の真ん中に「© 2026 Noctifex」が
-    1行ぶんの段を取り、その下に本文が始まっていた。899 以下の帯で畳むのと同じ
-    扱いで、畳んでも失われるものは無い（サイトの名前は名札と <title> にある）。
-    全体ページ（/all）の足元は著作権表示しか持たない（自分への行き先は置かない）
-    ので、足元ごと出さない。
-
-    名札を 1段目いっぱい（flex-basis: 100%）にして、残りを2段目へ送る。名札の
-    中身は中央に寄せる（柱の align-items: center は縦の中心になるので、横は
-    justify-content で寄せ直す）。帯は3段から2段になり、貼り付いた帯が画面の上を
-    食う高さが減る（帯の高さ 136.8 → 94.1px = center @1440x900, 既定書体, macOS
-    Chromium）。
-  */
-  body[data-layout='center'] .rail {
-    flex-direction: row;
-    flex-wrap: wrap;
-    justify-content: center;
-    align-items: center;
-  }
-
-  body[data-layout='center'] .rail > .identity {
-    flex-basis: 100%;
-    justify-content: center;
-  }
-
-  body[data-layout='center'] .rail__copy,
-  body[data-layout='center'][data-whole] .rail__footer {
-    display: none;
-  }
-
-  /*
-    中央寄せと雑誌風は、900 以上でも柱を左に立てず上の帯にする（すぐ上で
-    列を1つに戻している）。帯になった名札の中身は横に寝かせること。
-
-    縦積みのままだと名札だけで約237px——トップの帯 30.1px の約8倍——を取り、
-    貼り付いた帯が画面の上の3割近くを食う（= center @1440x900）。
-
-    4行まとめて効かせる。flex-wrap を落とすと、名札の6つの子が狭い帯で1行に
-    収まらず、はみ出したぶんが切れる。
-  */
-  body[data-layout='center'] .identity,
-  body[data-layout='magazine'] .identity {
-    flex-direction: row;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--sp-4);
-  }
-
-  /*
-    雑誌風の目次も、全体ページ（/all）では折り返す（中央寄せの素の規則と同じ
-    flex-wrap: wrap）。ほかのページでは「ページの外枠」の 900 以上が nowrap の
-    貼り付く帯で上書きする。
-
-    折り返さないころは、帯の行に入りきらない目次が画面の右へ伸び、ページが横に
-    動いた（ブロック12本の中身で scrollWidth 1550 = magazine @1440x900）。この骨格の
-    900 以上の目次は素の overflow: visible を受けるので、はみ出しは目次の中では
-    なくページの幅になる。印刷と Ctrl-F の宛先で、末尾の Contact が画面の外に出ていた。
-  */
-  body[data-layout='magazine'] .toc {
-    flex-wrap: wrap;
-    border-top: 0;
-  }
-}
-
 /* ============================================ 押す・選ぶ（手触り） */
 
 /*
@@ -2792,24 +3090,26 @@ body[data-layout='magazine'] .head:not(.head--sub, .head--chapter) :is(h1, h2) {
   部品ごとに量を変えると、手触りが揃わない。
   transform ではなく scale を使うのは、ホバーで浮かせる translate とぶつけないため
 */
-.pill-cta:active,
+.cta:active,
 .filters a:active,
 .socials a:active,
 .toc a:active,
-.rail__admin:active,
+.top__admin:active,
 .band:active,
 .member:active,
-.back:active {
+.back:active,
+.contact__mail:active,
+.contact__sub:active {
   scale: var(--press);
 }
 
 /*
-  カードは面を押したとき（題のリンクの覆いが :active のとき）だけ縮む。
-  .card:active にすると、中の Repository や担当者名を押したときもカードごと
+  一覧の行は面を押したとき（題のリンクの覆いが :active のとき）だけ縮む。
+  .entry:active にすると、中の Repository や担当者名を押したときも行ごと
   縮み、押したものと縮んだものが食い違う。上の列に並べないのは :has のため
   ——知らないブラウザで、列ごと（ほかの部品の手触りまで）捨てられる。
 */
-.card:has(.card__link:active) {
+.entry:has(.entry__link:active) {
   scale: var(--press);
 }
 
@@ -2817,45 +3117,80 @@ body[data-layout='magazine'] .head:not(.head--sub, .head--chapter) :is(h1, h2) {
 
 @media (hover: hover) {
   /*
-    浮かせるのは押せるものだけ。カードは題にリンク（.card__link）を持つもの
-    だけで、slug の無いカードは押してもどこへも行かないので浮かせない——
-    押せる合図だけ出して、押しても何も起きない面を作らない。
+    ホバーで応えるのは押せるものだけ。一覧の行は題にリンク（.entry__link）を持つ
+    ものだけで、slug の無い行は押してもどこへも行かないので応えない——押せる
+    合図だけ出して、押しても何も起きない面を作らない。応え方は矢印を送って
+    字を上げる（箱を持たない行なので、浮かせない）。
 
-    :has は :is() の中に入れる。.member と素の列（.card:has(…):hover,
-    .member:hover）で並べると、:has を知らないブラウザでは列ごと捨てられて
-    Team のカードまで浮かなくなる。:is() は読めない引数だけを落とすので、
-    そこでは .member だけが残る（リンクのあるカードも浮かなくなるが、押せば
-    行き先へは行く）。
+    :has は :is() の中に入れる。素の列に並べると、:has を知らないブラウザでは
+    列ごと捨てられる。:is() は読めない引数だけを落とす。
   */
-  :is(.card:has(.card__link), .member):hover {
+  :is(.entry:has(.entry__link)):hover .entry__go {
+    color: var(--ink);
+    translate: var(--sp-2) 0;
+  }
+
+  :is(.entry:has(.entry__link)):hover .entry__link {
+    text-decoration: underline;
+    text-decoration-thickness: var(--orbit-line);
+    text-underline-offset: var(--sp-2);
+  }
+
+  .member:hover {
     border-color: var(--line-strong);
     background: var(--surface-hover);
-    transform: translateY(-2px);
   }
 
   .band:hover {
     border-color: var(--line-strong);
-    background: var(--surface-hover);
   }
 
-  .band:hover .band__arrow {
+  .band:hover .band__arrow,
+  .cta:hover .cta__arrow {
     translate: var(--sp-2) 0;
   }
 
-  .toc a:hover {
+  .system__label a:hover {
     color: var(--ink);
-    background: var(--surface-hover);
   }
 
-  /* 色はアクセントのまま（目次と見分ける印なので、ホバーで消さない） */
-  .rail__admin:hover {
-    background: var(--accent-soft);
+  /* 図にマウスを重ねたら、止まった天体と札に戻す（札を読んで押せるように） */
+  .system:hover .orbit-movers {
+    opacity: 0;
   }
 
-  .socials a:hover,
+  .system:hover > :is(.system__bodies, .system__labels) {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /*
+    札の名前をマウスで出すのもここだけ。タッチで押した札は :hover が貼り付いたまま
+    残るので、指の端末では名前はキーボードで選んだとき（:focus-visible）と押した先の
+    ページだけが言う
+  */
+  .system__label a:hover .system__name {
+    position: static;
+    width: auto;
+    height: auto;
+    min-width: 0;
+    clip-path: none;
+    text-overflow: ellipsis;
+  }
+
+  .toc a:hover,
+  .socials a:hover {
+    color: var(--ink);
+  }
+
+  /* 色はアクセントのまま（目次と見分ける印なので、ホバーで消さない）。下線で応える */
+  .top__admin:hover {
+    text-decoration: underline;
+    text-underline-offset: var(--sp-1);
+  }
+
   .filters a:not([aria-current]):hover,
   .back:hover {
-    background: var(--surface-hover);
     color: var(--ink);
   }
 
@@ -2868,19 +3203,12 @@ body[data-layout='magazine'] .head:not(.head--sub, .head--chapter) :is(h1, h2) {
     text-underline-offset: var(--sp-1);
   }
 
-  /*
-    罫線だけの面は浮かせない。浮くと隣の段と行がずれて見える。
-    代わりに上の罫線をアクセントにする。これも押せる面の合図なので、
-    カードは上と同じく題にリンクを持つものだけ
-  */
-  body[data-layout='magazine'] :is(.card:has(.card__link), .member):hover {
-    transform: none;
-    background: transparent;
-    border-top-color: var(--accent);
+  .contact__mail:hover {
+    border-color: var(--ink);
   }
 
-  .pill-cta:hover {
-    opacity: 0.88;
+  .contact__sub:hover {
+    color: var(--ink);
   }
 }
 
@@ -2888,40 +3216,6 @@ body[data-layout='magazine'] .head:not(.head--sub, .head--chapter) :is(h1, h2) {
 @media (pointer: coarse) {
   :root {
     --tap: 44px;
-  }
-
-  /*
-    目次の行き先と管理画面への入口も、ほかの押すもの（絞り込み・戻る道）と
-    同じ的（--tap）にする。素の姿は字の高さ＋上下 4px の 30px で、
-    電話の帯ではいちばんよく押す手がいちばん小さかった。
-
-    指のときだけ。細いポインタでは目次を詰めたまま（柱の縦の並びも 899 以下の
-    帯も、30px の行で組んである）。npm run check:fit は 390x844 と 768x1024 を
-    指（hasTouch）で測り、目次の的が --tap 以上かを見る——どちらも設計上は電話と
-    板で、実物は指で触る。
-  */
-  .toc a,
-  .rail__admin {
-    min-height: var(--tap);
-    align-items: center;
-  }
-
-  /*
-    入口の「すべてを1ページで読む →」も同じ的に。素の姿は下線の文字リンクで、
-    高さは字の1行ぶん（22px = 390x844 指・768x1024 指）。899 以下では柱の足元の
-    「全体を1ページで見る →」を畳むので、指の画面で全体ページへ行く手はこの
-    1本だけになる。字の位置は行の中央に置き、下線の姿は変えない。
-    高さが変わると月の上の字の座る位置も変わるので、npm run check:contrast も通す。
-
-    gap は字と矢印（aria-hidden の span）のあいだの空き。flex の中では、字の塊の
-    後ろの空白が行末の空白として消え、「読む→」と矢印が字に付く。空白1つぶん
-    （--fs-sm の字で 4px 前後）を gap で戻す。
-  */
-  .hero__whole {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--sp-2);
-    min-height: var(--tap);
   }
 }
 
@@ -2932,7 +3226,7 @@ body[data-layout='magazine'] .head:not(.head--sub, .head--chapter) :is(h1, h2) {
 
   /*
     ここの !important は外せない。動きを止める指定は、部品ごとに書いた
-    transition / animation（.card や .pill など十数か所）より必ず強く
+    transition / animation（.entry や .cta など十数か所）より必ず強く
     なければならず、詳細度で勝とうとすると同じ一覧をここに書き写すことになる。
     「動きを減らす」と設定した人に動きが残るのは、めまいや発作の引き金になる
     （WCAG 2.3.3）。lint の自動修正に外させないよう、理由つきで黙らせる。
@@ -2948,463 +3242,303 @@ body[data-layout='magazine'] .head:not(.head--sub, .head--chapter) :is(h1, h2) {
 }
 
 /*
-  はっきり見たいと言われたら、月は消す。
+  はっきり見たいと言われたら、入口の軌道図は消す。
 
-  三日月は文字の下に敷く明るい面なので、コントラストを上げたい人にとっては
-  邪魔でしかない。forced-colors（Windows のハイコントラスト）では文字だけが
-  システム色に置き換わり、画像は置き換わらない——つまり何もしないと、
-  いちばん読みやすくしたい設定で、いちばん読みにくい組み合わせが残る。
-  prefers-contrast: more も同じ意図の申告なので、まとめて受ける。
-
-  装飾なので、消しても失われる情報は無い（aria-hidden と alt="" のとおり）。
+  軌道図は装飾で、forced-colors（Windows のハイコントラスト）では線と点がシステム色に
+  置き換わって札の地と見分けが付かなくなる。prefers-contrast: more も同じ意図の申告
+  なので、まとめて受ける。消しても失われる情報は無い（作品の名前は「一覧で見る →」の
+  先に全部あり、件数は件数の帯が字で言う）。締めの図（.orbits）も同じ。
 */
 @media (forced-colors: active), (prefers-contrast: more) {
-  .moon {
+  .system,
+  .orbits {
     display: none;
+  }
+
+  /* 図の区画も畳む（下の「表紙を1列に畳む」） */
+  .hero--orbit {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 1fr auto;
+    grid-template-areas: 'copy' 'tally';
+  }
+
+  .orbital {
+    grid-template-rows: 1fr;
+  }
+}
+
+/*
+  強制色モードでは、ロゴの O の影を地の色で抜く。光の縁と横線は字の色（強制色の
+  リンクの色）になるのに、影の黒はそのまま残るので、明るいテーマでは O が塗りの円に
+  見える。prefers-contrast: more の括りには入れない——強制色でないときの Canvas は
+  灰色の地で、影が灰色の円になる
+*/
+@media (forced-colors: active) {
+  .logo-core {
+    fill: Canvas;
   }
 }
 
 /*
   背の低い窓でも消す。
 
-  400px を切ると、貼り付いた帯を除いた表紙が月を絵として置けるほど高くならず
-  （320x256 では表紙の残りが 100px 足らず）、字の後ろに明るい面だけが残る。
+  400px を切ると、貼り付いた帯を除いた表紙が軌道図を絵として置けるほど高くならず
+  （320x256 では表紙の残りが 100px 足らず）、図が見出しを画面の外へ押し出す。
   拡大 200% の人が最初に当たる寸法なので、装飾より本文を通す。
 */
 @media (max-height: 400px) {
-  .moon {
+  .system,
+  .orbits {
     display: none;
+  }
+
+  /*
+    表紙を1列に畳む。図を消しただけだと区画が残り、900 以上の入口は右半分が空き、
+    締めは字が図の行（auto）へ繰り上がって表紙の上に寄る
+  */
+  .hero--orbit {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 1fr auto;
+    grid-template-areas: 'copy' 'tally';
+  }
+
+  .orbital {
+    grid-template-rows: 1fr;
+  }
+}
+
+/* ====================================================== ページの切り替え */
+
+/*
+  ページを移るときの切り替え（cross-document view transitions）。JavaScript は
+  使わない——同じサイトの中のふつうのリンクの移動で、前と次の両方のページが
+  この宣言を持っていれば、ブラウザが古い姿から新しい姿へつなぐ。知らない
+  ブラウザではふつうに移るだけ（進歩的な強化）。
+
+  - 本文は短く重ねて入れ替える（既定の root の重ね合わせ。長さは --dur）
+  - 上の帯は名前（top）で本文から分け、入れ替わりに巻き込まない——ページを
+    移っても同じ場所に居るものは、動かないほうがよい
+  - 一覧の行の題と作品のページの見出しは同じ名前（item-<slug>。components.tsx の
+    itemTransition）でつなぎ、題がそのまま見出しへ動いて大きくなる
+
+  管理画面では切り替えない（admin.css が同じ宣言を none で上書きする。両方のページが
+  宣言を持つときだけ切り替わるので、公開ページと管理画面のあいだも切り替わらない）。
+  動きを減らす設定では、宣言ごと外す（下の @media。* の animation: none は
+  ::view-transition の疑似要素には届かない）。
+*/
+@view-transition {
+  navigation: auto;
+}
+
+.top {
+  view-transition-name: top;
+}
+
+::view-transition-group(*),
+::view-transition-old(*),
+::view-transition-new(*) {
+  animation-duration: var(--dur);
+  animation-timing-function: var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @view-transition {
+    navigation: none;
   }
 }
 
 /* ====================================================== ページの外枠（公開ページ） */
 
 /*
-  公開ページは普通に縦にスクロールする。目次（柱・上の帯）はページの上に貼り付けて、
-  どこまで読み進めても次の行き先に手が届くようにする。
+  公開ページは普通に縦にスクロールする。上の帯はページの上に貼り付けて、どこまで
+  読み進めても次の行き先に手が届くようにする。
 
   以前は「1画面に1つぶんだけを収め、ページはスクロールさせない」を不変条件にして
   いた。持ち主が実際に触って、節を画面ごとに割って底の左右の手でしかめくれないのは
   面倒すぎる、と判断してやめた（CLAUDE.md の「公開ページは縦に読む」）。この節は
   その外枠の跡地で、残したのは3つだけ——表紙（入口と締め）を1画面ぶんの高さに
-  敷くこと、節の見出しを上に揃えること、目次を貼り付けること。
+  敷くこと、節の見出しを上に揃えること、上の帯を貼り付けること。
 
   @media screen で括るのは、紙には貼り付ける帯も1画面ぶんの表紙も要らないため
   （紙の上の姿は末尾の @media print）。幅のメディアクエリ（600 / 900）とは別物。
 
-  当てる相手は公開ページだけ。data-layout は公開ページの body にしか付かない
-  （管理画面には当てない）ので、これを目印にする。[data-whole] が付くのは
-  全体ページ（/all）で、あちらは節を縦に積んだ1本の文書なので表紙も帯の貼り付けも
-  持たない（900 以上の rail の柱だけは素の規則で貼り付く）。
+  当てる相手は公開ページだけ（body[data-site]。管理画面と 404 には付かない）。
+  [data-whole] が付くのは全体ページ（/all）で、あちらは節を縦に積んだ1本の文書
+  なので、表紙も帯の貼り付けも持たない。目印の側は :where() で包んで詳細度を 0 に
+  してある。
 
-  目印の側は :where() で包んで詳細度を 0 にしてある。骨格のプリセット
-  （body[data-layout='center'] …）に勝たなければならない所だけ :where() を外す。
-
-  この節はファイルの末尾近くに置く。骨格（.shell / main / .rail）の素の指定と
-  900 以上の指定を上書きするので、それらより後でなければ効かない。
+  この節はファイルの末尾近くに置く。骨格（.top / main）と部品の素の指定を
+  上書きするので、それらより後でなければ効かない。
 */
 @media screen {
   /*
-    目次の帯の下に見出しが隠れないよう、フラグメント（#about など）やフォーカスで
-    送られた先を帯の高さぶん下に止める。値は :root の --band-clear（帯の姿の
-    いちばん高い形 + 間）。柱が本文の左に立つ rail の 900 以上は帯が上に無いので、
-    全体ページと同じ --sp-7（下の 900 以上）。
+    貼り付いた上の帯の下に見出しが隠れないよう、フラグメント（#about など）や
+    フォーカスで送られた先を帯の高さぶん下に止める（:root の --top-clear）。
   */
-  :where(html:has(> body[data-layout]:not([data-whole]))) {
-    scroll-padding-top: var(--band-clear);
+  :where(html:has(> body[data-site]:not([data-whole]))) {
+    scroll-padding-top: var(--top-clear);
   }
 
   /*
-    表紙の高さ。.shell を画面1つぶん（--screen-h）以上にし、本文（main）が残りを
-    受ける。中身が短い画面では節が画面の下まで伸び、長い画面ではページごと伸びる。
-
-    height ではなく min-height。高さを決め打つと、長い中身がページの外へ切られる
-    （以前はそれを避けるために、中身を画面ごとに割っていた）。
-
-    入口の Hero（月の表紙）と締めの Contact は、この残りの高さに月を敷く。月の丈は
-    節の高さに対する割合（:root の --moon-h）なので、節が画面ぶんの高さを持って
-    いれば、月の大きさも字との位置も画面の高さで決まる（npm run check:contrast が
-    測る姿）。
-
-    帯の姿（899 以下の全骨格と、中央寄せ・雑誌風の 900 以上）では .shell を
-    縦の flex にする。grid のままだと、帯（.rail）の貼り付けが効かない——grid の
-    子の貼り付けはその子の grid area の中でしか動けず、1段目（auto）の高さは帯
-    そのものなので、1px も動けなかった。flex の子は .shell 全体の中を動ける。
-    柱が左に立つ rail の 900 以上は2列の grid のまま（柱の area がページの高さ
-    いっぱいなので、素の position: sticky がそのまま効く）。
+    足元を画面の底に置く。body を縦の flex にして画面1つぶん（--screen-h）以上の
+    高さを持たせ、本文（main）が残りを受ける。中身の短いページでも足元が画面の
+    途中に浮かない。height ではなく min-height——長い中身はページごと伸びる。
   */
-  :where(body[data-layout]:not([data-whole])) .shell {
+  body[data-site] {
     display: flex;
     flex-direction: column;
     min-height: var(--screen-h);
   }
 
-  :where(body[data-layout]:not([data-whole])) main {
+  body[data-site] > main {
     flex: 1 0 auto;
-    gap: var(--sp-5);
   }
 
   /*
-    節は本文の残りの高さを受け（flex: 1 0 auto）、中身はその中で上から置く（上揃え）。
-    表紙（入口と締め）はこれで画面いっぱいになり、字を下に寄せられる。
+    上の帯を貼り付ける。重なりは z-index: 2——入口の軌道図の字（z-index: 1）と、
+    作品の行の中のリンク（覆いの上に出す z-index: 1）より上。地（--bg）は素の
+    .top が敷いている。全体ページでは貼り付けない（節を縦に積んだ1本の文書で、
+    目次はページの中の行き先。帯は頭にあれば足りる）。
+  */
+  :where(body[data-site]:not([data-whole])) .top {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
 
-    **上揃えは見出しの錨。** どのページでも、見出し（節の h1）が同じ高さから始まる。
-    上下中央に寄せていたころは、見出しの高さが中身の量で決まってページごとに跳ねて
-    いた。npm run check:fit が、同じ骨格・寸法の中で見出しの上端が 1px 以内で
-    そろっていることを測っている。
+  /*
+    いまのページの行き先を、帯の見えている幅の中で開く。JavaScript が無いので、
+    帯は何もしなければいつも左端（scrollLeft 0）で開き、並びの後ろの節
+    （Links・Contact）に着くと印が帯の右の外に押し出されていた。
 
-    safe を付ける。素の center / end は、中身が箱を超えた瞬間に上端を箱の外へ
-    押し出す。節はいまは中身の高さまで伸びるので超えないが、寄せ方を下の Hero と
-    月の節で差し替えるとき、どの寄せ方でも safe を外さない決まりを1つにしておく。
+    scroll-initial-target: nearest は、いちばん近いスクロール容器（この帯）の
+    最初の位置を、その要素が見える所に決める（CSS Scroll Snap 2。inline 方向は
+    scrollIntoView の nearest と同じで、scroll-margin を読む）。scroll-margin で
+    右端のぼかし（--fade-w）のぶんを空け、印がぼかしの下に座らないようにする。
+    知らないブラウザ（いまは Chromium 133 以降だけ）はこの1本を捨てて左端で開く
+    （進歩的な強化）。npm run check:fit が「印の矩形が帯の見えている矩形の中に
+    ある」を測っている。
+  */
+  :where(body[data-site]:not([data-whole])) .toc a[aria-current='page'] {
+    /* biome-ignore lint/correctness/noUnknownProperty: CSS Scroll Snap 2 の性質で、Biome の一覧にまだ無い（Chromium 133 から）。知らないブラウザは捨てる */
+    scroll-initial-target: nearest;
+    scroll-margin-inline: var(--fade-w);
+  }
+
+  /*
+    節は上揃え（見出しの錨）。どのページでも、見出し（節の h1）が帯の罫線から
+    同じだけ下（main の --page-pad）から始まる。npm run check:fit が、同じ寸法の
+    中で見出しの上端が 1px 以内でそろっていることを測っている。
 
     ここは必ず :is(.hero, section) のクラス強度（0,1,1）で書く。main > *
-    （0,0,1）では .hero{display:flex}（0,1,0）に負けて、Hero だけ縦積みが残る。
-    下の Hero と月の節の寄せ方も同じ（0,1,1）以上で、この規則より後ろに置く。
+    （0,0,1）では .hero{display:flex}（0,1,0）に負ける。
   */
-  :where(body[data-layout]:not([data-whole])) main > :is(.hero, section) {
+  :where(body[data-site]) main > :is(.hero, section) {
     display: grid;
-    flex: 1 0 auto;
     align-content: safe start;
   }
 
   /*
-    節を2つ以上持つページ（個人ページ: 名札の Hero → About → Skills → Career）では、
-    残りの高さを受けるのは最後の節だけ。どれも伸びると、中身の短い人のページで
-    名札と About のあいだに空きが割り振られ、名札が画面の真ん中に浮く。名札は
-    ページの頭に中身の高さで座り、余った高さはページの下に残る。
+    表紙（入口の Hero と締めの Contact）は、帯と本文の余白を除いた画面の残り
+    いっぱい（--cover-h）を下限に持つ。表紙の下端が画面の下端に来て、足元は
+    次の画面に回る。全体ページには表紙が無い（節の並びのまま）。
   */
-  :where(body[data-layout]:not([data-whole])) main > :is(.hero, section):not(:last-child) {
-    flex-grow: 0;
-  }
-
-  /*
-    Hero（入口と、個人ページの名札）は錨を持たない。見出しで始まる節では
-    なく、名乗りの表紙なので、比べる相手が無い。月の無い Hero が1つだけのページは
-    無い（個人ページは名札の下に About が続き、上の規則で伸びない）ので、
-    この上下中央が効くのは Hero を持つページの控えとしてだけ。
-  */
-  :where(body[data-layout]:not([data-whole])) main > .hero {
-    align-content: safe center;
-  }
-
-  /*
-    月のある入口だけは下に寄せる。上半分を月に明け渡し、名乗りと帯を表紙の下に
-    置く——月（右上）と字（左下）が対角に座り、字が月の下を通らなくなる。
-    :has を知らない環境では上の中央寄せに落ちるだけ。safe は上と同じ理由。
-  */
-  :where(body[data-layout]:not([data-whole])) main > .hero:has(> .moon) {
-    align-content: safe end;
-  }
-
-  /*
-    締めの画面（Contact）も同じく下に寄せる。こちらは月を置くときにだけ
-    .moonlit が付くので :has は要らない（全体ページでは付かず、節の並びのまま）。
-  */
-  :where(body[data-layout]:not([data-whole])) main > .moonlit {
-    align-content: safe end;
+  :where(body[data-site]:not([data-whole])) main > :is(.hero--orbit, .orbital) {
+    min-height: var(--cover-h);
   }
 
   @media (max-width: 899px) {
     /*
-      名札を横帯にし、ページの上に貼り付ける。縦に積むと、それだけで画面の1/4を
-      使ってしまう。
-
-      貼り付けた帯の下を本文が流れるので、地（--bg）を敷いて字が重ならないように
-      する。重なりは z-index: 2——Hero と月の節の中身（月より前に出す z-index: 1）と、
-      カードの中のリンク（覆いの上に出す z-index: 1）より上。
-
-      上下に --sp-3 の空きを取り、同じだけ負の margin で戻す。貼り付いたときに
-      帯の字が画面の上端に触れないためで、貼り付く前の版面（帯と本文の位置）は
-      1px も変わらない——月の大きさと字の位置（check:contrast が測る姿）も同じ。
+      絞り込みも目次と同じ、1行の横に送る帯にする。折り返すと2段で場所を取る。
+      ぼかしのぶんの空きを右に持ち、同じだけ右の余白へはみ出す（目次の .toc と同じ。
+      溢れていなければ最後の手を薄めない）
     */
-    :where(body[data-layout]:not([data-whole])) .rail {
-      position: sticky;
-      top: 0;
-      z-index: 2;
-      flex-direction: row;
-      align-items: center;
-      gap: var(--sp-4);
-      margin-block: calc(var(--sp-3) * -1);
-      padding-block: var(--sp-3);
-      background: var(--bg);
-    }
-
-    /*
-      名札の中身も横に寝かせる。縦積みのままだと帯が何段にも伸びて、貼り付いた帯が
-      画面の上を食う（トップの帯は rail で 30.1px、center で 64.2px =
-      @390x844, Hiragino Sans, macOS Chromium。プリセットを書き落とさないこと
-      ——条件抜きの数だけ並べると食い違って見える）。
-      個人ページも同じ柱を使う（顔と所在地は本文の名札 .nameplate にだけ出す）。
-    */
-    :where(body[data-layout]:not([data-whole])) .identity {
-      flex-direction: row;
-      align-items: center;
-      gap: var(--sp-4);
-      min-width: 0;
-    }
-
-    /*
-      帯に入らないものは畳む。畳むのは4つ——肩書き、ひとこと、柱の中の
-      GitHub / メール、著作権表示。ロゴと名前と目次に場所を譲る。900 以上の柱と、
-      全体ページ（/all）では今までどおり出る。
-
-      **畳んだぶんが「どこにも無くなる」ものを、この中に入れてはいけない。**
-      GitHub のプロフィールはかつてここにしか無く、この1行がスマホからの
-      一次動線を丸ごと消していた（WCAG 1.4.10 の「機能の損失」）。いまは
-      Contact の画面に常設してあり、そちらは幅で消えない——だから .socials は
-      柱の中（.identity の子）だけを名指しする。素の .socials を隠すと、
-      Contact に置いたほうまで一緒に消える。
-      肩書きも同じ理由で畳んでよい: 入口の Hero の肩書き（.hero__role）、
-      個人ページの名札（.nameplate__meta）、<title> / meta description /
-      JSON-LD の jobTitle に残っている。
-
-      名前（.identity__name）は畳まない。1人のサイトの入口以外の画面で、誰の
-      サイトかを言うのは帯ではここだけになる。代わりにワードマークを畳む（下）。
-
-      肩書きを畳むのは幅の勘定でもある。390 の帯は 358px しかなく、ワードマーク・
-      名前・肩書きを並べると名札だけで 310px を取って目次が入らない（必要 220px。
-      = rail @390x844, Hiragino Sans, macOS Chromium）。ワードマークも畳む（下の2本）。
-    */
-    :where(body[data-layout]:not([data-whole])) .identity__role,
-    :where(body[data-layout]:not([data-whole])) .identity__tagline,
-    :where(body[data-layout]:not([data-whole])) .identity .socials,
-    :where(body[data-layout]:not([data-whole])) .rail__footer {
-      display: none;
-    }
-
-    /*
-      名乗る画面（1人のサイトの、入口以外）では、ワードマーク（NOCTIFEX）を
-      見た目だけ畳んで名前に場所を譲る。帯に残るのは ロゴの印・名前・目次。
-
-      display: none にしないのは、ロゴのリンクの名前がこの字だから。印の svg は
-      aria-hidden なので、字ごと消すと「名前の無いリンク」になる（WCAG 4.1.2）。
-      だから .sr-only と同じ手で、読み上げには残したまま版面から外す。
-      サイトの名前は <title> にも残るので、畳んで「どこにも無くなる」ものではない。
-
-      入口では畳まない（.identity--named が付かない）。入口の名乗りは Hero の
-      h1 で、帯にはロゴと目次しか無いので、ワードマークの入る幅がある。
-
-      幅の勘定: 390 の帯は 358px。名乗る画面では 名札 103.2px（ロゴの印 27px
-      + 間 12px + 名前 64.2px）+ 間 12px + 目次 242.8px で、目次は切れずに
-      収まる（scrollWidth = clientWidth）。入口では 名札 110.9px（ワードマーク
-      込み）+ 目次 235.1px。帯の高さはどちらも 30.1px で、名乗る前と同じ
-      （= 全骨格 @390x844, Hiragino Sans, macOS Chromium。目次は
-      Projects / Profile / Contact の3行）。指では目次の行き先が 44px の的に
-      なる（@media (pointer: coarse)）ので、帯も 44px（= 全骨格 @390x844 指,
-      同条件）。幅は変わらない。
-    */
-    :where(body[data-layout]:not([data-whole])) .identity--named .brand__word {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      overflow: hidden;
-      clip-path: inset(50%);
-      white-space: nowrap;
-    }
-
-    /*
-      名前は1行のまま。帯が詰まったときに「岡崎 / 昂功」と2段に折れると、
-      そのぶん貼り付いた帯が伸びて画面の上を食う。入りきらない長さなら末尾を省く
-      （読み上げには全部が残る）。
-    */
-    :where(body[data-layout]:not([data-whole])) .identity__name {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    /*
-      目次も1行の横帯にする。折り返すと2段になり、貼り付いた帯がそのぶん画面の
-      上を食う。
-
-      ここだけ :where() を外してある。中央寄せの
-      body[data-layout='center'] .toc（0,2,1）が flex-wrap: wrap を持っていて、
-      :where() 付きの (0,1,0) では負けるため。
-
-      右端をぼかすのは、切れていることを見せるため。帯そのものは横にしか動かず、
-      タッチ端末ではスクロールバーも出ないので、切れていることに気づく手がかりが
-      ほかに無い。
-    */
-    body[data-layout]:not([data-whole]) .toc {
-      flex: 1;
-      min-width: 0;
-      flex-wrap: nowrap;
-      border-top: 0;
-      padding-top: 0;
-      mask-image: var(--fade-right);
-    }
-
-    /*
-      いまのページの行き先を、帯の見えている幅の中で開く。JavaScript が無いので、
-      帯は何もしなければいつも左端（scrollLeft 0）で開き、並びの後ろの節
-      （Links・Contact）に着くと印が帯の右の外に押し出されていた（seed に
-      ブロックを3本足しただけで、390 の指の帯が 126px 溢れる）。
-
-      scroll-initial-target: nearest は、いちばん近いスクロール容器（この帯）の
-      最初の位置を、その要素が見える所に決める（CSS Scroll Snap 2。inline 方向は
-      scrollIntoView の nearest と同じで、scroll-margin を読む）。scroll-margin で
-      右端のぼかし（--fade-right の --sp-6）のぶんを空け、印がぼかしの下に座らない
-      ようにする。知らないブラウザ（いまは Chromium 133 以降だけ）はこの1本を
-      捨てて左端で開く——今までの姿のまま（進歩的な強化）。
-
-      帯のときだけに掛ける。柱が縦に立つ 900 以上の rail では .toc は
-      スクロール容器ではなく、いちばん近い容器は柱そのもの（overflow-y: auto）で、
-      そちらを縦に送ってしまう。npm run check:fit が、帯の姿の全画面で
-      「印の矩形が帯の見えている矩形の中にある」を測っている。
-    */
-    :where(body[data-layout]:not([data-whole])) .toc a[aria-current='page'] {
-      /* biome-ignore lint/correctness/noUnknownProperty: CSS Scroll Snap 2 の性質で、Biome の一覧にまだ無い（Chromium 133 から）。知らないブラウザは捨てる */
-      scroll-initial-target: nearest;
-      scroll-margin-inline: var(--sp-6);
-    }
-
-    /* 絞り込みも目次と同じ、1行の横スクロール帯にする。折り返すと2段で場所を取る */
-    :where(body[data-layout]:not([data-whole])) .filters {
+    :where(body[data-site]:not([data-whole])) .filters {
       flex-wrap: nowrap;
       overflow-x: auto;
-      scrollbar-width: thin;
+      scrollbar-width: none;
+      margin-inline-end: calc(var(--fade-w) * -1);
+      padding-inline-end: var(--fade-w);
       mask-image: var(--fade-right);
     }
 
-    :where(body[data-layout]:not([data-whole])) .filters a {
+    :where(body[data-site]:not([data-whole])) .filters a {
       flex-shrink: 0;
     }
   }
 
-  @media (min-width: 900px) {
-    /*
-      柱が本文の左に立つ rail は2列の grid のまま。柱は素の 900 以上の規則で
-      貼り付き（position: sticky・画面より高ければ柱の中だけが縦に動く）、
-      本文の列が表紙の高さを受ける。上に帯が無いので、送った先の空きは --sp-7。
-    */
-    :where(body[data-layout='rail']:not([data-whole])) .shell {
-      display: grid;
-    }
-
-    :where(html:has(> body[data-layout='rail']:not([data-whole]))) {
-      scroll-padding-top: var(--sp-7);
-    }
-
-    /*
-      中央寄せと雑誌風は 900 以上でも柱が上の帯になる。899 以下と同じく貼り付け、
-      地を敷く。素の骨格の規則（body[data-layout='center'] .rail の
-      position: static）に勝たせるので :where() を外して (0,3,1)。
-
-      雑誌風の帯は下に罫線と --sp-5 の空きを持つ（骨格: 雑誌風）ので、空きを足す
-      のは上だけ。中央寄せは上下に足す。どちらも同じだけ負の margin で戻し、
-      貼り付く前の版面は動かさない。
-
-      帯の高さは中央寄せ（2段）がいちばん高く、送った先の空きもそれに合わせる
-      （:root の --band-clear-wide）。
-    */
-    body[data-layout='center']:not([data-whole]) .rail,
-    body[data-layout='magazine']:not([data-whole]) .rail {
-      position: sticky;
-      top: 0;
-      z-index: 2;
-      margin-top: calc(var(--sp-3) * -1);
-      padding-top: var(--sp-3);
-      background: var(--bg);
-    }
-
-    body[data-layout='center']:not([data-whole]) .rail {
-      margin-bottom: calc(var(--sp-3) * -1);
-      padding-bottom: var(--sp-3);
-    }
-
-    :where(html:has(> body[data-layout='center']:not([data-whole]))),
-    :where(html:has(> body[data-layout='magazine']:not([data-whole]))) {
-      scroll-padding-top: var(--band-clear-wide);
-    }
-
-    /*
-      上の帯になる骨格（中央寄せ・雑誌風）の目次は、900 以上でも1行の横帯にし、
-      帯の行の残りの幅に収める（899 以下と同じ姿）。
-
-      素の body[data-layout='center'] .toc は全体ページのために折り返す（wrap）ので、
-      打ち込むブロックを足すほど帯が段を増やし、貼り付いた帯が画面の上を食う
-      （ブロック12本の中身では目次だけで5段）。雑誌風の目次は折り返さないが、
-      中身の幅（max-content）のまま帯の行に入ろうとするので、長くなると行ごと
-      2段目へ落ちて帯が1段ぶん伸びた（1段の帯が3段に。= magazine @1440x900）。
-      件数で高さが変わる部品を、貼り付く帯に置かない。
-
-      flex: 1 1 0 で、行に残った幅を目次が取る（中身の幅で行を決めない）。行き先は
-      その中で中央に寄せ（safe なので、溢れたら左から並べて右端をぼかす）、
-      帯の行は中央寄せなら2段（名札 / 目次と全体ページへの1本）、雑誌風なら1段の
-      まま動かない。
-
-      (0,3,1) で素の (0,2,1) に勝たせる。:where() では負ける（899 以下の目次と同じ事情）。
-    */
-    body[data-layout='center']:not([data-whole]) .toc,
-    body[data-layout='magazine']:not([data-whole]) .toc {
-      flex: 1 1 0;
-      min-width: 0;
-      flex-wrap: nowrap;
-      overflow-x: auto;
-      justify-content: safe center;
-      mask-image: var(--fade-right);
-    }
-
-    /*
-      899 以下の帯と同じく、いまの画面の行き先を見えている幅の中で開く。
-      overflow-x: auto は上の1本で戻してある——素の 900 以上の .toc（柱が縦に
-      立つ rail のための overflow: visible）を受けたままでは帯がスクロール容器に
-      ならず、溢れた行き先はぼかしの外で切られて、印も手も届かなかった
-      （ブロック12本の中身で 8 画面 = center / magazine @1440x900）。
-    */
-    :where(body[data-layout='center']:not([data-whole])) .toc a[aria-current='page'],
-    :where(body[data-layout='magazine']:not([data-whole])) .toc a[aria-current='page'] {
-      /* biome-ignore lint/correctness/noUnknownProperty: 同上（899 以下の目次の印） */
-      scroll-initial-target: nearest;
-      scroll-margin-inline: var(--sp-6);
-    }
-
-    /*
-      上の帯になる骨格（中央寄せ・雑誌風）の職種は1行のまま、--role-w で末尾を省く
-      （読み上げには全部が残る。899 以下の帯の名前と同じ扱い）。職種の欄に上限は
-      無く、中央寄せの帯は名前・職種・一言・GitHub / メールを1行に並べるので、
-      長い職種（シニアソフトウェアエンジニア・テックリード、21字）で GitHub /
-      メールが2段目へ落ち、貼り付いた帯が 39px 伸びた（= center @1440x900,
-      Hiragino Sans, macOS Chromium）。職種は入口の Hero・個人ページの名札・
-      <title>・description に全部が出ている。
-    */
-    :where(body[data-layout='center']:not([data-whole])) .identity__role,
-    :where(body[data-layout='magazine']:not([data-whole])) .identity__role {
-      max-width: var(--role-w);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-  }
-
   /*
-    [hidden] の打ち消し。上で display を与えているので、このままだと hidden を
-    付けた節が見えてしまう（.card[hidden]{display:none} と同じ罠）。
-    上の指定（0,1,1）に勝たせるため属性を足して（0,2,1）にし、必ず最後に置く。
+    全体ページの目次は折り返す。帯は貼り付かない頭の1段なので、1行の横帯より
+    全部が見えるほうがよい（印刷・Ctrl-F の宛先で、末尾の Contact が帯の外に
+    隠れない）。ぼかしも外す。
   */
-  :where(body[data-layout]:not([data-whole])) main > :is(.hero, section)[hidden] {
-    display: none;
+  :where(body[data-site][data-whole]) .toc {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    mask-image: none;
   }
 }
 
 @media print {
   /*
+    紙は白い地で刷る。画面の黒い地のまま刷ると、白に近い字が白い紙に乗る（地の色は
+    既定では刷られない）。差し替えるのは色の段だけで、名前は :root とそろえる
+    （片方にしか無い段を作らない。test/theme.test.ts の「配色」が数える）。
+
+    形は夜の地を裏返しただけ: 地は色味の無い白、面は黒をうっすら重ね、線は弱く、
+    上辺の光は白。アクセントは同じ色相を暗くして、白い地で字が 4.5:1 に届く所へ
+    置く（いちばん低いのはエンバーで 5.21:1）。モノクロは黒、塗りのボタンの字は白。
+    ロゴの O の影（--hole-core）は紙の色に抜く——光を墨で刷るので、黒のままだと光の
+    輪と影がつながって塗りの円になる。
+  */
+  :root {
+    --bg: #ffffff;
+    --surface: rgba(0, 0, 0, 0.035);
+    --surface-hover: rgba(0, 0, 0, 0.06);
+    --line: rgba(0, 0, 0, 0.08);
+    --line-strong: rgba(0, 0, 0, 0.15);
+    --highlight: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    --ink: #111114;
+    --ink-mid: #4a4a53;
+    --ink-weak: #6a6a74;
+    --hole-core: #ffffff;
+    --mono: #111114;
+    --mono-soft: rgba(17, 17, 20, 0.06);
+    --iris: #4c4cd9;
+    --iris-soft: rgba(76, 76, 217, 0.08);
+    --violet: #7445d6;
+    --violet-soft: rgba(116, 69, 214, 0.08);
+    --ember: #a8570b;
+    --ember-soft: rgba(168, 87, 11, 0.08);
+    --mint: #0b7a5a;
+    --mint-soft: rgba(11, 122, 90, 0.08);
+    --sky: #1668b8;
+    --sky-soft: rgba(22, 104, 184, 0.08);
+    --rose: #c02a4d;
+    --rose-soft: rgba(192, 42, 77, 0.08);
+    --accent-ink: #ffffff;
+    --danger: #c0343b;
+    --danger-soft: rgba(192, 52, 59, 0.08);
+    --switch-track: rgba(0, 0, 0, 0.12);
+  }
+
+  /*
     紙の上ではリンクは押せない。サイトを通して刷るなら全体ページ（/all）を
-    刷ること。.moon はインクを食うだけの装飾なので、ここで落とす（/all には
+    刷ること。軌道図はインクを食うだけの装飾なので、ここで落とす（/all には
     元から出ないが、入口のページを直接刷られたときのため）。
   */
-  .rail,
+  .top,
   .filters,
   .back,
   .skip,
   .band,
-  .hero__whole,
-  .moon {
+  .cta,
+  .system,
+  .orbits {
     display: none;
   }
 
-  .card {
+  .entry {
     break-inside: avoid;
   }
 }

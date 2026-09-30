@@ -49,11 +49,17 @@ const cssTextPlugin = (): Plugin => ({
   ファイルを読むのはここ（Node 側）しかない。
 */
 const ASSET = 'virtual:asset:'
+// public/assets/ にあるファイルの名前の一覧（画像は中身を文字として読めないので、名前だけ）
+const ASSET_LIST = 'virtual:assets'
 
 const assetPlugin = (): Plugin => ({
   name: 'noctifex:asset',
-  resolveId: (id) => (id.startsWith(ASSET) ? `\0${id}` : null),
+  resolveId: (id) => (id.startsWith(ASSET) || id === ASSET_LIST ? `\0${id}` : null),
   load(id) {
+    if (id === `\0${ASSET_LIST}`) {
+      this.addWatchFile('./public/assets')
+      return `export default ${JSON.stringify(readdirSync('./public/assets'))}`
+    }
     if (!id.startsWith(`\0${ASSET}`)) return null
     const file = `./public/assets/${id.slice(`\0${ASSET}`.length)}`
     this.addWatchFile(file)

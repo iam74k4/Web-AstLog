@@ -50,7 +50,7 @@ const xmlText = (text: string) =>
 
 export async function sitemapXml(c: Context<AppEnv>) {
   const db = drizzle(c.env.DB, { schema })
-  // 作品は URL を組むぶん（区分・slug）だけ。カードの子（タグ・リンク・担当・
+  // 作品は URL を組むぶん（区分・slug）だけ。一覧の行の子（タグ・リンク・担当・
   // プラットフォーム）は要らないので、全件ぶんを引かない
   const [members, blocks, items] = await Promise.all([
     listPublishedMembers(db),

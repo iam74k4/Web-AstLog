@@ -28,7 +28,7 @@ import { describe, nameWithRole } from './meta'
   （CLAUDE.md の「公開ページは縦に読む」）。前の URL は member.tsx が
   #about などへ 301 で送る（MEMBER_SECTIONS）。
 
-  個人ページはサイトの並びの一部（柱と目次はサイトのまま）。1人のサイトでは
+  個人ページはサイトの並びの一部（上の帯と足元はサイトのまま）。1人のサイトでは
   サイトの並びに「Profile」として入り、2人以上のサイトでは Team の続き（目次の印は
   Team）。組み方は member.tsx の renderMemberScreen と site.ts の pageList。ここは
   中身と説明文だけを作る。
@@ -70,7 +70,7 @@ export function memberPage(member: schema.Member, band: Child) {
     <>
       <Hero profile>
         {/*
-          名札（顔・名前・肩書きと所在地）。柱はサイトのままなので、その人の
+          名札（顔・名前・肩書きと所在地）。足元はサイトのままなので、その人の
           顔はここにしか出ない。Team のカードと同じ並びにして、カードを押した
           先で同じ顔に着くようにする。
 

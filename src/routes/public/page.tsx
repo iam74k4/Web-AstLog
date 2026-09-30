@@ -11,8 +11,8 @@ import type { Theme } from '../../theme'
 import { Layout, type OgImage } from '../../ui/Layout'
 
 /*
-  管理画面への入口（柱の AdminLink）の行き先。ログインしている人にだけ返し、
-  訪問者には undefined——柱は訪問者の姿のまま。
+  管理画面への入口（上の帯の AdminLink）の行き先。ログインしている人にだけ返し、
+  訪問者には undefined——帯は訪問者の姿のまま。
 
   クッキーが無ければ D1 には聞きに行かない（訪問者のリクエストは1本も増えない）。
   ログインしている人に返すページは、共有のキャッシュに置かせない（private）。
@@ -61,8 +61,8 @@ export function movedTo(c: Context<AppEnv>, to: string) {
   サイトのページから、その中身を直す管理画面へ。
 
   打ち込むブロックはその編集画面。決まった中身のブロックは、中身の出どころへ
-  ——Projects は項目の一覧、Team はメンバーの一覧、入口の名前と職種は
-  メンバー（1人のサイトならその人の編集）。Contact と入口のリード文は
+  ——Projects は項目の一覧、Team はメンバーの一覧、入口の名乗り（大見出し・肩書き・
+  足元の名前）はメンバー（1人のサイトならその人の編集）。Contact と入口のリード文は
   src/site.ts にあって管理画面からは変えられないので、「構成」のその行へ送る。
 */
 export const blockAdminPath = (block: schema.Block, solo?: schema.Member) => {
@@ -105,7 +105,7 @@ export async function screenPage(
     */
     jsonLd?: unknown
     theme: Theme
-    sidebar: Child
+    footer: Child
     // このページの中身を直す管理画面（adminHref が、ログインしている人にだけ出す）
     adminPath: string
     // 共有カードの画像。渡さなければサイトの1枚（src/ui/Layout.tsx の OgImage）
@@ -120,7 +120,7 @@ export async function screenPage(
       jsonLd={page.jsonLd}
       nav={page.nav}
       theme={page.theme}
-      sidebar={page.sidebar}
+      footer={page.footer}
       admin={await adminHref(c, page.adminPath)}
       image={page.image}
     >

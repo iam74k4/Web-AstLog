@@ -69,7 +69,7 @@ export function clientFor(env: ClientEnv, provider: ProviderKey): Client | null 
 /*
   提供元から見た「この人」。subject が照合の鍵で、label は画面に出す写し。
   email は Google のときだけ入り、emailVerified が true のときだけ最初の
-  紐づけに使ってよい（src/lib/auth.ts の isOwnerIdentity）。
+  紐づけに使ってよい（src/lib/auth.ts の ownerValue）。
 */
 export type Identity = {
   provider: ProviderKey
@@ -195,7 +195,7 @@ async function identifyGithub(args: {
       headers: {
         accept: 'application/json',
         'content-type': 'application/x-www-form-urlencoded',
-        'user-agent': 'Noctifex',
+        'user-agent': 'AstLog',
       },
       body: new URLSearchParams({
         client_id: args.client.id,
@@ -217,7 +217,7 @@ async function identifyGithub(args: {
         accept: 'application/vnd.github+json',
         authorization: `Bearer ${token.access_token}`,
         // GitHub の API は User-Agent の無い要求を 403 で断る
-        'user-agent': 'Noctifex',
+        'user-agent': 'AstLog',
         'x-github-api-version': '2022-11-28',
       },
     }),

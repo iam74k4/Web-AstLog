@@ -24,7 +24,7 @@ const bandOf = (html: string) => {
 describe('個人ページ → 一覧', () => {
   it('構成で Projects を外したら、一覧へは案内しない', async () => {
     const member = await seedMember()
-    // 2人のサイト。1人で Team を置くと、帯はもともと出ない（入口の帯と重なる）
+    // 2人のサイト。1人で Team を置くと、帯はもともと出ない（入口の1本と重なる）
     await seedMember({ slug: 'hoshino', name: '星野' })
     await seedItem({ type: 'app', memberId: member.id })
     await seedItem({ type: 'work', title: '業務の実績', memberId: member.id })
@@ -41,7 +41,7 @@ describe('個人ページ → 一覧', () => {
     await seedItem({ type: 'app', memberId: member.id })
     await seedItem({ type: 'work', title: '業務の実績' })
     /*
-      Team を置かない1人のサイト（カードの担当者名から入る並びの外のページ）。
+      Team を置かない1人のサイト（一覧の行の担当者名から入る並びの外のページ）。
       Team を置くと個人ページはサイトの並びに入り、帯は出さない
     */
     await place(['hero', 'projects', 'contact'])
@@ -52,20 +52,21 @@ describe('個人ページ → 一覧', () => {
     // 業務はほかの人のもの。その人の帯で「業務 1」と出すと、どこにも無い1件になる
     expect(band).not.toContain('業務')
     /*
-      題は入口の帯（つくったもの）と同じ言葉で、誰のものかを足す。「このメンバーの
-      Projects」のころは、節の名前（英語）を札の題に使っていた
+      題は入口の軌道図の札の名前（つくったもの）と同じ言葉で、誰のものかを足す。
+      「このメンバーの Projects」のころは、節の名前（英語）を札の題に使っていた
     */
     expect(band).toContain('<strong>このメンバーのつくったもの</strong>')
   })
 
-  it('入口の帯は、個人開発と業務を別々に数えて1つの一覧へ送る', async () => {
+  it('入口は、個人開発と業務を別々に数えて1つの一覧へ送る', async () => {
     await seedItem({ type: 'app' })
     await seedItem({ type: 'work', title: '業務の実績' })
     await place(['hero', 'projects', 'contact'])
 
-    const band = bandOf(await okText('/'))
-    expect(band).toContain('href="/projects"')
-    expect(band).toContain('個人開発 1 · 業務 1')
+    const html = await okText('/')
+    expect(html).toContain('<a class="cta" href="/projects">')
+    expect(html).toContain('<dt>個人開発</dt><dd class="tally__num" style="--to:1">01</dd>')
+    expect(html).toContain('<dt>業務</dt><dd class="tally__num" style="--to:1">01</dd>')
   })
 })
 
@@ -73,7 +74,7 @@ describe('1人のサイトの ?member=', () => {
   it('帯は ?member= を付けずに一覧へ送る', async () => {
     const member = await seedMember()
     await seedItem({ memberId: member.id })
-    // 帯が出るのは Team を置かない1人のサイト（置くと帯は出さない。入口の帯と重なる）
+    // 帯が出るのは Team を置かない1人のサイト（置くと帯は出さない。入口の1本と重なる）
     await place(['hero', 'projects', 'contact'])
 
     const html = await okText('/members/okazaki')
@@ -86,7 +87,7 @@ describe('1人のサイトの ?member=', () => {
     await seedItem({ title: '本人のアプリ', memberId: member.id })
     await seedItem({ title: '担当の無いアプリ', sortOrder: 20 })
 
-    // 名前のピルが無いので、効かせると「すべて」にも名前にも印が付かなくなる
+    // 名前の絞り込みが無いので、効かせると「すべて」にも名前にも印が付かなくなる
     const html = await okText('/projects?member=okazaki')
     expect(html).toContain('担当の無いアプリ')
     expect(html).toContain('href="/projects" aria-current="true"')
@@ -94,21 +95,21 @@ describe('1人のサイトの ?member=', () => {
 })
 
 describe('トップ → 個人ページ', () => {
-  it('Team を外したら、メンバーが1人でもカードから個人ページへ行ける', async () => {
+  it('Team を外したら、メンバーが1人でも一覧の行から個人ページへ行ける', async () => {
     const member = await seedMember()
     await seedItem({ slug: 'appmixer', memberId: member.id })
     await place(['hero', 'projects', 'contact'])
 
-    expect(await okText('/projects')).toContain('class="card__member" href="/members/okazaki"')
+    expect(await okText('/projects')).toContain('class="entry__member" href="/members/okazaki"')
     // 作品1件のページの「担当」も同じ条件
     expect(await okText('/apps/item/appmixer')).toContain('href="/members/okazaki"')
   })
 
-  it('Team があってメンバーが1人なら、カードには名前を出さない', async () => {
+  it('Team があってメンバーが1人なら、一覧の行には名前を出さない', async () => {
     const member = await seedMember()
     await seedItem({ memberId: member.id })
 
-    expect(await okText('/projects')).not.toContain('card__member')
+    expect(await okText('/projects')).not.toContain('entry__member')
   })
 })
 

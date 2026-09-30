@@ -35,20 +35,20 @@ const isSection = (key: string): key is MemberSection =>
 
   下書きのメンバーも、知らない続きの名前も、まとめて「その URL は無い」に落とす。
 
-  **個人ページはサイトの並びの一部。** 柱と目次はサイトのままで、個人ページ
+  **個人ページはサイトの並びの一部。** 上の帯と目次と足元はサイトのままで、個人ページ
   専用のものに入れ替えない（入れ替えると、Team のカードを押した先が別のサイトに
   見え、Team へ戻る道も無くなる）。どう並ぶかは人数で2つに分かれる。
 
     1人のサイト（Team を置いているとき。data.ts の profileOf）
       Team のページは作らず、その位置にこの人のページが並ぶ（site.ts の pageList）。
-      目次は「Profile」の1行で、このページでその行に印。帯は出さない（入口の帯と
-      同じ行き先・同じ件数）。構造化データはサイトの並びの先頭のときだけ
+      目次は「Profile」の1行で、このページでその行に印。帯は出さない（入口の
+      「一覧で見る →」と同じ行き先・同じ件数）。構造化データはサイトの並びの先頭のときだけ
       サイトの名乗りを載せる（firstOnly）
     2人以上のサイト
       Team の続き。目次はサイトのもので、印は Team に付く。この人の一覧への帯を
       名札の下に置き、構造化データはこの人の Person
 
-  Team を置いていないサイトでは、目次に印の付く行が無い（カードの担当者名から
+  Team を置いていないサイトでは、目次に印の付く行が無い（一覧の行の担当者名から
   入る並びの外のページ）。連絡先はサイトの Contact に合流させた
   （/members/<slug>/contact はそこへ 301）。
 */
@@ -56,7 +56,8 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
   /*
     続きの名前は決まった4つだけ。先に見ておくと、下の転送で Location に入れる
     文字列がこの4つに限られる（パスの一部をそのまま Location に入れない。
-    format.ts の isSafeRedirect のコメントに、CR/LF で 500 になった例がある）
+    c.req.param() は percent-decode するので、CR/LF が入ると Headers.set が例外を
+    投げて 500 になり、// で始まるとプロトコル相対の外の URL へ飛ぶ）
   */
   if (rest !== null && rest !== 'contact' && !isSection(rest)) return c.notFound()
   const db = drizzle(c.env.DB, { schema })
@@ -64,7 +65,7 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
     findPublishedMember(db, slug),
     /*
       人数だけを見る。サイトが1人として名乗っているあいだ（soloMember）は、
-      この人が所属する「Noctifex という組織」は存在しない——トップの
+      この人が所属する「AstLog という組織」は存在しない——トップの
       構造化データは同じ URL を Person として名乗っているので、ここで
       worksFor に同じ URL の Organization を書くと、1つの URL が2つの型を
       持つことになる。
@@ -121,11 +122,11 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
   const inSite = counted.profile ? links.find((link) => link.key === PROFILE_KEY) : undefined
 
   /*
-    この人の一覧への帯。カードをここに複製せず、絞り込んだ一覧へ送る。
+    この人の一覧への帯。一覧の行をここに複製せず、絞り込んだ一覧へ送る。
     行き先と件数の決め方は data.ts の bandOf。1人のサイトのプロフィールでは
-    出さない（入口の帯と同じ行き先・同じ件数になる）。
+    出さない（入口の「一覧で見る →」と同じ行き先・同じ件数になる）。
 
-    1人のサイトでは ?member= を付けない。readFilter が読まない（名前のピルが
+    1人のサイトでは ?member= を付けない。readFilter が読まない（名前の絞り込みが
     無い）ので、付けても効かない URL が1本増えるだけになる。
   */
   const band = inSite
@@ -170,8 +171,8 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
           }),
         },
     theme,
-    // 柱はサイトのもの。個人ページだけの柱に入れ替えると、別のサイトへ飛んだように見える
-    sidebar: <SiteIdentity solo={solo} />,
+    // 足元はサイトのもの。個人ページだけのものに入れ替えると、別のサイトへ飛んだように見える
+    footer: <SiteIdentity solo={solo} />,
     adminPath: `/admin/members/${member.id}/edit`,
   })
 }

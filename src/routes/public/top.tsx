@@ -55,7 +55,7 @@ export async function renderWholePage(c: Context<AppEnv>) {
 
   /*
     このページだけは絞り込まない。全部を1ページに載せるのが役目なので、
-    ?kind= も ?member= も読まない（ピルはページごとの URL へのリンクとして
+    ?kind= も ?member= も読まない（絞り込みの手はページごとの URL へのリンクとして
     残る）。
   */
   const counts = Object.fromEntries(
@@ -67,6 +67,7 @@ export async function renderWholePage(c: Context<AppEnv>) {
     filter: NO_FILTER,
     showMember: showMemberOf(blocks, members),
     projects: { total: items.length, rows: items },
+    counts,
     // このページには一覧そのものがすぐ下に並ぶ。送り出す先が無いので帯は置かない
     band: null,
     // 1人のサイトなら、Team の節の代わりにプロフィールを置く
@@ -112,10 +113,10 @@ export async function renderWholePage(c: Context<AppEnv>) {
       // 節を縦に積んだ1本の文書。app.css の「ページの外枠」を外す印
       whole
       /*
-        入口ではないので名乗る。Hero の h1 は同じページにあるが、印刷した紙の
-        2枚目から先、Ctrl-F で飛んだ先では柱だけが誰のサイトかを言う
+        足元で名乗る。Hero の h1 は同じページにあるが、印刷した紙の
+        終わりや Ctrl-F で飛んだ先では、足元が誰のサイトかを言う
       */
-      sidebar={<SiteIdentity solo={solo} />}
+      footer={<SiteIdentity solo={solo} />}
       // 全部の節が並ぶページなので、節の並び（構成）へ送る
       admin={await adminHref(c, '/admin/blocks')}
     >
@@ -172,7 +173,7 @@ export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
         canonical={`${SITE.origin}/`}
         nav={[]}
         theme={theme}
-        sidebar={<SiteIdentity solo={solo} />}
+        footer={<SiteIdentity solo={solo} />}
         // 何も出ていないのは、構成に公開中のブロックが無いから。直す場所はそこ
         admin={await adminHref(c, '/admin/blocks')}
       >
@@ -205,9 +206,9 @@ export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
   // プロフィールのページは /members/<slug> にしか無いので、ここでは当たらない
   if (!link || current?.kind !== 'block') return c.notFound()
 
-  // ここで初めてカードを引く。一覧の無いページでは1件も取ってこない
-  const rows = await pageRows(db, current, filter, memberId)
-  const data: TopData = { ...counted, projects: { ...counted.projects, rows } }
+  // ここで初めて作品の行を引く（一覧と、入口の軌道図の札）。ほかのページでは1件も取ってこない
+  const listed = await pageRows(db, current, filter, memberId)
+  const data: TopData = { ...counted, projects: { ...counted.projects, ...listed } }
 
   const rendered = renderBlock(current.block, data, false)
   // sitePages が並べたページなので、ここで null は返らない
@@ -222,14 +223,8 @@ export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
     description: rendered.description,
     jsonLd: firstOnly(links, link, siteJsonLd(members)),
     theme,
-    // 入口（Hero）では柱に名乗らない。Contact では柱の GitHub / メールを出さない（SiteIdentity）
-    sidebar: (
-      <SiteIdentity
-        solo={solo}
-        entrance={current.block.type === 'hero'}
-        contact={current.block.type === 'contact'}
-      />
-    ),
+    // Contact では足元の GitHub / メールを出さない（本文に同じ手がある。SiteIdentity）
+    footer: <SiteIdentity solo={solo} contact={current.block.type === 'contact'} />,
     adminPath: blockAdminPath(current.block, solo),
   })
 }

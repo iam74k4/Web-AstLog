@@ -2,8 +2,15 @@ import type { Child } from 'hono/jsx'
 import { yearInJapan } from '../lib/format'
 import { SITE } from '../site'
 import type { Theme } from '../theme'
-import { AdminLink, HtmlDocument, Stylesheets } from './components'
-import { MARK_POINTS } from './icons'
+import {
+  AdminLink,
+  Brand,
+  ColorSchemeMeta,
+  FaviconLinks,
+  HtmlDocument,
+  langOf,
+  Stylesheets,
+} from './components'
 
 export type NavItem = { href: string; label: string; active?: boolean }
 
@@ -23,11 +30,8 @@ export type NavItem = { href: string; label: string; active?: boolean }
   1枚に戻す（X が og:image に読むのは JPEG / PNG / WebP / GIF だけ）。
 
   **それ以外のページはサイトの1枚**（SITE_IMAGE）。素材はリポジトリにある
-  public/assets/avatar.png。og:image に出せる raster はこれ1枚——ロゴ
-  （noctifex-mark.svg / noctifex-wordmark.svg）は SVG で、貼り先のどれも
-  og:image の SVG を読まない（Slack / LinkedIn / X）。入口の月
-  （moon.avif / moon.webp）は raster だが、無彩色の三日月を CSS の
-  mask-image で抜くための素材なので、そのまま貼ると絵にならない。
+  public/assets/avatar.png（持ち主の顔）。このサイトは1人として名乗るので、貼られた
+  札に出すのはロゴではなく顔にする。
 
   twitter:card は画像の寸法で決める（cardOf）。横長で X の大きい札の下限
   （300x157）以上なら summary_large_image、それ以外は summary。サイトの1枚は
@@ -80,15 +84,16 @@ const ShareImage = ({ image }: { image: OgImage }) => (
 )
 
 /*
-  公開ページの外枠。head と骨格（名札 + 本文）はここだけで決める。
+  公開ページの外枠。head と骨格（上の帯・本文・足元）はここだけで決める。
 
-  骨格の並べ替えは body の data-* だけで済ませる。マークアップは
-  どのプリセットでも同じで、変わるのは app.css の [data-layout] 側。
-  出し分けを JSX に持たせると、プリセットの数だけ画面が分かれてしまう。
+  骨格は1つ——上に帯（ロゴと目次。貼り付く）、その下に本文、底に足元（誰の
+  サイトか・連絡先・全体ページへの1本）。見た目のプリセットで変わるのは色と
+  見出しの書体だけで、並べ方は変えない（src/theme.ts）。
 
   公開ページは JavaScript を持たない。絞り込みもページの移動もサーバーが決め、
   リンクをたどるだけで動く。ここに <script> を1つ足すと、切られた環境で
-  何が落ちるかを毎回考えることになる。
+  何が落ちるかを毎回考えることになる。ページを移るときの切り替え（app.css の
+  @view-transition）も CSS だけで、知らないブラウザではふつうに移るだけ。
 */
 export const Layout = (props: {
   title: string
@@ -97,7 +102,11 @@ export const Layout = (props: {
   jsonLd?: unknown
   nav: NavItem[]
   theme: Theme
-  sidebar: Child
+  /*
+    足元の名乗り（components.tsx の SiteIdentity）。どのページにも出るので、
+    ここに載せたものは全ページに載る
+  */
+  footer: Child
   /*
     縦に積んだ全体ページ（/all）のときだけ立てる。app.css は body のこの印で
     「ページの外枠」（表紙の高さ・貼り付く帯）を外す。
@@ -105,7 +114,7 @@ export const Layout = (props: {
   whole?: boolean
   /*
     ログインしている人にだけ渡る、管理画面の行き先（AdminLink）。訪問者には
-    undefined が渡り、柱は今までと同じ姿のまま。
+    undefined が渡り、帯は今までと同じ姿のまま。
   */
   admin?: string
   // 共有カードの画像。渡さなければサイトの1枚（SITE_IMAGE）
@@ -116,7 +125,7 @@ export const Layout = (props: {
     <head>
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-      <meta name="color-scheme" content="dark" />
+      <ColorSchemeMeta />
       <title>{props.title}</title>
       <meta name="description" content={props.description} />
       <link rel="canonical" href={props.canonical} />
@@ -129,10 +138,7 @@ export const Layout = (props: {
       <meta property="og:locale" content="ja_JP" />
       <ShareImage image={props.image ?? SITE_IMAGE} />
 
-      <link
-        rel="icon"
-        href={`data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%230c0c0e'/%3E%3Cpolygon points='${MARK_POINTS}' fill='%23f2f2f4'/%3E%3C/svg%3E`}
-      />
+      <FaviconLinks />
       <Stylesheets />
       {props.jsonLd ? (
         <script
@@ -144,8 +150,12 @@ export const Layout = (props: {
         />
       ) : null}
     </head>
+    {/*
+      data-site は公開ページの印。app.css はこれで公開ページだけに外枠（貼り付く帯・
+      表紙の高さ・なめらかな送り）を当てる——管理画面と 404 の body には付かない
+    */}
     <body
-      data-layout={props.theme.layout}
+      data-site=""
       data-accent={props.theme.accent}
       data-typeface={props.theme.typeface}
       data-whole={props.whole ? '' : undefined}
@@ -153,84 +163,74 @@ export const Layout = (props: {
       <a class="skip" href="#main">
         本文へスキップ
       </a>
-      <div class="shell">
-        <aside class="rail">
-          {props.sidebar}
-          {/*
-            いま見ているページには aria-current="page"。'true' ではなく 'page' な
-            のは、目次の行き先が別の URL（/projects）だから。'true' は「この一覧の
-            中のいま」で、ページそのものは指さない。作品のページは載っている一覧
-            （Projects）の行に、個人ページは Profile か Team の行に印が付く。
-
-            番号は振らない。目次の番号はブロックの並び順でしかなく、読む人に言う
-            ことが無い。
-
-            aria-label は行き先で出し分ける。全体ページの目次だけが本当に
-            ページ内（#projects）を指していて、ページごとの URL では別ページへ移る。
-            片方に固定した文字列は、必ずどちらかで嘘になる。
-
-            ページの移動は、この目次と、ページの中のリンク（入口の帯・カード・
-            「← 一覧に戻る」）だけ。画面の底の左右の手（ページャ）は外した
-            （CLAUDE.md の「公開ページは縦に読む」）。
-          */}
-          <nav class="toc" aria-label={props.whole ? 'ページ内の移動' : 'ページの移動'}>
-            {props.nav.map((item) => (
-              <a key={item.href} href={item.href} aria-current={item.active ? 'page' : undefined}>
-                {item.label}
-              </a>
-            ))}
-          </nav>
-          {/*
-            目次のすぐ後ろ。足元（.rail__footer）には入れない——あちらは 899 以下で
-            畳まれるので、電話からは管理画面へ行けなくなる。ここなら 899 以下の
-            横帯でも右端に残る
-          */}
-          {props.admin ? <AdminLink href={props.admin} /> : null}
-          {/*
-            全体ページ（/all）への1本道。
-
-            公開側にも管理画面にも /all への href が1本も無かった。@media print は
-            「全体ページを刷ること」と書いているのに、そこへ行く手段が URL を手で
-            打つことしか無い。Ctrl-F もブラウザ翻訳も、同じ1本が無いために
-            サイトの一部にしか届かなかった。
-
-            全体ページ自身には出さない（自分への行き先）。
-
-            899 以下ではこの足元ごと畳まれる（著作権表示と一緒に。CLAUDE.md の
-            「899 以下で畳むもの」）。畳んでも全体ページへの道は消えない——入口の Hero の帯の
-            下に「すべてを1ページで読む →」（components.tsx の WholeLink）を置いて
-            あり、そちらは幅で畳まない。sitemap.xml にも載るので、検索からも届く。
-          */}
-          {/*
-            著作権表示（と、あとに続く「 · 」）は .rail__copy に包む。中央寄せの骨格は
-            900 以上で柱が上の帯になり、そこでは著作権表示を出さずに全体ページへの
-            1本だけを目次の行に残す（app.css の「骨格: 中央寄せ」）。素の字のままだと
-            CSS から字だけを選べない。区切りの「 · 」も同じ箱に入れるのは、表示を
-            畳んだときに区切りだけが行の頭に残らないようにするため
-          */}
-          <footer class="rail__footer">
-            <span class="rail__copy">
-              © {yearInJapan()} {SITE.name}
-              {props.whole ? null : ' · '}
-            </span>
-            {/*
-              矢印は →。同じタブで開くサイトの中の行き先なので、「外へ出る・
-              別タブ」の印（↗）は付けない（components.tsx の LinkList を見ること）。
-              管理画面の同じ1本は別タブで開くので、あちらは ↗ のまま
-            */}
-            {props.whole ? null : <a href="/all">全体を1ページで見る →</a>}
-          </footer>
-        </aside>
+      {/*
+        上の帯。ロゴ（入口へ）と目次と、ログイン中だけ管理画面への入口。ページの上に
+        貼り付き（全体ページを除く）、ページを移っても同じ場所に居る。
+      */}
+      <header class="top">
+        <Brand />
         {/*
-          tabindex={-1} は「本文へスキップ」のため。Safari（と iOS の全ブラウザ）は
-          フラグメントで移った先が素でフォーカスを受けない要素だと、見た目だけ動いて
-          キーボードの位置は帯に残る。このサイトに迂回路はこの1本しか無いので、
-          外すと目次を毎回たどる以外の手が消える。-1 なので Tab の順番には入らない。
+          いま見ているページには aria-current="page"。'true' ではなく 'page' な
+          のは、目次の行き先が別の URL（/projects）だから。'true' は「この一覧の
+          中のいま」で、ページそのものは指さない。作品のページは載っている一覧
+          （Projects）の行に、個人ページは Profile か Team の行に印が付く。
+
+          番号は振らない。目次の番号はブロックの並び順でしかなく、読む人に言う
+          ことが無い。行き先の名前が英字だけなら lang="en"（等幅の小さな大文字の札に
+          なる。components.tsx の langOf）。
+
+          aria-label は行き先で出し分ける。全体ページの目次だけが本当に
+          ページ内（#projects）を指していて、ページごとの URL では別ページへ移る。
+          片方に固定した文字列は、必ずどちらかで嘘になる。
+
+          ページの移動は、この目次と、ページの中のリンク（入口の一覧への手・
+          作品の行・「← 一覧に戻る」）だけ。画面の底の左右の手（ページャ）は置かない
+          （CLAUDE.md の「公開ページは縦に読む」）。
         */}
-        <main id="main" tabindex={-1}>
-          {props.children}
-        </main>
-      </div>
+        <nav class="toc" aria-label={props.whole ? 'ページ内の移動' : 'ページの移動'}>
+          {props.nav.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              aria-current={item.active ? 'page' : undefined}
+              lang={langOf(item.label)}
+            >
+              {item.label}
+            </a>
+          ))}
+        </nav>
+        {props.admin ? <AdminLink href={props.admin} /> : null}
+      </header>
+      {/*
+        tabindex={-1} は「本文へスキップ」のため。Safari（と iOS の全ブラウザ）は
+        フラグメントで移った先が素でフォーカスを受けない要素だと、見た目だけ動いて
+        キーボードの位置は帯に残る。このサイトに迂回路はこの1本しか無いので、
+        外すと目次を毎回たどる以外の手が消える。-1 なので Tab の順番には入らない。
+      */}
+      <main id="main" tabindex={-1}>
+        {props.children}
+      </main>
+      {/*
+        足元。誰のサイトか（名前・職種・一言）と連絡先、著作権表示と全体ページへの
+        1本。どの幅でも畳まない——上の帯にはロゴと目次しか置かないので、名乗りと
+        連絡先はここが受ける。
+      */}
+      <footer class="foot">
+        {props.footer}
+        <p class="foot__meta">
+          <span>
+            © {yearInJapan()} {SITE.name}
+          </span>
+          {/*
+            全体ページ（/all）への1本道。印刷・Ctrl-F・ブラウザ翻訳の宛先で、
+            sitemap.xml にも載る。全体ページ自身には出さない（自分への行き先）。
+
+            矢印は →。同じタブで開くサイトの中の行き先なので、「外へ出る・
+            別タブ」の印（↗）は付けない（components.tsx の LinkList を見ること）。
+          */}
+          {props.whole ? null : <a href="/all">全体を1ページで見る →</a>}
+        </p>
+      </footer>
     </body>
   </HtmlDocument>
 )

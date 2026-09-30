@@ -4,3 +4,6 @@ node_modules/
 
 # ワークツリーの実体。ここを追跡するとリポジトリが自分自身を取り込む
 .claude/worktrees/
+
+# Python の書き出し（scripts/blackhole/render.py を動かすと生える）
+__pycache__/

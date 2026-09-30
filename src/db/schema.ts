@@ -132,10 +132,10 @@ export const items = sqliteTable(
     summary: text('summary').notNull().default(''),
     /*
       作品ページの本文。背景・やったこと・結果を段落で。
-      カードには出さない——出るのは作品のページの説明の下の小節「Story」（#story）
+      一覧には出さない——出るのは作品のページの説明の下の小節「Story」（#story）
       だけで、空なら（段落が1つも無ければ）その小節を作らない（src/blocks.ts の
-      itemStory）。カードの説明（summary）は目録の2文で、作品のページの頭は
-      カードを開いたもの。
+      itemStory）。一覧の行の説明（summary）は目録の2文で、作品のページの頭は
+      行を開いたもの。
 
       既にある行は '' のまま（NOT NULL に定数の既定値なので ALTER で入る）。
       本人の作品の中身をこちらで書いて埋めない。
@@ -144,7 +144,7 @@ export const items = sqliteTable(
     /*
       スクリーンショット。/images/items/<…>（管理画面から KV に上げたもの）か、
       /assets/…（同梱）。null なら画像なし——作品ページに figure を出さず、
-      カードにもサムネイルを出さない。
+      一覧にもサムネイルを出さない。
 
       代替テキストは別の列で持つ（画像そのものに焼き込めない）。空のまま
       公開させない検査は src/blocks.ts の publishErrors（公開の関門）。
@@ -223,7 +223,7 @@ export const itemTags = sqliteTable(
     sortOrder: integer('sort_order').notNull().default(0),
   },
   /*
-    子の行は作品ごとに sort_order の順で引く（カードのタグ・行き先）。主キー
+    子の行は作品ごとに sort_order の順で引く（一覧の行のタグ・行き先）。主キー
     （item_id, tag）でも作品では引けるが、並べ直しが1件ごとに走る。item_links には
     item_id の索引そのものが無く、作品1件のたびに表を丸ごと読んでいた
   */
@@ -495,5 +495,4 @@ export type Member = typeof members.$inferSelect
 export type Item = typeof items.$inferSelect
 export type Platform = typeof platforms.$inferSelect
 export type User = typeof users.$inferSelect
-export type UserIdentity = typeof userIdentities.$inferSelect
 export type Block = typeof blocks.$inferSelect

@@ -1,12 +1,18 @@
-import { countPublishedByKind, type Db, listPublishedItems } from '../../db/queries'
+import {
+  countPublishedByKind,
+  type Db,
+  listPublishedItemKeys,
+  listPublishedItems,
+} from '../../db/queries'
 import type * as schema from '../../db/schema'
-import { type ItemFilter, type ItemView, type KindCounts, totalOf } from '../../domain'
+import { type ItemFilter, type KindCounts, totalOf } from '../../domain'
 import type { Page } from '../../lib/sequence'
 import { filterQuery } from '../../ui/components'
 import { renderBlock } from './blocks'
 import {
   bandOf,
   filterApplies,
+  type ItemListData,
   kindsOf,
   profileOf,
   scopeOf,
@@ -44,8 +50,8 @@ export type BlockPage = {
   個人ページの経路（member.tsx）。サイトの並びに入っているのは、目次に
   「Profile」の1行を持たせるため。
 
-  帯（このメンバーのつくったもの）は付けない——入口の帯と同じ行き先・同じ件数に
-  なり、同じ札がサイトに2度出る。
+  帯（このメンバーのつくったもの）は付けない——入口の「一覧で見る →」と同じ
+  行き先・同じ件数になり、同じ手がサイトに2度出る。
 */
 export type ProfilePage = {
   kind: 'profile'
@@ -89,27 +95,38 @@ function pageList(blocks: schema.Block[], data: TopData): SitePage[] {
   残る。一覧の無いページには付けて回らない」）。落とすのは、そのページでは何の
   意味も持たない項目だけ。
 */
-export const pageQuery = (slug: string, filter: ItemFilter): string =>
+const pageQuery = (slug: string, filter: ItemFilter): string =>
   filterApplies(slug) ? filterQuery(filter) : ''
 
 /*
-  いま出すページの行を引く。絞り込みの効かないページでは1件も引かない
-  ——そのページに一覧は無い。
+  いま出すページの行を引く。一覧（Projects）は絞り込みを効かせて、入口は軌道図の札の
+  ために公開中の全件を（入口に絞り込みは効かない）。ほかのページでは1件も引かない
+  ——そのページに作品は出ない。
+
+  絞り込んだ一覧は、行の番号のために公開中の並び（id だけ）も引く。番号は絞り込む
+  前の並びでの位置で、入口の軌道図の札と同じ番号（data.ts の ItemListData）。
 */
 export async function pageRows(
   db: Db,
   page: BlockPage,
   filter: ItemFilter,
   memberId: number | null,
-): Promise<ItemView[]> {
-  if (!filterApplies(page.block.type)) return []
-  return listPublishedItems(db, scopeOf(filter, memberId))
+): Promise<Pick<ItemListData, 'rows' | 'numbers'>> {
+  if (page.block.type === 'hero') return { rows: await listPublishedItems(db) }
+  if (!filterApplies(page.block.type)) return { rows: [] }
+  const scope = scopeOf(filter, memberId)
+  if (!scope.kind && !scope.memberId) return { rows: await listPublishedItems(db) }
+  const [rows, order] = await Promise.all([
+    listPublishedItems(db, scope),
+    listPublishedItemKeys(db),
+  ])
+  return { rows, numbers: new Map(order.map((key, index) => [key.id, index + 1])) }
 }
 
 /*
   サイトのページの並びと、それを組むのに使った数。
 
-  ここで引くのは数だけ。カードそのものは、どのページを出すかが決まってから
+  ここで引くのは数だけ。一覧の行そのものは、どのページを出すかが決まってから
   引く（pageRows）。
 */
 export async function sitePages(
@@ -128,6 +145,7 @@ export async function sitePages(
     filter,
     showMember: showMemberOf(blocks, members),
     projects: { total: totalOf(counts), rows: [] },
+    counts,
     band: bandOf(blocks, counts),
     profile: profileOf(blocks, members),
   }
@@ -140,7 +158,7 @@ export async function sitePages(
 
   canonical: 先頭のページは / と /<slug> の2つの URL で開けるので、正は / の
   ほうにそろえる。2つ目からは、そのページの URL が正。絞り込みは付けない——
-  同じ中身の取り出し方なので、ピルの組み合わせのぶんだけ URL が数えられると、
+  同じ中身の取り出し方なので、絞り込みの組み合わせのぶんだけ URL が数えられると、
   どれが本体か分からなくなる。
 
   href も先頭だけは / に寄せる（目次が /hero を指して、入口と同じ中身の URL を

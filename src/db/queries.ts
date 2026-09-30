@@ -65,7 +65,7 @@ const itemsWhere = (scope: ItemScope) =>
     scope.memberId ? eq(schema.items.memberId, scope.memberId) : undefined,
   )
 
-// カード1枚ぶんに要る子（タグ・リンク・担当・プラットフォーム）を一緒に引く形。
+// 一覧の行1つぶんに要る子（タグ・リンク・担当・プラットフォーム）を一緒に引く形。
 // タグとリンクは idx_item_tags_item / idx_item_links_item を作品ごとに並びのまま読む
 const itemWith = {
   tags: { orderBy: [asc(schema.itemTags.sortOrder)] },
@@ -77,7 +77,7 @@ const itemWith = {
 
 /*
   DB の行を画面に出す形に開く。一覧（listPublishedItems）と作品1件
-  （findPublishedItem）で同じ式を読む——片方だけ直すと、一覧のカードと
+  （findPublishedItem）で同じ式を読む——片方だけ直すと、一覧の行と
   その作品の恒久リンクで中身が食い違う。
 */
 type ItemRow = schema.Item & {
@@ -89,7 +89,7 @@ type ItemRow = schema.Item & {
 
 function toItemView(row: ItemRow): ItemView {
   // 下書きのメンバーは名前も出さない。出すと、まだ公開していない人の名前が
-  // カードに載り、404 になるプロフィールへ導いてしまう
+  // 一覧の行に載り、404 になるプロフィールへ導いてしまう
   const member = row.member?.published === 1 ? row.member : null
   return {
     ...row,
@@ -170,7 +170,7 @@ export async function findPublishedItem(db: Db, slug: string): Promise<ItemView 
   公開中の作品の並びだけ（id・区分・slug）。sitemap.xml が恒久リンクを数え上げるのに
   使う。並びは一覧と同じ itemOrder。
 
-  カードの中身（タグ・リンク・担当）は引かない。要るのは URL だけで、7件なら
+  一覧の行の中身（タグ・リンク・担当）は引かない。要るのは URL だけで、7件なら
   7件ぶんの子を毎回引くことになる。
 */
 export function listPublishedItemKeys(db: Db) {
@@ -187,23 +187,20 @@ export function listPublishedItemKeys(db: Db) {
 
 /*
   公開中の項目の数。管理画面の構成が「Projects が公開ページに出るか」を知らせるのに
-  使う（src/routes/admin/blocks.tsx の siteCounts）。カードを引かずに数える。
+  使う（src/routes/admin/blocks.tsx の siteCounts）。行の中身を引かずに数える。
 */
 export async function countPublishedItems(db: Db, scope: ItemScope = {}) {
   const [row] = await db.select({ n: count() }).from(schema.items).where(itemsWhere(scope))
   return row?.n ?? 0
 }
 
-export function listPlatforms(db: Db) {
-  return db.query.platforms.findMany({ orderBy: [asc(schema.platforms.sortOrder)] })
-}
-
 /*
-  区分ごとの公開中の件数。絞り込みのピル（両方の区分に項目があるときだけ並べる）
-  と、一覧への帯の「個人開発 5 · 業務 2」に使う。memberId を渡せばその人のぶん。
+  区分ごとの公開中の件数。区分の絞り込み（両方の区分に項目があるときだけ並べる）
+  と、入口の軌道図と件数の帯（Tally）と、個人ページの帯の「個人開発 5 · 業務 2」に
+  使う。memberId を渡せばその人のぶん。
 
-  ピルは絞り込む前の件数から決める。絞り込んだ結果から決めると、押すたびに
-  ピルの並びが変わり、いま押したピルが消えて戻れなくなる。
+  絞り込みは絞り込む前の件数から決める。絞り込んだ結果から決めると、押すたびに
+  絞り込みの並びが変わり、いま押した手が消えて戻れなくなる。
 */
 export async function countPublishedByKind(
   db: Db,
@@ -224,8 +221,8 @@ export async function countPublishedByKind(
 /* ------------------------------------------------------------- 見た目 */
 
 /*
-  settings は key-value なので、見た目の3つは接頭辞を付けて置く。
-  他の設定が増えても、この3行だけを拾えるようにするため。
+  settings は key-value なので、見た目の2つ（アクセント色と書体）は接頭辞を付けて
+  置く。他の設定が増えても、見た目の行だけを拾えるようにするため。
 */
 const THEME_PREFIX = 'theme.'
 
@@ -279,7 +276,7 @@ export async function findBlock(db: Db, id: number): Promise<schema.Block | unde
   位置と id で、どちらかが公開中なら公開。畳まれたほうの行は見えなくなるが、DB には
   残り、0004 がそのとき消す。
 */
-export function readLegacyBlocks(rows: schema.Block[]): schema.Block[] {
+function readLegacyBlocks(rows: schema.Block[]): schema.Block[] {
   const merged = new Map<string, schema.Block>()
   const out: schema.Block[] = []
   for (const row of rows) {

@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, lt, sql } from 'drizzle-orm'
-import type { DrizzleD1Database } from 'drizzle-orm/d1'
+import type { Db } from '../db/queries'
 import * as schema from '../db/schema'
 import type { Identity } from './oauth'
 
@@ -13,12 +13,10 @@ import type { Identity } from './oauth'
 */
 const SESSION_DAYS = 14
 
-type Db = DrizzleD1Database<typeof schema>
+const hex = (bytes: Uint8Array) => [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
 
 export function newToken(bytes = 32): string {
-  return [...crypto.getRandomValues(new Uint8Array(bytes))]
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
+  return hex(crypto.getRandomValues(new Uint8Array(bytes)))
 }
 
 /*
@@ -28,7 +26,7 @@ export function newToken(bytes = 32): string {
 */
 export async function sessionKey(token: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+  return hex(new Uint8Array(digest))
 }
 
 // 比較は定数時間で。早期 return すると、どこまで一致したかが時間に出る
@@ -108,9 +106,6 @@ export function ownerValue(env: OwnerEnv, identity: Identity): string | null {
   if (!want || identity.emailVerified !== true || !ASCII_EMAIL.test(email)) return null
   return email.toLowerCase() === want ? want : null
 }
-
-export const isOwnerIdentity = (env: OwnerEnv, identity: Identity) =>
-  ownerValue(env, identity) !== null
 
 /*
   提供元のアカウントから、管理画面の user を引く。通さないなら null。

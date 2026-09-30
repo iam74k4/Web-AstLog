@@ -1,6 +1,6 @@
 import type { Child } from 'hono/jsx'
-import { HtmlDocument, Stylesheets } from './components'
-import { MarkIcon } from './icons'
+import { ColorSchemeMeta, FaviconLinks, HtmlDocument, Stylesheets } from './components'
+import { HoleMark } from './icons'
 
 /*
   管理画面の外枠。900px 以上で左ナビ、それ未満では上のバーになる（CSS 側）。
@@ -21,9 +21,10 @@ const AdminHead = ({ title }: { title: string }) => (
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="color-scheme" content="dark" />
+    <ColorSchemeMeta />
     <meta name="robots" content="noindex" />
-    <title>{title} — Noctifex Admin</title>
+    <title>{title} — AstLog Admin</title>
+    <FaviconLinks />
     <Stylesheets admin />
   </head>
 )
@@ -42,7 +43,7 @@ export const AdminLayout = (props: {
       <div class="admin-shell">
         <aside class="admin-nav">
           <span class="admin-nav__brand">
-            <MarkIcon size={18} />
+            <HoleMark size={20} />
             <span>ADMIN</span>
           </span>
           <nav class="admin-nav__links">

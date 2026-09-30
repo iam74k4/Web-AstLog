@@ -1,37 +1,138 @@
 /*
-  アイコンはインライン SVG のみ。絵文字は使わない。
-  三日月は assets/noctifex-mark.svg と同じ形。currentColor を継ぐので、
-  置いた場所の文字色になる。
+  アイコンはインライン SVG のみ。絵文字は使わない。currentColor を継ぐので、置いた
+  場所の文字色になる。
 */
 
-/*
-  三日月。明るい側が左（外周は x=5.68 まで張り出し、内周は x≈10.7〜12.1）。
-  入口の背景の月（scripts/moon/render.py）も同じ向きに光を当ててある。
-*/
-/*
-  size は必須。app.css は svg に寸法を与える規則を1つも持たないので、
-  渡し忘れると素の 300x150 に落ちて版面が崩れる。
-*/
-/*
-  三日月の7点。ここが正。
+import {
+  GLOW_STOPS,
+  HOLE,
+  LINE_STOPS,
+  linePath,
+  MARK_VIEWBOX,
+  SPOT,
+  spotPath,
+  WORDMARK,
+} from './logo'
 
-  同じ列が3か所にある——この MarkIcon、Layout.tsx の favicon（data URI）、
-  public/assets/noctifex-mark.svg。1つめと2つめはここから配り、3つめは
-  別ファイルなので test/public.test.ts が一致を見張る。
-*/
-export const MARK_POINTS =
-  '14.96,2.50 7.71,6.10 5.68,13.93 10.27,20.60 18.32,21.50 12.09,16.78 10.73,9.07'
+/*
+  ロゴのブラックホール（O の位置の、光の縁・横線・黒い円）。形は src/ui/logo.ts が正。
+  色は currentColor（光と横線）と CSS の --hole-core（黒い円。app.css の .logo-core）。
+  グラデーションの id は置く部品ごとに変える（ワードマークと印を同じページに置いたとき、
+  id が重なると片方の光が消える。いま並べているページは無いが、並べた日に黙って消えない）。
 
-export const MarkIcon = ({ size }: { size: number }) => (
+  光（HoleLight）と黒い円（HoleCore）を分けて出すのは、入口と締めのブラックホール
+  （components.tsx の Hole）がそのあいだに縁を回る光の点（HoleSpot）を挟むため
+*/
+export const HoleLight = ({ cx, cy, id }: { cx: number; cy: number; id: string }) => (
+  <>
+    <defs>
+      <radialGradient
+        id={`${id}-glow`}
+        cx={cx}
+        cy={cy}
+        r={HOLE.glow}
+        gradientUnits="userSpaceOnUse"
+      >
+        {GLOW_STOPS.map(([at, alpha]) => (
+          <stop key={at} offset={at} stop-color="currentColor" stop-opacity={alpha} />
+        ))}
+      </radialGradient>
+      <linearGradient
+        id={`${id}-line`}
+        x1={cx - HOLE.line}
+        x2={cx + HOLE.line}
+        gradientUnits="userSpaceOnUse"
+      >
+        {LINE_STOPS.map(([at, alpha]) => (
+          <stop key={at} offset={at} stop-color="currentColor" stop-opacity={alpha} />
+        ))}
+      </linearGradient>
+    </defs>
+    <path d={linePath(cx, cy)} fill={`url(#${id}-line)`} />
+    <circle cx={cx} cy={cy} r={HOLE.glow} fill={`url(#${id}-glow)`} />
+  </>
+)
+
+export const HoleCore = ({ cx, cy }: { cx: number; cy: number }) => (
+  <circle class="logo-core" cx={cx} cy={cy} r={HOLE.core} />
+)
+
+/*
+  縁を回る光の点（入口と締めのブラックホールだけ）。頭から尾へ消える短い弧を、にじみと芯の
+  2本の線で描く（尾へ消える坂は弧の弦に沿った直線のグラデーション。sweep が 90 度より
+  小さいので、弦の上の並びが弧の上の並びと同じ向きになる）。中心は (0, 0)
+*/
+export const HoleSpot = ({ id }: { id: string }) => {
+  const { d, head, tail } = spotPath()
+  return (
+    <>
+      <defs>
+        <linearGradient
+          id={`${id}-spot`}
+          x1={head.x}
+          y1={head.y}
+          x2={tail.x}
+          y2={tail.y}
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop offset="0" stop-color="currentColor" stop-opacity="1" />
+          <stop offset="1" stop-color="currentColor" stop-opacity="0" />
+        </linearGradient>
+      </defs>
+      <path
+        d={d}
+        fill="none"
+        stroke={`url(#${id}-spot)`}
+        stroke-width={SPOT.halo}
+        stroke-linecap="round"
+        stroke-opacity={SPOT.haloOpacity}
+      />
+      <path
+        d={d}
+        fill="none"
+        stroke={`url(#${id}-spot)`}
+        stroke-width={SPOT.width}
+        stroke-linecap="round"
+      />
+    </>
+  )
+}
+
+const Hole = ({ cx, cy, id }: { cx: number; cy: number; id: string }) => (
+  <>
+    <HoleLight cx={cx} cy={cy} id={id} />
+    <HoleCore cx={cx} cy={cy} />
+  </>
+)
+
+/*
+  ワードマーク（ΛSTLOG。O がブラックホール）。大きさは置く側の CSS が高さで決める
+  （幅は viewBox の縦横比から。光の縁と横線は字の箱の外へはみ出して見せる——
+  overflow visible）。読み上げには出さない——名前は置く側が字で持つ（.sr-only の AstLog）
+*/
+export const Wordmark = ({ class: className }: { class: string }) => (
   <svg
-    viewBox="0 0 24 24"
-    width={size}
-    height={size}
+    class={className}
+    viewBox={WORDMARK.viewBox}
     fill="currentColor"
+    overflow="visible"
     aria-hidden="true"
     focusable="false"
   >
-    <polygon points={MARK_POINTS} />
+    <Hole cx={HOLE.cx} cy={HOLE.cy} id="wm" />
+    <path d={WORDMARK.lambda} />
+    <path d={WORDMARK.strokes} fill="none" stroke="currentColor" stroke-width={WORDMARK.stroke} />
+  </svg>
+)
+
+/*
+  印だけ（ワードマークの O を1つで）。404 と管理画面の頭で使う。
+  size は必須——app.css は印に寸法を与える規則を持たないので、渡し忘れると素の
+  300x150 に落ちて版面が崩れる
+*/
+export const HoleMark = ({ size }: { size: number }) => (
+  <svg viewBox={MARK_VIEWBOX} width={size} height={size} aria-hidden="true" focusable="false">
+    <Hole cx={0} cy={0} id="mk" />
   </svg>
 )
 

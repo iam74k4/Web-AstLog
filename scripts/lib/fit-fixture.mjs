@@ -14,8 +14,8 @@
     （MAX_CHARS.blockHeading）、ひとことの一文も上限（MAX_STATEMENT_SENTENCE）
   - メンバー6人（Team のグリッド）。うち2人は長い肩書き・上限の大見出し・長い
     紹介文・技術3塊・長い経歴を、均等に割った形と寄せた形で持つ
-  - 作品7件。いちばん重いカード（画像あり・説明の上限 100 字・実績値・タグ5つ・
-    リンク5本・担当者名）、画像の有る無しが混ざる行、作品名が上限ちょうどの作品。
+  - 作品7件。いちばん重い一覧の行（画像あり・説明の上限 100 字・実績値・タグ5つ・
+    リンク5本・担当者名）、画像の無い行、作品名が上限ちょうどの作品。
     2件は長い本文（6段落）を2形で持つ
 
   上限の数（src/blocks.ts の MAX_CHARS）はそこから読む（書き写さない）。上限を変えた日に、
@@ -255,7 +255,7 @@ function memberRows() {
     email: null,
   })
   return [
-    // 長い職種。1人のサイトでは柱の帯に名前と並ぶ（中央寄せの帯で末尾を省く相手）
+    // 長い職種。1人のサイトでは足元に名前と並び、入口の大見出しの上の札にも出る
     heavy(1, 'aoki', '青木 春香', 'シニアソフトウェアエンジニア / テックリード', 'even'),
     heavy(2, 'ishida', '石田 湊', 'Senior Software Engineer / Tech Lead', 'lump'),
     light(3, 'ueno', '上野 真央', 'Designer', true),
@@ -291,7 +291,7 @@ function itemRows() {
     ...row,
   })
   return [
-    // 1行目: いちばん重いカード2枚の行（grid の1行は PROJECT_COLUMNS 枚）
+    // いちばん重い行が2件（画像・実績値・タグ・リンク・担当者名が全部そろう）
     heavy({
       id: 1,
       type: 'app',
@@ -306,7 +306,7 @@ function itemRows() {
       id: 2,
       type: 'work',
       category: '金融系基幹システム',
-      // 作品名の上限ちょうど（MAX_CHARS.itemTitle）。カードの題と見出しが2行に折れる姿
+      // 作品名の上限ちょうど（MAX_CHARS.itemTitle）。行の題と見出しが2行に折れる姿
       title: words(MAX_CHARS.itemTitle, 3),
       slug: 'fixture-long-title',
       year: '2026',
@@ -314,7 +314,7 @@ function itemRows() {
       body: storyBody('lump'),
       sort_order: 20,
     }),
-    // 2行目: 画像の有る無しが混ざる行
+    // 画像のある行と無い行
     heavy({
       id: 3,
       type: 'work',
@@ -338,7 +338,7 @@ function itemRows() {
       member_id: 3,
       sort_order: 40,
     }),
-    // 4行目: 1枚だけの行（並びは下の2件のあと）
+    // 説明の短い行（並びは下の2件のあと）
     heavy({
       id: 5,
       type: 'app',
@@ -358,9 +358,9 @@ function itemRows() {
       sort_order: 50,
     }),
     /*
-      3行目: 実績値の無いカード2枚。説明は上限の 100 字、1枚は作品名が上限ちょうどで
+      実績値の無い行2件。説明は上限の 100 字、1件は作品名が上限ちょうどで
       題が2行に折れる姿。年は 2025 で、並びは 2025 の2件（sort_order 30・40）のあと、
-      2024 の1枚だけの行（上の id 5）の前（src/db/queries.ts の itemOrder）
+      2024 の説明の短い行（上の id 5）の前（src/db/queries.ts の itemOrder）
     */
     ...[6, 7].map((id) =>
       heavy({
@@ -370,7 +370,7 @@ function itemRows() {
         title: id === 6 ? words(MAX_CHARS.itemTitle, 6) : 'Fixture Lean',
         slug: `fixture-lean-${id}`,
         year: '2025',
-        // 1枚は画像あり（同じ行のもう1枚は空の枠）
+        // 1件は画像あり（もう1件は画像なし）
         ...(id === 7
           ? { image_url: null, image_alt: '', image_width: null, image_height: null }
           : {}),
@@ -429,7 +429,7 @@ export function fixture({ solo = false } = {}) {
   const blocks = blockRows()
   /*
     solo は同じ中身の1人のサイト。公開中のメンバーが1人なら、Team の位置に
-    その人のプロフィールが入り、柱が名前と職種で名乗る（src/routes/public/data.ts の
+    その人のプロフィールが入り、足元が名前と職種で名乗る（src/routes/public/data.ts の
     soloMember）——複数人のサイトには無い姿で、本人のサイトはこちら。
     ほかの5人は下書きに置く（作品の担当はそのまま残る）
   */

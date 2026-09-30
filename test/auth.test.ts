@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isOwnerIdentity, newToken, sessionKey, timingSafeEqual } from '../src/lib/auth'
+import { newToken, ownerValue, sessionKey, timingSafeEqual } from '../src/lib/auth'
 import {
   base64url,
   callbackUrl,
@@ -81,46 +81,47 @@ describe('コールバック（redirect_uri）', () => {
   })
 })
 
-describe('最初の紐づけ（isOwnerIdentity）', () => {
+/*
+  返すのは比べた形の値（owner_claims の value になる）。通さないときは null
+*/
+describe('最初の紐づけ（ownerValue）', () => {
   const env = { OWNER_GITHUB_ID: '1001', OWNER_GOOGLE_EMAIL: 'Owner@Example.test' }
 
   it('GitHub は数値の id だけを見る。ログイン名が同じでも id が違えば通さない', () => {
-    expect(isOwnerIdentity(env, { provider: 'github', subject: '1001', label: '@x' })).toBe(true)
-    expect(isOwnerIdentity(env, { provider: 'github', subject: '1002', label: '@owner' })).toBe(
-      false,
-    )
+    expect(ownerValue(env, { provider: 'github', subject: '1001', label: '@x' })).toBe('1001')
+    expect(ownerValue(env, { provider: 'github', subject: '1002', label: '@owner' })).toBeNull()
   })
 
   it('Google は確認済みのアドレスだけ。大小は無視する', () => {
     const google = (email: string, emailVerified: boolean) =>
-      isOwnerIdentity(env, { provider: 'google', subject: 's', label: email, email, emailVerified })
-    expect(google('owner@example.TEST', true)).toBe(true)
-    expect(google('owner@example.test', false)).toBe(false)
-    expect(google('someone@example.test', true)).toBe(false)
+      ownerValue(env, { provider: 'google', subject: 's', label: email, email, emailVerified })
+    expect(google('owner@example.TEST', true)).toBe('owner@example.test')
+    expect(google('owner@example.test', false)).toBeNull()
+    expect(google('someone@example.test', true)).toBeNull()
   })
 
   it('大小を無視するのは ASCII のアドレスだけ（ケルビン記号 K は小文字にすると k になる）', () => {
     const kim = { OWNER_GOOGLE_EMAIL: 'kim@example.test' }
     const google = (email: string) =>
-      isOwnerIdentity(kim, {
+      ownerValue(kim, {
         provider: 'google',
         subject: 's',
         label: email,
         email,
         emailVerified: true,
       })
-    expect(google('Kim@example.test')).toBe(true)
-    expect(google('\u212Aim@example.test')).toBe(false)
+    expect(google('Kim@example.test')).toBe('kim@example.test')
+    expect(google('\u212Aim@example.test')).toBeNull()
   })
 
   it('設定が空なら誰も通さない（空の ID と空のアドレスを一致とみなさない）', () => {
-    expect(isOwnerIdentity({}, { provider: 'github', subject: '', label: '' })).toBe(false)
+    expect(ownerValue({}, { provider: 'github', subject: '', label: '' })).toBeNull()
     expect(
-      isOwnerIdentity(
+      ownerValue(
         { OWNER_GOOGLE_EMAIL: '' },
         { provider: 'google', subject: 's', label: '', email: '', emailVerified: true },
       ),
-    ).toBe(false)
+    ).toBeNull()
   })
 })
 

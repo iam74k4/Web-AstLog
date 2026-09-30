@@ -14,7 +14,7 @@ const page = (key: string, href: string, nav: string | null = key): Page => ({
   href,
   canonical: href,
   nav,
-  title: `${key} — Noctifex`,
+  title: `${key} — AstLog`,
 })
 
 const PAGES: Page[] = [

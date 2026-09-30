@@ -1,33 +1,26 @@
 import type { Child } from 'hono/jsx'
-import {
-  blockLines,
-  blockShown,
-  blockTexts,
-  blockType,
-  itemStory,
-  memberUnits,
-  PROJECT_COLUMNS,
-} from '../../blocks'
+import { blockLines, blockShown, blockTexts, blockType, itemStory, memberUnits } from '../../blocks'
 import type * as schema from '../../db/schema'
 import { KIND_LABEL } from '../../domain'
-import { chunk } from '../../lib/format'
+import { yearFrom } from '../../lib/format'
 import { SITE } from '../../site'
 import {
-  Band,
   Contact,
+  Cta,
+  Eyebrow,
   FilterLinks,
   Hero,
   HiddenHeading,
-  ItemCard,
+  ItemRow,
   ItemStories,
+  itemHref,
   LinkList,
-  langOf,
   MemberCardCompact,
   MemberCardWide,
-  MoonField,
   Note,
   NowList,
   Numbers,
+  OrbitSystem,
   OwnSocials,
   Phrases,
   ProfileWhole,
@@ -35,11 +28,10 @@ import {
   ScreenSection,
   SectionHead,
   Statement,
-  shotRow,
+  Tally,
   Timeline,
-  WholeLink,
 } from '../../ui/components'
-import { siteCountsOf, soloMember, type TopData } from './data'
+import { rowNumber, siteCountsOf, soloMember, type TopData } from './data'
 import {
   describe,
   excerpt,
@@ -69,7 +61,7 @@ export type Rendered = {
   /*
     目次に行を持つか。見出しを空けたメモは、名前を種類の名前（メモ）で持つが、
     目次には並べない——目次は目に見える見出しの一覧で、ページに「メモ」とは
-    書いていない（柱の帯の幅も取らない）
+    書いていない（上の帯の幅も取らない）
   */
   toc: boolean
   /*
@@ -122,6 +114,51 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
   switch (block.type) {
     case 'hero': {
       const solo = soloMember(members)
+      const name = solo?.name ?? SITE.name
+      /*
+        全体ページ（/all）の頭。印刷・Ctrl-F・翻訳の宛先なので、誰のサイトかを
+        目に見える h1 で置く——1人のサイトならその人の名前と肩書き、そうでなければ
+        サイトの名前だけ。軌道図は置かない（紙に装飾を刷らせない）。英字だけの
+        肩書きには lang="en"（読み上げの発音と、等幅の札にする印。langOf）。
+      */
+      if (whole) {
+        return {
+          id,
+          slug: id,
+          nav: null,
+          toc: false,
+          title: null,
+          description: describe(siteDescription(solo)),
+          node: (
+            <Hero>
+              {solo?.role ? <Eyebrow parts={[solo.role]} /> : null}
+              <h1>
+                <Phrases text={name} />
+              </h1>
+              <p class="hero__lead">
+                <Phrases text={SITE.heroLead} />
+              </p>
+            </Hero>
+          ),
+        }
+      }
+      /*
+        入口。左に大見出しとリード文と一覧への1本、右に作品の軌道図、底に件数の帯。
+
+        大見出しは1人のサイトならその人の大見出し（members.headline。無ければ名前）、
+        2人以上ならサイトの一言。名前を真ん中に据えた前の入口は、持ち主が「ださい。
+        Profile で出る」と外した——名乗りは足元（SiteIdentity）と Profile が受ける。
+        大見出しの上の札は「職種 — 所在地」（採る側が最初に探すもの）。
+
+        一覧への1本と件数の帯は、一覧（Projects）のページがあって作品があるときだけ
+        （data.ts の bandOf。0件の知らせだけのページへ送らない）。軌道図の札に載せる
+        作品は、このページのために引いた公開中の全件（site.ts の pageRows）。
+      */
+      const statement = solo ? solo.headline || solo.name : SITE.tagline
+      const eyebrow = solo ? [solo.role, solo.location].filter(Boolean) : []
+      const years = projects.rows
+        .map((item) => yearFrom(item.year))
+        .filter((year): year is number => year !== null)
       return {
         id,
         slug: id,
@@ -131,46 +168,29 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
         // 入口はサイトそのもののページ。名乗りと同じ文をそのまま出す
         description: describe(siteDescription(solo)),
         node: (
-          <Hero>
-            {/*
-              背景の月は入口のページにだけ敷く。全体ページ（/all）に出さないのは、
-              あそこが印刷と Ctrl-F と翻訳の宛先だから——紙に淡い装飾を刷らせない。
-
-              Hero 部品ではなくここに置くのが要。Hero も .hero クラスも個人ページの
-              名乗りと共有していて（member-page.tsx の memberPage）、あちらに
-              埋めるとメンバー全員のページに月が出る。
-            */}
-            {whole ? null : <MoonField />}
-            {/*
-              名乗り。1人のサイトならその人の名前と肩書き、そうでなければ
-              サイトの名前だけ。標語は置かない（採る側が探しに来るのは人の
-              名前と職種）。肩書きは名前の上に小さく添える札で、899 以下で柱から
-              畳まれる肩書きも、入口ではここで読める。英字だけの肩書きには
-              lang="en"（読み上げの発音と、等幅の札にする印。components.tsx の langOf）
-            */}
-            {solo?.role ? (
-              <p class="hero__role" lang={langOf(solo.role)}>
-                {solo.role}
+          <Hero orbit>
+            <div class="hero__copy">
+              {eyebrow.length ? <Eyebrow parts={eyebrow} /> : null}
+              <h1>
+                <Phrases text={statement} />
+              </h1>
+              <p class="hero__lead">
+                <Phrases text={SITE.heroLead} />
               </p>
+              {band ? <Cta href={band.href}>一覧で見る</Cta> : null}
+            </div>
+            <OrbitSystem
+              counts={data.counts}
+              items={projects.rows.map((item, order) => ({
+                type: item.type,
+                title: item.title,
+                href: itemHref(item),
+                number: rowNumber(projects, item, order),
+              }))}
+            />
+            {band ? (
+              <Tally counts={band.counts} since={years.length ? Math.min(...years) : null} />
             ) : null}
-            <h1>
-              <Phrases text={solo?.name ?? SITE.name} />
-            </h1>
-            <p>
-              <Phrases text={SITE.heroLead} />
-            </p>
-            {/*
-              一覧への帯。このページには作品が1件も無いので、何件あるかを数で
-              見せてから送り出す。帯は id も名前も持たない（目次からは指さない）。
-              題は「つくったもの」——右端が「一覧で見る →」なので「一覧」と2度言わない
-            */}
-            {band ? <Band href={band.href} label="つくったもの" counts={band.counts} /> : null}
-            {/*
-              全体ページ（/all）への控えめな1本。柱の足元の同じ行き先は 899 以下で
-              畳まれるので、入口の本文にも置く（WholeLink）。全体ページの Hero には
-              出さない——自分への行き先になる
-            */}
-            {whole ? null : <WholeLink />}
           </Hero>
         ),
       }
@@ -179,11 +199,11 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
     case 'projects': {
       /*
         個人開発（app）と業務（work）を1つの一覧に並べる。並びは新しい順
-        （src/db/queries.ts の itemOrder）。区分はカードの札（プラットフォーム /
-        業界）と絞り込みのピルで見分ける。
+        （src/db/queries.ts の itemOrder）。区分は行の札（プラットフォーム /
+        業界・区分）と絞り込みで見分ける。
 
         公開中の項目が1件も無ければ節ごと出さない。絞り込んで0件になっただけの
-        ときは出す（blockShown）——ピルごと消えると、絞り込みを外す手がページから
+        ときは出す（blockShown）——絞り込みごと消えると、それを外す手がページから
         無くなる
       */
       // 公開中の項目がある区分が1つだけなら、その区分（見出しの添えになる）
@@ -195,8 +215,8 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
         toc: true,
         title: 'Projects',
         /*
-          件数と区分は、このページに出ている絞り込みのピルそのもの。そのあとに、
-          カードの名前を並べる。業務のカードは実績値まで入れる（カードの .metric に
+          件数と区分は、このページに出ている絞り込みそのもの。そのあとに、
+          行の名前を並べる。業務の行は実績値まで入れる（行の .metric に
           しか無い一文を、検索結果と共有カードにも出す）。
         */
         description: describe(
@@ -213,14 +233,16 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
             head={
               <>
                 {/*
-                  添えは、区分のピルが無いときだけ。区分が2つあるサイトでは
-                  すぐ下のピル（すべて / 個人開発 / 業務）が同じ言葉を並べる。
-                  区分が1つのサイトではピルが並ばない（FilterLinks）ので、何の
-                  一覧かを言うのはこの添えだけになる
+                  添えは、区分の絞り込みが無いときだけ。区分が2つあるサイトでは
+                  隣の絞り込み（すべて / 個人開発 / 業務）が同じ言葉を並べる。
+                  区分が1つのサイトでは絞り込みが並ばない（FilterLinks）ので、何の
+                  一覧かを言うのはこの添えだけになる。見出しのすぐ後ろには、
+                  いま並んでいる行の数（count）
                 */}
                 <SectionHead
                   title="Projects"
                   note={soleKind ? KIND_LABEL[soleKind] : undefined}
+                  count={projects.rows.length}
                   h1={!whole}
                 />
                 <FilterLinks
@@ -234,27 +256,25 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
           >
             {projects.rows.length ? (
               /*
-                列の数はサーバーが決める（src/blocks.ts の PROJECT_COLUMNS）。CSS は
-                repeat(var(--cols), …) と書くだけで数を持たない（app.css の「600px 以上」）
+                番号付きの行を縦に並べる（索引）。番号は一覧での並び順で、入口の
+                軌道図の札と同じ番号。絞り込んでも絞り込む前の番号のまま（rowNumber）
               */
-              <div class="grid" style={`--cols:${PROJECT_COLUMNS}`}>
-                {/*
-                  サムネイルの枠は行ごとに決める（ItemCard の framed）。行は
-                  PROJECT_COLUMNS 件ずつ——grid が並べる1行と同じ区切り
-                */}
-                {chunk(projects.rows, PROJECT_COLUMNS).flatMap((row) => {
-                  const framed = shotRow(row)
-                  return row.map((item) => (
-                    <ItemCard key={item.id} item={item} showMember={showMember} framed={framed} />
-                  ))
-                })}
+              <div class="entries">
+                {projects.rows.map((item, order) => (
+                  <ItemRow
+                    key={item.id}
+                    item={item}
+                    number={rowNumber(projects, item, order)}
+                    showMember={showMember}
+                  />
+                ))}
               </div>
             ) : (
               <p class="filter-empty">この条件に当てはまるものはまだありません</p>
             )}
             {/*
               作品の本文。ページごとの URL では作品のページの小節（#story）にしか
-              無いので、全体ページ（中身を全部載せる場所）ではカードの下に並べる
+              無いので、全体ページ（中身を全部載せる場所）では一覧の行の下に並べる
             */}
             {whole ? (
               <ItemStories
@@ -341,7 +361,9 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
         toc: true,
         title: 'Contact',
         description: describe(SITE.contactLead),
-        node: <Contact email={SITE.email} github={SITE.github} whole={whole} />,
+        node: (
+          <Contact email={SITE.email} github={SITE.github} counts={data.counts} whole={whole} />
+        ),
       }
 
     // ここから打ち込むもの。目次に載せるのは見出しを持つものだけ
