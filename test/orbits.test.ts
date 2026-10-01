@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  bodyIndexOf,
   bodyItems,
+  CHART_FRAME,
   CONTACT_FRAME,
   ELEVATION,
   HERO_FRAME,
@@ -365,7 +367,7 @@ describe('入口の軌道図の形', () => {
   })
 })
 
-describe('公転', () => {
+describe('動き続けるもの', () => {
   // SVG の transform 属性の並び（translate(x y) rotate(deg) scale(x y)）を右から点に当てる
   const apply = (list: string, point: { x: number; y: number }) => {
     let { x, y } = point
@@ -389,26 +391,6 @@ describe('公転', () => {
     return { x, y }
   }
 
-  it('回る天体の止まった姿は、止まった天体と同じ場所（札が指す場所）', () => {
-    for (const frame of [HERO_FRAME, CONTACT_FRAME]) {
-      for (const counts of [
-        { app: 1, work: 0 },
-        { app: 5, work: 2 },
-        { app: 14, work: 6 },
-      ]) {
-        const map = orbitMap(counts, frame)
-        expect(map.movers).toHaveLength(map.bodies.length)
-        map.movers.forEach((mover, j) => {
-          const body = map.bodies[j]
-          // app.css は at の内側で単位円を1周回す。回り終えた姿が点 (1, 0)
-          const at = apply(mover.at, { x: 1, y: 0 })
-          expect(Math.hypot(at.x - (body?.x ?? 0), at.y - (body?.y ?? 0))).toBeLessThan(0.5)
-          expect(mover.kind).toBe(body?.kind)
-        })
-      }
-    }
-  })
-
   it('吸い込まれる粒は読み込むたびに同じ。1周して、斜めから見て黒い円の縁で落ち切る', () => {
     const map = orbitMap({ app: 5, work: 2 }, HERO_FRAME)
     // 写しの HTML が毎回同じになるように、乱数は決まった種から
@@ -429,17 +411,19 @@ describe('公転', () => {
     // 作品が0件でも、ブラックホールは粒を吸い込む
     const empty = orbitMap({ app: 0, work: 0 }, HERO_FRAME)
     expect(empty.dust.length).toBeGreaterThan(0)
-    expect(empty.movers).toHaveLength(0)
   })
 
-  it('外側の軌道ほどゆっくり回る（周期は長半径の 1.5 乗）', () => {
+  /*
+    天体は公転させない（札と同じ止まった場所に居る）。動くのは軌道を流れる光で、外側の
+    軌道ほどゆっくり流れる（公転の周期は長半径の 1.5 乗。光はその一定の割合で1周する）
+  */
+  it('天体は回らない。軌道を流れる光は外側ほどゆっくり', () => {
     const map = orbitMap({ app: 5, work: 2 }, HERO_FRAME)
-    const periods = map.movers.map((mover) => mover.period)
-    for (let i = 1; i < periods.length; i += 1) {
-      expect(periods[i] ?? 0).toBeGreaterThan(periods[i - 1] ?? 0)
+    expect(Object.keys(map)).not.toContain('movers')
+    for (let i = 1; i < map.flows.length; i += 1) {
+      expect(map.flows[i] ?? 0).toBeGreaterThan(map.flows[i - 1] ?? 0)
     }
-    // ゆっくり——いちばん速い内側でも1周に1分以上
-    expect(Math.min(...periods)).toBeGreaterThanOrEqual(60)
+    expect(map.flows).toHaveLength(map.orbits.length)
   })
 
   it('奥と手前の半面は、焦点を通る交線で枠を2つに分ける（奥が上）', () => {
@@ -492,6 +476,50 @@ describe('番号の札', () => {
     ])
     // 数えたあとに作品が減っていても落ちない（その天体は札を持たない）
     expect(bodyItems(map.bodies, items.slice(0, 2)).filter((item) => item === null)).toHaveLength(1)
+  })
+
+  /*
+    作品の星図（components.tsx の OrbitChart）は、入口の札が付く天体と同じ天体を灯す。
+    結び方は bodyItems の1本で、作品の id から引く表にしただけ
+  */
+  it('作品ごとの天体の表（bodyIndexOf）は、入口の札と同じ結び方', () => {
+    const counts = { app: 3, work: 2 }
+    const items = [
+      { id: 11, type: 'app' as const },
+      { id: 12, type: 'work' as const },
+      { id: 13, type: 'app' as const },
+      { id: 14, type: 'app' as const },
+      { id: 15, type: 'work' as const },
+    ]
+    const on = bodyItems(orbitMap(counts, HERO_FRAME).bodies, items)
+    const index = bodyIndexOf(counts, items)
+    expect(index.size).toBe(items.length)
+    on.forEach((item, j) => {
+      expect(item, `天体 ${j}`).not.toBeNull()
+      expect(index.get(item?.id ?? -1), `天体 ${j}`).toBe(j)
+    })
+    // 天体の並びは件数だけで決まる。枠を変えても同じ天体を指す（星図は締めの枠で描く）
+    expect(orbitMap(counts, CHART_FRAME).bodies.map((body) => body.kind)).toEqual(
+      orbitMap(counts, HERO_FRAME).bodies.map((body) => body.kind),
+    )
+    // 数えたあとに増えた行（載る天体が無い）は表に無い。星図を持たないだけで落ちない
+    expect(bodyIndexOf(counts, [...items, { id: 16, type: 'app' as const }]).has(16)).toBe(false)
+  })
+
+  it('天体は乗っている軌道を知っている。作品が本数より多いときは内側から相乗り', () => {
+    for (const counts of [
+      { app: 2, work: 1 },
+      { app: 9, work: 4 },
+    ]) {
+      const map = orbitMap(counts, HERO_FRAME)
+      map.bodies.forEach((body, j) => {
+        expect(body.orbit, `天体 ${j}`).toBe(j % map.orbits.length)
+      })
+    }
+  })
+
+  it('星図の枠は締めの枠と同じ（入口と同じ星系を背の低い横長に）', () => {
+    expect(CHART_FRAME).toBe(CONTACT_FRAME)
   })
 
   /*

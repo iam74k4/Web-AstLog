@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-pool-workers'
 import type { Plugin } from 'vite'
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 // テストも本番と同じ Worker ランタイム（workerd）で動かす。
 // Node で動かすと D1 も KV も偽物になり、確かめたいことが確かめられない。
@@ -179,5 +179,10 @@ export default defineConfig({
   ],
   test: {
     setupFiles: ['./test/setup.ts'],
+    /*
+      .claude/worktrees/ はワークツリーの実体（.gitignore）。中にこのリポジトリの別の版の
+      test/ が丸ごとあり、既定のままだとそれも拾って、古い版のテストが今の版の中で落ちる
+    */
+    exclude: [...configDefaults.exclude, '.claude/**'],
   },
 })

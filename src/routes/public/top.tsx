@@ -126,6 +126,21 @@ export async function renderWholePage(c: Context<AppEnv>) {
 }
 
 /*
+  /profile。目次の「Profile」の行（1人のサイトのプロフィール）を、その名前のとおりの URL でも
+  開けるようにする。行き先は目次の行き先と同じその人のページ（profileOf・memberHref）。
+
+  プロフィールの無いサイト（2人以上・Team を置いていない）では 404——目次にも Profile の
+  行が無く、送る先が1つに決まらない。行き先がデータで変わる（2人目を公開した日に無くなる）
+  ので、ブラウザに覚えさせない（movedTo。/team の 301 と同じ）。
+*/
+export async function renderProfileAlias(c: Context<AppEnv>) {
+  const db = drizzle(c.env.DB, { schema })
+  const [members, blocks] = await Promise.all([listPublishedMembers(db), publishedBlocks(db)])
+  const profile = profileOf(blocks, members)
+  return profile ? movedTo(c, memberHref(profile.slug)) : c.notFound()
+}
+
+/*
   ブロック1つぶんのページの描画。公開ページの本体。
 
   slug が null ならトップ（並びの先頭）。そうでなければ URL が名指ししたページで、

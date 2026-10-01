@@ -8,7 +8,7 @@ import { robotsTxt, sitemapXml } from './crawl'
 import { serveImage } from './images'
 import { renderItem } from './item'
 import { renderMemberScreen } from './member'
-import { renderScreen, renderWholePage } from './top'
+import { renderProfileAlias, renderScreen, renderWholePage } from './top'
 
 /*
   公開ページの URL の登録。ここは登録だけを持ち、描くのはそれぞれのモジュール
@@ -35,6 +35,13 @@ const PAGE_NUMBER = /^[1-9][0-9]*$/
   要らない——`/all` が先にあれば、`/:screen` はこの1語を見ない。
 */
 publicRoutes.get('/all', (c) => renderWholePage(c))
+
+/*
+  目次の「Profile」の名前のとおりの URL。1人のサイトのプロフィール（/members/<slug>）へ
+  送るだけ（top.tsx の renderProfileAlias）。`profile` も catch-all のページの名前
+  （PAGE_NAME）とは衝突しない1語で、ここに置けば `/:screen` はこの1語を見ない。
+*/
+publicRoutes.get('/profile', (c) => renderProfileAlias(c))
 
 publicRoutes.get('/', (c) => renderScreen(c, null))
 

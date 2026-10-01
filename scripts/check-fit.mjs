@@ -195,8 +195,8 @@ const measure = ([typeface, cfg]) => {
   /*
     着いたときの動き（入口のブラックホールが大きく灯り、軌道が回って収まる）は
     終わらせてから測る。測るのは止まった版面で、動きの途中の箱の位置ではない
-    （途中の姿の読みやすさは check:contrast が測る）。終わらない動き（天体の公転や
-    ブラックホールの縁を回る光の点）は finish() できない（投げる）ので、外して止まった姿に戻す
+    （途中の姿の読みやすさは check:contrast が測る）。終わらない動き（軌道を流れる光や
+    ブラックホールの縁を回る光）は finish() できない（投げる）ので、外して止まった姿に戻す
   */
   for (const animation of document.getAnimations()) {
     if (Number.isFinite(animation.effect.getComputedTiming().endTime)) animation.finish()

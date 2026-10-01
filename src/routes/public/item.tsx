@@ -4,6 +4,7 @@ import { itemStory } from '../../blocks'
 import {
   findMovedItem,
   findPublishedItem,
+  listPublishedItemKeys,
   listPublishedMembers,
   loadTheme,
   publishedBlocks,
@@ -12,6 +13,7 @@ import * as schema from '../../db/schema'
 import { type ItemKind, type ItemView, KIND_LABEL } from '../../domain'
 import type { AppEnv } from '../../env'
 import { IMAGE_FORMATS, imageTypeOfPath } from '../../lib/image'
+import { bodyIndexOf, CHART_FRAME, orbitMap } from '../../lib/orbits'
 import { tableOfContents } from '../../lib/sequence'
 import { SITE } from '../../site'
 import {
@@ -80,10 +82,10 @@ const itemFacts = (item: ItemView) =>
   日に、貼られた作品のリンクまで死んではいけない。出る条件は「作品が公開中」の
   1つだけ。
 
-  中身は一覧の行を開いたもの（ItemDetail）と、本文の小節「Story」（#story。本文を
-  書いた作品にだけ。ItemStory）。以前は本文を次の画面（…/story）に分け、作品同士を
-  画面の底の左右の手でめくっていた。1ページにまとめたので、前の本文の URL は
-  #story へ 301（story が true）。
+  中身は一覧の行を開いたもの（ItemDetail。画像の無い作品は画像の位置に星図）と、本文の
+  小節「Story」（#story。本文を書いた作品にだけ。ItemStory）。以前は本文を次の画面
+  （…/story）に分け、作品同士を画面の底の左右の手でめくっていた。1ページにまとめたので、
+  前の本文の URL は #story へ 301（story が true）。
 
   行き来は目次と「← 一覧に戻る」（見出しの上）。戻る先は一覧のこの作品の行
   （/projects#item-<slug>）。
@@ -132,9 +134,25 @@ export async function renderItem(
   if (item.type !== kind) return movedTo(c, href)
 
   const solo = soloMember(members)
-  // 目次はサイトのページのまま。このページに絞り込みは無いので、素の並びを聞く
-  const { pages } = await sitePages(db, blocks, members, NO_FILTER)
+  /*
+    目次はサイトのページのまま。このページに絞り込みは無いので、素の並びを聞く。
+    画像の無い作品は、公開中の全件の並びも引く——星図（ItemDetail の chart）が灯す
+    天体と、星図の札の番号（一覧と同じ番号）を決める
+  */
+  const [{ pages, counted }, order] = await Promise.all([
+    sitePages(db, blocks, members, NO_FILTER),
+    item.imageUrl ? null : listPublishedItemKeys(db),
+  ])
   const links = sitePageLinks(pages, NO_FILTER, solo)
+  const body = order ? bodyIndexOf(counted.counts, order).get(item.id) : undefined
+  const chart =
+    order && body !== undefined
+      ? {
+          map: orbitMap(counted.counts, CHART_FRAME),
+          body,
+          number: order.findIndex((key) => key.id === item.id) + 1,
+        }
+      : undefined
 
   /*
     「← 一覧に戻る」の行き先。一覧のこの作品の行（id は itemCardId）。一覧は全件を
@@ -181,7 +199,7 @@ export async function renderItem(
           h1
           transition={itemTransition(item)}
         />
-        <ItemDetail item={item} links={destinations} />
+        <ItemDetail item={item} links={destinations} chart={chart} />
         <ItemStory paragraphs={paragraphs} />
       </Screen>
     ),

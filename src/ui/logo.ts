@@ -1,8 +1,8 @@
 /*
   AstLog のロゴの形（ここが正）。ページのロゴは src/ui/icons.tsx の Wordmark / HoleMark が
   ここから直に SVG を描く。入口と締めの軌道図の真ん中のブラックホールも、同じ O を大きく
-  描いたもの（components.tsx の Hole。横線を軌道面の傾きに合わせて回し、縁を回る光の点
-  SPOT を足す）。素材のファイル（public/assets の astlog-wordmark.svg・
+  描いたもの（components.tsx の Hole。横線を軌道面の傾きに合わせて回し、縁の光の輪 RING と
+  縁を回る光 SPOT を足す）。素材のファイル（public/assets の astlog-wordmark.svg・
   favicon.svg と、favicon・iPhone のホーム画面の PNG）は scripts/logo/export.mjs が
   ここから書き出す。GitHub の Organization の顔はロゴではなく、測地線を追って焼いた
   ブラックホールの絵（scripts/blackhole/render.py の avatar）。
@@ -86,13 +86,14 @@ export function linePath(cx: number, cy: number): string {
 }
 
 /*
-  縁を回る光の点（入口と締めのブラックホールだけ。ロゴには無い）。光の輪の中ほどの円を、
-  頭が明るく尾が消える弧（sweep 度）で描き、SVG ごと回す（app.css の .hole__spin）。
-  黒い円のすぐ外は輪がいちばん白く、そこに置くと白に埋もれて見えない。弧は短く保つ
-  （長い弧が円のまわりを回ると、読み込み中のくるくるに見える）。r は弧の半径、width は芯の
-  太さ、halo はにじみの太さ（どれも字の高さ 20 の格子）、haloOpacity はにじみの濃さ
+  縁を回る光（入口と締めのブラックホールだけ。ロゴにも星図にも無い）。光の輪の外縁に沿って、
+  頭が明るく尾が消える短い弧（sweep 度）を描き、SVG ごと回す（app.css の .hole__spin）——
+  輪の一部がふっと明るくなって、輪の上を滑っていくように見える。輪より少し太く（width。
+  画面の px。描く側が vector-effect で保つ）、端は切る。弧は短く保つ（長い弧が円のまわりを
+  回ると、読み込み中のくるくるに見える）。前は光の中ほどを太い芯と厚いにじみ・丸い端で
+  描いていて、大きく描くと白い錠剤に見えた。r は弧の半径（字の高さ 20 の格子）
 */
-export const SPOT = { r: 9.6, width: 0.8, halo: 2.4, haloOpacity: 0.16, sweep: 32 } as const
+export const SPOT = { r: round(HOLE.core + 0.3), width: 2.2, sweep: 40 } as const
 
 // 光の点の弧。頭は右（角 0）、尾は時計と逆回りに sweep 度（回る向きは時計回り）
 export function spotPath(): {
@@ -112,6 +113,35 @@ export function spotPath(): {
 // 印だけのときの枠（O を真ん中に、横線の端まで入る正方形）。MARK_HALF はその半分の幅
 export const MARK_HALF = 19
 export const MARK_VIEWBOX = `${-MARK_HALF} ${-MARK_HALF} ${2 * MARK_HALF} ${2 * MARK_HALF}`
+
+/*
+  大きく描くとき（入口と締めのブラックホール・作品の星図。components.tsx の Hole）だけの光。
+  形はロゴの O のまま（黒い円・縁の光・後ろを通る横線）で、縁の光の質だけを上げる——
+
+  - 光の坂（LARGE_GLOW_STOPS）。ロゴの坂は黒い円の縁で真っ白に立ち上がる。小さい印では
+    それが縁の輪に見えるが、大きく描くと白い光の塗りつぶしになり、日食か電球に見えた。
+    大きいときは縁を抑え、外へ早めに薄める。抑えすぎない——光った画素が描いた画素の半分を
+    切ると、npm run check:contrast の「ブラックホールの地からの離れ」が黒い円の暗さ（地との
+    差 12）に張り付き、薄すぎて出ていないのと同じに数えられる（縁 0.62 で 18、いまの数で 27）
+  - 光の輪（RING）。黒い円の縁に沿う細い輪（光子の輪）。太さは画面の px（width。描く側が
+    vector-effect で保つ）で、どの大きさでも細い線のまま。左が明るく右へ薄れる
+    （fade。円盤の回る向きの明るさの偏り）。halo はそのまわりのにじみ
+
+  小さいロゴは今のまま——輪と光が1つに溶ける大きさでは、どちらも同じ O に見える
+*/
+export const LARGE_GLOW_STOPS: readonly (readonly [number, number])[] = [
+  [round(HOLE.core / HOLE.glow - 0.005), 0],
+  [round(HOLE.core / HOLE.glow), 0.72],
+  [round((HOLE.core + 2.2) / HOLE.glow), 0.3],
+  [1, 0],
+]
+export const RING = {
+  r: round(HOLE.core + 0.12),
+  width: 1.6,
+  halo: 5,
+  haloOpacity: 0.18,
+  fade: 0.5,
+} as const
 
 /*
   アイコン（favicon・iPhone のホーム画面）の枠の半分。印の枠より詰め、横線の端は枠で

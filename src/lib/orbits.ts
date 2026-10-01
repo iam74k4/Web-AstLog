@@ -52,21 +52,16 @@ export type OrbitFrame = {
 export type OrbitPath = { kind: ItemKind; d: string; far: string; near: string }
 /*
   天体。side は札を先に試す側——枠の右の端に近い天体は左から試す（右へ出すと
-  札が枠の外で切れる。placeLabels）
+  札が枠の外で切れる。placeLabels）。orbit は乗っている軌道（orbits の何番目か。作品が
+  軌道の本数より多いときは、内側から順に相乗りする）
 */
 export type OrbitBody = {
   kind: ItemKind
   x: number
   y: number
   side: 'left' | 'right'
+  orbit: number
 }
-/*
-  公転する天体（bodies と同じ並び）。at は単位円を天体の軌道へ写す変換（SVG の transform
-  属性の書き方）——焦点へ動かし、傾け、潰し、軌道の向きに回し、楕円の中心へ寄せ、長半径と
-  短半径に伸ばし、最後に離心近点角だけ回す。その中の点 (1, 0) が天体の止まった場所。
-  app.css はその内側で単位円を1周回す（.orbit-mover。period 秒で1周）
-*/
-export type OrbitMover = { kind: ItemKind; at: string; period: number }
 /*
   ブラックホールへ吸い込まれる光の粒（入口と締め。app.css の .orbit-dust）。軌道面の上の
   向き a（度）から1周回りながら、半径 r0 から r1 まで落ちる。1周して元の向きで落ち切る
@@ -87,16 +82,15 @@ export type OrbitMap = {
   height: number
   orbits: OrbitPath[]
   bodies: OrbitBody[]
-  movers: OrbitMover[]
   // 軌道面を枠へ写す変換（焦点へ動かし、傾け、潰す。SVG の transform 属性）。粒はこの中の点
   plane: string
   dust: OrbitDust[]
   // 軌道に沿って流れる光の1周の秒数（orbits と同じ並び）
   flows: number[]
   /*
-    枠を、軌道面の奥の側と手前の側に分ける半面（path）。公転する天体は同じ写しを
+    枠を、軌道面の奥の側と手前の側に分ける半面（path）。軌道を流れる光は同じ写しを
     奥と手前の層に1つずつ置き、それぞれをこの半面で切る——ブラックホールの向こうを
-    回るあいだは後ろの層に、こちらへ来るあいだは前の層に見える
+    流れるあいだは後ろの層に、こちらへ来るあいだは前の層に見える
   */
   halves: { far: string; near: string }
   /*
@@ -136,6 +130,14 @@ export const CONTACT_FRAME: OrbitFrame = {
   focus: { x: 500, y: 160 },
 }
 
+/*
+  作品の星図の枠（components.tsx の OrbitChart。画像の無い作品の、作品のページと一覧の
+  行の絵）。締めと同じ枠——入口と同じ星系を背の低い横長に描いたもので、縦横比も同じ
+  app.css の --contact-ratio を読む。枠を分けないのは、星図の天体が入口と締めの天体と
+  同じ向きに並んで見えるように（同じ件数なら同じ絵。枠を変えると並びが変わる）
+*/
+export const CHART_FRAME: OrbitFrame = CONTACT_FRAME
+
 // 軌道の本数の上限。これより多い作品は、内側から順に同じ軌道へ相乗りさせる
 export const MAX_ORBITS = 7
 
@@ -166,12 +168,14 @@ const MARGIN = 14
 const LABEL_FLIP = 0.7
 
 /*
-  公転の周期（秒）。いちばん内側の軌道の1周で、外側ほど長い（ケプラーの第3法則。
-  周期は長半径の 1.5 乗に比例）。ゆっくり——字を読む目の端で、止まって見えない程度
+  軌道を流れる光の1周の長さのもと（秒）。いちばん内側の軌道の公転の周期で、外側ほど長い
+  （ケプラーの第3法則。周期は長半径の 1.5 乗に比例）。天体そのものは公転させない——
+  天体は番号の札と同じ止まった場所に居る（札と食い違う天体を、重ねたときに札へ寄せると、
+  跳ぶか軌道を外れて飛んだ）。動くのは光だけで、外側ほどゆっくり流れる
 */
 const INNER_PERIOD = 90
 
-// 軌道を流れる光は、天体より速く回る（天体の周期のこの割合で1周）
+// 軌道を流れる光は、公転の周期のこの割合で1周する
 const FLOW_SHARE = 0.2
 
 /*
@@ -401,28 +405,16 @@ export function orbitMap(counts: KindCounts, frame: OrbitFrame): OrbitMap {
       side: seen.x > frame.width * LABEL_FLIP ? ('left' as const) : ('right' as const),
     }
   })
-  const bodies: OrbitBody[] = placed.map(({ kind, x, y, side }) => ({ kind, x, y, side }))
+  const bodies: OrbitBody[] = placed.map(({ kind, x, y, side }, j) => ({
+    kind,
+    x,
+    y,
+    side,
+    orbit: j % n,
+  }))
 
-  /*
-    公転。天体の止まった場所の真近点角を離心近点角に直し（tan(E/2) = √((1−e)/(1+e))·tan(ν/2)）、
-    単位円をその角だけ回した所を止まった場所にする（at の最後の rotate）。app.css はその
-    内側で単位円を1周回す。離心近点角を等しい速さで回すので、厳密なケプラー運動ではない
-    （近点のまわりで少し遅い）が、この離心率では目に見える差にならない
-  */
   const aMin = orbits[0]?.a ?? 1
   const plane = `translate(${frame.focus.x} ${frame.focus.y}) rotate(${TILT}) scale(1 ${round3(SQUASH)})`
-  const movers: OrbitMover[] = placed.map(({ kind, nu }, j) => {
-    const { a, e, omega } = orbits[j % n] as Orbit
-    const b = a * Math.sqrt(1 - e * e)
-    const eccentric = 2 * Math.atan(Math.sqrt((1 - e) / (1 + e)) * Math.tan(rad(nu) / 2))
-    return {
-      kind,
-      at:
-        `${plane} rotate(${round3(omega)}) translate(${round3(-a * e)} 0) ` +
-        `scale(${round3(a)} ${round3(b)}) rotate(${Math.round(((eccentric * 180) / Math.PI) * 100) / 100})`,
-      period: round(INNER_PERIOD * (a / aMin) ** 1.5),
-    }
-  })
 
   /*
     吸い込まれる粒。軌道の内側の7割から外側の軌道の少し外までのどこかから、1周渦を巻いて
@@ -497,7 +489,6 @@ export function orbitMap(counts: KindCounts, frame: OrbitFrame): OrbitMap {
       ...orbitHalves(frame, orbit),
     })),
     bodies,
-    movers,
     plane,
     dust,
     flows: orbits.map((orbit) => round(INNER_PERIOD * (orbit.a / aMin) ** 1.5 * FLOW_SHARE)),
@@ -511,13 +502,39 @@ export function orbitMap(counts: KindCounts, frame: OrbitFrame): OrbitMap {
   j 番目の天体に、区分 k の作品の j 番目（一覧の並び）を載せる。載せる作品が足りない
   天体は null（件数と作品の列を別々に引いたとき、数えたあとに1件減っていても落ちない）。
 */
-export function bodyItems<T extends { type: ItemKind }>(bodies: OrbitBody[], items: T[]) {
+export function bodyItems<T extends { type: ItemKind }>(
+  bodies: readonly { kind: ItemKind }[],
+  items: readonly T[],
+) {
   const taken = Object.fromEntries(ITEM_KIND_KEYS.map((kind) => [kind, 0])) as KindCounts
   return bodies.map((body) => {
     const item = items.filter((one) => one.type === body.kind)[taken[body.kind]] ?? null
     taken[body.kind] += 1
     return item
   })
+}
+
+/*
+  作品ごとに、載っている天体（orbitMap の bodies の何番目か）を引く表。結び方は bodyItems と
+  同じ1本で、天体の並びは件数だけから決まる（interleaveKinds。枠には依らない）。items は
+  公開中の全件を一覧の並びで——絞り込んだ一覧の行だけを渡すと、区分の中の順が変わって
+  別の天体を指す。
+
+  作品の星図（components.tsx の OrbitChart）が、入口の軌道図で同じ作品が載っている天体と
+  その軌道を灯すのに使う。載る天体の無い作品（件数を数えたあとに増えた行）は表に無い。
+*/
+export function bodyIndexOf<T extends { id: number; type: ItemKind }>(
+  counts: KindCounts,
+  items: readonly T[],
+): Map<number, number> {
+  const index = new Map<number, number>()
+  bodyItems(
+    interleaveKinds(counts).map((kind) => ({ kind })),
+    items,
+  ).forEach((item, j) => {
+    if (item) index.set(item.id, j)
+  })
+  return index
 }
 
 /*
