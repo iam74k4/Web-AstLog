@@ -86,7 +86,12 @@ INSERT INTO items (id, type, member_id, platform_key, title, slug, year, summary
   (2, 'app', 1, 'ios', 'AllTasks', 'alltasks', '2026', 'Apple リマインダー・Microsoft To Do・Google ToDo を1つの受信箱にまとめるタスクアプリ。3つのサービスを横断して1画面で扱えるようにしている。', 1, 20),
   (3, 'app', 1, 'cli', 'AI Agent Config', 'ai-agent-config', '2026', 'Cursor / Claude Code / Copilot でばらつくルールを1か所に集約し、1コマンドで各環境へ配る設定ツール。本業の AI 活用を自分の環境にも通すためにつくった。', 1, 30),
   (4, 'app', 1, 'server', 'Discord Bot', 'discord-bot', '2026', '機能追加がコマンド単位で完結する153ファイルのモジュール構成。VC 録音と SQLite 永続化を備え、Railway へ継続デプロイしている。', 1, 40),
-  (5, 'app', 1, 'web', 'Portfolio', 'portfolio', '2026', 'スクロールしない SPA 型のポートフォリオ。「ページ全体をスクロールさせない」制約を先に置いて設計している。', 1, 50);
+  (5, 'app', 1, 'web', 'AstLog', 'astlog', '2026', 'Cloudflare Workers で動くこのポートフォリオ。JavaScript を1行も配らず、入口の軌道図の動きもページの切り替えも CSS だけで組んでいる。', 1, 50);
+
+-- 5 は前の Portfolio（スクロールしない SPA のサイト。リポジトリはもう無い）を、このサイトに
+-- 差し替えたもの。前の slug（/apps/item/portfolio）は転送表に残し、貼られたリンクを殺さない
+-- （管理画面で slug を変えたときと同じ形。下の item_slug_redirects）。このサイトの
+-- リポジトリは非公開なので、行き先（item_links）は置かない
 
 -- 説明文がまだ書けていないもの。消さずに下書きのまま置いておく
 INSERT INTO items (id, type, member_id, platform_key, title, slug, year, summary, published, sort_order) VALUES
@@ -112,20 +117,27 @@ INSERT INTO item_tags (item_id, tag, sort_order) VALUES
   (2, 'Swift', 0), (2, 'SwiftUI', 1), (2, 'watchOS', 2),
   (3, 'Shell', 0), (3, 'PowerShell', 1), (3, 'Node.js', 2),
   (4, 'TypeScript', 0), (4, 'discord.js', 1), (4, 'SQLite', 2),
-  (5, 'TypeScript', 0), (5, 'React', 1), (5, 'Vite', 2),
+  (5, 'TypeScript', 0), (5, 'Hono', 1), (5, 'Cloudflare Workers', 2),
   (7, 'Python', 0),
   (9, '生成AI', 0), (9, 'C#', 1), (9, 'Playwright', 2),
   (10, 'Copilot Studio', 0), (10, 'Power Platform', 1), (10, 'RAG', 2);
 
 -- リンク ------------------------------------------------------------------
 
+-- AllTasks（2）のリポジトリは公開していない（URL が 404）ので、行き先を置かない。公開したら
+-- 管理画面から足す
+
 INSERT INTO item_links (item_id, label, url, sort_order) VALUES
   (1, 'Repository', 'https://github.com/iam74k4/AppMixer-Apple', 0),
   (1, 'Release', 'https://github.com/iam74k4/AppMixer-Apple/releases/latest', 1),
-  (2, 'Repository', 'https://github.com/iam74k4/AllTasks-Apple', 0),
   (3, 'Repository', 'https://github.com/iam74k4/ai-agent-config', 0),
   (4, 'Repository', 'https://github.com/iam74k4/DiscordBot', 0),
-  (5, 'Repository', 'https://github.com/iam74k4/Portfolio', 0),
   (6, 'Repository', 'https://github.com/iam74k4/Booking-Platform', 0),
   (7, 'Repository', 'https://github.com/iam74k4/EventPlayback', 0),
   (8, 'Repository', 'https://github.com/iam74k4/AgentDeck-StreamDeckPlus', 0);
+
+-- 前の slug --------------------------------------------------------------
+
+-- 差し替えた 5 の前の URL を、いまの URL へ 301 で送る（src/routes/public/item.tsx の renderItem）
+INSERT INTO item_slug_redirects (old_slug, item_id) VALUES
+  ('portfolio', 5);
