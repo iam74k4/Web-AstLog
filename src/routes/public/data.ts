@@ -80,12 +80,20 @@ export const bandOf = (blocks: schema.Block[], counts: KindCounts, query = ''): 
   numbers は絞り込んだ一覧の行の番号（作品の id → 絞り込む前の並びでの位置。1 から）。
   番号は入口の軌道図の札と同じ番号で結ぶので、業務だけに絞っても 03 の作品は 03。
   絞り込まない一覧では持たず、行の順がそのまま番号（rowNumber）。
+
+  order は絞り込んだ一覧の、絞り込む前の並び（公開中の全件の id と区分）。行の星図が
+  灯す天体を引くのに使う（orbits.ts の bodyIndexOf。天体は区分の中の順で作品と結ぶので、
+  メンバーで絞った行だけでは別の天体を指す）。絞り込まない一覧では持たず、行がその並び。
 */
 export type ItemListData = {
   total: number
   rows: ItemView[]
   numbers?: ReadonlyMap<number, number>
+  order?: readonly { id: number; type: ItemKind }[]
 }
+
+// 一覧の行の星図が灯す天体を引くための、公開中の全件の並び（ItemListData の order）
+export const fullOrder = (list: ItemListData) => list.order ?? list.rows
 
 // 一覧の行の番号（1 から）。絞り込んだ一覧では、絞り込む前の並びでの位置
 export const rowNumber = (list: ItemListData, item: ItemView, order: number) =>

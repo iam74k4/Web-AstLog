@@ -9,6 +9,7 @@ import {
   LINE_STOPS,
   linePath,
   MARK_VIEWBOX,
+  RING,
   SPOT,
   spotPath,
   WORDMARK,
@@ -21,9 +22,20 @@ import {
   id が重なると片方の光が消える。いま並べているページは無いが、並べた日に黙って消えない）。
 
   光（HoleLight）と黒い円（HoleCore）を分けて出すのは、入口と締めのブラックホール
-  （components.tsx の Hole）がそのあいだに縁を回る光の点（HoleSpot）を挟むため
+  （components.tsx の Hole）がそのあいだに縁の光の輪（HoleRing）と縁を回る光（HoleSpot）を
+  挟むため。stops は光の坂で、大きく描くときは logo.ts の LARGE_GLOW_STOPS を渡す
 */
-export const HoleLight = ({ cx, cy, id }: { cx: number; cy: number; id: string }) => (
+export const HoleLight = ({
+  cx,
+  cy,
+  id,
+  stops = GLOW_STOPS,
+}: {
+  cx: number
+  cy: number
+  id: string
+  stops?: readonly (readonly [number, number])[]
+}) => (
   <>
     <defs>
       <radialGradient
@@ -33,7 +45,7 @@ export const HoleLight = ({ cx, cy, id }: { cx: number; cy: number; id: string }
         r={HOLE.glow}
         gradientUnits="userSpaceOnUse"
       >
-        {GLOW_STOPS.map(([at, alpha]) => (
+        {stops.map(([at, alpha]) => (
           <stop key={at} offset={at} stop-color="currentColor" stop-opacity={alpha} />
         ))}
       </radialGradient>
@@ -58,9 +70,11 @@ export const HoleCore = ({ cx, cy }: { cx: number; cy: number }) => (
 )
 
 /*
-  縁を回る光の点（入口と締めのブラックホールだけ）。頭から尾へ消える短い弧を、にじみと芯の
-  2本の線で描く（尾へ消える坂は弧の弦に沿った直線のグラデーション。sweep が 90 度より
-  小さいので、弦の上の並びが弧の上の並びと同じ向きになる）。中心は (0, 0)
+  縁を回る光（入口と締めのブラックホールだけ）。光の輪の外縁に沿う短い弧を、頭のすぐ後ろで
+  いちばん明るく、頭と尾の両方へ消える坂で描く（坂は弧の弦に沿った直線のグラデーション。
+  sweep が 90 度より小さいので、弦の上の並びが弧の上の並びと同じ向きになる）——端が見えず、
+  輪の上をやわらかい明かりが滑る。頭を切りっぱなしにすると輪に縦の刻みが見え、丸めると
+  錠剤に見えた。太さは画面の px（non-scaling-stroke）。中心は (0, 0)
 */
 export const HoleSpot = ({ id }: { id: string }) => {
   const { d, head, tail } = spotPath()
@@ -75,7 +89,8 @@ export const HoleSpot = ({ id }: { id: string }) => {
           y2={tail.y}
           gradientUnits="userSpaceOnUse"
         >
-          <stop offset="0" stop-color="currentColor" stop-opacity="1" />
+          <stop offset="0" stop-color="currentColor" stop-opacity="0" />
+          <stop offset="0.3" stop-color="currentColor" stop-opacity="1" />
           <stop offset="1" stop-color="currentColor" stop-opacity="0" />
         </linearGradient>
       </defs>
@@ -83,20 +98,43 @@ export const HoleSpot = ({ id }: { id: string }) => {
         d={d}
         fill="none"
         stroke={`url(#${id}-spot)`}
-        stroke-width={SPOT.halo}
-        stroke-linecap="round"
-        stroke-opacity={SPOT.haloOpacity}
-      />
-      <path
-        d={d}
-        fill="none"
-        stroke={`url(#${id}-spot)`}
         stroke-width={SPOT.width}
-        stroke-linecap="round"
+        vector-effect="non-scaling-stroke"
       />
     </>
   )
 }
+
+/*
+  縁の光の輪（大きく描くブラックホールだけ。logo.ts の RING）。黒い円の縁に沿う細い輪と、
+  そのまわりのにじみ。太さは画面の px（non-scaling-stroke）で、枠が縮んでも伸びても細い線の
+  まま。左が明るく右へ薄れる（円盤の回る向きの明るさの偏り）。中心は (0, 0)
+*/
+export const HoleRing = ({ id }: { id: string }) => (
+  <>
+    <defs>
+      <linearGradient id={`${id}-ring`} x1={-RING.r} x2={RING.r} gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="currentColor" stop-opacity="1" />
+        <stop offset="1" stop-color="currentColor" stop-opacity={RING.fade} />
+      </linearGradient>
+    </defs>
+    <circle
+      r={RING.r}
+      fill="none"
+      stroke="currentColor"
+      stroke-opacity={RING.haloOpacity}
+      stroke-width={RING.halo}
+      vector-effect="non-scaling-stroke"
+    />
+    <circle
+      r={RING.r}
+      fill="none"
+      stroke={`url(#${id}-ring)`}
+      stroke-width={RING.width}
+      vector-effect="non-scaling-stroke"
+    />
+  </>
+)
 
 const Hole = ({ cx, cy, id }: { cx: number; cy: number; id: string }) => (
   <>

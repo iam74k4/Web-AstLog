@@ -6,12 +6,12 @@ import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import css from '../public/app.css'
 import * as schema from '../src/db/schema'
-import { ITEM_KINDS } from '../src/domain'
-import { CONTACT_FRAME } from '../src/lib/orbits'
+import { ITEM_KINDS, type KindCounts } from '../src/domain'
+import { CONTACT_FRAME, HERO_FRAME, orbitMap } from '../src/lib/orbits'
 import { publicRoutes } from '../src/routes/public/routes'
 import { SITE } from '../src/site'
 import { itemHref, LinkList, LinkRow, splitPhrases } from '../src/ui/components'
-import { HOLE, iconSvg, wordmarkSvg } from '../src/ui/logo'
+import { GLOW_STOPS, HOLE, iconSvg, LARGE_GLOW_STOPS, wordmarkSvg } from '../src/ui/logo'
 import { db, form, get, okText, resetDb, seedItem, seedMember, signIn, touch } from './helpers'
 
 beforeEach(resetDb)
@@ -945,8 +945,11 @@ describe('締めのページ（Contact）', () => {
       const main = mainOf(await okText(path))
       // 持ち主が外した（「動きを止める 不要」）。動きを減らす設定だけが止める
       expect(main, path).not.toMatch(/motion-toggle|class="motion"|動きを止める/)
-      // 同じ天体を奥と手前の層に1つずつ（天体2つ × 2）
-      expect(main.match(/class="orbit-mover orbit-body/g), path).toHaveLength(4)
+      /*
+        天体は公転させない（札と同じ止まった場所に居る）。前は公転させていて、重ねたときに
+        天体を札へ寄せると、跳ぶか軌道を外れて飛んだ
+      */
+      expect(main, path).not.toMatch(/orbit-mover|orbit-settle/)
       // 軌道を流れる光も奥と手前に。吸い込まれる粒はブラックホールの後ろの層にだけ
       expect(main.match(/class="orbit-flow"/g), path).toHaveLength(4)
       expect(main.match(/<g class="orbit-dust"/g), path).toHaveLength(1)
@@ -961,22 +964,38 @@ describe('締めのページ（Contact）', () => {
     }
   })
 
-  it('入口と締めのブラックホールは、ロゴの O と同じ絵（光の縁の坂も黒い円の大きさも）', async () => {
+  it('入口と締めのブラックホールは、ロゴの O と同じ形。大きく描くときだけ縁の光を締める', async () => {
     /*
       持ち主の「ワードマークのブラックホールと統一してほしい」。前は測地線を追って焼いた
-      絵（斜めから見た円盤が影の前を横切る姿）で、上の帯のロゴの O と別のものに見えた
+      絵（斜めから見た円盤が影の前を横切る姿）で、上の帯のロゴの O と別のものに見えた。
+      黒い円の大きさと横線はロゴのまま。縁の光だけ、大きく描くときは坂を抑えて細い光の輪を
+      足す（ロゴの坂のまま大きくすると、白い光の塗りつぶしで日食か電球に見えた。
+      src/ui/logo.ts の LARGE_GLOW_STOPS / RING）
     */
     await seedMember()
     await seedItem({ type: 'app' })
-    const stopsOf = (html: string) =>
-      html.match(/<radialGradient[^>]*>(.*?)<\/radialGradient>/)?.[1] ?? ''
-    const logo = stopsOf(topOf(await okText('/')))
-    expect(logo).toContain('<stop')
+    const gradient = (html: string, kind: 'radialGradient' | 'linearGradient', name: string) =>
+      html.match(new RegExp(`<${kind} id="[a-z-]+-${name}"[^>]*>(.*?)</${kind}>`))?.[1] ?? ''
+    const stops = (list: readonly (readonly [number, number])[]) =>
+      list
+        .map(
+          ([at, alpha]) =>
+            `<stop offset="${at}" stop-color="currentColor" stop-opacity="${alpha}"></stop>`,
+        )
+        .join('')
+    const top = topOf(await okText('/'))
+    // 上の帯のロゴの O は今の坂のまま。光の輪は持たない
+    expect(gradient(top, 'radialGradient', 'glow')).toBe(stops(GLOW_STOPS))
+    expect(top).not.toContain('hole__ring')
     for (const path of ['/', '/contact']) {
       const main = mainOf(await okText(path))
       const hole = main.slice(main.indexOf('<span class="hole" aria-hidden="true"'))
-      expect(stopsOf(hole), path).toBe(logo)
+      expect(gradient(hole, 'radialGradient', 'glow'), path).toBe(stops(LARGE_GLOW_STOPS))
+      expect(gradient(hole, 'linearGradient', 'line'), path).toBe(
+        gradient(top, 'linearGradient', 'line'),
+      )
       expect(hole, path).toContain(`<circle class="logo-core" cx="0" cy="0" r="${HOLE.core}"`)
+      expect(hole, path).toContain('<svg class="hole__ring"')
       expect(main, path).not.toContain('/assets/blackhole')
     }
   })
@@ -986,8 +1005,8 @@ describe('締めのページ（Contact）', () => {
     const main = mainOf(await okText('/'))
     expect(main).toContain('class="orbit-grain__dot"')
     expect(main).toContain('<svg class="hole__spin"')
-    // 回る天体は無い（入れ物の orbit-movers だけ）
-    expect(main).not.toContain('class="orbit-mover orbit-body')
+    // 天体が無いので、止まった天体の点も無い
+    expect(main).not.toContain('class="orbit-body')
   })
 
   it('ページに出すのは誘いの1文とメールと GitHub の手。見出しは読み上げのためにだけ置く', async () => {
@@ -1169,16 +1188,15 @@ describe('ページの URL', () => {
     expect(near).toBeGreaterThan(hole)
     expect(bodies).toBeGreaterThan(near)
     /*
-      線は奥から手前へ続けて濃くなる坂を読む（層ごとに id を分けたグラデーション）。
-      手前の層にだけ、線の下に地の色の縁取りを敷く
+      線は奥から手前へ続けて濃くなる坂を読む（層ごとに id を分けたグラデーション）
     */
     expect(system.slice(far, hole)).toContain(
       '<linearGradient id="system-far-depth" gradientUnits="userSpaceOnUse"',
     )
     expect(system.slice(far, hole)).toContain('stroke="url(#system-far-depth)"')
     expect(system.slice(near, bodies)).toContain('stroke="url(#system-near-depth)"')
-    expect(system.slice(near, bodies)).toContain('class="orbit__casing"')
-    expect(system.slice(far, hole)).not.toContain('orbit__casing')
+    // 地の色の縁取りは敷かない（光を締めたので線はそのまま見える。縁取りは光を黒い筋で切った）
+    expect(system).not.toContain('orbit__casing')
     // レーダー（走査線・波紋・走査の時刻）はやめた
     expect(home).not.toMatch(/system__beam|orbit-ring|--at:/)
     // 作品1つに天体1つ。個人開発は点、業務は輪
@@ -1691,12 +1709,15 @@ describe('作品1件の恒久リンク', () => {
     expect(html).toContain('<meta name="description" content="音を配る常駐アプリ。"/>')
   })
 
-  it('画像も本文も無ければ、figure も横に並べる組み方も本文の小節も出さない', async () => {
+  it('画像も本文も無ければ、figure も本文の小節も出さず、画像の位置に星図を置く', async () => {
     await seedItem({ title: 'AppMixer', slug: 'appmixer', summary: '音を配る常駐アプリ。' })
 
     const html = await okText('/apps/item/appmixer')
     const main = mainOf(html)
-    expect(main).toContain('<div class="detail">')
+    // 画像と同じ組み方（900 以上は文の列の横。app.css の .detail--chart）で、絵は星図
+    expect(main).toContain(
+      '<div class="detail detail--chart"><span class="chart" aria-hidden="true"',
+    )
     expect(main).not.toContain('<figure')
     expect(main).toContain('<div class="bio"><p>音を配る常駐アプリ。</p></div>')
     expect(main).not.toContain('id="story"')
@@ -2200,6 +2221,17 @@ describe('1人のサイトのプロフィール', () => {
 
     await seedMember({ slug: 'hoshino', name: '星野' })
     expect((await get('/team')).status).toBe(200)
+  })
+
+  it('/profile は目次の Profile の行き先へ 301。プロフィールの無いサイトでは 404', async () => {
+    await seedMember()
+    const response = await get('/profile')
+    expect(response.status).toBe(301)
+    expect(response.headers.get('location')).toBe('/members/okazaki')
+
+    // 2人目を公開すると、目次に Profile の行は無い（Team に戻る）
+    await seedMember({ slug: 'hoshino', name: '星野' })
+    expect((await get('/profile')).status).toBe(404)
   })
 
   it('プロフィールに帯は出さない。入口の一覧への1本と同じ行き先・同じ件数になる', async () => {
@@ -3300,6 +3332,136 @@ describe('前の URL', () => {
 })
 
 /*
+  作品の星図（components.tsx の OrbitChart）。画像の無い作品の絵で、入口の軌道図でその
+  作品が載っている天体を灯す——入口の札・一覧の行・作品のページが同じ天体でつながる。
+  天体の位置は件数だけで決まるので、札の位置から入口の天体（HERO_FRAME の何番目か）を引き、
+  星図が同じ番目の天体を灯しているかを見る
+*/
+describe('作品の星図', () => {
+  const at = (value: number, whole: number) => Math.round((value / whole) * 10000) / 100
+  // 入口の札が付いている天体（HERO_FRAME の bodies の何番目か）。札の位置（--x / --y）から引く
+  const landingBody = (html: string, href: string, counts: KindCounts) => {
+    const style = html.match(
+      new RegExp(`style="--x:([\\d.]+)%;--y:([\\d.]+)%;[^"]*"><a href="${href}"`),
+    )
+    return orbitMap(counts, HERO_FRAME).bodies.findIndex(
+      (body) =>
+        at(body.x, HERO_FRAME.width) === Number(style?.[1]) &&
+        at(body.y, HERO_FRAME.height) === Number(style?.[2]),
+    )
+  }
+  // 星図が灯している天体（星図の中の天体の並びでの位置。灯していなければ -1）
+  const litBody = (chart: string) =>
+    [...chart.matchAll(/<g class="orbit-body orbit-body--\w+( chart__lit)?"/g)].findIndex(
+      (match) => match[1],
+    )
+  // 一覧の行（id="item-<slug>"）の中
+  const rowOf = (html: string, slug: string) =>
+    html.split(`id="item-${slug}"`)[1]?.split('</article>')[0] ?? ''
+
+  it('一覧の画像の無い行は、入口でその作品が載っている天体を灯す。絞り込んでも同じ天体', async () => {
+    /*
+      天体は区分の中の順で作品と結ぶ。メンバーで絞った行だけで数えると、d（区分 app の
+      3つ目）が絞った行の中では2つ目になり、別の天体を灯す
+    */
+    const okazaki = await seedMember()
+    const futari = await seedMember({ slug: 'futari', name: '二人目', sortOrder: 20 })
+    const rows: [string, 'app' | 'work', number][] = [
+      ['a', 'app', okazaki.id],
+      ['b', 'app', futari.id],
+      ['c', 'work', okazaki.id],
+      ['d', 'app', okazaki.id],
+      ['e', 'work', futari.id],
+    ]
+    for (const [index, [slug, type, memberId]] of rows.entries()) {
+      await seedItem({
+        title: slug.toUpperCase(),
+        slug,
+        type,
+        memberId,
+        sortOrder: (index + 1) * 10,
+      })
+    }
+    const counts: KindCounts = { app: 3, work: 2 }
+    const top = mainOf(await okText('/'))
+    const all = mainOf(await okText('/projects'))
+    const bodies = new Set<number>()
+    for (const [slug, type] of rows) {
+      const body = landingBody(top, `/${type === 'app' ? 'apps' : 'works'}/item/${slug}`, counts)
+      expect(body, slug).toBeGreaterThanOrEqual(0)
+      expect(litBody(rowOf(all, slug)), slug).toBe(body)
+      bodies.add(body)
+    }
+    // 行ごとに別の天体
+    expect(bodies.size).toBe(rows.length)
+
+    const mine = mainOf(await okText('/projects?member=okazaki'))
+    for (const slug of ['a', 'c', 'd']) {
+      expect(litBody(rowOf(mine, slug)), slug).toBe(litBody(rowOf(all, slug)))
+    }
+    const works = mainOf(await okText('/projects?kind=work'))
+    for (const slug of ['c', 'e']) {
+      expect(litBody(rowOf(works, slug)), slug).toBe(litBody(rowOf(all, slug)))
+    }
+    // 星図ごとにグラデーションの名前を分ける（同じ名前が2つあると、片方の線が消える）
+    const ids = [...all.matchAll(/<linearGradient id="([^"]+)"/g)].map((match) => match[1])
+    expect(ids.length).toBeGreaterThan(rows.length)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('作品のページの星図は一覧の行と同じ天体を灯し、左上に一覧の番号を添える', async () => {
+    await seedMember()
+    await seedItem({ title: 'A', slug: 'a', sortOrder: 10 })
+    await seedItem({ title: 'B', slug: 'b', type: 'work', sortOrder: 20 })
+    const list = mainOf(await okText('/projects'))
+    for (const [slug, path, number] of [
+      ['a', '/apps/item/a', '01'],
+      ['b', '/works/item/b', '02'],
+    ] as const) {
+      const main = mainOf(await okText(path))
+      const chart = main.split('<span class="chart"')[1] ?? ''
+      expect(litBody(chart), slug).toBeGreaterThanOrEqual(0)
+      expect(litBody(chart), slug).toBe(litBody(rowOf(list, slug)))
+      expect(chart, slug).toContain(`<span class="chart__number">${number}</span>`)
+    }
+    // 一覧の行の星図は番号を持たない（行の頭に同じ番号がある）
+    expect(list).toContain('class="chart entry__chart"')
+    expect(list).not.toContain('chart__number')
+  })
+
+  it('止まった図。灯すのは天体1つとその軌道だけで、ブラックホールの縁を回る光の点も持たない', async () => {
+    await seedItem({ title: 'A', slug: 'a' })
+    await seedItem({ title: 'B', slug: 'b', type: 'work', sortOrder: 20 })
+    const chart = rowOf(mainOf(await okText('/projects')), 'a')
+    expect(chart).toContain('<span class="hole" aria-hidden="true"')
+    expect(chart).not.toContain('hole__spin')
+    expect(chart).not.toMatch(/orbit-mover|orbit-flow|orbit-grain/)
+    expect(chart.match(/<g class="orbit-body[^"]* chart__lit"/g)).toHaveLength(1)
+    // 軌道は奥と手前の半分に分けて描くので、灯す線は2本（同じ軌道の2つの半分）
+    expect(chart.match(/<path class="orbit orbit--\w+ chart__lit"/g)).toHaveLength(2)
+    // 飾り。読み上げには何も言わない
+    expect(chart).toContain('<span class="chart entry__chart" aria-hidden="true"')
+  })
+
+  it('画像のある作品は画像だけ。星図は置かない（絵は1つ）', async () => {
+    await seedItem({
+      title: 'A',
+      slug: 'a',
+      imageUrl: '/images/items/a-ab12.png',
+      imageAlt: '画面',
+    })
+    await seedItem({ title: 'B', slug: 'b', sortOrder: 20 })
+    const list = mainOf(await okText('/projects'))
+    expect(rowOf(list, 'a')).toContain('class="entry__thumb"')
+    expect(rowOf(list, 'a')).not.toContain('class="chart')
+    expect(rowOf(list, 'b')).toContain('class="chart entry__chart"')
+    const page = mainOf(await okText('/apps/item/a'))
+    expect(page).toContain('<div class="detail detail--shot">')
+    expect(page).not.toContain('class="chart')
+  })
+})
+
+/*
   COR-1。行き先がデータで変わる転送（slug の転送表・区分を変えた作品・1人のサイトの
   /team・個人ページの Contact）は、ブラウザに覚えさせない（Cache-Control: no-cache）。
   覚えさせていたころは、slug を変えて前の URL を開いたブラウザが「前 → 新」を覚え、
@@ -3336,9 +3498,10 @@ describe('転送をブラウザに覚えさせるか', () => {
     await noCache('/apps/item/mixer2', '/apps/item/appmixer')
   })
 
-  it('メンバーの slug の転送・1人のサイトの /team・個人ページの Contact も no-cache', async () => {
+  it('メンバーの slug の転送・1人のサイトの /team と /profile・個人ページの Contact も no-cache', async () => {
     const member = await seedMember()
     await noCache('/team', '/members/okazaki')
+    await noCache('/profile', '/members/okazaki')
     await noCache('/members/okazaki/contact', '/contact')
     const signed = await signIn()
     await signed(`/admin/members/${member.id}`, {

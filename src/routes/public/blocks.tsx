@@ -3,6 +3,7 @@ import { blockLines, blockShown, blockTexts, blockType, itemStory, memberUnits }
 import type * as schema from '../../db/schema'
 import { KIND_LABEL } from '../../domain'
 import { yearFrom } from '../../lib/format'
+import { bodyIndexOf, CHART_FRAME, orbitMap } from '../../lib/orbits'
 import { SITE } from '../../site'
 import {
   Contact,
@@ -31,7 +32,7 @@ import {
   Tally,
   Timeline,
 } from '../../ui/components'
-import { rowNumber, siteCountsOf, soloMember, type TopData } from './data'
+import { fullOrder, rowNumber, siteCountsOf, soloMember, type TopData } from './data'
 import {
   describe,
   excerpt,
@@ -208,6 +209,17 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
       */
       // 公開中の項目がある区分が1つだけなら、その区分（見出しの添えになる）
       const soleKind = kinds.length === 1 ? kinds[0] : undefined
+      /*
+        画像の無い行の星図。絵の形は件数だけで決まるので、組むのは一覧に1度だけ。灯す
+        天体は、入口の軌道図でその作品が載っている天体（公開中の全件の並びで結ぶ。
+        絞り込んだ一覧でも、入口と同じ天体を指す）
+      */
+      const chartMap = orbitMap(data.counts, CHART_FRAME)
+      const onBody = bodyIndexOf(data.counts, fullOrder(projects))
+      const chartOf = (id: number) => {
+        const body = onBody.get(id)
+        return body === undefined ? undefined : { map: chartMap, body }
+      }
       return {
         id,
         slug: id,
@@ -266,6 +278,7 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
                     item={item}
                     number={rowNumber(projects, item, order)}
                     showMember={showMember}
+                    chart={chartOf(item.id)}
                   />
                 ))}
               </div>

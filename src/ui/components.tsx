@@ -16,6 +16,7 @@ import {
 import { initials, isHttpsUrl, isSafeUrl, type SkillGroup, skillRows } from '../lib/format'
 import {
   bodyItems,
+  CHART_FRAME,
   CONTACT_FRAME,
   HERO_FRAME,
   type LabelSide,
@@ -27,8 +28,17 @@ import {
   placeLabels,
 } from '../lib/orbits'
 import { SITE } from '../site'
-import { GithubIcon, HoleCore, HoleLight, HoleSpot, MailIcon, PencilIcon, Wordmark } from './icons'
-import { HOLE, MARK_HALF, MARK_VIEWBOX } from './logo'
+import {
+  GithubIcon,
+  HoleCore,
+  HoleLight,
+  HoleRing,
+  HoleSpot,
+  MailIcon,
+  PencilIcon,
+  Wordmark,
+} from './icons'
+import { HOLE, LARGE_GLOW_STOPS, MARK_HALF, MARK_VIEWBOX } from './logo'
 
 /*
   画面はこの部品だけで組む。新しい見た目が要るときは、まずここに足してから使う。
@@ -381,11 +391,16 @@ export const Phrases = ({ text }: { text: string }) => (
   viewBox と一緒に縮み、電話では 2px ほどまで潰れた）。
 
   業務の天体は輪。同じ点を2回描き、2回目を地の色で小さく抜く。
+
+  lit は作品の星図（OrbitChart）で灯す天体（bodies の何番目か）。入口と締めでは渡さない。
 */
-const Bodies = ({ bodies }: { bodies: OrbitBody[] }) => (
+const Bodies = ({ bodies, lit }: { bodies: OrbitBody[]; lit?: number }) => (
   <>
-    {bodies.map((body) => (
-      <g key={`${body.x},${body.y}`} class={`orbit-body orbit-body--${body.kind}`}>
+    {bodies.map((body, i) => (
+      <g
+        key={`${body.x},${body.y}`}
+        class={`orbit-body orbit-body--${body.kind}${i === lit ? ' chart__lit' : ''}`}
+      >
         <path d={`M${body.x} ${body.y}h0`} />
         {body.kind === 'work' ? (
           <path class="orbit-body__hole" d={`M${body.x} ${body.y}h0`} />
@@ -403,51 +418,64 @@ const Bodies = ({ bodies }: { bodies: OrbitBody[] }) => (
     半分が同じ坂を読むので、継ぎ目で濃さが跳ばない（半分ずつの濃さを変えていたころは、
     楕円の左右の端で線が急に濃くなった）。坂の色と濃さは app.css の .orbit-depth__*。
     グラデーションは層ごとに id を分けて持つ（id は置く部品が渡す）
-  - 手前の半分の下には地の色の縁取り（.orbit__casing）を敷く。ブラックホールの光の縁の
-    前を通る所で白い線が白い光に溶けず、前を横切るのが見える。縁取りを先に全部描いてから
-    線を描く（隣の軌道の縁取りが線を削らない）
+  - 手前の半分に地の色の縁取りは敷かない。光の縁を締めた（logo.ts の LARGE_GLOW_STOPS）ので、
+    手前の線が光の前を通る所（焦点から黒い円の 1.3 倍ほど）では光はもう薄く、線はそのまま
+    見える。光が真っ白だったころは縁取りで線を浮かせていて、それが光を黒い筋で切っていた
+  - lit は作品の星図（OrbitChart）で灯す軌道（orbits の何番目か）。灯す線も奥から手前へ
+    続けて濃くなる坂で、坂の濃さだけが違う（.chart-depth__*）。奥と手前の半分が同じ坂を
+    読むので、灯した線も継ぎ目で跳ばない。入口と締めでは渡さない
 */
-const OrbitLines = ({ map, side, id }: { map: OrbitMap; side: 'far' | 'near'; id: string }) => (
-  <>
-    <defs>
-      <linearGradient
-        id={id}
-        gradientUnits="userSpaceOnUse"
-        x1={map.depth.x1}
-        y1={map.depth.y1}
-        x2={map.depth.x2}
-        y2={map.depth.y2}
-      >
-        <stop class="orbit-depth__far" offset="0" />
-        <stop class="orbit-depth__near" offset="1" />
-      </linearGradient>
-    </defs>
-    {side === 'near'
-      ? map.orbits.map((orbit) => (
-          <path key={`casing-${orbit.near}`} class="orbit__casing" d={orbit.near} />
-        ))
-      : null}
-    {map.orbits.map((orbit) => (
-      <path
-        key={orbit[side]}
-        class={`orbit orbit--${orbit.kind}`}
-        d={orbit[side]}
-        stroke={`url(#${id})`}
-      />
-    ))}
-  </>
-)
+const OrbitLines = ({
+  map,
+  side,
+  id,
+  lit,
+}: {
+  map: OrbitMap
+  side: 'far' | 'near'
+  id: string
+  lit?: number
+}) => {
+  const slope = (name: string, stop: string) => (
+    <linearGradient
+      id={name}
+      gradientUnits="userSpaceOnUse"
+      x1={map.depth.x1}
+      y1={map.depth.y1}
+      x2={map.depth.x2}
+      y2={map.depth.y2}
+    >
+      <stop class={`${stop}__far`} offset="0" />
+      <stop class={`${stop}__near`} offset="1" />
+    </linearGradient>
+  )
+  return (
+    <>
+      <defs>
+        {slope(id, 'orbit-depth')}
+        {lit === undefined ? null : slope(`${id}-lit`, 'chart-depth')}
+      </defs>
+      {map.orbits.map((orbit, i) => (
+        <path
+          key={orbit[side]}
+          class={`orbit orbit--${orbit.kind}${i === lit ? ' chart__lit' : ''}`}
+          d={orbit[side]}
+          stroke={`url(#${i === lit ? `${id}-lit` : id})`}
+        />
+      ))}
+    </>
+  )
+}
 
 /*
-  動き続けるもの（入口と締め）のうち、軌道に沿うもの。軌道を流れる光（orbit-flow）と、
-  公転する天体（orbit-mover）。どちらも同じものを奥の層と手前の層に1つずつ置き、それぞれを
-  軌道面の奥と手前の半面で切る（orbits.ts の OrbitMap の halves）——ブラックホールの向こうを
-  回るあいだは後ろに、こちらへ来るあいだは前に見える。動かし方は app.css の「動き続ける」。
-  動きを減らす設定では隠し、止まった天体（Bodies）と札だけが残る。
+  動き続けるもの（入口と締め）のうち、軌道に沿うもの——軌道を流れる光（orbit-flow）。同じ
+  ものを奥の層と手前の層に1つずつ置き、それぞれを軌道面の奥と手前の半面で切る（orbits.ts の
+  OrbitMap の halves）——ブラックホールの向こうを流れるあいだは後ろに、こちらへ来るあいだは
+  前に見える。動かし方は app.css の「動き続ける」。動きを減らす設定では出さない。
 
-  天体は、動かない親（orbits.ts の OrbitMover の at。SVG の transform 属性）が単位円を
-  軌道へ写し、動く子は単位円を1周回るだけ——keyframes に天体ごとの数を持たせない
-  （app.css の「動き続ける」の、var() を keyframes に書かない話）
+  天体は公転させない。天体はいつも番号の札と同じ止まった場所に居て（Bodies）、動くのは光
+  だけ——公転する天体と止まった場所の札は食い違い、重ねたときに天体を札へ寄せると、跳ぶか
+  軌道を外れて飛んだ（持ち主が「シンプルに」と選んだ）
 */
 const Motion = ({ map, side, id }: { map: OrbitMap; side: 'far' | 'near'; id: string }) => {
   const clip = `url(#${id})`
@@ -467,19 +495,6 @@ const Motion = ({ map, side, id }: { map: OrbitMap; side: 'far' | 'near'; id: st
             pathLength="100"
             style={`--dur:${map.flows[i]}s;--delay:-${Math.round((map.flows[i] ?? 0) * ((i * 0.618) % 1) * 10) / 10}s`}
           />
-        ))}
-      </g>
-      <g class="orbit-movers" clip-path={clip}>
-        {map.movers.map((mover, i) => (
-          <g key={i} transform={mover.at}>
-            <g
-              class={`orbit-mover orbit-body orbit-body--${mover.kind}`}
-              style={`--period:${mover.period}s`}
-            >
-              <path d="M1 0h0" />
-              {mover.kind === 'work' ? <path class="orbit-body__hole" d="M1 0h0" /> : null}
-            </g>
-          </g>
         ))}
       </g>
     </>
@@ -518,21 +533,27 @@ const Dust = ({ map }: { map: OrbitMap }) => (
 const twoDigits = (value: number) => String(value).padStart(2, '0')
 
 /*
-  ブラックホール（入口と締め）。ロゴの O と同じ絵——黒い円（影）、縁でくっきり光って外へ
-  消える輪、その後ろを通る横線（真横から見た円盤）——を、軌道図の焦点に大きく置く（形は
-  src/ui/logo.ts、描き方は icons.tsx の HoleLight / HoleCore）。ロゴと同じ1つのものに
-  見せるため、比も色（字の白と --hole-core）も変えない。横線は軌道面の傾きに合わせて回す
-  （app.css の .hole の --system-tilt。輪と円は回しても同じ）。
+  ブラックホール（入口と締めと作品の星図）。ロゴの O と同じ絵——黒い円（影）、縁でくっきり
+  光って外へ消える輪、その後ろを通る横線（真横から見た円盤）——を、軌道図の焦点に大きく置く
+  （形は src/ui/logo.ts、描き方は icons.tsx の HoleLight / HoleCore）。ロゴと同じ1つのものに
+  見せるため、形の比も色（字の白と --hole-core）も変えない。大きく描くときだけ縁の光の質を
+  上げる——光の坂を抑え（LARGE_GLOW_STOPS）、黒い円の縁に細い光の輪（HoleRing）を足す
+  （理由は logo.ts）。横線は軌道面の傾きに合わせて回す（app.css の
+  .hole の --system-tilt。輪と円は回しても同じ）。
 
   大きさは枠の hole（黒い円の半径）から、置き場所は枠の focus から組んで style で渡す
   （CSS に写すと、枠を変えた日に片方だけ古くなる）。
 
-  3枚の SVG を重ねる: 光（横線と輪。明るさがゆっくり揺らぐ）→ 縁を回る光の点（HoleSpot。
-  回り続ける）→ 黒い円。動くのは SVG ごとの明るさと回転だけで、中を描き直さない。
-  id はグラデーションの名前の頭（入口と締めは別のページだが、ロゴの wm / mk とは分ける）。
-  飾りなので読み上げには出さない。
+  SVG を重ねる: 光（横線と縁の光。明るさがゆっくり揺らぐ）→ 縁の光の輪 →
+  縁を回る光（HoleSpot。回り続ける）→ 黒い円。動くのは SVG ごとの明るさと回転だけで、
+  中を描き直さない。id はグラデーションの名前の頭（入口と締めは別のページだが、ロゴの
+  wm / mk とは分ける）。飾りなので読み上げには出さない。
+
+  still は作品の星図（OrbitChart）の止まったブラックホール。縁を回る光を描かない（光の
+  揺らぎは app.css が星図の中で止める）。一覧には星図が行の数だけ並ぶので、1つずつ
+  回して揺らすと、読んでいる行の横でいくつもの光が動き続ける
 */
-const Hole = ({ frame, id }: { frame: OrbitFrame; id: string }) => {
+const Hole = ({ frame, id, still }: { frame: OrbitFrame; id: string; still?: boolean }) => {
   const pct = (value: number) => `${Math.round(value * 10000) / 100}%`
   // 印の枠（±MARK_HALF）が黒い円の半径（HOLE.core）の何倍か
   const width = (2 * MARK_HALF * frame.hole) / HOLE.core
@@ -543,11 +564,16 @@ const Hole = ({ frame, id }: { frame: OrbitFrame; id: string }) => {
       style={`--hole-x:${pct(frame.focus.x / frame.width)};--hole-y:${pct(frame.focus.y / frame.height)};--hole-w:${pct(width / frame.width)}`}
     >
       <svg class="hole__light" viewBox={MARK_VIEWBOX} aria-hidden="true" focusable="false">
-        <HoleLight cx={0} cy={0} id={id} />
+        <HoleLight cx={0} cy={0} id={id} stops={LARGE_GLOW_STOPS} />
       </svg>
-      <svg class="hole__spin" viewBox={MARK_VIEWBOX} aria-hidden="true" focusable="false">
-        <HoleSpot id={id} />
+      <svg class="hole__ring" viewBox={MARK_VIEWBOX} aria-hidden="true" focusable="false">
+        <HoleRing id={id} />
       </svg>
+      {still ? null : (
+        <svg class="hole__spin" viewBox={MARK_VIEWBOX} aria-hidden="true" focusable="false">
+          <HoleSpot id={id} />
+        </svg>
+      )}
       <svg class="hole__core" viewBox={MARK_VIEWBOX} aria-hidden="true" focusable="false">
         <HoleCore cx={0} cy={0} />
       </svg>
@@ -580,10 +606,10 @@ export type OrbitItem = { type: ItemKind; title: string; href: string | null; nu
     ブラックホールだけはロゴの O と同じ色（字の白と --hole-core）
   - 軌道・天体・ブラックホールは aria-hidden。札（リンク）だけが読み上げに出る
   - 着いたときに一度だけ、ブラックホールが灯り、軌道と天体が渦を巻いて収まる
-    （app.css の「入口に着いたとき」）。そのあとも動き続ける——天体がゆっくり公転し、軌道を
-    光が流れ、光の粒が渦を巻いて吸い込まれ、ブラックホールの縁を光の点が回り、光が揺らぐ
-    （Motion・Dust・Hole。動いているあいだは札を隠し、札を選ぶかマウスを重ねると止まった
-    天体と札に戻る）。止まった姿がそのまま完成形
+    （app.css の「入口に着いたとき」）。そのあとも光は動き続ける——軌道を光が流れ、光の粒が
+    渦を巻いて吸い込まれ、ブラックホールの縁を光が回り、光が揺らぐ（Motion・Dust・Hole）。
+    天体は公転させず、札と同じ止まった場所に居る（Motion）。札はマウスを重ねたとき・選んだ
+    ときに番号の順に浮かぶ（指の端末では初めから出ている）。止まった姿がそのまま完成形
 
   呼ぶのは renderBlock の case 'hero' だけで、全体ページ（/all）には置かない
   （印刷・Ctrl-F・翻訳の宛先）。
@@ -724,10 +750,9 @@ export const Cta = ({ href, children }: { href: string; children: Child }) => (
   締めの軌道図。入口と同じ件数の星系（同じブラックホール）を、横長の帯の真ん中に置く
   （枠は orbits.ts の CONTACT_FRAME）。番号の札は持たない——作品へは目次と入口から行く。
 
-  入口と同じく、軌道の奥の半分はブラックホールの後ろ、手前の半分は前に描き、止まった天体
-  （.orbit-rest）はいちばん上。動き続けるものも入口と同じ（Motion・Dust・Hole。動いている
-  あいだは止まった天体を隠す）。着いたときの一度きりの動きは持たない——入口で一度動けば
-  足りる。
+  入口と同じく、軌道の奥の半分はブラックホールの後ろ、手前の半分は前に描き、天体
+  （止まった場所に居る。公転しない）はいちばん上。動き続けるものも入口と同じ（Motion・
+  Dust・Hole）。着いたときの一度きりの動きは持たない——入口で一度動けば足りる。
 */
 export const ContactOrbits = ({ counts }: { counts: KindCounts }) => {
   const map = orbitMap(counts, CONTACT_FRAME)
@@ -743,11 +768,60 @@ export const ContactOrbits = ({ counts }: { counts: KindCounts }) => {
       <svg viewBox={view} aria-hidden="true" focusable="false">
         <OrbitLines map={map} side="near" id="contact-near-depth" />
         <Motion map={map} side="near" id="contact-near" />
-        <g class="orbit-rest">
-          <Bodies bodies={map.bodies} />
-        </g>
+        <Bodies bodies={map.bodies} />
       </svg>
     </div>
+  )
+}
+
+/*
+  作品の星図。画像の無い作品の絵として、作品のページ（ItemDetail。文の列の横）と一覧の行
+  （ItemRow。サムネイルの位置）に置く。入口と同じ星系を締めの枠（orbits.ts の
+  CHART_FRAME）に止めた姿で描き、その作品が載っている天体と軌道だけを灯す——入口の軌道図で
+  番号の札を付けていた天体が、作品のページではこの1つとして光る。
+
+  - map は orbitMap(件数, CHART_FRAME)。一覧では行の数だけ描くので、呼ぶ側が1度だけ組んで
+    渡す。body は灯す天体（map.bodies の何番目か。orbits.ts の bodyIndexOf）
+  - 層は締めと同じ（軌道の奥の半分 → ブラックホール → 手前の半分と天体）。ブラックホールは
+    止まった姿（Hole の still）で、公転も流れる光も粒も持たない。止まった絵なので、着いた
+    ときの動きも持たない（入口で一度動けば足りる。締めと同じ判断）
+  - 灯した天体には輪（.chart__ring）を重ねる。字の大きさと同じく画面の px で描くので、
+    枠が縮んでも潰れない（輪は HTML の箱で、置き場所だけを天体の位置の % で渡す）
+  - number は作品のページでだけ渡す一覧の番号。星図の左上に札として置く（一覧の行は
+    行の頭に同じ番号を持っているので出さない）
+  - 絵だけで読み上げには何も言わない（aria-hidden）。名前は見出しと題のリンクが持つ。
+    id はグラデーションの名前の頭で、ページの中で星図ごとに変える（作品の id から）
+*/
+export type ChartSpot = { map: OrbitMap; body: number }
+
+export const OrbitChart = ({
+  map,
+  body,
+  id,
+  number,
+  class: className,
+}: ChartSpot & { id: string; number?: number; class?: string }) => {
+  const spot = map.bodies[body]
+  if (!spot) return null
+  const at = (value: number, whole: number) => `${Math.round((value / whole) * 10000) / 100}%`
+  const view = `0 0 ${map.width} ${map.height}`
+  return (
+    <span
+      class={className ? `chart ${className}` : 'chart'}
+      aria-hidden="true"
+      style={`--x:${at(spot.x, map.width)};--y:${at(spot.y, map.height)}`}
+    >
+      <svg viewBox={view} aria-hidden="true" focusable="false">
+        <OrbitLines map={map} side="far" id={`${id}-far`} lit={spot.orbit} />
+      </svg>
+      <Hole frame={CHART_FRAME} id={`${id}-hole`} still />
+      <svg viewBox={view} aria-hidden="true" focusable="false">
+        <OrbitLines map={map} side="near" id={`${id}-near`} lit={spot.orbit} />
+        <Bodies bodies={map.bodies} lit={body} />
+      </svg>
+      <span class="chart__ring" />
+      {number ? <span class="chart__number">{twoDigits(number)}</span> : null}
+    </span>
   )
 }
 
@@ -867,15 +941,21 @@ export const itemTransition = (item: { slug: string | null }) =>
   サムネイルは画像のある作品だけ（飾りなので alt="" と aria-hidden。名前は題の
   リンクが持つ）。loading="lazy" は、一覧が縦に長いため。枠の縦横比は CSS が
   決めているので、読み込みを待っても高さは動かない。
+
+  画像の無い作品は、同じ位置に星図（OrbitChart。入口の軌道図でその作品が載っている天体を
+  灯した絵）を置く。chart は呼ぶ側が組む（件数と公開中の全件の並びを知っているのは一覧の
+  側）。渡されなければ何も置かない——空の枠は読み込みの失敗に見える。
 */
 export const ItemRow = ({
   item,
   number,
   showMember,
+  chart,
 }: {
   item: ItemView
   number: number
   showMember?: boolean
+  chart?: ChartSpot
 }) => {
   const href = itemHref(item)
   const where = item.platformLabel ?? item.category
@@ -916,6 +996,8 @@ export const ItemRow = ({
         <span class="entry__thumb" aria-hidden="true">
           <img src={item.imageUrl} alt="" loading="lazy" decoding="async" />
         </span>
+      ) : chart ? (
+        <OrbitChart {...chart} id={`chart-${item.id}`} class="entry__chart" />
       ) : null}
       {href ? (
         <span class="entry__go" aria-hidden="true">
@@ -1008,7 +1090,8 @@ export const Shot = ({ src, alt }: { src: string; alt: string }) => (
 /*
   作品1件のページの、見出し（SectionHead）の下。**一覧の行を開いたもの**として
   組む——説明・実績値・タグ・行き先は行と同じ部品（Note の段落・Metric・
-  Tags・LinkRow）。足すのは画像（Shot）だけで、本文はこの下の小節（ItemStory）。
+  Tags・LinkRow）。足すのは絵（画像の Shot か、画像の無い作品の星図 OrbitChart）だけで、
+  本文はこの下の小節（ItemStory）。
 
   行と同じ部品にしたのは、行から開いた先で同じ形に着く続き方のため。
   以前は実績値をトップの「数字」の箱（Numbers）で、行き先をリンク集の行
@@ -1016,22 +1099,32 @@ export const Shot = ({ src, alt }: { src: string; alt: string }) => (
   画像の上に画面1枚ぶんの高さを取っていた。
 
   並びは 画像 → 文の列（説明・実績値・タグ・行き先）。900 未満では縦に、900 以上
-  では文の列を左・画像を右に並べる（app.css の .detail--shot）。画像を先に置くのは、
+  では文の列を左・画像を右に並べる（app.css の .detail--shot と .detail--chart）。画像を先に置くのは、
   縦に積んだとき見出しのすぐ下に来るように。横に並べたときは左から読み始める
   文の頭を見出しにそろえたいので、画像は右へ回す。
 
   links は行き先（作品のリンクと、複数人のサイトなら「担当」）。呼ぶ側が
   組む——担当を出す条件（showMemberOf）はサイトの構成を知っている側にしかない。
+
+  画像の無い作品は、画像の位置に星図（OrbitChart）を置く（.detail--chart。並べ方は画像と
+  同じで、900 以上は文の列の右）。chart には一覧の番号も入れて渡す（星図の左上の札）。
+  画像がある作品は画像だけ——絵は1つにする。
 */
 export const ItemDetail = ({
   item,
   links,
+  chart,
 }: {
   item: ItemView
   links: { label: string; url: string }[]
+  chart?: ChartSpot & { number: number }
 }) => (
-  <div class={item.imageUrl ? 'detail detail--shot' : 'detail'}>
-    {item.imageUrl ? <Shot src={item.imageUrl} alt={item.imageAlt} /> : null}
+  <div class={item.imageUrl ? 'detail detail--shot' : chart ? 'detail detail--chart' : 'detail'}>
+    {item.imageUrl ? (
+      <Shot src={item.imageUrl} alt={item.imageAlt} />
+    ) : chart ? (
+      <OrbitChart {...chart} id={`chart-${item.id}`} />
+    ) : null}
     <div class="detail__text">
       {item.summary ? <Note paragraphs={[item.summary]} /> : null}
       <Metric item={item} />

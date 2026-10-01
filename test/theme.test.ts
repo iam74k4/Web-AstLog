@@ -15,7 +15,7 @@ import { LOGO_COLORS } from '../src/ui/logo'
 import { db, form, get, okText, resetDb, seedItem, seedMember, signIn } from './helpers'
 
 // 着いたあとも動き続ける animation の名前（app.css の「動き続ける」）
-const LASTING = /orbit-(turn|flow|swirl|fall|spin|breathe)\b/
+const LASTING = /orbit-(flow|swirl|fall|spin|breathe)\b/
 
 beforeEach(resetDb)
 
@@ -773,6 +773,23 @@ describe('部品の作法', () => {
     expect(sheet).not.toContain('outline: 2px')
   })
 
+  it('一覧の行の題と行き先の下線は、透明の線に色を入れて溶かすように出す', () => {
+    /*
+      線の有り無しを切り替えると、色は送れず、下線がその場に現れる。ふだんから透明の線を
+      引いておき、マウスを重ねたときに色だけを入れる
+    */
+    const title = bodyOf(sheet, '.entry__link {')
+    expect(title).toContain('text-decoration-line: underline')
+    expect(title).toContain('text-decoration-color: transparent')
+    expect(title).toContain('transition: text-decoration-color var(--dur) var(--ease)')
+    const hover = blockAt(sheet, '@media (hover: hover)')
+    const lit = bodyOf(hover, ':is(.entry:has(.entry__link)):hover .entry__link {')
+    expect(lit).toContain('text-decoration-color: currentColor')
+    expect(lit).not.toContain('text-decoration: underline')
+    expect(bodyOf(sheet, '.links a {')).toContain('text-decoration-color: transparent')
+    expect(bodyOf(hover, '.links a:hover {')).toContain('text-decoration-color: currentColor')
+  })
+
   it('ホバーで応えるのは、題にリンクを持つ行だけ', () => {
     /*
       slug の無い行は押してもどこへも行かない。応えると、押せる合図だけ出して
@@ -1170,6 +1187,97 @@ describe('一覧の行', () => {
     expect(row).toContain('border-bottom: 1px solid var(--line)')
     expect(row).not.toMatch(/border-radius|background|box-shadow/)
   })
+
+  it('タグの区切りの点は札の左の外へ吊るし、並びの左端で切る。折り返した行を点から始めない', () => {
+    /*
+      2つ目からの札の頭に点を置いていたころは、技術が2行に折れると2行目が
+      「· Core Audio」と点から始まった（1280 の一覧の技術の列）
+    */
+    expect(sheet).not.toContain('.tags li + li::before')
+    const dot = bodyOf(sheet, '.tags li::before {')
+    expect(dot).toContain('width: var(--sp-4)')
+    expect(dot).toContain('margin-inline-start: calc(var(--sp-4) * -1)')
+    // 行の区画の .entry > .tags ではなく、素の .tags（行の頭から書いた規則）
+    const tags = bodyOf(sheet, '\n.tags {')
+    // 札のあいだは点1つぶん。行の頭の札の点は並びの外に出て切られる
+    expect(tags).toContain('gap: var(--sp-2) var(--sp-4)')
+    expect(tags).toContain('overflow-x: clip')
+  })
+})
+
+/*
+  作品の星図（components.tsx の OrbitChart）。画像の無い作品の絵で、入口と同じ星系を締めの
+  枠に止めた姿で描き、その作品が載っている天体と軌道だけを灯す。
+*/
+describe('作品の星図', () => {
+  it('箱は締めの枠の縦横比から崩さず、層を箱いっぱいに重ねる。面は敷かない', () => {
+    const chart = bodyOf(sheet, '.chart {')
+    expect(chart).toContain('aspect-ratio: var(--contact-ratio)')
+    // 縦に積んだとき（900 未満）は、画像の枠の高さ（--shot-h）を超えない幅まで
+    expect(chart).toContain('width: min(100%, calc(var(--shot-h) * var(--contact-ratio)))')
+    expect(chart).toContain('min-height: 0')
+    expect(chart).not.toMatch(/background|border|box-shadow/)
+    expect(bodyOf(sheet, '.chart > svg {')).toContain('inset: 0')
+    // 一覧の行ではサムネイルと同じ区画・同じ幅の上限
+    const row = bodyOf(sheet, '.entry__chart {')
+    expect(row).toContain('grid-area: thumb')
+    expect(row).toContain('width: min(100%, var(--entry-thumb))')
+    // 900 以上は文の列の横。列の高さまで伸ばすと比が崩れ、ブラックホールが焦点から外れる
+    const wide = blockAt(sheet, '@media (min-width: 900px)')
+    expect(bodyOf(wide, '.detail--chart {')).toContain(
+      'grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)',
+    )
+    const beside = bodyOf(wide, '.detail--chart > .chart {')
+    expect(beside).toContain('align-self: center')
+    expect(beside).not.toMatch(/height/)
+  })
+
+  it('止まった図。ブラックホールの光も揺らさず、着いたときの動きも持たない', () => {
+    expect(bodyOf(sheet, '.chart .hole__light {')).toContain('animation: none')
+    const moving = rulesOf(sheet).filter(
+      (rule) =>
+        rule.selectors.some((one) => /\.chart/.test(one)) &&
+        rule.decls.some(([name, value]) => name.startsWith('animation') && value !== 'none'),
+    )
+    expect(moving).toEqual([])
+  })
+
+  it('灯す線は入口と同じ向きの坂で、色はアクセント。ほかは沈める', () => {
+    for (const stop of ['.chart-depth__far {', '.chart-depth__near {']) {
+      expect(bodyOf(sheet, stop), stop).toContain('stop-color: var(--accent)')
+    }
+    expect(bodyOf(sheet, '.chart-depth__far {')).toContain(
+      'stop-opacity: calc(var(--chart-lit) * var(--chart-lit-far))',
+    )
+    expect(bodyOf(sheet, '.chart :is(.orbit, .orbit-body):not(.chart__lit) {')).toContain(
+      'opacity: var(--chart-dim)',
+    )
+    // 輪は画面の px。枠が縮んでも潰れない
+    expect(bodyOf(sheet, '.chart__ring {')).toContain('width: var(--chart-ring)')
+  })
+
+  it('押せる行のホバーと、キーボードで選んだときに輪が広がる。:has は :is() の中', () => {
+    const hover = blockAt(sheet, '@media (hover: hover)')
+    expect(bodyOf(hover, ':is(.entry:has(.entry__link)):hover .chart__ring {')).toContain(
+      'scale: var(--chart-ring-grow)',
+    )
+    expect(bodyOf(sheet, ':is(.entry:has(.entry__link:focus-visible)) .chart__ring {')).toContain(
+      'scale: var(--chart-ring-grow)',
+    )
+  })
+
+  it('はっきり見たい設定と紙では出さない。作品のページの列も1つに畳む', () => {
+    for (const marker of [
+      '@media (forced-colors: active), (prefers-contrast: more)',
+      '@media print',
+    ]) {
+      const block = blockAt(sheet, marker)
+      expect(ruleWith(block, 'display: none').selector, marker).toContain('.chart')
+      expect(bodyOf(block, '.detail--chart {'), marker).toContain(
+        'grid-template-columns: minmax(0, 1fr)',
+      )
+    }
+  })
 })
 
 /*
@@ -1236,6 +1344,7 @@ describe('文字の段', () => {
         '.tally dt:lang(en)',
         '.head__count',
         '.entry__index',
+        '.chart__number',
         '.entry__meta li:lang(en)',
         '.contact__sub :lang(en)',
       ].sort(),
@@ -1268,6 +1377,7 @@ describe('文字の段', () => {
         '.tally dt:lang(en)',
         '.head__count',
         '.entry__index',
+        '.chart__number',
         '.entry__meta li:lang(en)',
         '.contact__sub :lang(en)',
       ].sort(),
@@ -1397,14 +1507,30 @@ describe('入口の軌道図', () => {
     expect(root()).toContain(`--label-dx: ${LABEL_GAP.x}px;`)
     expect(root()).toContain(`--label-dy: ${LABEL_GAP.y}px;`)
     expect(root()).toContain(`--label-max: ${LABEL_MAX_WIDTH}px;`)
-    // 名前はふだん隠し、キーボードで選んだときと、マウスで重ねたときに出す。長い名前は
-    // 札の幅で末尾を省き、札は伸びる向きの枠の端までの空き（--room）で止める
-    expect(bodyOf(sheet, '.system__name {')).toContain('clip-path: inset(50%)')
-    expect(bodyOf(sheet, '.system__label a:focus-visible .system__name {')).toContain(
-      'text-overflow: ellipsis',
-    )
-    expect(bodyOf(sheet, '.system__label > :is(a, span) {')).toContain(
+    /*
+      名前はふだん隠し（幅を持たない列と透明。読み上げとリンクの名前には入ったまま）、
+      キーボードで選んだときとマウスで重ねたときに列を伸ばして出す——札が一度に伸びず、
+      字もその場に現れない。長い名前は札の幅で末尾を省き、札は伸びる向きの枠の端までの
+      空き（--room）で止める
+    */
+    const label = bodyOf(sheet, '.system__label > :is(a, span) {')
+    expect(label).toContain('grid-template-columns: auto minmax(1px, 0fr)')
+    expect(label).toMatch(/transition:[^;]*grid-template-columns var\(--dur\) var\(--ease\)/)
+    // 札の箱は幅 0 の li に置かれる。中身の幅と書かないと、いちばん狭い幅で組まれて名前の列が伸びない
+    expect(label).toContain('width: max-content')
+    expect(label).toContain(
       'max-width: min(var(--label-max), calc(var(--room) - var(--label-dx) - var(--sp-1)))',
+    )
+    const name = bodyOf(sheet, '.system__name {')
+    expect(name).toContain('opacity: 0')
+    expect(name).toContain('text-overflow: ellipsis')
+    expect(name).not.toMatch(/display: none|visibility/)
+    expect(bodyOf(sheet, '.system__label a:focus-visible {')).toContain(
+      'grid-template-columns: auto minmax(1px, 1fr)',
+    )
+    expect(bodyOf(sheet, '.system__label a:focus-visible .system__name {')).toContain('opacity: 1')
+    expect(bodyOf(blockAt(sheet, '@media (hover: hover)'), '.system__label a:hover {')).toContain(
+      'grid-template-columns: auto minmax(1px, 1fr)',
     )
     // :hover で名前を出すのは (hover: hover) の中だけ（タッチで押した札に貼り付かない）
     const reveals = rulesOf(sheet).filter((rule) =>
@@ -1443,8 +1569,11 @@ describe('入口の軌道図', () => {
     expect(near).toContain('stop-opacity: var(--orbit-ink)')
     expect(sheet).not.toContain('.orbit--far')
     expect(bodyOf(sheet, '.orbit-body path {')).toContain('stroke: var(--ink)')
-    // 手前の半分の下の縁取りは地の色（光の縁の前を通る所で、線が光に溶けない）
-    expect(bodyOf(sheet, '.orbit__casing {')).toContain('stroke: var(--bg)')
+    /*
+      手前の半分に地の色の縁取りは敷かない。縁の光を締めたので、手前の線が光の前を通る所では
+      光はもう薄く、線はそのまま見える。光が真っ白だったころの縁取りは、光を黒い筋で切っていた
+    */
+    expect(sheet).not.toMatch(/orbit__casing|--orbit-casing/)
     expect(token('--orbit-ink')).toBeLessThan(1)
     expect(token('--orbit-far')).toBeLessThan(1)
   })
@@ -1452,7 +1581,6 @@ describe('入口の軌道図', () => {
   it('線と点の太さは画面の px。枠が縮んでも点を潰さない', () => {
     for (const selector of [
       '.orbit {',
-      '.orbit__casing {',
       '.orbit-body path {',
       '.orbit-flow {',
       '.orbit-grain__dot {',
@@ -1511,10 +1639,16 @@ describe('入口の軌道図', () => {
     expect(html).not.toMatch(/\/assets\/(moon|blackhole)/)
     expect(html).toContain('class="system__orbits system__orbits--far"')
     expect(html).toContain('<span class="hole" aria-hidden="true"')
-    // 光 → 縁を回る光の点 → 黒い円の順に重ねる（DOM の順が重なりの順）
+    /*
+      光（横線と縁の光）→ 縁の光の輪 → 縁を回る光 → 黒い円の順に重ねる（DOM の順が重なりの
+      順）。光の輪は大きく描くときだけ（logo.ts の RING）
+    */
     const hole = html.slice(html.indexOf('<span class="hole"'))
-    expect(hole.indexOf('class="hole__light"')).toBeLessThan(hole.indexOf('class="hole__spin"'))
-    expect(hole.indexOf('class="hole__spin"')).toBeLessThan(hole.indexOf('class="hole__core"'))
+    const order = ['hole__light', 'hole__ring', 'hole__spin', 'hole__core'].map((name) =>
+      hole.indexOf(`class="${name}"`),
+    )
+    expect(order.every((at) => at > 0)).toBe(true)
+    expect([...order].sort((a, b) => a - b)).toEqual(order)
   })
 
   it('動くのは着いたときの一度だけ。止まった姿がそのまま完成形で、5 秒以内に止まる', () => {
@@ -1577,7 +1711,7 @@ describe('入口の軌道図', () => {
     const lasting = rulesOf(sheet).filter((rule) =>
       rule.decls.some(([name, value]) => name === 'animation' && /infinite/.test(value)),
     )
-    expect(lasting.length).toBeGreaterThanOrEqual(6)
+    expect(lasting.length).toBeGreaterThanOrEqual(5)
     for (const rule of lasting) {
       const [, value] = rule.decls.find(([name]) => name === 'animation') ?? ['', '']
       expect(value, rule.selectors.join(', ')).toMatch(LASTING)
@@ -1589,7 +1723,7 @@ describe('入口の軌道図', () => {
     const hidden = rulesOf(sheet).find(
       (rule) =>
         rule.context.length === 0 &&
-        rule.selectors.includes(':is(.orbit-flows, .orbit-dust, .orbit-movers, .hole__spin)'),
+        rule.selectors.includes(':is(.orbit-flows, .orbit-dust, .hole__spin)'),
     )
     expect(hidden?.decls).toContainEqual(['display', 'none'])
     // 止める手は外した
@@ -1600,22 +1734,41 @@ describe('入口の軌道図', () => {
       許す）。var() を持つ keyframes は、動いている要素ごとに毎コマ解き直され、粒の多い
       入口では style の計算だけでコマの予算を食った（電話相当で 1 秒あたり 480ms）
     */
-    for (const name of ['orbit-turn', 'orbit-flow', 'orbit-swirl', 'orbit-fall', 'orbit-spin']) {
+    for (const name of ['orbit-flow', 'orbit-swirl', 'orbit-fall', 'orbit-spin']) {
       expect(blockAt(sheet, `@keyframes ${name}`), name).not.toContain('var(')
     }
-    // 公転は1周前の姿から止まった姿（親の transform が決めた場所）まで。from だけ
-    const turn = blockAt(sheet, '@keyframes orbit-turn')
-    expect(turn).toContain('transform: rotate(-1turn)')
-    expect(turn).not.toMatch(/\bto\s*\{|\d+%\s*\{/)
+    /*
+      天体は公転させない。天体はいつも番号の札と同じ止まった場所に居て、動くのは光だけ——
+      公転させていたころは、札と食い違う天体を重ねたときに札へ寄せていて、天体が跳ぶか軌道を
+      外れて飛んだ（持ち主が「シンプルに」と選んだ）
+    */
+    expect(sheet).not.toMatch(/orbit-turn|\.orbit-mover|\.orbit-settle|--settle/)
 
-    // 図の中を選んだとき・マウスを重ねたとき（手触りの括り）は、止まった天体と札に戻す
-    expect(bodyOf(sheet, '.system:focus-within .orbit-movers {')).toContain('opacity: 0')
-    expect(
-      bodyOf(sheet, '.system:focus-within > :is(.system__bodies, .system__labels) {'),
-    ).toContain('opacity: 1')
-    expect(
-      bodyOf(blockAt(sheet, '@media (hover: hover)'), '.system:hover .orbit-movers {'),
-    ).toContain('opacity: 0')
+    /*
+      札は、マウスを重ねられる端末で図に重ねたとき・図の中を選んだときに番号の順に浮かぶ
+      （何も動かさない）。通り過ぎただけでは出さず、押せるようになるのも出てから。指の端末と
+      動きを減らす設定では初めから出ている——隠すのはその括りの中だけ
+    */
+    const hover = blockAt(sheet, '@media (hover: hover)')
+    const quiet = blockAt(hover, '@media (prefers-reduced-motion: no-preference)')
+    expect(bodyOf(quiet, '.system__label {')).toContain('opacity: 0')
+    expect(bodyOf(quiet, '.system:is(:hover, :focus-within) .system__label {')).toContain(
+      'transition-delay: calc(var(--label-wait) + min(var(--i, 0), 8) * var(--stagger))',
+    )
+    const labels = bodyOf(quiet, '.system__labels {')
+    expect(labels).toContain('pointer-events: none')
+    expect(labels).toContain('allow-discrete')
+    expect(bodyOf(quiet, '.system:is(:hover, :focus-within) > .system__labels {')).toContain(
+      'transition-delay: var(--label-wait)',
+    )
+    const hiding = rulesOf(sheet).filter(
+      (rule) =>
+        rule.selectors.includes('.system__label') &&
+        rule.decls.some(([name, value]) => name === 'opacity' && value === '0'),
+    )
+    expect(hiding.map((rule) => rule.context)).toEqual([
+      ['@media (hover: hover)', '@media (prefers-reduced-motion: no-preference)'],
+    ])
   })
 
   it('紙には刷らない', () => {

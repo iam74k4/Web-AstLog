@@ -18,7 +18,7 @@ GitHub 上でそのまま図として表示される（Mermaid）。画面の一
 
 - **1人のサイト（Team を置いているとき）**: Team のページは無い。その位置にその人のページ
   （`/members/<slug>`。名札 → About → Skills → Career を縦に並べた1ページ）が並び、目次では
-  「Profile」の1行。`/team` はそこへ 301
+  「Profile」の1行。`/team` と `/profile` はそこへ 301
 - **2人以上のサイト**: Team のカードから入る（目次の印は Team）
 
 下の図は両方の形を1枚に載せ、片方にしか無い矢印には（2人以上）（1人のサイト）と
@@ -36,6 +36,7 @@ flowchart LR
     Whole["全体 GET /all"]
     Profile["メンバー個別<br>/members/:slug<br>小節 #about ・ #skills ・ #career"]
     OldTeam["1人のサイトの Team<br>/team"]
+    ProfileAlias["プロフィールの別名<br>/profile"]
     OldMember["前の個人ページの続き<br>/about ・ /skills ・ /career（…/:page も）"]
     Contact["サイトの Contact<br>/contact"]
     Mail["メールソフト"]
@@ -65,6 +66,7 @@ flowchart LR
     Screen -->|"Team のカード / プロフィール →（2人以上）"| Profile
     Screen -->|"目次の Profile（1人のサイト）"| Profile
     OldTeam -->|"301（1人のサイト）"| Profile
+    ProfileAlias -->|"301（1人のサイト。ほかは 404）"| Profile
     Screen -->|"一覧の行の担当者名（2人以上、または Team が無いとき）"| Profile
     Profile -->|"上の帯のロゴ"| Top
     Profile -->|"目次（サイトのもの。Team に印／1人のサイトは Profile に印）"| Screen
@@ -109,8 +111,8 @@ Projects、個人ページは Profile か Team）。
 管理画面で slug を変えた作品・メンバーの前の URL と、区分を変えた作品の前の区分の URL は、
 いまの URL へ 301 で寄せる（前の slug は `item_slug_redirects` / `member_slug_redirects`
 に残っている）。変えた日に名刺や SNS に貼ったリンクが切れる、を起こさない。
-この 301（と1人のサイトの `/team`・個人ページの Contact・前の個人ページの続き・前の本文の
-画面の 301）は行き先がデータで変わるので、`Cache-Control: no-cache` でブラウザに覚えさせない
+この 301（と1人のサイトの `/team` と `/profile`・個人ページの Contact・前の個人ページの続き・
+前の本文の画面の 301）は行き先がデータで変わるので、`Cache-Control: no-cache` でブラウザに覚えさせない
 ——slug を元に戻した日に、前の転送を覚えたブラウザがリダイレクトの無限ループにならないように。
 
 個人開発と業務は、公開ページでは Projects の1つの一覧（新しい順・全件）。以前の一覧の URL

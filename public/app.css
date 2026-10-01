@@ -199,15 +199,13 @@
 
     線はアクセント色で、細く薄い製図の線にする。業務の軌道は破線（--orbit-dash）。
     濃さは軌道面の奥から手前へ続けて変わる——手前の端が --orbit-ink、奥の端はそれに
-    --orbit-far を掛けた薄さ（奥ほど遠い）。手前の半分の下には地の色の縁取り
-    （--orbit-casing の太さ）を敷く。字は軌道の上に乗せない（番号の札は地を塗る）ので、
+    --orbit-far を掛けた薄さ（奥ほど遠い）。字は軌道の上に乗せない（番号の札は地を塗る）ので、
     濃さの上限は見た目だけで決まり、下限は npm run check:contrast が測る（線が消える
     のは改善ではない）。
   */
   --orbit-line: 1px;
   --orbit-ink: 0.42;
   --orbit-far: 0.25;
-  --orbit-casing: 3px;
   --orbit-dash: 2px 5px;
   --orbit-body: clamp(5px, 0.5vw, 7px);
 
@@ -219,6 +217,18 @@
   --label-dx: 10px;
   --label-dy: 6px;
   --label-max: 180px;
+
+  /*
+    作品の星図（.chart。components.tsx の OrbitChart）。灯す軌道の坂の濃さ（手前の端が
+    --chart-lit、奥の端はそれに --chart-lit-far を掛けた薄さ。入口の坂と同じ向き）と、
+    ほかの軌道と天体を沈める濃さ（--chart-dim）。灯した天体に重ねる輪の径（--chart-ring。
+    画面の px）と、押せる行にマウスを重ねたとき・選んだときの輪の大きさ（--chart-ring-grow 倍）
+  */
+  --chart-lit: 0.9;
+  --chart-lit-far: 0.45;
+  --chart-dim: 0.45;
+  --chart-ring: 18px;
+  --chart-ring-grow: 1.35;
 
   /*
     入口に着いたときの動き（「入口に着いたとき」）。見出しの列が浮かび上がるあいだに、
@@ -244,11 +254,11 @@
   --count-delay: calc(var(--infall-delay) + var(--infall-dur) * 0.3);
 
   /*
-    着いたあとも動き続けるもの（「動き続ける」）。天体の公転（1周の長さは orbits.ts の
-    INNER_PERIOD から。外側の軌道ほど長い）、軌道を流れる光（長さ --flow-len）、吸い込まれる
-    粒（落ち方の曲線 --fall-ease。落ちるほど速く回り、速く寄る）、ブラックホールの縁を回る
-    光の点（1周 --spin-dur）と光の揺らぎ（明るさが --breathe-low まで沈んで戻る。片道
-    --breathe-dur）。止める手は置かない（持ち主の判断。動きを減らす設定では全部止まる）
+    着いたあとも動き続けるもの（「動き続ける」）。軌道を流れる光（長さ --flow-len。1周の長さは
+    orbits.ts の INNER_PERIOD から。外側の軌道ほど長い）、吸い込まれる粒（落ち方の曲線
+    --fall-ease。落ちるほど速く回り、速く寄る）、ブラックホールの縁を回る光（1周 --spin-dur）と
+    光の揺らぎ（明るさが --breathe-low まで沈んで戻る。片道 --breathe-dur）。天体は動かさない。
+    止める手は置かない（持ち主の判断。動きを減らす設定では全部止まる）
   */
   --breathe-dur: 4s;
   --breathe-low: 0.68;
@@ -256,6 +266,12 @@
   --fall-ease: cubic-bezier(0.5, 0, 0.85, 0.45);
   /* 軌道を流れる光の長さ（軌道1周を 100 とした長さ） */
   --flow-len: 3;
+
+  /*
+    入口の番号の札を、図にマウスを重ねたとき・選んだときに出すまでの待ち（「動き続ける」）。
+    図の上をマウスが通り過ぎただけでは出さない
+  */
+  --label-wait: 120ms;
 
   /* 塗りの押し手（.cta）の高さ。指の的（--tap）より大きく取る、ページでいちばん強い1本 */
   --cta-h: 52px;
@@ -1002,7 +1018,7 @@ body[data-site] > main {
   伸び縮みさせる。置き場所（--hole-x / --hole-y）と大きさ（--hole-w）は、部品が
   orbits.ts の数（枠の focus と hole）から組んで style で渡す。
 
-  光・縁を回る光の点・黒い円の3枚の SVG を同じ箱に重ねる（DOM の順が重なりの順）。
+  光・縁の光の輪・縁を回る光・黒い円の SVG を同じ箱に重ねる（DOM の順が重なりの順）。
   黒い円は不透明なので、奥を回る軌道はその後ろに隠れる。横線は軌道面と同じ傾きに
   回す（--system-tilt。輪と円は回しても同じ）。
 
@@ -1052,17 +1068,6 @@ body[data-site] > main {
 .orbit-depth__near {
   stop-color: var(--accent);
   stop-opacity: var(--orbit-ink);
-}
-
-/*
-  手前の半分の下に敷く地の色の縁取り。ブラックホールの光の縁の前を通る所で、白い線が
-  白い光に溶けずに前を横切って見える（地の上では地と同じ色なので見えない）
-*/
-.orbit__casing {
-  fill: none;
-  stroke: var(--bg);
-  stroke-width: var(--orbit-casing);
-  vector-effect: non-scaling-stroke;
 }
 
 /* 業務の軌道は破線。区分を色だけで分けない（天体も塗りと輪で分ける） */
@@ -1127,13 +1132,22 @@ body[data-site] > main {
   札の幅の上限は、札の長さの上限（--label-max）と、札の伸びる向きの枠の端までの
   空き（--room。部品が orbits.ts の labelRoom から cqi で渡す。枠の縁から --sp-1 だけ
   離す）の小さいほう。名前を出して札が伸びても枠の外へ出ない——出ると枠の
-  overflow-x: clip に番号ごと切られ、フォーカスの輪も欠ける
+  overflow-x: clip に番号ごと切られ、フォーカスの輪も欠ける。
+
+  札は番号と名前の2列。名前の列はふだん幅を持たず（0fr）、名前を出すときに字の幅（1fr）
+  まで伸びる——列の幅を送るので、札は天体の反対側へ滑らかに伸びる（下の「名前」）。列の
+  下限 1px は、名前を幅 0 の箱にしないため（.sr-only が 1px を残すのと同じ。幅 0 の箱を
+  読み上げから落とす環境がある）。
+
+  幅は中身の幅（max-content）と書く。札の箱は幅 0 の li に対して置かれるので、書かないと
+  いちばん狭い幅（名前の列が 1px のまま）で組まれ、名前の列が伸びない
 */
 .system__label > :is(a, span) {
   position: absolute;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(1px, 0fr);
   align-items: baseline;
-  gap: var(--sp-3);
+  width: max-content;
   max-width: min(var(--label-max), calc(var(--room) - var(--label-dx) - var(--sp-1)));
   padding-inline: var(--sp-2);
   background: var(--bg);
@@ -1141,7 +1155,10 @@ body[data-site] > main {
   font-size: var(--fs-meta);
   line-height: 1.4;
   white-space: nowrap;
-  transition: color var(--dur-fast) var(--ease);
+  transition:
+    color var(--dur-fast) var(--ease),
+    grid-template-columns var(--dur) var(--ease),
+    column-gap var(--dur) var(--ease);
 }
 
 .system__label--ne > :is(a, span) {
@@ -1223,27 +1240,28 @@ body[data-site] > main {
 /*
   名前。ふだんは見せず（番号だけの札。名前まで並べると、札がブラックホールの影と弧に
   掛かる）、札にマウスを重ねたときとキーボードで選んだときに番号の横へ出す。隠すのは
-  .sr-only と同じ手で、読み上げとリンクの名前にはいつも入る。
+  幅を持たない列（上の札の 0fr）と透明で、読み上げとリンクの名前にはいつも入る。
+  出すときは列が伸びるのに合わせて字が浮かぶ（前は字がその場に現れ、札が一度に伸びた）。
 
   出したときの長い名前は札の幅（--label-max）で末尾を省く。全部は押した先の作品の
   ページにある。
 */
 .system__name {
-  position: absolute;
-  width: 1px;
-  height: 1px;
+  min-width: 0;
   overflow: hidden;
-  clip-path: inset(50%);
+  text-overflow: ellipsis;
   white-space: nowrap;
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.system__label a:focus-visible {
+  grid-template-columns: auto minmax(1px, 1fr);
+  column-gap: var(--sp-3);
 }
 
 .system__label a:focus-visible .system__name {
-  position: static;
-  width: auto;
-  height: auto;
-  min-width: 0;
-  clip-path: none;
-  text-overflow: ellipsis;
+  opacity: 1;
 }
 
 /*
@@ -1355,7 +1373,7 @@ body[data-site] > main {
   - 曲線は --ease の1本（ばねは使わない。止まる向きを行き過ぎて、軌道が揺り戻して
     見える）
 
-  どれも一度きりで、5 秒以内に止まる（WCAG 2.2.2。着いたあとも続く公転や光の揺らぎは
+  どれも一度きりで、5 秒以内に止まる（WCAG 2.2.2。着いたあとも続く光の流れや揺らぎは
   下の「動き続ける」）。keyframes には出だしの姿（from）だけを書き、終わりの姿を
   持たせない——止まった姿（reduced-motion で animation: none になったとき）が
   そのまま完成形になる。
@@ -1446,34 +1464,25 @@ body[data-site] > main {
 /*
   着いたあとも動き続けるもの（components.tsx の Motion・Dust・Hole）。入口と締めで同じ。
 
-  - 天体がゆっくり公転する（orbit-turn）
-  - 軌道に沿って光が流れる（orbit-flow。軌道1周の path の破線を送る。天体より速い）
+  - 軌道に沿って光が流れる（orbit-flow。軌道1周の path の破線を送る）
   - 光の粒が渦を巻いてブラックホールへ吸い込まれ、黒い円の縁で光に溶ける（orbit-swirl で
     1周回り、その中で orbit-fall が外から内へ寄せる。どちらも --fall-ease で、落ちるほど
     速い）
-  - ブラックホールの縁を光の点が回り（orbit-spin）、光が明るさを沈めては戻す（orbit-breathe）
+  - ブラックホールの縁を光が回り（orbit-spin）、光が明るさを沈めては戻す（orbit-breathe）
+
+  天体は動かさない（公転しない）。天体はいつも番号の札と同じ止まった場所に居る——公転させて
+  いたころは、札と食い違う天体を重ねたときに札へ寄せていて、天体が跳ぶか軌道を外れて飛んだ
+  （持ち主が「シンプルに」と選んだ）。
 
   keyframes に var() を書かない（光の揺らぎの1つを除く）。var() を持つ keyframes は、
   動いている要素ごとに毎コマ解き直され、粒の多い入口では style の計算だけでコマの予算を
-  食った（電話相当で 1 秒あたり 480ms。固定の値にして 75ms）。要素ごとに違う量——天体の
-  軌道の形、粒の向きと落ちる幅——は動かない親の transform 属性が持ち、動く子は同じ形を
-  回るだけ（1周・1 から 0 へ）にする。
+  食った（電話相当で 1 秒あたり 480ms。固定の値にして 75ms）。要素ごとに違う量——粒の向きと
+  落ちる幅——は動かない親の transform 属性が持ち、動く子は同じ形を回るだけ（1周・1 から 0 へ）
+  にする。
 
-  - 公転する天体は単位円の点 (1, 0) で、親（orbits.ts の OrbitMover の at）がその単位円を
-    軌道へ写し、止まった場所まで回してある。子は1周前の姿から止まった姿まで回る——
-    keyframes には from だけ（入口の動きと同じ決まり）
-  - 動いているあいだは、止まった天体と番号の札を隠す（札は止まった場所に置いてあり、動く
-    天体には付いていけない）。図の中を選んだとき（札へのフォーカス）とマウスを重ねたとき
-    （手触りの括り）は、動く天体を隠して止まった天体と札に戻す
   - 止める手は置かない（持ち主の判断。5 秒を超えて続く動きの止め方は、動きを減らす設定
     だけが受ける）。動きを減らす設定では、動く層を出さない——止まった天体と札が完成形
 */
-@keyframes orbit-turn {
-  from {
-    transform: rotate(-1turn);
-  }
-}
-
 @keyframes orbit-flow {
   to {
     stroke-dashoffset: -100;
@@ -1535,31 +1544,17 @@ body[data-site] > main {
   opacity: 0;
 }
 
-:is(.orbit-flows, .orbit-dust, .orbit-movers, .hole__spin) {
+:is(.orbit-flows, .orbit-dust, .hole__spin) {
   display: none;
 }
 
-/* 図の中を選んだとき（マウスを重ねたときは手触りの括り）は、止まった天体と札に戻す */
-.system:focus-within .orbit-movers {
-  opacity: 0;
-}
-
-.system:focus-within > :is(.system__bodies, .system__labels) {
-  opacity: 1;
-  pointer-events: auto;
-}
-
 @media (prefers-reduced-motion: no-preference) {
-  :is(.orbit-flows, .orbit-dust, .orbit-movers) {
+  :is(.orbit-flows, .orbit-dust) {
     display: inline;
   }
 
   .hole__spin {
     display: block;
-  }
-
-  .orbit-mover {
-    animation: orbit-turn var(--period) linear infinite;
   }
 
   .orbit-flow {
@@ -1580,20 +1575,6 @@ body[data-site] > main {
 
   .hole__light {
     animation: orbit-breathe var(--breathe-dur) var(--ease) infinite alternate;
-  }
-
-  /* 動いているあいだは、止まった天体と札を隠す（上の「図の中を選んだとき」で戻る） */
-  .system__bodies,
-  .orbit-rest,
-  .system__labels {
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .orbit-movers,
-  .system__bodies,
-  .system__labels {
-    transition: opacity var(--dur) var(--ease);
   }
 }
 
@@ -1989,6 +1970,100 @@ body[data-site] > main {
   text-align: center;
 }
 
+/* --- 作品の星図 --- */
+
+/*
+  作品の星図（components.tsx の OrbitChart）。画像の無い作品の絵で、作品のページ（文の列の
+  横。.detail--chart）と一覧の行（サムネイルの位置。.entry__chart）に置く。入口と同じ星系を
+  締めの枠（--contact-ratio。orbits.ts の CHART_FRAME）に止めた姿で描き、その作品が載って
+  いる軌道と天体だけを灯す。層の重ね方は締めと同じ（軌道の奥の半分・ブラックホール・手前の
+  半分と天体）。
+
+  箱は枠と同じ縦横比から崩さない。層（SVG とブラックホール）は箱の % で重ねるので、比が
+  崩れるとブラックホールが軌道の焦点から外れる。幅は列いっぱいを上限に、高さが --shot-h
+  （作品の画像の枠の高さ）を超えない所まで——背の低い窓ほど小さく、画像のある作品より
+  高くならない。
+
+  面（--surface）は敷かない。画像の枠が面を持つのは、枠に収めた絵の外の地を枠として
+  見せるため。星図は地の上に直に描いた図で、公開ページは箱を並べない。
+*/
+.chart {
+  position: relative;
+  display: block;
+  width: min(100%, calc(var(--shot-h) * var(--contact-ratio)));
+  aspect-ratio: var(--contact-ratio);
+  min-height: 0;
+}
+
+.chart > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/*
+  ほかの軌道と天体は沈め、灯すもの（.chart__lit）だけを元の濃さで残す。灯す軌道の色は
+  部品が渡す坂（OrbitLines の lit。stroke 属性の url(#…-lit)）が持ち、濃さの両端をここで
+  敷く——入口の坂（.orbit-depth__*）と同じ向きで、濃さだけが上がる。奥と手前の半分が同じ
+  坂を読むので、灯した線も継ぎ目で跳ばない
+*/
+.chart :is(.orbit, .orbit-body):not(.chart__lit) {
+  opacity: var(--chart-dim);
+}
+
+.chart-depth__far {
+  stop-color: var(--accent);
+  stop-opacity: calc(var(--chart-lit) * var(--chart-lit-far));
+}
+
+.chart-depth__near {
+  stop-color: var(--accent);
+  stop-opacity: var(--chart-lit);
+}
+
+/*
+  ブラックホールは止まった姿（Hole の still。縁を回る光を描かない）。入口と締めの光の
+  揺らぎ（.hole__light の orbit-breathe）も、星図の中では止める——一覧には星図が行の数だけ
+  並び、1つずつ揺らすと、読んでいる行の横でいくつもの光が明滅し続ける
+*/
+.chart .hole__light {
+  animation: none;
+}
+
+/*
+  灯した天体に重ねる輪。画面の px の径（--chart-ring）なので、枠が縮んでも潰れない。置き場所は
+  部品が天体の位置の % で渡す（--x / --y）。押せる行にマウスを重ねたとき・選んだときに少し
+  広がる（手触りの括りと、一覧の行のフォーカスの規則）
+*/
+.chart__ring {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--chart-ring);
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border: var(--orbit-line) solid var(--ink);
+  border-radius: 50%;
+  transition: scale var(--dur-spring) var(--ease-spring);
+}
+
+/*
+  一覧の番号（作品のページの星図だけ。入口の軌道図の札・一覧の行の頭と同じ番号）。数字だけの
+  札なので等幅の小さな字。星図の左上に置く——軌道面は右が上がるように傾いていて、左上の
+  角には線が来ない
+*/
+.chart__number {
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--ink-mid);
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  letter-spacing: 0.14em;
+  line-height: 1;
+}
+
 /* --- 作品1件のページ --- */
 
 /*
@@ -2144,6 +2219,19 @@ body[data-site] > main {
 }
 
 /*
+  題の下線。ふだんから透明の線を引いておき、押せる行にマウスを重ねたときに色だけを入れる
+  （手触りの括り）——線が一度に現れず、溶けるように出て、溶けるように消える。線の有り無しを
+  切り替えると、色は送れない（前はそうしていて、下線がその場に現れた）
+*/
+.entry__link {
+  text-decoration-line: underline;
+  text-decoration-color: transparent;
+  text-decoration-thickness: var(--orbit-line);
+  text-underline-offset: var(--sp-2);
+  transition: text-decoration-color var(--dur) var(--ease);
+}
+
+/*
   フォーカスの輪郭は行全体に描く。リンクそのもの（題の字）に描くと、押せる面は
   行全体なのに、輪郭だけが題の字幅に縮んで見える。太さは素の :focus-visible と
   同じ段（--focus-ring）。
@@ -2158,6 +2246,14 @@ body[data-site] > main {
 .entry__link:focus-visible::after {
   outline: var(--focus-ring) solid var(--accent);
   outline-offset: calc(var(--focus-ring) * -1);
+}
+
+/*
+  キーボードで行を選んだときも、マウスを重ねたとき（手触りの括り）と同じく星図の輪が広がる。
+  :has は :is() の中に入れる（知らないブラウザが列ごと捨てないように）
+*/
+:is(.entry:has(.entry__link:focus-visible)) .chart__ring {
+  scale: var(--chart-ring-grow);
 }
 
 /*
@@ -2230,6 +2326,15 @@ body[data-site] > main {
   object-position: center top;
 }
 
+/*
+  星図（画像の無い行。components.tsx の OrbitChart）。サムネイルと同じ区画・同じ幅の上限で、
+  高さは星図の縦横比から。どの幅でも出す（サムネイルと同じ理由）
+*/
+.entry__chart {
+  grid-area: thumb;
+  width: min(100%, var(--entry-thumb));
+}
+
 /* 技術（components.tsx の Tags）。区画に名前を付けて置き場所を決める */
 .entry > .tags {
   grid-area: tags;
@@ -2246,10 +2351,17 @@ body[data-site] > main {
     translate var(--dur-spring) var(--ease-spring);
 }
 
+/*
+  タグの並び。区切りの点は札ごとに札の左の外へ吊るし（下の li::before）、並びの左端で
+  切る（overflow-x: clip）——折り返した行の頭に来た札の点は並びの外に出て見えない。札の
+  あいだ（column-gap）は点1つぶんの幅で、点はその真ん中に座る。
+  以前は2つ目からの札の頭に点を置いていて、2行に折れると2行目が点から始まった
+*/
 .tags {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--sp-2);
+  gap: var(--sp-2) var(--sp-4);
+  overflow-x: clip;
 }
 
 /*
@@ -2268,9 +2380,12 @@ body[data-site] > main {
   letter-spacing: 0.04em;
 }
 
-.tags li + li::before {
+.tags li::before {
   content: '·';
-  margin-right: var(--sp-2);
+  display: inline-block;
+  width: var(--sp-4);
+  margin-inline-start: calc(var(--sp-4) * -1);
+  text-align: center;
 }
 
 /*
@@ -2306,7 +2421,13 @@ body[data-site] > main {
   min-height: var(--tap);
   color: var(--accent);
   font-size: var(--fs-sm);
-  transition: color var(--dur-fast) var(--ease);
+  /* 下線は題と同じく、透明の線に色を入れて溶かすように出す（手触りの括り） */
+  text-decoration-line: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: var(--sp-1);
+  transition:
+    color var(--dur-fast) var(--ease),
+    text-decoration-color var(--dur) var(--ease);
 }
 
 .links a::after {
@@ -3016,6 +3137,29 @@ body[data-site] > main {
     grid-column: 1;
     grid-row: 1;
   }
+
+  /*
+    画像の無い作品の星図も同じ並べ方（文の列を左・星図を右）。星図は縦横比を持つ図なので、
+    列の高さまで伸ばさず列の縦の真ん中に置く（伸ばすと比が崩れ、ブラックホールが軌道の
+    焦点から外れる）。幅は列いっぱい——横に並べると星図は文の列の高さと重なり、縦に積んだ
+    ときの --shot-h の上限（本文を押し下げないため）は要らない
+  */
+  .detail--chart {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--sp-6);
+  }
+
+  .detail--chart > .chart {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    width: 100%;
+  }
+
+  .detail--chart > .detail__text {
+    grid-column: 1;
+    grid-row: 1;
+  }
 }
 
 /* ====================================================== 見た目のプリセット */
@@ -3131,9 +3275,12 @@ body[data-site] > main {
   }
 
   :is(.entry:has(.entry__link)):hover .entry__link {
-    text-decoration: underline;
-    text-decoration-thickness: var(--orbit-line);
-    text-underline-offset: var(--sp-2);
+    text-decoration-color: currentColor;
+  }
+
+  /* 画像の無い行は、星図の灯した天体の輪も広げる（キーボードで選んだときと同じ） */
+  :is(.entry:has(.entry__link)):hover .chart__ring {
+    scale: var(--chart-ring-grow);
   }
 
   .member:hover {
@@ -3150,18 +3297,42 @@ body[data-site] > main {
     translate: var(--sp-2) 0;
   }
 
+  /*
+    入口の番号の札。マウスを重ねられる端末では、図に重ねたとき・図の中を選んだときに出す（絵を
+    静かに保つ。天体はいつも札の場所に居るので、何も動かさずに札だけが浮かぶ）。図の上を
+    マウスが通り過ぎただけでは出さない（--label-wait だけ待つ）。出すときは番号の順に1つずつ
+    （--stagger ずつ。8つ目より後はまとめて）。押せるようになるのも出てから（allow-discrete。
+    知らないブラウザではすぐ押せる）。離すと待たずに消える。
+
+    指の端末（重ねる手が無い。この括りの外）と動きを減らす設定では、札は初めから出ている
+  */
+  @media (prefers-reduced-motion: no-preference) {
+    .system__label {
+      opacity: 0;
+      transition: opacity var(--dur) var(--ease);
+    }
+
+    .system__labels {
+      pointer-events: none;
+      transition: pointer-events 0s linear allow-discrete;
+    }
+
+    .system:is(:hover, :focus-within) .system__label {
+      opacity: 1;
+      transition-delay: calc(var(--label-wait) + min(var(--i, 0), 8) * var(--stagger));
+    }
+
+    .system:is(:hover, :focus-within) > .system__labels {
+      pointer-events: auto;
+      transition-delay: var(--label-wait);
+    }
+  }
+
+  /* 札にマウスを重ねたら、名前の列を伸ばす（キーボードで選んだときと同じ。「名前」） */
   .system__label a:hover {
+    grid-template-columns: auto minmax(1px, 1fr);
+    column-gap: var(--sp-3);
     color: var(--ink);
-  }
-
-  /* 図にマウスを重ねたら、止まった天体と札に戻す（札を読んで押せるように） */
-  .system:hover .orbit-movers {
-    opacity: 0;
-  }
-
-  .system:hover > :is(.system__bodies, .system__labels) {
-    opacity: 1;
-    pointer-events: auto;
   }
 
   /*
@@ -3170,12 +3341,7 @@ body[data-site] > main {
     ページだけが言う
   */
   .system__label a:hover .system__name {
-    position: static;
-    width: auto;
-    height: auto;
-    min-width: 0;
-    clip-path: none;
-    text-overflow: ellipsis;
+    opacity: 1;
   }
 
   .toc a:hover,
@@ -3195,12 +3361,11 @@ body[data-site] > main {
   }
 
   /*
-    素の色がもう --accent なので、ホバーで色は動かせない。下線に替える。
-    色だけに頼らない合図なので、タッチ端末で落ちても失うものが無い。
+    素の色がもう --accent なので、ホバーで色は動かせない。下線（素の .links a が引いてある
+    透明の線）に色を入れる。色だけに頼らない合図なので、タッチ端末で落ちても失うものが無い。
   */
   .links a:hover {
-    text-decoration: underline;
-    text-underline-offset: var(--sp-1);
+    text-decoration-color: currentColor;
   }
 
   .contact__mail:hover {
@@ -3251,8 +3416,14 @@ body[data-site] > main {
 */
 @media (forced-colors: active), (prefers-contrast: more) {
   .system,
-  .orbits {
+  .orbits,
+  .chart {
     display: none;
+  }
+
+  /* 作品のページの星図の列も畳む（残すと、900 以上で文の列の右半分が空く） */
+  .detail--chart {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   /* 図の区画も畳む（下の「表紙を1列に畳む」） */
@@ -3524,8 +3695,8 @@ body[data-site] > main {
 
   /*
     紙の上ではリンクは押せない。サイトを通して刷るなら全体ページ（/all）を
-    刷ること。軌道図はインクを食うだけの装飾なので、ここで落とす（/all には
-    元から出ないが、入口のページを直接刷られたときのため）。
+    刷ること。軌道図と作品の星図はインクを食うだけの装飾なので、ここで落とす（入口の
+    軌道図は /all には元から出ないが、入口のページを直接刷られたときのため）。
   */
   .top,
   .filters,
@@ -3534,8 +3705,14 @@ body[data-site] > main {
   .band,
   .cta,
   .system,
-  .orbits {
+  .orbits,
+  .chart {
     display: none;
+  }
+
+  /* 星図を落とした作品のページは1列（横向きの紙で 900 を超えても、右半分を空けない） */
+  .detail--chart {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .entry {
