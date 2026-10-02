@@ -75,12 +75,12 @@ describe('認証', () => {
     expect((await post({ 'sec-fetch-site': 'same-site' })).status).toBe(403)
     expect((await post({ referer: 'https://evil.example/page' })).status).toBe(403)
     // 同じ origin でも scheme が違えば別物（host だけを比べていたころは通っていた）
-    expect((await post({ origin: 'http://noctifex.test' })).status).toBe(403)
+    expect((await post({ origin: 'http://astlog.test' })).status).toBe(403)
 
     // 同じサイトからのもの。保存まで進む（400 は中身の検査。送り元の検査は通っている）
-    expect((await post({ origin: 'https://noctifex.test' })).status).not.toBe(403)
+    expect((await post({ origin: 'https://astlog.test' })).status).not.toBe(403)
     expect((await post({ 'sec-fetch-site': 'same-origin' })).status).not.toBe(403)
-    expect((await post({ referer: 'https://noctifex.test/admin/items/new' })).status).not.toBe(403)
+    expect((await post({ referer: 'https://astlog.test/admin/items/new' })).status).not.toBe(403)
     // 3つとも無い（ブラウザ以外）。セッションのクッキーは Lax なので、別のサイトからは付かない
     expect((await post({})).status).not.toBe(403)
   })

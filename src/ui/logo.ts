@@ -1,32 +1,31 @@
 /*
   AstLog のロゴの形（ここが正）。ページのロゴは src/ui/icons.tsx の Wordmark / HoleMark が
-  ここから直に SVG を描く。入口と締めの軌道図の真ん中のブラックホールも、同じ O を大きく
-  描いたもの（components.tsx の Hole。横線を軌道面の傾きに合わせて回し、縁の光の輪 RING と
-  縁を回る光 SPOT を足す）。素材のファイル（public/assets の astlog-wordmark.svg・
-  favicon.svg と、favicon・iPhone のホーム画面の PNG）は scripts/logo/export.mjs が
-  ここから書き出す。GitHub の Organization の顔はロゴではなく、測地線を追って焼いた
-  ブラックホールの絵（scripts/blackhole/render.py の avatar）。
+  ここから直に SVG を描く。素材のファイル（public/assets の astlog-wordmark.svg・favicon.svg と、
+  favicon・iPhone のホーム画面の PNG）は scripts/logo/export.mjs がここから書き出す。
 
   ロゴは「字で組む ΛSTLOG の O をブラックホールにしたもの」。横棒の無い A（Λ）と、
-  線の太さをそろえた幾何の大文字で、宇宙機関の字の系譜。O の位置には黒い円（影）を置き、
-  縁がくっきり光って外へやわらかく消える輪（光の縁）と、その後ろを通る横線（真横から
-  見た円盤の光）を添える。印だけのとき（favicon・404・管理画面）は、この O を1つで使う。
+  線の太さをそろえた幾何の大文字で、宇宙機関の字の系譜。O の位置には、入口と締めの軌道図の
+  真ん中と同じブラックホールの絵（BLACKHOLE_ART。光の曲がりを計算して焼いた光の絵と、その下に
+  敷く影の黒い円）を、影の半径が HOLE.core になる大きさで置く——持ち主の「AstLog の o も
+  ブラックホールのデザインに合わせて」。前は黒い円・光の縁・後ろを通る横線の記号で、入口の
+  絵と別のものに見えた。線で描き直した姿（輪のある玉）は、大きく描くと土星に見えた。印だけの
+  とき（favicon・404・管理画面・作品の星図）も、同じ絵を1つで使う。
 
   - Λ だけは塗りの形で描く。線で描くと足の切り口が脚に直角になり、片方の角が
     字の底より下へ出る。塗りなら足を水平に切れる
   - 丸い字（S・G）と尖った頂（Λ）は字の高さから少しはみ出させる（0.3）。
     そろえると、丸と尖りのほうが小さく見える
-  - 字間は字の高さの 0.34 を土台に、組み合わせごとに目で詰める。O の左右は横線の
+  - 字間は字の高さの 0.34 を土台に、組み合わせごとに目で詰める。O の左右は光の翼の
     ぶんだけ少し開ける（SHIFT）
-  - 光の縁と横線は字の外へはみ出す（ページでは字の箱は字だけで決め、SVG は overflow を
-    見せる。ファイルは枠の外を切るので、枠を光のぶん広げる）
+  - 光は字の外へはみ出す（ページでは字の箱は字だけで決め、SVG は overflow を見せる。
+    ファイルは枠の外を切るので、枠を光のぶん広げる）
 
   字の高さ 20 の格子（原点は左下、上が負）。JSX を持たない（scripts から読むため）。
 */
 
 const round = (value: number) => Math.round(value * 1000) / 1000
 
-// O の左右を開ける量（横線が L と G に触れないように）
+// O の左右を開ける量（光の翼が L と G に触れないように）
 const SHIFT = 2.2
 
 // 字の箱（上の帯・ログイン画面のワードマークは、この箱の高さで置く）
@@ -41,111 +40,55 @@ export const WORDMARK = {
 } as const
 
 /*
-  O の位置のブラックホール（字の高さ 20 の格子）。core は黒い円の半径で、前の O の
-  内側の空きと同じ大きさ。glow は光の縁が消えきる半径、line / thick は横線の半分の
-  長さと、中ほどの半分の太さ
+  O の位置のブラックホール（字の高さ 20 の格子）。core は影の黒い円の半径で、前の O の
+  内側の空きと同じ大きさ。絵はこの影の大きさに合わせて置く（holeArt）
 */
 export const HOLE = {
   cx: round(93.97 + SHIFT),
   cy: -10,
   core: 7.2,
-  glow: 13,
-  line: 17.5,
-  thick: 1.15,
 } as const
 
-// 光の縁の坂（半径に対する位置と不透明度）。内縁でくっきり立ち、外へ消える
-export const GLOW_STOPS: readonly (readonly [number, number])[] = [
-  [round(HOLE.core / HOLE.glow - 0.005), 0],
-  [round(HOLE.core / HOLE.glow), 1],
-  [round((HOLE.core + 2.2) / HOLE.glow), 0.55],
-  [1, 0],
-]
+/*
+  ブラックホールの絵（scripts/blackhole/render.py の hero が焼く）。光の曲がりを計算した姿を
+  12° から見たもので、GitHub の Organization の顔（avatar）と同じ作り。影の上へ回り込む光の
+  弧と、影の前を横切る円盤で、ひと目でブラックホールと分かる。入口と締めの軌道図の真ん中
+  （components.tsx の Hole）とロゴの O（icons.tsx の HoleArt）が同じ1枚を使う。
 
-// 横線の坂（線の長さに対する位置と不透明度）。両端で消える
-export const LINE_STOPS: readonly (readonly [number, number])[] = [
-  [0, 0],
-  [0.25, 1],
-  [0.75, 1],
-  [1, 0],
-]
+  絵は光だけの透過の WebP（明るさが不透明度。色は字の白だけ）。影は焼かず、描く側が黒い円で
+  光の下に敷く——影は真円なので、分けても重ねた姿は同じで、光だけを揺らせる。width / height は
+  絵の画素、shadow は影の半径（画素）。影は絵の真ん中。
 
-// 横線の形。両端が尖る細い帯を、中心 (cx, cy) のまわりに
-export function linePath(cx: number, cy: number): string {
-  const steps = 48
-  const top: string[] = []
-  const bottom: string[] = []
-  for (let i = 0; i <= steps; i += 1) {
-    const u = -1 + (2 * i) / steps
-    const t = HOLE.thick * Math.max(0, 1 - Math.abs(u)) ** 1.2
-    const x = round(cx + u * HOLE.line)
-    top.push(`${x} ${round(cy - t)}`)
-    bottom.unshift(`${x} ${round(cy + t)}`)
-  }
-  return `M${[...top, ...bottom].join('L')}Z`
+  URL には版（?v= はファイルの SHA-256 の頭8桁）を付け、public/_headers が1年・immutable で
+  配る。上の帯のロゴがどのページでも読むので、既定（毎回確かめる）のままだと、ページを移る
+  たびに O の光が1往復ぶん消えてから灯る。焼き直したら、render.py が書き出す影の半径と版に
+  合わせる（test/public.test.ts がファイルの寸法と版を突き合わせる）
+*/
+export const BLACKHOLE_ART = {
+  src: '/assets/blackhole.webp?v=c48dd421',
+  width: 1024,
+  height: 576,
+  shadow: 127,
+} as const
+
+// 影の半径が core になるように置いた絵の箱（中心 (cx, cy) のまわり。字の格子の単位）
+export const holeArt = (cx: number, cy: number, core: number = HOLE.core) => {
+  const width = round((BLACKHOLE_ART.width / BLACKHOLE_ART.shadow) * core)
+  const height = round((BLACKHOLE_ART.height / BLACKHOLE_ART.shadow) * core)
+  return { x: round(cx - width / 2), y: round(cy - height / 2), width, height }
 }
 
 /*
-  縁を回る光（入口と締めのブラックホールだけ。ロゴにも星図にも無い）。光の輪の外縁に沿って、
-  頭が明るく尾が消える短い弧（sweep 度）を描き、SVG ごと回す（app.css の .hole__spin）——
-  輪の一部がふっと明るくなって、輪の上を滑っていくように見える。輪より少し太く（width。
-  画面の px。描く側が vector-effect で保つ）、端は切る。弧は短く保つ（長い弧が円のまわりを
-  回ると、読み込み中のくるくるに見える）。前は光の中ほどを太い芯と厚いにじみ・丸い端で
-  描いていて、大きく描くと白い錠剤に見えた。r は弧の半径（字の高さ 20 の格子）
+  印だけのときの枠（O を真ん中に置く正方形）。MARK_HALF はその半分の幅。光の翼の淡い端
+  （影の半径の約3倍）は枠の外へ出して見せる（icons.tsx の HoleMark の overflow）——枠を翼に
+  合わせると、影が小さな点になる
 */
-export const SPOT = { r: round(HOLE.core + 0.3), width: 2.2, sweep: 40 } as const
-
-// 光の点の弧。頭は右（角 0）、尾は時計と逆回りに sweep 度（回る向きは時計回り）
-export function spotPath(): {
-  d: string
-  head: { x: number; y: number }
-  tail: { x: number; y: number }
-} {
-  const at = (degrees: number) => ({
-    x: round(SPOT.r * Math.cos((degrees * Math.PI) / 180)),
-    y: round(SPOT.r * Math.sin((degrees * Math.PI) / 180)),
-  })
-  const head = at(0)
-  const tail = at(-SPOT.sweep)
-  return { d: `M${tail.x} ${tail.y}A${SPOT.r} ${SPOT.r} 0 0 1 ${head.x} ${head.y}`, head, tail }
-}
-
-// 印だけのときの枠（O を真ん中に、横線の端まで入る正方形）。MARK_HALF はその半分の幅
 export const MARK_HALF = 19
 export const MARK_VIEWBOX = `${-MARK_HALF} ${-MARK_HALF} ${2 * MARK_HALF} ${2 * MARK_HALF}`
 
 /*
-  大きく描くとき（入口と締めのブラックホール・作品の星図。components.tsx の Hole）だけの光。
-  形はロゴの O のまま（黒い円・縁の光・後ろを通る横線）で、縁の光の質だけを上げる——
-
-  - 光の坂（LARGE_GLOW_STOPS）。ロゴの坂は黒い円の縁で真っ白に立ち上がる。小さい印では
-    それが縁の輪に見えるが、大きく描くと白い光の塗りつぶしになり、日食か電球に見えた。
-    大きいときは縁を抑え、外へ早めに薄める。抑えすぎない——光った画素が描いた画素の半分を
-    切ると、npm run check:contrast の「ブラックホールの地からの離れ」が黒い円の暗さ（地との
-    差 12）に張り付き、薄すぎて出ていないのと同じに数えられる（縁 0.62 で 18、いまの数で 27）
-  - 光の輪（RING）。黒い円の縁に沿う細い輪（光子の輪）。太さは画面の px（width。描く側が
-    vector-effect で保つ）で、どの大きさでも細い線のまま。左が明るく右へ薄れる
-    （fade。円盤の回る向きの明るさの偏り）。halo はそのまわりのにじみ
-
-  小さいロゴは今のまま——輪と光が1つに溶ける大きさでは、どちらも同じ O に見える
-*/
-export const LARGE_GLOW_STOPS: readonly (readonly [number, number])[] = [
-  [round(HOLE.core / HOLE.glow - 0.005), 0],
-  [round(HOLE.core / HOLE.glow), 0.72],
-  [round((HOLE.core + 2.2) / HOLE.glow), 0.3],
-  [1, 0],
-]
-export const RING = {
-  r: round(HOLE.core + 0.12),
-  width: 1.6,
-  halo: 5,
-  haloOpacity: 0.18,
-  fade: 0.5,
-} as const
-
-/*
-  アイコン（favicon・iPhone のホーム画面）の枠の半分。印の枠より詰め、横線の端は枠で
-  切る——16px のタブで光の輪が潰れない大きさにするため（±19 のままだと影は 3px の点）
+  アイコン（favicon・iPhone のホーム画面）の枠の半分。印の枠より詰め、光の翼の端は枠で
+  切る——16px のタブで影と光が潰れない大きさにするため（±19 のままだと影は 3px の点）
 */
 const ICON_HALF = 16
 
@@ -159,33 +102,30 @@ export const LOGO_COLORS = { ink: '#f2f2f4', ground: '#0c0c0e', core: '#000' } a
 
 /*
   素材のファイルの中身（scripts/logo/export.mjs が書き、test/public.test.ts が
-  ここと突き合わせる）
+  ここと突き合わせる）。ファイルはページの外で開かれ、/assets の絵を読みに行けないので、
+  絵を data URI で埋め込む（art は小さく描き直した WebP の base64。export.mjs が作る）
 */
-const stops = (list: readonly (readonly [number, number])[]) =>
-  list
-    .map(
-      ([at, alpha]) =>
-        `<stop offset="${at}" stop-color="${LOGO_COLORS.ink}" stop-opacity="${alpha}"/>`,
-    )
-    .join('')
-
-const holeSvg = (cx: number, cy: number, id: string) =>
-  `<defs><radialGradient id="${id}-glow" cx="${cx}" cy="${cy}" r="${HOLE.glow}" gradientUnits="userSpaceOnUse">${stops(GLOW_STOPS)}</radialGradient>` +
-  `<linearGradient id="${id}-line" x1="${round(cx - HOLE.line)}" x2="${round(cx + HOLE.line)}" gradientUnits="userSpaceOnUse">${stops(LINE_STOPS)}</linearGradient></defs>` +
-  `<path d="${linePath(cx, cy)}" fill="url(#${id}-line)"/>` +
-  `<circle cx="${cx}" cy="${cy}" r="${HOLE.glow}" fill="url(#${id}-glow)"/>` +
-  `<circle cx="${cx}" cy="${cy}" r="${HOLE.core}" fill="${LOGO_COLORS.core}"/>`
+const holeSvg = (cx: number, cy: number, art: string) => {
+  const box = holeArt(cx, cy)
+  return (
+    `<circle cx="${cx}" cy="${cy}" r="${HOLE.core}" fill="${LOGO_COLORS.core}"/>` +
+    `<image href="data:image/webp;base64,${art}" x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}"/>`
+  )
+}
 
 const svg = (viewBox: string, body: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}"><title>AstLog</title>${body}</svg>\n`
 
-// ワードマークのファイル。暗い地に貼る素材で、枠は光の縁が上下に出るぶん広い
-export const wordmarkSvg = () => {
-  const top = Math.min(BOX.top, HOLE.cy - HOLE.glow)
-  const bottom = Math.max(BOX.bottom, HOLE.cy + HOLE.glow)
+// 光の見える上下の広がり（影の半径に対して。上へ回り込む弧と下の輪。絵の不透明度が 2% を切る所）
+const LIGHT_REACH = { up: 1.9, down: 1.5 }
+
+// ワードマークのファイル。暗い地に貼る素材で、枠は光が上下に出るぶん広い
+export const wordmarkSvg = (art: string) => {
+  const top = Math.min(BOX.top, round(HOLE.cy - HOLE.core * LIGHT_REACH.up))
+  const bottom = Math.max(BOX.bottom, round(HOLE.cy + HOLE.core * LIGHT_REACH.down))
   return svg(
     `0 ${top} ${BOX.width} ${round(bottom - top)}`,
-    holeSvg(HOLE.cx, HOLE.cy, 'wm') +
+    holeSvg(HOLE.cx, HOLE.cy, art) +
       `<path d="${WORDMARK.lambda}" fill="${LOGO_COLORS.ink}"/>` +
       `<path d="${WORDMARK.strokes}" fill="none" stroke="${LOGO_COLORS.ink}" stroke-width="${WORDMARK.stroke}"/>`,
   )
@@ -193,14 +133,14 @@ export const wordmarkSvg = () => {
 
 /*
   アイコン（favicon.svg と、favicon・iPhone のホーム画面の PNG）。どれも同じ1枚で、
-  地の色の正方形に印を載せる——光は白なので、透明のままだと明るいタブでは輪も横線も
+  地の色の正方形に印を載せる——光は白なので、透明のままだと明るいタブでは光が
   白に溶け、黒い点だけになる
 */
-export const iconSvg = () => {
+export const iconSvg = (art: string) => {
   const edge = 2 * ICON_HALF
   return svg(
     `${-ICON_HALF} ${-ICON_HALF} ${edge} ${edge}`,
     `<rect x="${-ICON_HALF}" y="${-ICON_HALF}" width="${edge}" height="${edge}" fill="${LOGO_COLORS.ground}"/>` +
-      holeSvg(0, 0, 'mk'),
+      holeSvg(0, 0, art),
   )
 }

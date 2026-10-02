@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   bodyIndexOf,
   bodyItems,
+  CAMERA,
   CHART_FRAME,
   CONTACT_FRAME,
+  COSMOS,
+  cosmosMap,
   ELEVATION,
   HERO_FRAME,
   interleaveKinds,
@@ -12,10 +15,14 @@ import {
   LABEL_SIZE,
   type LabelSide,
   MAX_ORBITS,
+  NEBULA,
+  nebulaMap,
   orbitMap,
   placeLabels,
+  STARDUST_CLASSES,
   TILT,
 } from '../src/lib/orbits'
+import { BLACKHOLE_ART } from '../src/ui/logo'
 
 /*
   入口と締めの軌道図の形（src/lib/orbits.ts）。描いた姿そのもの（線が字に
@@ -102,7 +109,7 @@ describe('入口の軌道図の形', () => {
     expect(map.bodies).toHaveLength(7)
     expect(map.bodies.filter((body) => body.kind === 'app')).toHaveLength(5)
     expect(map.bodies.filter((body) => body.kind === 'work')).toHaveLength(2)
-    expect(map.orbits).toHaveLength(7)
+    expect(map.orbits).toHaveLength(Math.min(7, MAX_ORBITS))
   })
 
   it('少ないほうの区分を均等に散らす（業務の軌道が1か所に固まらない）', () => {
@@ -215,21 +222,151 @@ describe('入口の軌道図の形', () => {
     }
   })
 
-  it('破線（業務）の軌道に乗るのは業務の天体だけ。区分が混ざる軌道は実線', () => {
-    // 作品が軌道の本数より多いと、1本に2つ以上が乗る。最初の天体で線を決めていたころ、
-    // 破線の軌道に個人開発の点が乗っていた
-    for (const counts of [
-      { app: 8, work: 2 },
-      { app: 14, work: 6 },
-      { app: 3, work: 9 },
-    ]) {
-      const map = orbitMap(counts, HERO_FRAME)
-      const n = map.orbits.length
+  it('軌道は透視で見る。手前は大きく広がり、奥はブラックホールの後ろで詰まる', () => {
+    /*
+      どの距離も同じ大きさで見ていたころは、同じ形の輪が等しく並び、的か図面に見えた（持ち主の
+      「軌道がださい。もっと壮大に」）。カメラの距離は枠の outer に比例する（星図のように枠ごと
+      縮めても同じ形）
+    */
+    expect(CAMERA).toBeGreaterThan(1.5)
+    expect(CAMERA).toBeLessThan(4)
+    for (const frame of [HERO_FRAME, CONTACT_FRAME]) {
+      const map = orbitMap({ app: 5, work: 2 }, frame)
+      // いちばん手前は、いちばん奥より焦点から遠くに写る（外の軌道ほど差が大きい）
       map.orbits.forEach((orbit, i) => {
-        const riding = map.bodies.filter((_, j) => j % n === i).map((body) => body.kind)
-        if (orbit.kind === 'work') expect(riding.every((kind) => kind === 'work')).toBe(true)
-        if (riding.every((kind) => kind === 'work')) expect(orbit.kind).toBe('work')
+        const { cy, ry } = ellipseOf(orbit.d)
+        const ratio = (cy + ry - frame.focus.y) / (frame.focus.y - (cy - ry))
+        expect(ratio).toBeGreaterThan(i === map.orbits.length - 1 ? 2.5 : 1.5)
       })
+      // 隣の軌道との間は、手前のほうが奥より広い
+      const ellipses = map.orbits.map((orbit) => ellipseOf(orbit.d))
+      ellipses.slice(1).forEach((outer, i) => {
+        const inner = ellipses[i] as ReturnType<typeof ellipseOf>
+        const below = outer.cy + outer.ry - (inner.cy + inner.ry)
+        const above = inner.cy - inner.ry - (outer.cy - outer.ry)
+        expect(below).toBeGreaterThan(above)
+      })
+    }
+  })
+
+  it('軌道は光の帯と星屑で描く。帯は手前ほど太く明るい', () => {
+    /*
+      細い線だけのころは、同じ形の輪が並んだ図面に見えた。帯は軌道ごとに区間に分け、手前の
+      区間ほど太く濃い（透視の手がかり）。奥の区間は奥の層（ブラックホールの後ろ）に描く
+    */
+    const map = orbitMap({ app: 5, work: 2 }, HERO_FRAME)
+    expect(map.bands.length).toBeGreaterThanOrEqual(map.orbits.length * 12)
+    const near = map.bands.filter((band) => band.side === 'near')
+    const far = map.bands.filter((band) => band.side === 'far')
+    expect(near.length).toBeGreaterThan(0)
+    expect(far.length).toBeGreaterThan(0)
+    const widest = (bands: typeof map.bands) => Math.max(...bands.map((band) => band.w))
+    const brightest = (bands: typeof map.bands) => Math.max(...bands.map((band) => band.o))
+    expect(widest(near)).toBeGreaterThan(widest(far) * 1.5)
+    expect(brightest(near)).toBeGreaterThan(brightest(far))
+    // 星屑: 明るさの段ごとの点の並び。奥と手前の両方に散り、読み込むたびに同じ
+    const dots = (levels: string[]) => levels.join('').match(/M[\d.]+ [\d.]+h0/g) ?? []
+    expect(map.stardust.far).toHaveLength(STARDUST_CLASSES)
+    expect(map.stardust.near).toHaveLength(STARDUST_CLASSES)
+    expect(dots(map.stardust.far).length).toBeGreaterThan(100)
+    expect(dots(map.stardust.near).length).toBeGreaterThan(dots(map.stardust.far).length)
+    expect(orbitMap({ app: 5, work: 2 }, HERO_FRAME).stardust).toEqual(map.stardust)
+    // 入口と締めは同じ星屑（焦点の高さのずれだけ動く）
+    const shift = CONTACT_FRAME.focus.y - HERO_FRAME.focus.y
+    const heroDots = dots([...map.stardust.far, ...map.stardust.near])
+    const contactMap = orbitMap({ app: 5, work: 2 }, CONTACT_FRAME)
+    const contactDots = dots([...contactMap.stardust.far, ...contactMap.stardust.near])
+    expect(contactDots).toHaveLength(heroDots.length)
+    const first = (list: string[]) => (list[0]?.match(/[\d.]+/g) ?? []).map(Number)
+    const [hx = 0, hy = 0] = first(heroDots)
+    const [cx = 0, cy = 0] = first(contactDots)
+    expect(Math.abs(cx - hx)).toBeLessThan(0.11)
+    expect(Math.abs(cy - shift - hy)).toBeLessThan(0.11)
+    // 作品が0件なら、帯も星屑も無い
+    const empty = orbitMap({ app: 0, work: 0 }, HERO_FRAME)
+    expect(empty.bands).toEqual([])
+    expect(dots([...empty.stardust.far, ...empty.stardust.near])).toEqual([])
+  })
+
+  it('軌道は区分を持たない。区分は天体が持つ（業務は輪のある惑星）', () => {
+    /*
+      業務の軌道を破線にしていたころは、線が図面に見えた（持ち主の「線と点が図面っぽい」）。
+      作品が軌道の本数より多いと1本に2つ以上が乗り、区分の混ざる軌道の線も決めかねた
+    */
+    const map = orbitMap({ app: 3, work: 9 }, HERO_FRAME)
+    for (const orbit of map.orbits) expect(Object.keys(orbit).sort()).toEqual(['d', 'far', 'near'])
+    expect(map.bodies.filter((body) => body.kind === 'work')).toHaveLength(9)
+    // 輪は軌道面と同じ角度から見た楕円を、少し起こして傾ける（水平のままだと「目」の記号に見えた）
+    expect(map.ring.ry / map.ring.rx).toBeCloseTo(Math.sin((ELEVATION * Math.PI) / 180), 1)
+    expect(Math.abs(map.ring.tilt)).toBeGreaterThanOrEqual(10)
+    expect(Math.abs(map.ring.tilt)).toBeLessThanOrEqual(35)
+    // 輪の大きさは星系と一緒に伸び縮みする（ブラックホールの影の大きさには依らない）
+    expect(orbitMap({ app: 3, work: 9 }, CHART_FRAME).ring.rx / map.ring.rx).toBeCloseTo(
+      CHART_FRAME.inner / HERO_FRAME.inner,
+      1,
+    )
+  })
+
+  it('軌道は水平に並び、外ほど間を広げる', () => {
+    /*
+      面を −8° 傾けていたころは、狙った傾きではなく曲がって見えた（持ち主の「傾きが中途
+      半端」）。14° の低い角度から見た7本を等しい間隔で並べていたころは、レコード盤か土星の
+      輪に見えた（「平たく詰まって見える」）
+    */
+    expect(TILT).toBe(0)
+    expect(ELEVATION).toBeGreaterThanOrEqual(24)
+    expect(MAX_ORBITS).toBeLessThanOrEqual(5)
+    const ellipses = orbitMap({ app: 5, work: 2 }, HERO_FRAME).orbits.map((orbit) =>
+      ellipseOf(orbit.d),
+    )
+    for (const ellipse of ellipses) expect(ellipse.t).toBe(0)
+    const gaps = ellipses.slice(1).map((outer, i) => outer.rx - (ellipses[i]?.rx ?? 0))
+    for (let i = 1; i < gaps.length; i += 1) {
+      expect(gaps[i] ?? 0).toBeGreaterThan(gaps[i - 1] ?? 0)
+    }
+  })
+
+  it('星系は枠に収まる。いちばん外側の軌道は枠の幅いっぱい', () => {
+    /*
+      透視で手前が広がるぶん星系を縮めて、外側の軌道の左右の端が枠の縁（MARGIN 14）に来る。
+      入口と締めは同じ倍率（幅で決まる）で、上下は枠の中に収まる
+    */
+    for (const frame of [HERO_FRAME, CONTACT_FRAME]) {
+      const map = orbitMap({ app: 5, work: 2 }, frame)
+      const outer = ellipseOf(map.orbits.at(-1)?.d ?? '')
+      expect(outer.cx - outer.rx).toBeCloseTo(14, 0)
+      expect(outer.cx + outer.rx).toBeCloseTo(frame.width - 14, 0)
+      expect(outer.cy - outer.ry).toBeGreaterThanOrEqual(13)
+      expect(outer.cy + outer.ry).toBeLessThanOrEqual(frame.height - 13)
+    }
+    // 入口は星系の上下の真ん中を枠の真ん中にそろえる（上と下の残りは番号の札の場所）
+    const hero = ellipseOf(orbitMap({ app: 5, work: 2 }, HERO_FRAME).orbits.at(-1)?.d ?? '')
+    expect(Math.abs(hero.cy - hero.ry - (HERO_FRAME.height - hero.cy - hero.ry))).toBeLessThan(4)
+    // 締めの枠は星系に MARGIN を足しただけの高さ
+    const contact = ellipseOf(orbitMap({ app: 5, work: 2 }, CONTACT_FRAME).orbits.at(-1)?.d ?? '')
+    expect(contact.cy - contact.ry).toBeCloseTo(14, 0)
+    expect(contact.cy + contact.ry).toBeLessThanOrEqual(CONTACT_FRAME.height - 13)
+    /*
+      ブラックホールの影は小さく、光は星系の幅の 1/5 から 1/3 のあいだ。影の半径が 76 のころは
+      平らな黒い円が見出しより先に目に入り、45 でも星屑の円盤より目立った（持ち主の「主張が
+      強すぎる」）。影も光も小さい印だったころ（星系の幅の 1/9 ほど）は軌道ばかりが目に付いた
+      （持ち主の「ブラックホールとの釣り合い」）
+    */
+    expect(HERO_FRAME.hole / HERO_FRAME.outer).toBeLessThan(1 / 10)
+    const art = (BLACKHOLE_ART.width / BLACKHOLE_ART.shadow) * HERO_FRAME.hole
+    expect(art / (2 * HERO_FRAME.outer)).toBeGreaterThan(1 / 5)
+    expect(art / (2 * HERO_FRAME.outer)).toBeLessThan(1 / 3)
+  })
+
+  it('天体は手前ほど大きい（奥行きの倍率は 1 まで）', () => {
+    const map = orbitMap({ app: 9, work: 3 }, HERO_FRAME)
+    const sorted = [...map.bodies].sort((a, b) => a.y - b.y)
+    for (let i = 1; i < sorted.length; i += 1) {
+      expect(sorted[i]?.scale ?? 0).toBeGreaterThanOrEqual(sorted[i - 1]?.scale ?? 0)
+    }
+    for (const body of map.bodies) {
+      expect(body.scale).toBeGreaterThan(0.5)
+      expect(body.scale).toBeLessThanOrEqual(1)
     }
   })
 
@@ -331,11 +468,12 @@ describe('入口の軌道図の形', () => {
   it('線の濃さの坂は、軌道面の奥から焦点を通って手前へ。どの軌道も坂の中に入る', () => {
     const map = orbitMap({ app: 5, work: 2 }, HERO_FRAME)
     const { x1, y1, x2, y2 } = map.depth
-    // 奥が上、手前が下。両端の真ん中が焦点
+    // 奥が上、手前が下。焦点は両端を結ぶ線の上（透視で手前の端のほうが遠い）
     expect(y1).toBeLessThan(HERO_FRAME.focus.y)
     expect(y2).toBeGreaterThan(HERO_FRAME.focus.y)
-    expect(Math.abs((x1 + x2) / 2 - HERO_FRAME.focus.x)).toBeLessThan(0.2)
-    expect(Math.abs((y1 + y2) / 2 - HERO_FRAME.focus.y)).toBeLessThan(0.2)
+    expect(y2 - HERO_FRAME.focus.y).toBeGreaterThan(HERO_FRAME.focus.y - y1)
+    const cross = (HERO_FRAME.focus.x - x1) * (y2 - y1) - (HERO_FRAME.focus.y - y1) * (x2 - x1)
+    expect(Math.abs(cross) / Math.hypot(x2 - x1, y2 - y1)).toBeLessThan(0.2)
     // 奥と手前を分ける交線（画面の中の傾き TILT）と直交する
     const along = { x: Math.cos((TILT * Math.PI) / 180), y: Math.sin((TILT * Math.PI) / 180) }
     const span = Math.hypot(x2 - x1, y2 - y1)
@@ -406,8 +544,15 @@ describe('動き続けるもの', () => {
       expect(grain.delay).toBeLessThanOrEqual(0)
       expect(Math.abs(grain.delay)).toBeLessThanOrEqual(grain.dur)
     }
-    // 面の潰しと傾きは軌道と同じ（粒は軌道と同じ面を落ちる）
-    expect(map.plane).toContain(`rotate(${TILT}) scale(1 ${Math.round(squash * 1000) / 1000})`)
+    /*
+      面の潰しと傾きは軌道と同じ（粒は軌道と同じ面を落ちる）。透視は SVG の変換で書けないので、
+      焦点での縮みと潰しの平行の写し（横と縦の倍率の比が sin(ELEVATION)）
+    */
+    const [sx = 0, sy = 0] = (map.plane.match(/scale\(([\d.]+) ([\d.]+)\)/) ?? [])
+      .slice(1)
+      .map(Number)
+    expect(map.plane).toContain(`rotate(${TILT}) scale(`)
+    expect(sy / sx).toBeCloseTo(squash, 2)
     // 作品が0件でも、ブラックホールは粒を吸い込む
     const empty = orbitMap({ app: 0, work: 0 }, HERO_FRAME)
     expect(empty.dust.length).toBeGreaterThan(0)
@@ -518,8 +663,31 @@ describe('番号の札', () => {
     }
   })
 
-  it('星図の枠は締めの枠と同じ（入口と同じ星系を背の低い横長に）', () => {
-    expect(CHART_FRAME).toBe(CONTACT_FRAME)
+  it('星図の星系は締めの星系をそのまま縮めたもの。天体は同じ向きに並ぶ', () => {
+    /*
+      星図は一覧のサムネイルと同じ背の低い横長（--chart-ratio）に収めるため、締めの星系を
+      縮める。軌道・ブラックホール・天体を置かない矩形を同じ比で縮めるので、天体は入口と
+      締めの天体と同じ向きに並ぶ（同じ件数なら同じ絵）
+    */
+    const s = CHART_FRAME.hole / CONTACT_FRAME.hole
+    expect(s).toBeLessThan(1)
+    expect(CHART_FRAME.width).toBe(CONTACT_FRAME.width)
+    for (const key of ['inner', 'outer'] as const) {
+      expect(CHART_FRAME[key] / CONTACT_FRAME[key]).toBeCloseTo(s, 3)
+    }
+    for (const counts of [
+      { app: 1, work: 0 },
+      { app: 5, work: 2 },
+      { app: 14, work: 6 },
+    ]) {
+      const chart = orbitMap(counts, CHART_FRAME)
+      const contact = orbitMap(counts, CONTACT_FRAME)
+      chart.bodies.forEach((body, j) => {
+        const same = contact.bodies[j] ?? body
+        expect(body.x - CHART_FRAME.focus.x).toBeCloseTo((same.x - CONTACT_FRAME.focus.x) * s, 0)
+        expect(body.y - CHART_FRAME.focus.y).toBeCloseTo((same.y - CONTACT_FRAME.focus.y) * s, 0)
+      })
+    }
   })
 
   /*
@@ -549,7 +717,7 @@ describe('番号の札', () => {
   }
 
   it('番号の札は枠の中に収まり、ブラックホールに掛からない。どの件数でも', () => {
-    for (let total = 1; total <= 12; total += 1) {
+    for (let total = 1; total <= 20; total += 1) {
       for (let work = 0; work <= total; work += 1) {
         const map = orbitMap({ app: total - work, work }, frame)
         const sides = placeLabels(frame, map.bodies)
@@ -566,8 +734,12 @@ describe('番号の札', () => {
     }
   })
 
-  it('番号の札どうしは重ならない（12件まで）', () => {
-    for (let total = 1; total <= 12; total += 1) {
+  it('番号の札どうしは重ならない（20件まで）', () => {
+    /*
+      作品が軌道の本数より多いと、同じ軌道に2つ目が乗る。黄金角の列の続きのままだと、本数 5 では
+      1つ目からたった 32.5° の所に来て札が重なった（orbits.ts の ROUND_SPREAD）
+    */
+    for (let total = 1; total <= 20; total += 1) {
       for (let work = 0; work <= total; work += 1) {
         const map = orbitMap({ app: total - work, work }, frame)
         const sides = placeLabels(frame, map.bodies)
@@ -579,5 +751,89 @@ describe('番号の札', () => {
         })
       }
     }
+  })
+})
+
+/*
+  星雲と星空（orbits.ts の nebulaMap / cosmosMap。描くのは components.tsx の Nebula / Cosmos）。
+  雲の質感は描く側のフィルタが付けるので、ここで見るのは塊と星の置き場所だけ
+*/
+describe('星雲と星空', () => {
+  // 回した楕円の外接の箱
+  const extentOf = (lobe: { cx: number; cy: number; rx: number; ry: number; rot: number }) => {
+    const t = (lobe.rot * Math.PI) / 180
+    const hx = Math.hypot(lobe.rx * Math.cos(t), lobe.ry * Math.sin(t))
+    const hy = Math.hypot(lobe.rx * Math.sin(t), lobe.ry * Math.cos(t))
+    return { x0: lobe.cx - hx, x1: lobe.cx + hx, y0: lobe.cy - hy, y1: lobe.cy + hy }
+  }
+
+  it('星雲は読み込むたびに同じ。件数にも枠にも依らない1枚の箱', () => {
+    expect(nebulaMap()).toEqual(nebulaMap())
+    expect(nebulaMap()).toMatchObject(NEBULA)
+    // 色の役は3色と明るい芯と塵。暗い塵の帯は光る塊の上に重ねる（最後）
+    const tones = nebulaMap().lobes.map((lobe) => lobe.tone)
+    for (const tone of ['a', 'b', 'c', 'ink', 'dust']) expect(tones).toContain(tone)
+    expect(tones.slice(tones.indexOf('dust')).every((tone) => tone === 'dust')).toBe(true)
+  })
+
+  it('どの塊も箱の中で消えきる（箱の縁で雲を断ち切らない）', () => {
+    for (const lobe of nebulaMap().lobes) {
+      const box = extentOf(lobe)
+      expect(box.x0, JSON.stringify(lobe)).toBeGreaterThanOrEqual(0)
+      expect(box.x1, JSON.stringify(lobe)).toBeLessThanOrEqual(NEBULA.width)
+      expect(box.y0, JSON.stringify(lobe)).toBeGreaterThanOrEqual(0)
+      expect(box.y1, JSON.stringify(lobe)).toBeLessThanOrEqual(NEBULA.height)
+    }
+  })
+
+  it('星雲はブラックホールのまわりに広がる。箱の真ん中を、いちばん大きい塊が包む', () => {
+    // 描く側は箱の真ん中をブラックホールの位置に置く（app.css の .cosmos__nebula）
+    const [haze] = nebulaMap().lobes
+    const box = extentOf(haze ?? { cx: 0, cy: 0, rx: 0, ry: 0, rot: 0 })
+    expect(box.x0).toBeLessThan(NEBULA.width / 2 - 400)
+    expect(box.x1).toBeGreaterThan(NEBULA.width / 2 + 400)
+    expect(box.y0).toBeLessThan(NEBULA.height / 2 - 300)
+    expect(box.y1).toBeGreaterThan(NEBULA.height / 2 + 300)
+  })
+
+  it('星空は読み込むたびに同じ。視野の中に、暗い星ほど多く置く。光芒と瞬きは一部だけ', () => {
+    const map = cosmosMap()
+    expect(cosmosMap()).toEqual(map)
+    expect(map.stars.length).toBeGreaterThan(200)
+    for (const star of map.stars) {
+      expect(star.x).toBeGreaterThanOrEqual(0)
+      expect(star.x).toBeLessThanOrEqual(COSMOS.width)
+      expect(star.y).toBeGreaterThanOrEqual(0)
+      expect(star.y).toBeLessThanOrEqual(COSMOS.height)
+      if (star.twinkle) {
+        expect(star.twinkle.delay).toBeLessThanOrEqual(0)
+        expect(Math.abs(star.twinkle.delay)).toBeLessThanOrEqual(star.twinkle.dur)
+      }
+    }
+    const faint = map.stars.filter((star) => star.o < 0.5).length
+    expect(faint).toBeGreaterThan(map.stars.length / 2)
+    const glints = map.stars.filter((star) => star.glint)
+    expect(glints.length).toBeGreaterThanOrEqual(4)
+    expect(glints.length).toBeLessThanOrEqual(8)
+    // 光芒はいちばん明るい星に
+    const dimmestGlint = Math.min(...glints.map((star) => star.o))
+    expect(map.stars.filter((star) => !star.glint).every((star) => star.o <= dimmestGlint)).toBe(
+      true,
+    )
+    const share = map.stars.filter((star) => star.twinkle).length / map.stars.length
+    expect(share).toBeGreaterThan(0.1)
+    expect(share).toBeLessThan(0.35)
+  })
+
+  it('流れ星は数本。視野の上のほうから、遅れを散らして流れる', () => {
+    const { meteors } = cosmosMap()
+    expect(meteors.length).toBeGreaterThanOrEqual(2)
+    expect(meteors.length).toBeLessThanOrEqual(5)
+    for (const meteor of meteors) {
+      expect(meteor.y).toBeLessThan(COSMOS.height / 3)
+      expect(meteor.delay).toBeLessThanOrEqual(0)
+      expect(Math.abs(meteor.delay)).toBeLessThan(meteor.dur)
+    }
+    expect(new Set(meteors.map((meteor) => meteor.dur)).size).toBe(meteors.length)
   })
 })

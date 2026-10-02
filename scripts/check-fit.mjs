@@ -20,8 +20,8 @@
     (3) 切られた要素が無い  overflow が hidden / clip の祖先の外へ出ている要素も、
                           自分の中身（字）を hidden / clip で切っている箱も無い
                           （行止め line-clamp・1行で末尾を省く ellipsis・読み上げ用の
-                          1px の箱・SVG の中は除く。SVG の箱そのもの——ロゴ・軌道図・
-                          アイコン——は測る）
+                          1px の箱・SVG の中・星空 .cosmos の中は除く。SVG の箱そのもの
+                          ——ロゴ・軌道図・アイコン——と星空の箱は測る）
     (4) h1 がちょうど1つ   1ページ = 1ドキュメント（WCAG 1.3.1）
     (5) 帯の場所           上の帯が本文の上、足元が本文の下
     (6) 帯の貼り付け       上の帯の position が sticky。本文の下に画面3つぶんの空きを
@@ -99,7 +99,24 @@ import { chromium } from 'playwright'
 import { devServer, ROOT, scratchState } from './lib/dev-server.mjs'
 import { fixture, seedBlocks } from './lib/fit-fixture.mjs'
 import { keysOf } from './lib/theme.mjs'
+import { importTs } from './lib/ts-import.mjs'
 import { DESIGN_SIZES } from './lib/viewports.mjs'
+
+/*
+  入口の枠の焦点（ブラックホールの置き場所）と、そのまわりの天体と札を置かない矩形（clear。
+  ブラックホールの影と光が乗る）を、枠に対する割合で。src/lib/orbits.ts の HERO_FRAME を
+  そのまま読む——焦点は枠の真ん中より上にある（軌道は焦点より手前へ深く回るので、星系の上下の
+  真ん中を枠の真ん中にそろえる）。写すと、焦点を動かした日に検査だけが古い所を測る
+*/
+const { HERO_FRAME } = await importTs('src/lib/orbits.ts')
+const FOCUS = {
+  x: HERO_FRAME.focus.x / HERO_FRAME.width,
+  y: HERO_FRAME.focus.y / HERO_FRAME.height,
+}
+const CLEAR = {
+  x: HERO_FRAME.clear.x / HERO_FRAME.width,
+  y: HERO_FRAME.clear.y / HERO_FRAME.height,
+}
 
 // 設計サイズ（390 と 768 は指で測る）。一覧と理由は scripts/lib/viewports.mjs
 const VIEWPORTS = DESIGN_SIZES
@@ -115,7 +132,7 @@ const SLACK = 1
 const ANCHORED = 'main > section:first-child:not(.orbital)'
 
 // src/lib/auth.ts の SESSION_COOKIE と sessionKey（SHA-256 の16進）と同じ
-const SESSION_COOKIE = 'nx_session'
+const SESSION_COOKIE = 'astlog_session'
 
 /*
   ログインした姿のためのセッション。使い捨ての D1 に owner を1人と、その
@@ -196,7 +213,7 @@ const measure = ([typeface, cfg]) => {
     着いたときの動き（入口のブラックホールが大きく灯り、軌道が回って収まる）は
     終わらせてから測る。測るのは止まった版面で、動きの途中の箱の位置ではない
     （途中の姿の読みやすさは check:contrast が測る）。終わらない動き（軌道を流れる光や
-    ブラックホールの縁を回る光）は finish() できない（投げる）ので、外して止まった姿に戻す
+    ブラックホールの光の揺らぎ）は finish() できない（投げる）ので、外して止まった姿に戻す
   */
   for (const animation of document.getAnimations()) {
     if (Number.isFinite(animation.effect.getComputedTiming().endTime)) animation.finish()
@@ -292,6 +309,14 @@ const measure = ([typeface, cfg]) => {
     */
     const drawing = el.tagName.toLowerCase() === 'svg'
     if (drawing) skipped.add(el)
+    /*
+      星空（入口と締めの .cosmos）の中も測らない。本文の幅いっぱいに敷く飾りの背景で、
+      中の星雲は図より大きく置いて星空の箱で切り取るのが決まり（app.css の .cosmos__nebula）。
+      星空の箱そのものは、画面の中に居て祖先に切られていないことを測る（自分で中身を切って
+      いるのは決まりどおりなので、下の「自分の中身を切っている箱」には数えない）
+    */
+    const backdrop = el.classList.contains('cosmos')
+    if (backdrop) skipped.add(el)
     if (rect.width === 0 || rect.height === 0 || style.visibility === 'hidden') continue
     if (rect.right > innerWidth + slack || rect.left < -slack) {
       wide.push(`${nameOf(el)} ${round(rect.left)}〜${round(rect.right)}px`)
@@ -307,6 +332,7 @@ const measure = ([typeface, cfg]) => {
     */
     if (
       !drawing &&
+      !backdrop &&
       clips(style) &&
       style.textOverflow !== 'ellipsis' &&
       (el.scrollHeight > el.clientHeight + slack || el.scrollWidth > el.clientWidth + slack)
@@ -363,25 +389,34 @@ const measure = ([typeface, cfg]) => {
   }
 
   /*
-    (10) 入口の軌道図。ブラックホールは焦点（入口の枠の真ん中）に座る——箱は
-    回してあるが、回る中心が箱の真ん中なので、外接の箱の真ん中が焦点。札が出ている
-    （枠が LABEL_MIN_WIDTH 以上）ときは、札どうしと、札と光の縁が重ならず、札が枠の中に
-    収まる。札の箱は字の箱（リンク）そのもの（名前は重ねたときだけ出るので、ふだんは番号）
+    (10) 入口の軌道図。ブラックホールは焦点（入口の枠の HERO_FRAME の focus。cfg.focus は枠に
+    対する割合）に座る——箱は回してあるが、回る中心が箱の真ん中なので、外接の箱の真ん中が
+    焦点。札が出ている
+    （枠が LABEL_MIN_WIDTH 以上）ときは、札どうしと、札とブラックホールのまわりの矩形（HERO_FRAME
+    の clear。影と光が乗る。cfg.clear は枠に対する割合）が重ならず、札が枠の中に収まる。札の箱は
+    字の箱（リンク）そのもの（名前は重ねたときだけ出るので、ふだんは番号）
   */
   const system = document.querySelector('.system')
   if (system && getComputedStyle(system).display !== 'none') {
     const box = system.getBoundingClientRect()
     const hole = system.querySelector('.hole')?.getBoundingClientRect()
-    // 光の縁の円（.hole__light の circle）の外接の箱。札が掛かってはいけない所
-    let star = null
+    // ブラックホールのまわりの矩形。札が掛かってはいけない所
+    const core = {
+      left: box.left + box.width * (cfg.focus.x - cfg.clear.x),
+      right: box.left + box.width * (cfg.focus.x + cfg.clear.x),
+      top: box.top + box.height * (cfg.focus.y - cfg.clear.y),
+      bottom: box.top + box.height * (cfg.focus.y + cfg.clear.y),
+    }
     if (hole) {
-      const dx = (hole.left + hole.right) / 2 - (box.left + box.right) / 2
-      const dy = (hole.top + hole.bottom) / 2 - (box.top + box.bottom) / 2
+      const dx = (hole.left + hole.right) / 2 - (box.left + box.width * cfg.focus.x)
+      const dy = (hole.top + hole.bottom) / 2 - (box.top + box.height * cfg.focus.y)
       if (Math.abs(dx) > slack || Math.abs(dy) > slack) {
         problems.push(`ブラックホールが焦点から ${round(dx)}, ${round(dy)}px ずれている`)
       }
-      star = system.querySelector('.hole__light circle')?.getBoundingClientRect() ?? null
-      if (!star) problems.push('入口のブラックホールに光の縁（.hole__light の circle）が無い')
+      const art = system.querySelector('.hole__art')
+      if (!art?.complete || !art.naturalWidth) {
+        problems.push('入口のブラックホールの絵（.hole__art）が読めていない')
+      }
     } else {
       problems.push('入口の軌道図にブラックホール（.hole）が無い')
     }
@@ -401,8 +436,8 @@ const measure = ([typeface, cfg]) => {
       ) {
         problems.push(`軌道図の札「${one.name}」が枠の外へ出ている`)
       }
-      if (star && overlap(rect, star) > slack) {
-        problems.push(`軌道図の札「${one.name}」がブラックホールの光の縁に重なる`)
+      if (overlap(rect, core) > slack) {
+        problems.push(`軌道図の札「${one.name}」がブラックホールのまわりの矩形に重なる`)
       }
       for (const other of labels.slice(i + 1)) {
         if (overlap(rect, other.rect) > slack) {
@@ -628,7 +663,7 @@ async function measureRun(browser, base, run, typefaces) {
         for (const typeface of typefaces) {
           const found = await page.evaluate(measure, [
             typeface,
-            { slack: SLACK, anchored: ANCHORED },
+            { slack: SLACK, anchored: ANCHORED, focus: FOCUS, clear: CLEAR },
           ])
           checked += 1
           const label = `${typeface} ${where} ${path}`

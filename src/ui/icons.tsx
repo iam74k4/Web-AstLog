@@ -3,150 +3,38 @@
   場所の文字色になる。
 */
 
-import {
-  GLOW_STOPS,
-  HOLE,
-  LINE_STOPS,
-  linePath,
-  MARK_VIEWBOX,
-  RING,
-  SPOT,
-  spotPath,
-  WORDMARK,
-} from './logo'
+import { BLACKHOLE_ART, HOLE, holeArt, MARK_VIEWBOX, WORDMARK } from './logo'
 
 /*
-  ロゴのブラックホール（O の位置の、光の縁・横線・黒い円）。形は src/ui/logo.ts が正。
-  色は currentColor（光と横線）と CSS の --hole-core（黒い円。app.css の .logo-core）。
-  グラデーションの id は置く部品ごとに変える（ワードマークと印を同じページに置いたとき、
-  id が重なると片方の光が消える。いま並べているページは無いが、並べた日に黙って消えない）。
+  ロゴの O のブラックホール。入口と締めの軌道図の真ん中と同じ絵（logo.ts の BLACKHOLE_ART）を、
+  影の黒い円（CSS の --hole-core。app.css の .logo-core）の上に、影の半径が HOLE.core になる
+  大きさで置く。絵は光だけの透過の WebP で、/assets から読む（入口と同じ1枚。版つきの URL で
+  1年持つので、ページを移っても取り直さない。CSP の img-src 'self' の中）。
 
-  光（HoleLight）と黒い円（HoleCore）を分けて出すのは、入口と締めのブラックホール
-  （components.tsx の Hole）がそのあいだに縁の光の輪（HoleRing）と縁を回る光（HoleSpot）を
-  挟むため。stops は光の坂で、大きく描くときは logo.ts の LARGE_GLOW_STOPS を渡す
+  強制色のモードでは絵の色を変えられない（白い光が明るい地に溶ける）ので、app.css が絵を隠して
+  影の円を字の色の輪にする——O の字の形だけは残る。輪の太さは字の線と同じ（stroke-width。
+  ふだんは stroke が無いので引かれない）
 */
-export const HoleLight = ({
-  cx,
-  cy,
-  id,
-  stops = GLOW_STOPS,
-}: {
-  cx: number
-  cy: number
-  id: string
-  stops?: readonly (readonly [number, number])[]
-}) => (
-  <>
-    <defs>
-      <radialGradient
-        id={`${id}-glow`}
-        cx={cx}
-        cy={cy}
-        r={HOLE.glow}
-        gradientUnits="userSpaceOnUse"
-      >
-        {stops.map(([at, alpha]) => (
-          <stop key={at} offset={at} stop-color="currentColor" stop-opacity={alpha} />
-        ))}
-      </radialGradient>
-      <linearGradient
-        id={`${id}-line`}
-        x1={cx - HOLE.line}
-        x2={cx + HOLE.line}
-        gradientUnits="userSpaceOnUse"
-      >
-        {LINE_STOPS.map(([at, alpha]) => (
-          <stop key={at} offset={at} stop-color="currentColor" stop-opacity={alpha} />
-        ))}
-      </linearGradient>
-    </defs>
-    <path d={linePath(cx, cy)} fill={`url(#${id}-line)`} />
-    <circle cx={cx} cy={cy} r={HOLE.glow} fill={`url(#${id}-glow)`} />
-  </>
-)
-
-export const HoleCore = ({ cx, cy }: { cx: number; cy: number }) => (
-  <circle class="logo-core" cx={cx} cy={cy} r={HOLE.core} />
-)
-
-/*
-  縁を回る光（入口と締めのブラックホールだけ）。光の輪の外縁に沿う短い弧を、頭のすぐ後ろで
-  いちばん明るく、頭と尾の両方へ消える坂で描く（坂は弧の弦に沿った直線のグラデーション。
-  sweep が 90 度より小さいので、弦の上の並びが弧の上の並びと同じ向きになる）——端が見えず、
-  輪の上をやわらかい明かりが滑る。頭を切りっぱなしにすると輪に縦の刻みが見え、丸めると
-  錠剤に見えた。太さは画面の px（non-scaling-stroke）。中心は (0, 0)
-*/
-export const HoleSpot = ({ id }: { id: string }) => {
-  const { d, head, tail } = spotPath()
+export const HoleArt = ({ cx, cy }: { cx: number; cy: number }) => {
+  const box = holeArt(cx, cy)
   return (
     <>
-      <defs>
-        <linearGradient
-          id={`${id}-spot`}
-          x1={head.x}
-          y1={head.y}
-          x2={tail.x}
-          y2={tail.y}
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop offset="0" stop-color="currentColor" stop-opacity="0" />
-          <stop offset="0.3" stop-color="currentColor" stop-opacity="1" />
-          <stop offset="1" stop-color="currentColor" stop-opacity="0" />
-        </linearGradient>
-      </defs>
-      <path
-        d={d}
-        fill="none"
-        stroke={`url(#${id}-spot)`}
-        stroke-width={SPOT.width}
-        vector-effect="non-scaling-stroke"
+      <circle class="logo-core" cx={cx} cy={cy} r={HOLE.core} stroke-width={WORDMARK.stroke} />
+      <image
+        class="logo-art"
+        href={BLACKHOLE_ART.src}
+        x={box.x}
+        y={box.y}
+        width={box.width}
+        height={box.height}
       />
     </>
   )
 }
 
 /*
-  縁の光の輪（大きく描くブラックホールだけ。logo.ts の RING）。黒い円の縁に沿う細い輪と、
-  そのまわりのにじみ。太さは画面の px（non-scaling-stroke）で、枠が縮んでも伸びても細い線の
-  まま。左が明るく右へ薄れる（円盤の回る向きの明るさの偏り）。中心は (0, 0)
-*/
-export const HoleRing = ({ id }: { id: string }) => (
-  <>
-    <defs>
-      <linearGradient id={`${id}-ring`} x1={-RING.r} x2={RING.r} gradientUnits="userSpaceOnUse">
-        <stop offset="0" stop-color="currentColor" stop-opacity="1" />
-        <stop offset="1" stop-color="currentColor" stop-opacity={RING.fade} />
-      </linearGradient>
-    </defs>
-    <circle
-      r={RING.r}
-      fill="none"
-      stroke="currentColor"
-      stroke-opacity={RING.haloOpacity}
-      stroke-width={RING.halo}
-      vector-effect="non-scaling-stroke"
-    />
-    <circle
-      r={RING.r}
-      fill="none"
-      stroke={`url(#${id}-ring)`}
-      stroke-width={RING.width}
-      vector-effect="non-scaling-stroke"
-    />
-  </>
-)
-
-const Hole = ({ cx, cy, id }: { cx: number; cy: number; id: string }) => (
-  <>
-    <HoleLight cx={cx} cy={cy} id={id} />
-    <HoleCore cx={cx} cy={cy} />
-  </>
-)
-
-/*
   ワードマーク（ΛSTLOG。O がブラックホール）。大きさは置く側の CSS が高さで決める
-  （幅は viewBox の縦横比から。光の縁と横線は字の箱の外へはみ出して見せる——
-  overflow visible）。読み上げには出さない——名前は置く側が字で持つ（.sr-only の AstLog）
+  （幅は viewBox の縦横比から。O の光は字の箱の外へはみ出して見せる——overflow visible）。読み上げには出さない——名前は置く側が字で持つ（.sr-only の AstLog）
 */
 export const Wordmark = ({ class: className }: { class: string }) => (
   <svg
@@ -157,7 +45,7 @@ export const Wordmark = ({ class: className }: { class: string }) => (
     aria-hidden="true"
     focusable="false"
   >
-    <Hole cx={HOLE.cx} cy={HOLE.cy} id="wm" />
+    <HoleArt cx={HOLE.cx} cy={HOLE.cy} />
     <path d={WORDMARK.lambda} />
     <path d={WORDMARK.strokes} fill="none" stroke="currentColor" stroke-width={WORDMARK.stroke} />
   </svg>
@@ -166,11 +54,18 @@ export const Wordmark = ({ class: className }: { class: string }) => (
 /*
   印だけ（ワードマークの O を1つで）。404 と管理画面の頭で使う。
   size は必須——app.css は印に寸法を与える規則を持たないので、渡し忘れると素の
-  300x150 に落ちて版面が崩れる
+  300x150 に落ちて版面が崩れる。光の翼の淡い端は枠の外へ出して見せる（logo.ts の MARK_HALF）
 */
 export const HoleMark = ({ size }: { size: number }) => (
-  <svg viewBox={MARK_VIEWBOX} width={size} height={size} aria-hidden="true" focusable="false">
-    <Hole cx={0} cy={0} id="mk" />
+  <svg
+    viewBox={MARK_VIEWBOX}
+    width={size}
+    height={size}
+    overflow="visible"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <HoleArt cx={0} cy={0} />
   </svg>
 )
 

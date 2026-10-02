@@ -71,12 +71,12 @@ const VERSION_TTL_SECONDS = 60
 const CACHEABLE = new Set([200, 301, 302, 404])
 
 // 写しに付けて置く印（訪問者に返すときは外す）
-const VERSION_HEADER = 'x-noctifex-version'
-const STORED_HEADER = 'x-noctifex-stored'
+const VERSION_HEADER = 'x-astlog-version'
+const STORED_HEADER = 'x-astlog-stored'
 // 応答がもともと持っていた cache-control（返すときに付け直す）
-const ORIGINAL_CACHE_CONTROL = 'x-noctifex-cache-control'
+const ORIGINAL_CACHE_CONTROL = 'x-astlog-cache-control'
 // 訪問者に返す、写しをどう使ったか（hit / miss / stale）。テストと調べもの用
-export const CACHE_STATE_HEADER = 'x-noctifex-cache'
+export const CACHE_STATE_HEADER = 'x-astlog-cache'
 
 const passesBy = (path: string) =>
   path === '/admin' ||

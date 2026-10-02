@@ -238,10 +238,10 @@ describe('本番へ出す道', () => {
 
   it('移行はいつも流す（選択肢にしない）。流す前に本番の写しを残す', () => {
     expect(deploy).not.toMatch(/inputs\.migrate|migrate:\s*\n\s*description/)
-    const exported = deploy.indexOf('wrangler d1 export noctifex --remote')
-    const bookmark = deploy.indexOf('wrangler d1 time-travel info noctifex')
+    const exported = deploy.indexOf('wrangler d1 export astlog --remote')
+    const bookmark = deploy.indexOf('wrangler d1 time-travel info astlog')
     const uploaded = deploy.indexOf('actions/upload-artifact')
-    const migrated = deploy.indexOf('wrangler d1 migrations apply noctifex --remote')
+    const migrated = deploy.indexOf('wrangler d1 migrations apply astlog --remote')
     const deployed = deploy.indexOf('npx wrangler deploy')
     for (const at of [exported, bookmark, uploaded, migrated, deployed])
       expect(at).toBeGreaterThan(-1)
@@ -252,9 +252,9 @@ describe('本番へ出す道', () => {
 
   it('写しは戻せる形（定義と中身の2本）で取り、Time Travel より長く置く', () => {
     // 1本の export は、子の表の行が親の CREATE TABLE より前に来て空の D1 に戻せない
-    expect(deploy).toMatch(/wrangler d1 export noctifex --remote[^\n]*--no-data/)
-    expect(deploy).toMatch(/wrangler d1 export noctifex --remote[^\n]*--no-schema/)
-    expect(deploy).not.toMatch(/wrangler d1 export noctifex --remote(?![^\n]*--no-(?:data|schema))/)
+    expect(deploy).toMatch(/wrangler d1 export astlog --remote[^\n]*--no-data/)
+    expect(deploy).toMatch(/wrangler d1 export astlog --remote[^\n]*--no-schema/)
+    expect(deploy).not.toMatch(/wrangler d1 export astlog --remote(?![^\n]*--no-(?:data|schema))/)
     // 栞（Time Travel）は30日まで。控えがそれと同じ日に消えては、30日より前へ戻せない
     const days = Number(deploy.match(/retention-days: (\d+)/)?.[1])
     expect(days).toBeGreaterThan(30)

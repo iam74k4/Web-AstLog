@@ -178,36 +178,82 @@
     右の列、900 未満は本文の列いっぱい）。
 
     --system-tilt は軌道面の画面の中での傾き（orbits.ts の TILT と同じ数。test が
-    突き合わせる）。軌道は orbits.ts が傾けて描き、ブラックホールの横線（真横から見た
-    円盤。同じ面にある）はここで同じだけ回す。
+    突き合わせる）。軌道は orbits.ts が傾けて描き、ブラックホールの絵（円盤は軌道と同じ面）は
+    ここで同じだけ回す。いまは水平（0deg）。
+
+    --chart-ratio は作品の星図の枠（orbits.ts の CHART_FRAME。締めの星系を縮めたもの）。
+    一覧の画像の枠（--thumb-ratio）とほぼ同じ背の低い横長で、一覧の行の高さがそろう。
   */
   --system-ratio: 1000 / 560;
-  --contact-ratio: 1000 / 320;
-  --system-tilt: -8deg;
+  --contact-ratio: 1000 / 512;
+  --chart-ratio: 1000 / 320;
+  --system-tilt: 0deg;
   /*
-    締めの軌道図の幅の上限。星系は枠の幅いっぱいに描くので、広い画面で本文の列いっぱいに
-    伸ばすと、表紙の高さを図だけで食う
+    締めの軌道図の幅の上限と、高さの上限（表紙の高さの半分）。星系は枠の幅いっぱいに描くので、
+    広い画面で本文の列いっぱいに伸ばすと、表紙の高さを図だけで食う。背の低い窓では高さで
+    止める——止めないと、誘いの1文とメールと GitHub の手が1画面目の下へ押し出される
+    （npm run check:contrast の 1024x768 が字を測れなくなる）
   */
   --contact-w: 900px;
+  --contact-h: calc(var(--cover-h) * 0.5);
 
   /*
-    軌道の線と天体の点。
+    軌道の線と天体。
 
-    線と点の太さは画面の px（vector-effect: non-scaling-stroke）。枠が電話の
-    358px から机の 650px まで縮み伸びしても、線は 1px、点は 5〜7px のまま
-    （viewBox の単位で持つと、電話で点が 2px まで潰れた）。
+    線と天体の点の太さは画面の px（vector-effect: non-scaling-stroke）。viewBox の単位で
+    持つと、電話で点が 2px まで潰れた。線は 1px のまま。点は枠の幅に比例する（cqi。
+    業務の天体の輪は viewBox の単位で描くので、点も枠と一緒に伸び縮みしないと、輪との
+    釣り合いが幅で変わる）が、下限と上限で止める。手前の天体ほど大きい（orbits.ts の
+    OrbitBody の scale を掛ける）。
 
-    線はアクセント色で、細く薄い製図の線にする。業務の軌道は破線（--orbit-dash）。
-    濃さは軌道面の奥から手前へ続けて変わる——手前の端が --orbit-ink、奥の端はそれに
-    --orbit-far を掛けた薄さ（奥ほど遠い）。字は軌道の上に乗せない（番号の札は地を塗る）ので、
-    濃さの上限は見た目だけで決まり、下限は npm run check:contrast が測る（線が消える
-    のは改善ではない）。
+    線はアクセント色。濃さは軌道面の奥から手前へ続けて変わる——手前の端が --orbit-ink、
+    奥の端はそれに --orbit-far を掛けた薄さ（奥ほど遠い）。外の軌道ほど淡く、いちばん外側は
+    内側の --orbit-outer 倍（同じ濃さの輪が並ぶと、的のような平らな縞に見えた）。細い芯の
+    下に、同じ坂の淡いにじみ（幅 --orbit-glow-w。点と同じく枠の幅に比例する。濃さ
+    --orbit-glow）を敷く。
+    天体の点のまわりにも外へ消えるにじみ（濃さ --body-halo。色はアクセント。大きさは
+    components.tsx の Bodies）。字は軌道の上に乗せない（番号の札は地を塗る）ので、濃さの
+    上限は見た目だけで決まり、下限は npm run check:contrast が測る（線が消えるのは改善
+    ではない）。
   */
   --orbit-line: 1px;
-  --orbit-ink: 0.42;
-  --orbit-far: 0.25;
-  --orbit-dash: 2px 5px;
-  --orbit-body: clamp(5px, 0.5vw, 7px);
+  --orbit-ink: 0.34;
+  --orbit-far: 0.15;
+  --orbit-outer: 0.55;
+  --orbit-band: 0.42;
+  /*
+    ブラックホールの光の絵の濃さ（components.tsx の Hole。影の黒い円には掛けない）。白い光が
+    濃いと、星屑の円盤よりブラックホールが先に目に入った（持ち主の「主張が強すぎる」）
+  */
+  --hole-light: 0.72;
+  --stardust-w: clamp(0.5px, 0.13cqi, 1px);
+  --stardust-ink: 0.9;
+  --stardust-far: 0.35;
+  --orbit-glow: 0.14;
+  --orbit-glow-w: clamp(3px, 0.9cqi, 6px);
+  --orbit-body: clamp(4px, 1.3cqi, 9px);
+  --body-halo: 0.55;
+
+  /*
+    星雲（components.tsx の Nebula。形は orbits.ts の nebulaMap）。雲の4枚（光・雲・筋・塵）の
+    濃さ。色は見た目のプリセットごとの3色（--nebula-a / -b / -c。下の「見た目の
+    プリセット」）で、モノクロのときも星雲だけは青紫と桃と空色にする（持ち主の「星雲だけ色を
+    付ける」）。字は星雲の上に乗せない（星空の覆いが字の後ろで消す。番号の札は地を
+    塗る）。下限は npm run check:contrast が測る
+  */
+  --nebula-light: 0.3;
+  --nebula-cloud: 0.95;
+  --nebula-veil: 0.85;
+  --nebula-dust: 0.85;
+  --nebula-a: var(--iris);
+  --nebula-b: var(--rose);
+  --nebula-c: var(--sky);
+
+  /*
+    宇宙（components.tsx の Cosmos）。星空に敷く星雲の色の淡い広がりの濃さ（2色を透明に
+    混ぜる割合）
+  */
+  --cosmos-wash: 16%;
 
   /*
     天体の札（.system__label）を天体からずらす量と、札の幅の上限（長い名前は末尾を
@@ -232,6 +278,7 @@
 
   /*
     入口に着いたときの動き（「入口に着いたとき」）。見出しの列が浮かび上がるあいだに、
+    星雲が広がった姿から凝って灯り（--condense-*）、
     ブラックホールが灯り（--ignite-*。大きく霞んだ姿から、明るさを落としながら縮んで
     締まる）、軌道と天体が渦を巻いて収まる（--infall-*。--infall-turn だけ回って霞んだ
     姿から、焦点のまわりへ巻き込まれるように）。番号の札は収まった
@@ -245,6 +292,9 @@
   --ignite-scale: 1.3;
   --ignite-blur: 14px;
   --ignite-glow: 2.4;
+  --condense-delay: 0ms;
+  --condense-dur: 2600ms;
+  --condense-scale: 1.12;
   --infall-delay: 400ms;
   --infall-dur: 2200ms;
   --infall-turn: 28deg;
@@ -254,18 +304,24 @@
   --count-delay: calc(var(--infall-delay) + var(--infall-dur) * 0.3);
 
   /*
-    着いたあとも動き続けるもの（「動き続ける」）。軌道を流れる光（長さ --flow-len。1周の長さは
-    orbits.ts の INNER_PERIOD から。外側の軌道ほど長い）、吸い込まれる粒（落ち方の曲線
-    --fall-ease。落ちるほど速く回り、速く寄る）、ブラックホールの縁を回る光（1周 --spin-dur）と
-    光の揺らぎ（明るさが --breathe-low まで沈んで戻る。片道 --breathe-dur）。天体は動かさない。
-    止める手は置かない（持ち主の判断。動きを減らす設定では全部止まる）
+    着いたあとも動き続けるもの（「動き続ける」）。軌道を流れる光（1周の長さは orbits.ts の
+    INNER_PERIOD から。外側の軌道ほど長い）、吸い込まれる粒（落ち方の曲線 --fall-ease。
+    落ちるほど速く回り、速く寄る）、ブラックホールの光の揺らぎ（明るさが --breathe-low まで
+    沈んで戻る。片道 --breathe-dur）、星雲の漂い（片道 --drift-dur）と星の瞬き（周期は星ごと。
+    orbits.ts の nebulaMap）。天体は動かさない。止める手は置かない（持ち主の判断。動きを
+    減らす設定では全部止まる）
   */
+  --drift-dur: 40s;
   --breathe-dur: 4s;
-  --breathe-low: 0.68;
-  --spin-dur: 9s;
+  --breathe-low: 0.82;
   --fall-ease: cubic-bezier(0.5, 0, 0.85, 0.45);
-  /* 軌道を流れる光の長さ（軌道1周を 100 とした長さ） */
+  /*
+    軌道を流れる光の長さ（軌道1周を 100 とした長さ）。細い頭（--flow-len）と、その後ろに
+    引く長く淡い尾（--flow-tail。濃さ --flow-tail-ink）
+  */
   --flow-len: 3;
+  --flow-tail: 12;
+  --flow-tail-ink: 0.3;
 
   /*
     入口の番号の札を、図にマウスを重ねたとき・選んだときに出すまでの待ち（「動き続ける」）。
@@ -583,6 +639,16 @@ body[data-site] > main {
   padding-block: var(--page-pad);
 }
 
+/*
+  本文は、入口と締めの星空（.cosmos）の位置の基準で、重なりの容れ物。星空は本文の幅いっぱい
+  （inset: 0）に、本文の中身の後ろ（z-index: -1）に敷く。容れ物にしないと、-1 の星空が
+  ページの地の後ろへ沈むことがある
+*/
+body[data-site] > main {
+  position: relative;
+  isolation: isolate;
+}
+
 /* --- 上の帯 --- */
 
 /*
@@ -608,8 +674,8 @@ body[data-site] > main {
 }
 
 /*
-  ロゴの O の黒い円（src/ui/icons.tsx の Hole。上の帯・ログイン画面・404・管理画面）。
-  光の縁と横線は currentColor（字の色）で、黒い円だけがこの段を読む
+  ロゴの O の影の黒い円（src/ui/icons.tsx の HoleArt。上の帯・ログイン画面・404・管理画面）。
+  光は焼いた絵（.logo-art。入口のブラックホールと同じ1枚）で、色を持たない
 */
 .logo-core {
   fill: var(--hole-core);
@@ -617,7 +683,7 @@ body[data-site] > main {
 
 /*
   ワードマーク（ΛSTLOG）。上の帯とログイン画面。高さで大きさを決め、幅は縦横比から。
-  O の光の縁と横線は字の箱の外へはみ出して見せる（箱を光に合わせると、字が小さくなる）
+  O の光は字の箱の外へはみ出して見せる（箱を光に合わせると、字が小さくなる）
 */
 .brand__word {
   display: block;
@@ -983,8 +1049,9 @@ body[data-site] > main {
   そのまわりに作品を1つずつ軌道に載せる（形は src/lib/orbits.ts。件数だけから
   決まる）。天体には作品の番号の札を添える（名前は札の中にあり、選んだときに出る）。
 
-  絵の層は枠いっぱいに重ねる——軌道の奥の半分・ブラックホール（.hole）・軌道の
-  手前の半分・天体の順（DOM の順がそのまま重なりの順）。縦横比は :root の
+  絵の層は枠いっぱいに重ねる——軌道の奥の半分・ブラックホール（.hole）・軌道の手前の
+  半分・天体の順（DOM の順がそのまま重なりの順）。星雲と星空は枠の外、本文の幅いっぱいに
+  敷く（.cosmos）。縦横比は :root の
   --system-ratio（orbits.ts の HERO_FRAME と同じ数）。
 
   横だけ切る（overflow-x: clip。縦は出してよい——着いたときに灯るブラックホールと、
@@ -1005,6 +1072,7 @@ body[data-site] > main {
 }
 
 .system__orbits,
+.system__motion,
 .system__bodies {
   position: absolute;
   inset: 0;
@@ -1013,16 +1081,190 @@ body[data-site] > main {
 }
 
 /*
-  ブラックホール（components.tsx の Hole。入口と締めで同じ）。ロゴの O と同じ絵
-  （黒い円・光の縁・後ろを通る横線。形は src/ui/logo.ts）を焦点に置き、枠と一緒に
-  伸び縮みさせる。置き場所（--hole-x / --hole-y）と大きさ（--hole-w）は、部品が
-  orbits.ts の数（枠の focus と hole）から組んで style で渡す。
+  動かない層（軌道の線・光の帯・星屑。入口の .system__orbits と締めの .orbits__still）は、
+  自分の合成の層に描く——帯と星屑のぼかし（SVG のフィルタ）を一度だけ描いて使い回すため。
+  同じ層に流れる光や粒が居ると、それが動くたびにぼかしまで描き直す（だから動くものは
+  .system__motion と締めの別の SVG に分けてある）
+*/
+:is(.system__orbits, .orbits__still) {
+  will-change: transform;
+}
 
-  光・縁の光の輪・縁を回る光・黒い円の SVG を同じ箱に重ねる（DOM の順が重なりの順）。
-  黒い円は不透明なので、奥を回る軌道はその後ろに隠れる。横線は軌道面と同じ傾きに
-  回す（--system-tilt。輪と円は回しても同じ）。
+/*
+  宇宙（components.tsx の Cosmos。入口と締め）。軌道図のまわりを、本文の幅いっぱいの星空に
+  する——星と、星雲の2色の淡い広がり（背景の放射の坂。図の焦点のあたりに置く）と流れ星。
 
-  色はロゴと同じ——光は字の白（--ink）、黒い円は --hole-core（.logo-core）。見た目の
+  字の後ろには何も出さない（覆い mask-image で消す）。小さい字は地の黒で 4.5:1 ぎりぎりの
+  所があり（職種と所在地の札・件数の見出し）、星1つが字の行に掛かるだけで割る。覆いは
+  図の場所に合わせる——
+  - 入口（1列）と締め: 図の下で消える（図の高さは枠の縦横比と本文の幅から組む --cosmos-fig）
+  - 入口（900 以上）: 左の字の列（本文の幅の半分）で消え、底の件数の帯の上で消える
+  位置の基準は本文（main。「骨格」）。npm run check:contrast が字の下を測る。
+*/
+.cosmos {
+  --cosmos-x: 50%;
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.cosmos__stars,
+.cosmos__meteors {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/*
+  星。太さは星ごと（style）で、画面の px のまま。光芒は細い十字で、真ん中から先へ消える
+  （坂は部品が style で渡す。同じ明るさの十字は照準に見えた）
+*/
+.cosmos__stars path {
+  fill: none;
+  stroke: var(--ink);
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.cosmos__stars .cosmos__glint {
+  stroke-width: var(--orbit-line);
+  stroke-linecap: butt;
+  opacity: 0.5;
+}
+
+.cosmos__spark {
+  stop-color: var(--ink);
+}
+
+/* 流れ星。頭が明るく尾が消える筋（坂は部品が渡す）。ふだんは出さない（「動き続ける」） */
+.cosmos__meteor {
+  fill: none;
+  stroke-width: calc(var(--orbit-line) * 1.5);
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0;
+}
+
+.cosmos__trail {
+  stop-color: var(--ink);
+}
+
+/*
+  図の幅（--cosmos-fig-w）と高さ（--cosmos-fig）と、星雲の色の広がり。入口の図は本文の幅
+  いっぱい（900 以上は右の列）で縦横比が --system-ratio、締めの図は .orbits と同じ幅の
+  決め方で --contact-ratio。本文の幅は min(画面 − 余白, 版面)
+*/
+.cosmos--hero {
+  --cosmos-fig-w: min(100vw - 2 * var(--gutter), var(--w-page));
+  --cosmos-fig: calc(var(--cosmos-fig-w) / (var(--system-ratio)));
+}
+
+.cosmos--contact {
+  --cosmos-fig-w: min(
+    min(100vw - 2 * var(--gutter), var(--w-page)),
+    var(--contact-w),
+    var(--contact-h) *
+    (var(--contact-ratio))
+  );
+  --cosmos-fig: calc(var(--cosmos-fig-w) / (var(--contact-ratio)));
+}
+
+.cosmos--hero,
+.cosmos--contact {
+  --cosmos-y: calc(var(--page-pad) + var(--cosmos-fig) * var(--cosmos-focus));
+  background:
+    radial-gradient(
+      ellipse calc(var(--cosmos-fig-w) * 0.9) calc(var(--cosmos-fig) * 0.9) at
+        calc(var(--cosmos-x) - 8%) var(--cosmos-y),
+      color-mix(in srgb, var(--nebula-a) var(--cosmos-wash), transparent),
+      transparent
+    ),
+    radial-gradient(
+      ellipse calc(var(--cosmos-fig-w) * 0.7) calc(var(--cosmos-fig) * 0.8) at
+        calc(var(--cosmos-x) + 10%) var(--cosmos-y),
+      color-mix(in srgb, var(--nebula-b) var(--cosmos-wash), transparent),
+      transparent
+    );
+  mask-image: linear-gradient(
+    to bottom,
+    #000 calc(var(--page-pad) + var(--cosmos-fig) * 0.75),
+    transparent calc(var(--page-pad) + var(--cosmos-fig) + var(--sp-5))
+  );
+}
+
+/*
+  星雲（components.tsx の Nebula。星空の中、ブラックホールのまわり）。ブラックホールの位置
+  （--cosmos-x / --cosmos-y）を真ん中に、図の幅（--cosmos-fig-w）に比例した大きさで置く。
+  箱の縦横比は orbits.ts の NEBULA と同じ（test/theme.test.ts が突き合わせる）。図より大きく、
+  はみ出したぶんは星空（.cosmos）が切る。位置は余白（margin）で引く——translate は漂う動きが
+  使う（「動き続ける」）。
+
+  色は塊の役ごとに使う場所で敷く（:root で混ぜない。[data-accent] が効かなくなる）——
+  3色は --nebula-a / -b / -c（見た目のプリセットごと）、明るい芯は字の白、塵は地の色。
+  4枚の濃さは :root の --nebula-*。
+*/
+.cosmos__nebula {
+  --nebula-w: calc(var(--cosmos-fig-w) * 1.57);
+  position: absolute;
+  left: var(--cosmos-x);
+  top: var(--cosmos-y);
+  width: var(--nebula-w);
+  aspect-ratio: 1600 / 1000;
+  margin-left: calc(var(--nebula-w) / -2);
+  margin-top: calc(var(--nebula-w) / -3.2);
+}
+
+.nebula__a {
+  stop-color: var(--nebula-a);
+}
+
+.nebula__b {
+  stop-color: var(--nebula-b);
+}
+
+.nebula__c {
+  stop-color: var(--nebula-c);
+}
+
+.nebula__ink {
+  stop-color: var(--ink);
+}
+
+stop.nebula__dust {
+  stop-color: var(--bg);
+}
+
+.nebula__light {
+  opacity: var(--nebula-light);
+}
+
+.nebula__cloud {
+  opacity: var(--nebula-cloud);
+}
+
+.nebula__veil {
+  opacity: var(--nebula-veil);
+}
+
+/* 塵の帯（use の要素）。坂の色（stop の .nebula__dust）とは要素で分ける */
+use.nebula__dust {
+  opacity: var(--nebula-dust);
+}
+
+/*
+  ブラックホール（components.tsx の Hole）を焦点に置き、枠と一緒に伸び縮みさせる。置き場所
+  （--hole-x / --hole-y）と大きさ（--hole-w）は、部品が orbits.ts の数（枠の focus と hole）
+  から組んで style で渡す。軌道面と同じ傾きに回す（--system-tilt）。
+
+  焼いた光の絵（logo.ts の BLACKHOLE_ART。ロゴの O と同じ1枚）と、その下に敷く影の黒い円
+  （::before。径は部品が絵の幅に対する割合 --hole-shadow で渡す）。箱の高さは絵の縦横比
+  （img の width / height）から決まる。影は不透明なので、奥を回る軌道はその後ろに隠れる。
+  入口と締めでは光だけが揺らぐ（「動き続ける」）。作品の星図（.hole--still）は揺らさない。
+
+  色は字の白だけ——光は焼いた白、影は --hole-core（ロゴの O の .logo-core と同じ段）。見た目の
   プリセットのアクセント色では塗らない（ロゴの O と同じ1つのものに見せる）。
 */
 .hole {
@@ -1030,19 +1272,29 @@ body[data-site] > main {
   left: var(--hole-x);
   top: var(--hole-y);
   width: var(--hole-w);
-  aspect-ratio: 1;
   translate: -50% -50%;
   rotate: var(--system-tilt);
-  color: var(--ink);
   pointer-events: none;
 }
 
-.hole > svg {
+.hole::before {
+  content: '';
   position: absolute;
-  inset: 0;
+  left: 50%;
+  top: 50%;
+  width: var(--hole-shadow);
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: var(--hole-core);
+}
+
+.hole__art {
+  position: relative;
+  display: block;
   width: 100%;
-  height: 100%;
-  overflow: visible;
+  height: auto;
+  opacity: var(--hole-light);
 }
 
 /*
@@ -1051,13 +1303,76 @@ body[data-site] > main {
 
   線の色は、部品が線ごとに渡す坂（components.tsx の OrbitLines。stroke 属性の
   url(#…)）が持つ。坂の両端の色と濃さはここで敷く——奥の端は --orbit-far を掛けて薄く、
-  手前へ続けて --orbit-ink まで濃くなる（奥ほど遠い）。.orbit に stroke を書かない
-  （書くと坂を上書きする）
+  手前へ続けて --orbit-ink まで濃くなる（奥ほど遠い）。.orbit と .orbit__glow に stroke を
+  書かない（書くと坂を上書きする）。細い芯（.orbit）の下に、同じ坂の淡いにじみ
+  （.orbit__glow）を敷く。外の軌道ほど淡い——部品が軌道ごとに内側の 0 から外側の 1 までの
+  位置（--reach）を渡し、濃さは外側で --orbit-outer 倍まで落ちる（星図は渡さない）
 */
-.orbit {
+.orbit,
+.orbit__glow {
   fill: none;
-  stroke-width: var(--orbit-line);
   vector-effect: non-scaling-stroke;
+}
+
+.orbit {
+  stroke-width: var(--orbit-line);
+  opacity: calc(1 - var(--reach, 0) * (1 - var(--orbit-outer)));
+}
+
+.orbit__glow {
+  stroke-width: var(--orbit-glow-w);
+  opacity: calc(var(--orbit-glow) * (1 - var(--reach, 0) * (1 - var(--orbit-outer))));
+}
+
+/*
+  軌道に沿う光の帯（components.tsx の OrbitBands）。色は線と同じアクセント。区間ごとの太さと
+  濃さは部品が渡し（手前ほど太く明るい）、帯ぜんぶの濃さは :root の --orbit-band
+*/
+.orbit-bands {
+  fill: none;
+  stroke: var(--accent);
+  opacity: var(--orbit-band);
+}
+
+/*
+  軌道に沿って散る星屑（components.tsx の Stardust）。明るさの段ごとの太さ（--stardust-w の
+  倍）と濃さ。濃さは線と同じ奥から手前への坂（奥の端は --stardust-far）。太さは画面の px
+  （点を潰さない）で、枠の幅に比例する（電話の小さな枠で粒が帯を埋めない）
+*/
+.stardust path {
+  fill: none;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.stardust__0 {
+  stroke-width: var(--stardust-w);
+  opacity: calc(var(--stardust-ink) * 0.45);
+}
+
+.stardust__1 {
+  stroke-width: calc(var(--stardust-w) * 1.5);
+  opacity: calc(var(--stardust-ink) * 0.65);
+}
+
+.stardust__2 {
+  stroke-width: calc(var(--stardust-w) * 2.1);
+  opacity: calc(var(--stardust-ink) * 0.85);
+}
+
+.stardust__3 {
+  stroke-width: calc(var(--stardust-w) * 2.8);
+  opacity: var(--stardust-ink);
+}
+
+.stardust-depth__far {
+  stop-color: var(--ink);
+  stop-opacity: var(--stardust-far);
+}
+
+.stardust-depth__near {
+  stop-color: var(--ink);
+  stop-opacity: 1;
 }
 
 .orbit-depth__far {
@@ -1070,39 +1385,50 @@ body[data-site] > main {
   stop-opacity: var(--orbit-ink);
 }
 
-/* 業務の軌道は破線。区分を色だけで分けない（天体も塗りと輪で分ける） */
-.orbit--work {
-  stroke-dasharray: var(--orbit-dash);
-}
-
 /*
-  天体は長さ0の線に丸い線端を付けた点（components.tsx の Bodies）。業務は輪で、
-  同じ点を地の色で半分の太さに抜く。
+  天体は光る惑星（components.tsx の Bodies）。芯の点（長さ0の線に丸い線端）と、その
+  まわりのにじみ（アクセント色の、外へ消える放射の坂）。大きさは --orbit-body に奥行きの倍率
+  （--scale。手前ほど大きい）を掛けたもの。業務は輪のある惑星——軌道面と同じ角度から
+  見た輪を、奥の半分は点の後ろ、手前の半分は前に描く。区分を色だけで分けない（形で
+  分ける）
 */
 .orbit-body path {
   fill: none;
-  stroke: var(--ink);
-  stroke-width: var(--orbit-body);
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
 }
 
-.orbit-body .orbit-body__hole {
-  stroke: var(--bg);
-  stroke-width: calc(var(--orbit-body) / 2);
+.orbit-body__dot {
+  stroke: var(--ink);
+  stroke-width: calc(var(--orbit-body) * var(--scale, 1));
+}
+
+.orbit-body__halo {
+  opacity: var(--body-halo);
+}
+
+.orbit-body__glow {
+  stop-color: var(--accent);
+}
+
+.orbit-body__ring {
+  stroke: var(--ink);
+  stroke-width: var(--orbit-line);
 }
 
 /*
   天体の札（作品の番号と名前。作品のページへのリンク）。置き場所は天体の右上・
   左上・右下・左下のどれか（.system__label--ne …。重ならない向きを orbits.ts の
   placeLabels が選ぶ）。天体の点を原点に置き、札の箱をその向きへずらす。ずらす量は
-  orbits.ts の LABEL_GAP と同じ数（:root の --label-dx / --label-dy）。
+  orbits.ts の LABEL_GAP と同じ数（:root の --label-dx / --label-dy）。天体から札へ
+  引き出し線は引かない（札は天体のすぐ横に居る。線を引いていたころは図面に見えた）。
 
   札は枠が十分に広いときだけ出す（下の @container。orbits.ts の LABEL_MIN_WIDTH と
   同じ数）。狭い枠では点だけ——作品の名前は「一覧で見る →」の先に全部ある。
 
   札の地は --bg で塗る。軌道の線が字の後ろを横切らないように（小さい字なので
-  4.5:1 が要る。npm run check:contrast が札の字も測る）。
+  4.5:1 が要る。npm run check:contrast が札の字も測る）。地の縁は同じ色でぼかし、星雲へ
+  溶かす（縁の立った黒い四角は、柔らかい絵の上に貼った付箋かデバッグの表示に見えた）。
 */
 .system__labels {
   position: absolute;
@@ -1151,6 +1477,7 @@ body[data-site] > main {
   max-width: min(var(--label-max), calc(var(--room) - var(--label-dx) - var(--sp-1)));
   padding-inline: var(--sp-2);
   background: var(--bg);
+  box-shadow: 0 0 var(--sp-2) var(--sp-2) var(--bg);
   color: var(--ink-mid);
   font-size: var(--fs-meta);
   line-height: 1.4;
@@ -1179,47 +1506,6 @@ body[data-site] > main {
 .system__label--sw > :is(a, span) {
   right: var(--label-dx);
   top: var(--label-dy);
-}
-
-/*
-  天体から札の角へ引く細い線。札の箱の、天体に向いた角の外に --label-dx × --label-dy
-  の箱を置き、その対角線を1本だけ描く。
-*/
-.system__label > :is(a, span)::before {
-  content: '';
-  position: absolute;
-  width: var(--label-dx);
-  height: var(--label-dy);
-  background: linear-gradient(
-    var(--leader-to),
-    transparent calc(50% - var(--orbit-line)),
-    var(--ink-weak) 50%,
-    transparent calc(50% + var(--orbit-line))
-  );
-}
-
-.system__label--ne > :is(a, span)::before {
-  --leader-to: to bottom right;
-  right: 100%;
-  top: 100%;
-}
-
-.system__label--nw > :is(a, span)::before {
-  --leader-to: to top right;
-  left: 100%;
-  top: 100%;
-}
-
-.system__label--se > :is(a, span)::before {
-  --leader-to: to top right;
-  right: 100%;
-  bottom: 100%;
-}
-
-.system__label--sw > :is(a, span)::before {
-  --leader-to: to bottom right;
-  left: 100%;
-  bottom: 100%;
 }
 
 /* 番号は英数字の札なので等幅。名前は英字だけなら等幅の小さな大文字、和文ならそのまま */
@@ -1339,17 +1625,18 @@ body[data-site] > main {
 /*
   締めの軌道図（components.tsx の ContactOrbits）。入口と同じ星系を、横長の枠に
   描いて列の真ん中に置く。縦横比は :root の --contact-ratio（orbits.ts の
-  CONTACT_FRAME）、幅の上限は --contact-w。
+  CONTACT_FRAME）、幅の上限は --contact-w と、高さの上限 --contact-h から決まる幅。
 */
 .orbits {
   position: relative;
   align-self: stretch;
   justify-self: center;
-  width: min(100%, var(--contact-w));
+  width: min(100%, var(--contact-w), calc(var(--contact-h) * var(--contact-ratio)));
   aspect-ratio: var(--contact-ratio);
+  container-type: inline-size;
 }
 
-/* 軌道の奥の半分・ブラックホール・手前の半分の順に重ねる（入口と同じ） */
+/* 星雲・軌道の奥の半分・ブラックホール・手前の半分の順に重ねる（入口と同じ） */
 .orbits > svg {
   position: absolute;
   inset: 0;
@@ -1360,10 +1647,12 @@ body[data-site] > main {
 /* --- 入口に着いたとき --- */
 
 /*
-  入口に着いたときの一度だけの動き。見出しの列が浮かび上がるあいだに、ブラックホールが
-  灯り、軌道と天体が渦を巻いて焦点のまわりに収まり、番号の札が1つずつ出る。
-  件数の帯は数え上がる。
+  入口に着いたときの一度だけの動き。見出しの列が浮かび上がるあいだに、星雲が凝って
+  灯り、ブラックホールが灯り、軌道と天体が渦を巻いて焦点のまわりに収まり、番号の札が
+  1つずつ出る。件数の帯は数え上がる。
 
+  - 星雲は、少し広がって見えない姿から、縮みながら灯る（orbit-condense。量は --condense-*）。
+    枠の横へ広がったぶんは枠が切る（雲の縁はもともと透明）
   - ブラックホールは、大きく霞んで明るすぎる姿から、縮みながら締まって落ち着く
     （orbit-ignite。重力で潰れていくように。量は --ignite-*）
   - 軌道と天体は、回って霞んだ姿から、焦点のまわりへ巻き込まれるように収まる
@@ -1418,6 +1707,18 @@ body[data-site] > main {
   animation-delay: calc(var(--infall-delay) + var(--i, 0) * var(--stagger));
 }
 
+@keyframes orbit-condense {
+  from {
+    opacity: 0;
+    scale: var(--condense-scale);
+  }
+}
+
+/* 星空は星雲と同じ長さで灯る（広がる動きは持たない。画面いっぱいの層を動かさない） */
+.hero > .cosmos {
+  animation: orbit-light var(--condense-dur) var(--ease) var(--condense-delay) backwards;
+}
+
 @keyframes orbit-ignite {
   from {
     opacity: 0;
@@ -1439,6 +1740,7 @@ body[data-site] > main {
 }
 
 .system__orbits,
+.system__motion,
 .system__bodies {
   animation: orbit-infall var(--infall-dur) var(--ease) var(--infall-delay) backwards;
 }
@@ -1468,7 +1770,12 @@ body[data-site] > main {
   - 光の粒が渦を巻いてブラックホールへ吸い込まれ、黒い円の縁で光に溶ける（orbit-swirl で
     1周回り、その中で orbit-fall が外から内へ寄せる。どちらも --fall-ease で、落ちるほど
     速い）
-  - ブラックホールの縁を光が回り（orbit-spin）、光が明るさを沈めては戻す（orbit-breathe）
+  - ブラックホールの光が明るさを沈めては戻す（orbit-breathe。光の絵の不透明度だけを変え、
+    下に敷いた影の黒い円は動かさない——絵の明るさを filter で落とすと、白い光が灰色に
+    くすんだ）
+  - 星雲がゆっくり漂い（orbit-drift。雲の SVG の箱ごと動かすので、中のフィルタは掛け
+    直さない）、星が瞬き（orbit-twinkle。明るさだけ。もとの明るさは星ごとの opacity 属性で、
+    keyframes は真ん中の暗さだけを持つ）、流れ星が流れる（orbit-meteor）
 
   天体は動かさない（公転しない）。天体はいつも番号の札と同じ止まった場所に居る——公転させて
   いたころは、札と食い違う天体を重ねたときに札へ寄せていて、天体が跳ぶか軌道を外れて飛んだ
@@ -1513,27 +1820,63 @@ body[data-site] > main {
   }
 }
 
-@keyframes orbit-spin {
+@keyframes orbit-drift {
   to {
-    transform: rotate(1turn);
+    translate: 1.5% -1%;
   }
 }
 
-/* 光の揺らぎは1つの要素だけなので、明るさの下限を :root の段から読む */
+@keyframes orbit-twinkle {
+  50% {
+    opacity: 0.15;
+  }
+}
+
+/*
+  流れ星。置いた向き（部品が親の transform 属性で渡す）のまま、周期の頭の 6% で 420 だけ
+  流れて消え、残りは消えたまま待つ。筋の長さと流れる幅は viewBox の単位
+*/
+@keyframes orbit-meteor {
+  from {
+    transform: translate(0px, 0px);
+    opacity: 0;
+  }
+
+  1% {
+    opacity: 1;
+  }
+
+  6%,
+  to {
+    transform: translate(420px, 0px);
+    opacity: 0;
+  }
+}
+
+/* 光の揺らぎは1つの要素だけなので、明るさの下限を :root の段から読む（光の濃さに掛ける） */
 @keyframes orbit-breathe {
   from {
-    opacity: var(--breathe-low);
+    opacity: calc(var(--hole-light) * var(--breathe-low));
   }
 }
 
-/* 軌道を流れる光。短い破線を1本だけ、軌道の線の上に */
+/*
+  軌道を流れる光。軌道の線の上に、細い頭の破線を1本と、その後ろに引く長く淡い尾
+  （components.tsx の Motion）。尾は頭と同じ所で終わるように、長さの差だけ遅れて回る
+  （「動き続ける」の .orbit-flow--tail）
+*/
 .orbit-flow {
   fill: none;
   stroke: var(--ink);
-  stroke-width: calc(var(--orbit-line) * 2);
+  stroke-width: var(--orbit-line);
   stroke-linecap: round;
   stroke-dasharray: var(--flow-len) calc(100 - var(--flow-len));
   vector-effect: non-scaling-stroke;
+}
+
+.orbit-flow--tail {
+  stroke-dasharray: var(--flow-tail) calc(100 - var(--flow-tail));
+  opacity: var(--flow-tail-ink);
 }
 
 .orbit-grain__dot {
@@ -1544,7 +1887,7 @@ body[data-site] > main {
   opacity: 0;
 }
 
-:is(.orbit-flows, .orbit-dust, .hole__spin) {
+:is(.orbit-flows, .orbit-dust, .cosmos__meteors) {
   display: none;
 }
 
@@ -1553,12 +1896,21 @@ body[data-site] > main {
     display: inline;
   }
 
-  .hole__spin {
+  .cosmos__meteors {
     display: block;
+  }
+
+  .cosmos__meteor {
+    animation: orbit-meteor var(--dur) linear var(--delay) infinite;
   }
 
   .orbit-flow {
     animation: orbit-flow var(--dur) linear var(--delay) infinite;
+  }
+
+  /* 尾は頭より長いぶん（--flow-tail − --flow-len）だけ遅れて回り、頭と同じ所で終わる */
+  .orbit-flow--tail {
+    animation-delay: calc(var(--delay) + (var(--flow-tail) - var(--flow-len)) / 100 * var(--dur));
   }
 
   .orbit-grain {
@@ -1569,12 +1921,26 @@ body[data-site] > main {
     animation: orbit-fall var(--dur) var(--fall-ease) var(--delay) infinite;
   }
 
-  .hole__spin {
-    animation: orbit-spin var(--spin-dur) linear infinite;
+  .hole:not(.hole--still) > .hole__art {
+    animation: orbit-breathe var(--breathe-dur) var(--ease) infinite alternate;
   }
 
-  .hole__light {
-    animation: orbit-breathe var(--breathe-dur) var(--ease) infinite alternate;
+  /*
+    星雲は漂う。入口では、着いたときに凝って灯る動き（orbit-condense）と同じ宣言に並べる
+    （animation は1つの宣言しか効かない。分けて書くと、後ろの宣言が前の動きを消す）
+  */
+  .cosmos__nebula {
+    animation: orbit-drift var(--drift-dur) ease-in-out infinite alternate;
+  }
+
+  .hero .cosmos__nebula {
+    animation:
+      orbit-condense var(--condense-dur) var(--ease) var(--condense-delay) backwards,
+      orbit-drift var(--drift-dur) ease-in-out infinite alternate;
+  }
+
+  .cosmos__twinkle {
+    animation: orbit-twinkle var(--dur) ease-in-out var(--delay) infinite;
   }
 }
 
@@ -1974,10 +2340,11 @@ body[data-site] > main {
 
 /*
   作品の星図（components.tsx の OrbitChart）。画像の無い作品の絵で、作品のページ（文の列の
-  横。.detail--chart）と一覧の行（サムネイルの位置。.entry__chart）に置く。入口と同じ星系を
-  締めの枠（--contact-ratio。orbits.ts の CHART_FRAME）に止めた姿で描き、その作品が載って
-  いる軌道と天体だけを灯す。層の重ね方は締めと同じ（軌道の奥の半分・ブラックホール・手前の
-  半分と天体）。
+  横。.detail--chart）と一覧の行（サムネイルの位置。.entry__chart）に置く。締めの星系を
+  縮めて背の低い横長の枠（--chart-ratio。orbits.ts の CHART_FRAME）に止めた姿で描き、その
+  作品が載っている軌道と天体だけを灯す。層の重ね方は締めと同じ（軌道の奥の半分・
+  ブラックホール・手前の半分と天体）。星雲は敷かない——一覧に行の数だけ並ぶ図で、灯した
+  天体を指すのが役目。
 
   箱は枠と同じ縦横比から崩さない。層（SVG とブラックホール）は箱の % で重ねるので、比が
   崩れるとブラックホールが軌道の焦点から外れる。幅は列いっぱいを上限に、高さが --shot-h
@@ -1990,9 +2357,10 @@ body[data-site] > main {
 .chart {
   position: relative;
   display: block;
-  width: min(100%, calc(var(--shot-h) * var(--contact-ratio)));
-  aspect-ratio: var(--contact-ratio);
+  width: min(100%, calc(var(--shot-h) * var(--chart-ratio)));
+  aspect-ratio: var(--chart-ratio);
   min-height: 0;
+  container-type: inline-size;
 }
 
 .chart > svg {
@@ -2012,6 +2380,10 @@ body[data-site] > main {
   opacity: var(--chart-dim);
 }
 
+.chart .orbit__glow:not(.chart__lit) {
+  opacity: calc(var(--orbit-glow) * var(--chart-dim));
+}
+
 .chart-depth__far {
   stop-color: var(--accent);
   stop-opacity: calc(var(--chart-lit) * var(--chart-lit-far));
@@ -2020,15 +2392,6 @@ body[data-site] > main {
 .chart-depth__near {
   stop-color: var(--accent);
   stop-opacity: var(--chart-lit);
-}
-
-/*
-  ブラックホールは止まった姿（Hole の still。縁を回る光を描かない）。入口と締めの光の
-  揺らぎ（.hole__light の orbit-breathe）も、星図の中では止める——一覧には星図が行の数だけ
-  並び、1つずつ揺らすと、読んでいる行の横でいくつもの光が明滅し続ける
-*/
-.chart .hole__light {
-  animation: none;
 }
 
 /*
@@ -2989,9 +3352,7 @@ body[data-site] > main {
 }
 
 /*
-  ロゴの印（ブラックホールの O）。光の縁と横線は字の色（currentColor）で描くので、
-  色は字の白のまま——線の色（--line-strong）に落とすと光が暗い灰色になり、影の
-  黒い円だけが残って印に見えない。
+  ロゴの印（ブラックホールの O。src/ui/icons.tsx の HoleMark）。光は焼いた絵で色を持たない。
 
   display: flex は、印の svg を行に載せないため。この箱は .oops の列の中で block に
   なり、中の svg は1行ぶんの行ボックスに載る。標準モードの行ボックスは字が無くても
@@ -3087,6 +3448,41 @@ body[data-site] > main {
   }
 
   /*
+    入口の星空は、左の字の列と、底の件数の帯の上で消える（2つの覆いの重なる所だけを残す）。
+    図（--cosmos-fig-w）は右の列で、焦点（--cosmos-x / -y）は横がその真ん中、縦は件数の帯と
+    行の間（約 112px）を除いた残りの真ん中から、図の中の焦点の高さ（--cosmos-focus）だけずらした所
+  */
+  .cosmos--hero {
+    --cosmos-fig-w: calc((min(100vw - 2 * var(--gutter), var(--w-page)) - var(--sp-7) * 1.5) / 2);
+    --cosmos-x: calc(50% + var(--sp-7) * 0.75 + var(--cosmos-fig-w) / 2);
+    --cosmos-y: calc(
+      var(--page-pad) +
+      (100% - 2 * var(--page-pad) - 112px) /
+      2 +
+      (var(--cosmos-focus) - 0.5) *
+      var(--cosmos-fig)
+    );
+    /*
+      左の消え方は楕円（真ん中は焦点より右）。左の端は本文の幅の半分より 12px 左——字の列の
+      右の端（半分より 24px 左）の外——で、そこから焦点の手前まで長く薄れる。右は画面の端の
+      先まで開いたまま。まっすぐな線で切っていたころは、星雲が四角い板に見えた
+    */
+    mask-image:
+      radial-gradient(
+        ellipse calc(var(--cosmos-fig-w) * 0.8 + 48px) calc(var(--cosmos-fig) * 1.15) at
+          calc(var(--cosmos-x) + var(--cosmos-fig-w) * 0.3) var(--cosmos-y),
+        #000 45%,
+        transparent 100%
+      ),
+      linear-gradient(
+        to bottom,
+        #000 calc(100% - var(--page-pad) - 220px),
+        transparent calc(100% - var(--page-pad) - 100px)
+      );
+    mask-composite: intersect;
+  }
+
+  /*
     一覧の行: 番号・本文・札・技術・矢印を横に並べ、サムネイルは本文の下に置く。
     本文の列が残りを受け、札は区画の中で縦に積む。区画の幅は行をまたいで同じ
     なので、札と技術の縦の線が一覧の上から下までそろう
@@ -3177,40 +3573,65 @@ body[data-site] > main {
 /*
   body だけでなく要素単位でも効かせる。管理画面の見本が、同じ指定で
   そのまま色を出せるようにするため（見本用の色を別に持たない）。
+
+  星雲の3色（--nebula-a / -b / -c）もここで決める。1色目はアクセント、2色目と3色目は相方——
+  どれもパレットの色から選ぶ（色相を回して作ると、エンバーの相方が黄緑になった）。
+  モノクロでも星雲だけは青紫と桃と空色（持ち主の「星雲だけ色を付ける」）。
 */
 [data-accent='mono'] {
   --accent: var(--mono);
   --accent-soft: var(--mono-soft);
+  --nebula-a: var(--iris);
+  --nebula-b: var(--rose);
+  --nebula-c: var(--sky);
 }
 
 [data-accent='iris'] {
   --accent: var(--iris);
   --accent-soft: var(--iris-soft);
+  --nebula-a: var(--iris);
+  --nebula-b: var(--rose);
+  --nebula-c: var(--sky);
 }
 
 [data-accent='violet'] {
   --accent: var(--violet);
   --accent-soft: var(--violet-soft);
+  --nebula-a: var(--violet);
+  --nebula-b: var(--rose);
+  --nebula-c: var(--iris);
 }
 
 [data-accent='ember'] {
   --accent: var(--ember);
   --accent-soft: var(--ember-soft);
+  --nebula-a: var(--ember);
+  --nebula-b: var(--rose);
+  --nebula-c: var(--violet);
 }
 
 [data-accent='mint'] {
   --accent: var(--mint);
   --accent-soft: var(--mint-soft);
+  --nebula-a: var(--mint);
+  --nebula-b: var(--sky);
+  --nebula-c: var(--iris);
 }
 
 [data-accent='sky'] {
   --accent: var(--sky);
   --accent-soft: var(--sky-soft);
+  --nebula-a: var(--sky);
+  --nebula-b: var(--violet);
+  --nebula-c: var(--mint);
 }
 
 [data-accent='rose'] {
   --accent: var(--rose);
   --accent-soft: var(--rose-soft);
+  --nebula-a: var(--rose);
+  --nebula-b: var(--violet);
+  --nebula-c: var(--ember);
 }
 
 /* --- 書体。変えるのは見出しだけで、本文は読みやすさを優先して据え置く --- */
@@ -3417,7 +3838,8 @@ body[data-site] > main {
 @media (forced-colors: active), (prefers-contrast: more) {
   .system,
   .orbits,
-  .chart {
+  .chart,
+  .cosmos {
     display: none;
   }
 
@@ -3439,14 +3861,20 @@ body[data-site] > main {
 }
 
 /*
-  強制色モードでは、ロゴの O の影を地の色で抜く。光の縁と横線は字の色（強制色の
-  リンクの色）になるのに、影の黒はそのまま残るので、明るいテーマでは O が塗りの円に
-  見える。prefers-contrast: more の括りには入れない——強制色でないときの Canvas は
-  灰色の地で、影が灰色の円になる
+  強制色モードでは、ロゴの O を字と同じ色の輪に替える。光は焼いた絵で色を変えられず
+  （明るいテーマでは白い光が地に溶け、影の黒だけが塗りの円で残る）、字の色（強制色の
+  リンクの色）とも揃わないので隠し、影の円を地の色で抜いて縁に線を引く（太さは字の線と
+  同じ。icons.tsx の HoleArt が渡す）。prefers-contrast: more の括りには入れない——強制色
+  でないときの Canvas は灰色の地で、影が灰色の円になる
 */
 @media (forced-colors: active) {
+  .logo-art {
+    display: none;
+  }
+
   .logo-core {
     fill: Canvas;
+    stroke: currentColor;
   }
 }
 
@@ -3459,7 +3887,8 @@ body[data-site] > main {
 */
 @media (max-height: 400px) {
   .system,
-  .orbits {
+  .orbits,
+  .cosmos {
     display: none;
   }
 
@@ -3706,7 +4135,8 @@ body[data-site] > main {
   .cta,
   .system,
   .orbits,
-  .chart {
+  .chart,
+  .cosmos {
     display: none;
   }
 

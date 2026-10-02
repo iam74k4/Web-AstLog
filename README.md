@@ -3,8 +3,10 @@
 つくったものを置いておく場所。Cloudflare Workers の上で、公開ページと管理画面を
 1つの Worker が返す。
 
-名前は AstLog（astro ＋ log。前の名前は Noctifex）。ドメイン・Worker・D1・
-クッキーとヘッダの名前は noctifex のまま（ドメインを移すときにまとめて替える）。
+名前は AstLog（astro ＋ log）。リポジトリ・Worker・D1・クッキーとヘッダの名前も
+astlog にそろえてある。ドメインだけは前の名前で取った `noctifex.dev` のまま——
+新しいドメインを取ったら、`src/site.ts` の `origin`・`wrangler.toml` の `routes`・
+OAuth のコールバック URL（下の「OAuth のクライアントを作る」）を一緒に替える。
 
 - 公開: `https://noctifex.dev`
 - 管理: `https://noctifex.dev/admin`
@@ -139,15 +141,15 @@ npx wrangler secret put GOOGLE_CLIENT_SECRET
 直ることは無い（その値はもう使ってある。`owner_claims`）。
 
 ```bash
-npx wrangler d1 execute noctifex --remote --command "DELETE FROM user_identities WHERE provider = 'github'"
-npx wrangler d1 execute noctifex --remote --command "DELETE FROM sessions"
+npx wrangler d1 execute astlog --remote --command "DELETE FROM user_identities WHERE provider = 'github'"
+npx wrangler d1 execute astlog --remote --command "DELETE FROM sessions"
 ```
 
 外したアカウントを**また使う**ときは、使った記録の行も消してから、そのアカウントで
 ログインする（`[vars]` の値がそのアカウントのものであること）。
 
 ```bash
-npx wrangler d1 execute noctifex --remote --command "DELETE FROM owner_claims WHERE provider = 'github'"
+npx wrangler d1 execute astlog --remote --command "DELETE FROM owner_claims WHERE provider = 'github'"
 ```
 
 別のアカウントに替えるなら、`[vars]` をそのアカウントの値に書き換えてデプロイする
@@ -160,7 +162,7 @@ npx wrangler d1 execute noctifex --remote --command "DELETE FROM owner_claims WH
 （左ナビの足元の名前）→「すべての端末からログアウト」。管理画面に入れないときは、
 
 ```bash
-npx wrangler d1 execute noctifex --remote --command "DELETE FROM sessions"
+npx wrangler d1 execute astlog --remote --command "DELETE FROM sessions"
 ```
 
 ## 確かめる
@@ -186,12 +188,14 @@ npm run check:restore  # deploy が残す D1 の写しを、空の D1 に戻せ�
 測るのは箱の位置そのもの——`html` / `body` がページを止めていないか（`overflow` が
 `visible`）、**横にはみ出さないか**（ページの `scrollWidth` と、見えている要素の左右）、
 **切られた要素が無いか**（`overflow: hidden` / `clip` の祖先の外へ出た要素も、自分の字を
-切っている箱も。行止めと1行で省く札は除く）、`h1` がちょうど1つか、上の帯が本文の上・足元が
+切っている箱も。行止めと1行で省く札と、入口と締めの星空 `.cosmos` の中——星雲を星空の箱で
+切り取るのが決まり——は除く）、`h1` がちょうど1つか、上の帯が本文の上・足元が
 本文の下に居るか、**帯の貼り付け**（本文の下に画面3つぶんの空きを足して一番下まで送っても
 目次といまの印が画面の中にあり、帯が本文より手前に描かれ、地が透けていないか）、
 **送った先**（`main` の中の id へ送ると、上端が帯の下端より下に来るか）、押す的
 （目次の行き先と、入口の番号の札の中心に重ねた透明の面）が `--tap` 以上か、**見出しの錨**（どのページでも節の見出しが同じ高さに居るか）、**入口の軌道図**
-（ブラックホールが焦点に座り、番号の札どうし・札と光の縁が重ならず、札が枠の中に収まるか）。あわせて、
+（ブラックホールが焦点に座って絵が読めていて、番号の札どうし・札とブラックホールのまわりの矩形が
+重ならず、札が枠の中に収まるか）。あわせて、
 **目次の印**（いまのページの行き先）が帯の見えている幅の中にあるか——帯の最初の位置は
 読み込んだときに決まるので、ここだけはページごとに開き直して測る。
 
@@ -210,7 +214,7 @@ seed を先に流さなくてよい）。
 ```
 ✓ seed（1人のサイト）: 198 通り（11 URL × 3書体 × 3寸法 × 2姿）。横のはみ出し 0・
   切られた要素 0・h1 はどれも1つ・一番下まで送っても目次が見え、送った先は帯の下・
-  軌道図の札は重ならない。いちばん長いページ 2634px（sans 390x844 指 /projects）。
+  軌道図の札は重ならない。いちばん長いページ 3239px（sans 390x844 指 /projects）。
   見出しの錨のずれ 最大 0px。目次の印 30 ページが帯の中（うち 0 ページは送って開いた）。
   /all は 9 通りとも横に動かない
 ```
@@ -230,14 +234,15 @@ seed を先に流さなくてよい）。
 **1.00:1** ——その字は背景と同じ明るさで、完全に消えていた）。4寸法（電話と板は指で）×
 7アクセント（モノクロと6色）＝28通りをページごとに描き、入口（大見出し・札・リード文・一覧への
 押し手・番号の札・件数）と締め（Contact の1文・アドレス・「メールを送る」・GitHub）の字の行ボックスの
-下の画素を読んで WCAG 1.4.3 に照らす。入口は着いたときに一度だけ、ブラックホールが大きく明るい
-姿から縮んで灯り、軌道と天体が渦を巻いて収まり、そのあとは入口も締めも粒が落ち、光が流れ、縁の光が
-回り続けるので、その途中の3コマも同じ28通りで測る（入口 28 × 4姿 + 締め 28 × 4姿＝224通り。途中の姿では、
-まだ出ていない字と、隠している番号の札は測らない）。あわせて
-**軌道図が出ていること**も見る（軌道の線と点、ブラックホールを別々に消した絵との差分で、
-描いている画素数と、地からの離れ（明るさの差）に床を置く。床は 18/255。まとめて消すと、ブラックホール
-だけで床を越えて、線が消えても通る）。成功行の下に、線と点・ブラックホールごとの「いちばん少ない」姿の
-画素数が出る。
+下の画素を読んで WCAG 1.4.3 に照らす。入口は着いたときに一度だけ、星雲が凝って灯り、ブラックホールが
+大きく明るい姿から縮んで灯り、軌道と天体が渦を巻いて収まり、そのあとは入口も締めも粒が落ち、光が流れ、
+ブラックホールの光が揺らぎ、星雲が漂い続けるので、その途中の3コマも同じ28通りで測る（入口 28 × 4姿 + 締め 28 × 4姿＝
+224通り。途中の姿では、まだ出ていない字と、隠している番号の札は測らない）。あわせて
+**軌道図が出ていること**も見る（軌道の線と星屑、天体の点、ブラックホール、星雲、星空の星を別々に消した
+絵との差分で、描いている画素数と、地からの離れ（明るさの差）に床を置く。床は天体の点・ブラックホールが
+18/255、もともと淡い軌道の線と星屑・星雲・細かい星が 4/255。まとめて消すと、ブラックホールや星雲だけで
+床を越えて、軌道が消えても通る）。成功行の下に、それぞれの「いちばん少ない」姿の画素数が出る。入口と締めの星空は字の後ろで消える
+決まりなので、字の下の画素はこの検査がそのまま見張る。
 **文字を消した地だけを撮る**のが肝で、合成後の画面をそのまま読むと
 グリフ自身を背景として数えてしまい、どの組も 1.00:1 になって検査が意味を失う。撮った絵は CSP の
 無い空のページで読む（測るページはサイトの CSP のまま。外すと、本物の CSP が止めるものまで描いた姿で緑になる）。
@@ -272,7 +277,7 @@ push すると GitHub Actions が同じものを走らせる（`check` と `fit`
 最初の一度だけ、器を作る。
 
 ```bash
-npx wrangler d1 create noctifex          # 出力の database_id を wrangler.toml へ
+npx wrangler d1 create astlog          # 出力の database_id を wrangler.toml へ
 npx wrangler kv namespace create MEDIA   # 出力の id を wrangler.toml へ
 ```
 
@@ -373,7 +378,7 @@ https://github.com/actions/<名前>` で引き直し、行末のタグ名も直�
 
   上げ忘れても、写しは1時間で引き直される。seed（`db:seed:local` と本番の
   `db:seed:remote:destroys-prod`）は最後に自分で上げる
-- 写しを通ったかは応答の `x-noctifex-cache`（`hit` / `miss` / `stale`）で分かる
+- 写しを通ったかは応答の `x-astlog-cache`（`hit` / `miss` / `stale`）で分かる
 
 ### 戻す
 
@@ -386,9 +391,9 @@ Time Travel で戻すのがふつう。deploy が残した artifact の `bookmar
 `"bookmark"` を使う。
 
 ```bash
-npx wrangler d1 time-travel restore noctifex --bookmark=<bookmark>
+npx wrangler d1 time-travel restore astlog --bookmark=<bookmark>
 # 栞が無ければ時刻で
-npx wrangler d1 time-travel restore noctifex --timestamp=2026-09-27T09:00:00Z
+npx wrangler d1 time-travel restore astlog --timestamp=2026-09-27T09:00:00Z
 ```
 
 Time Travel は D1 に最初から入っていて、過去の任意の時点に戻せる（Workers の有料プランで
@@ -397,9 +402,9 @@ Time Travel は D1 に最初から入っていて、過去の任意の時点に�
 artifact の写し（90日残る）を**新しい空の D1 に、定義 → 中身の順で**流す。
 
 ```bash
-npx wrangler d1 create noctifex-restore
-npx wrangler d1 execute noctifex-restore --remote --file=schema-<sha>.sql   # 表と索引・移行の記録の表
-npx wrangler d1 execute noctifex-restore --remote --file=data-<sha>.sql     # 行（d1_migrations の行も）
+npx wrangler d1 create astlog-restore
+npx wrangler d1 execute astlog-restore --remote --file=schema-<sha>.sql   # 表と索引・移行の記録の表
+npx wrangler d1 execute astlog-restore --remote --file=data-<sha>.sql     # 行（d1_migrations の行も）
 # 中身を確かめてから、wrangler.toml の database_id をこちらへ差し替えて出す
 ```
 
@@ -413,8 +418,8 @@ npx wrangler d1 execute noctifex-restore --remote --file=data-<sha>.sql     # �
 手元で写しを取るのも同じ2本。
 
 ```bash
-npx wrangler d1 export noctifex --remote --no-data --output=schema.sql
-npx wrangler d1 export noctifex --remote --no-schema --output=data.sql
+npx wrangler d1 export astlog --remote --no-data --output=schema.sql
+npx wrangler d1 export astlog --remote --no-schema --output=data.sql
 ```
 
 写しにはメンバーの連絡先とログインの紐づけ（セッションの id は D1 にもハッシュでしか
@@ -553,7 +558,9 @@ src/
     sequence.ts      サイトのページの並びから目次と印を組む（tableOfContents。重なりは例外）
     orbits.ts        入口と締めの軌道図の形（件数から軌道と天体と動き続けるものを置く orbitMap・
                      軌道の奥と手前の半分 orbitHalves・天体と作品を結ぶ bodyItems・番号の札の
-                     置き場所 placeLabels・見る角度 ELEVATION と傾き TILT）
+                     置き場所 placeLabels・見る角度 ELEVATION と傾き TILT・まわりの星空 cosmosMap と
+                     星雲の塊 nebulaMap・入口と締めと作品の星図の枠 HERO_FRAME / CONTACT_FRAME /
+                     CHART_FRAME）
   routes/
     public/          公開ページ
       routes.ts      URL の登録だけ（登録順の決まり。catch-all は最後）
@@ -586,8 +593,8 @@ src/
     components.tsx   画面を組む部品。main の直接の子は Screen / Hero だけが作る
                      外枠はどれも HtmlDocument で <html> を開く（DOCTYPE を出す）
     icons.tsx        インライン SVG（ロゴの Wordmark / HoleMark もここで描く）
-    logo.ts          ロゴの形と素材に焼く色の正（ΛSTLOG の O がブラックホール。入口と締めの軌道図の真ん中も
-                     同じ O。JSX を持たない）
+    logo.ts          ロゴの形と素材に焼く色の正（ΛSTLOG の O は入口と同じブラックホールの絵
+                     BLACKHOLE_ART。軌道図と作品の星図の真ん中も同じ1枚。JSX を持たない）
 public/
   app.css            全画面のスタイル。値は :root のトークンだけで決める
                      色・書体のプリセットもここ（[data-accent] / [data-typeface]）
@@ -597,12 +604,13 @@ public/
                      公開ページは読まない（:root は持たず、app.css の段を読む）
   _headers           静的なファイルに付けるヘッダ（Worker を通らないので、ここで付ける）
                      Workers Static Assets が読む規則で、ファイルとしては配られない
-                     2枚の CSS は 1年・immutable（HTML が中身の版つきの URL
+                     2枚の CSS とブラックホールの絵は 1年・immutable（HTML が中身の版つきの URL
                      /app.css?v=… で読むので、変えてデプロイすれば URL が変わる）
-  assets/            GitHub の Organization の顔（astlog-avatar.png）——scripts/blackhole/render.py が焼く。
+  assets/            ブラックホールの光の絵（blackhole.webp。軌道図の真ん中とロゴの O）と GitHub の
+                     Organization の顔（astlog-avatar.png）——scripts/blackhole/render.py が焼く。
                      favicon（favicon.svg・favicon-32.png・apple-touch-icon.png）とページの外で使う
-                     ワードマーク（astlog-wordmark.svg）——scripts/logo/export.mjs が src/ui/logo.ts から
-                     書く。共有カードの絵（avatar.png）
+                     ワードマーク（astlog-wordmark.svg）——scripts/logo/export.mjs が src/ui/logo.ts と
+                     その絵から書く。共有カードの絵（avatar.png）
                      ※ ここに robots.txt や sitemap.xml を置かないこと。
                        public/ は Worker より先に配られるので、置くと
                        Worker が組み立てているほうが静かに届かなくなる
@@ -614,11 +622,13 @@ scripts/
   check-ids.mjs      本番に触れる前の番兵。wrangler.toml の id がプレースホルダなら止める
   seed-remote.mjs    npm run db:seed:remote:destroys-prod の中身。本番が空のときだけ流す
   touch-site.mjs     公開ページの写しの版を上げる（npm run site:touch / db:seed:local の最後）
-  blackhole/         render.py。GitHub の顔のブラックホールの絵を焼く（シュワルツシルトの測地線を追う。
-                     numpy と Pillow）。python3 scripts/blackhole/render.py avatar で public/assets に書く
-                     （サイトの中のブラックホールはロゴの O と同じ SVG で、ここでは焼かない）
+  blackhole/         render.py。ブラックホールの絵を焼く（シュワルツシルトの測地線を追う。numpy と
+                     Pillow）。python3 scripts/blackhole/render.py hero で軌道図とロゴの O の光の絵（影の
+                     半径と版を書き出す。src/ui/logo.ts の BLACKHOLE_ART をその数に。焼き直したら
+                     logo/export.mjs も流す）、avatar で GitHub の顔を public/assets に書く
   logo/              export.mjs。ロゴの素材（SVG と favicon・iPhone のホーム画面の PNG）を src/ui/logo.ts
-                     から書く（node scripts/logo/export.mjs。PNG は Playwright の Chromium で撮る）
+                     から書く（node scripts/logo/export.mjs。SVG は O の絵を小さくして data URI で
+                     抱える。PNG は Playwright の Chromium で撮る）
   moon/              前の入口の月（記録として残す。いまのサイトでは使っていない）。
                      render.py が Blender で焼き、pack.py が配信用に詰めていた（docs/moon.md）
   lib/               check-fit と check-contrast の共通部分。dev サーバの立て方と使い捨ての D1（dev-server.mjs）、

@@ -18,9 +18,13 @@ import {
   bodyItems,
   CHART_FRAME,
   CONTACT_FRAME,
+  type CosmosMap,
+  cosmosMap,
   HERO_FRAME,
   type LabelSide,
   labelRoom,
+  type NebulaMap,
+  nebulaMap,
   type OrbitBody,
   type OrbitFrame,
   type OrbitMap,
@@ -28,17 +32,8 @@ import {
   placeLabels,
 } from '../lib/orbits'
 import { SITE } from '../site'
-import {
-  GithubIcon,
-  HoleCore,
-  HoleLight,
-  HoleRing,
-  HoleSpot,
-  MailIcon,
-  PencilIcon,
-  Wordmark,
-} from './icons'
-import { HOLE, LARGE_GLOW_STOPS, MARK_HALF, MARK_VIEWBOX } from './logo'
+import { GithubIcon, MailIcon, PencilIcon, Wordmark } from './icons'
+import { BLACKHOLE_ART } from './logo'
 
 /*
   画面はこの部品だけで組む。新しい見た目が要るときは、まずここに足してから使う。
@@ -140,7 +135,7 @@ export const ColorSchemeMeta = () => <meta name="color-scheme" content="dark" />
   favicon。ロゴの印（ブラックホールの O を1つで）を地の色の正方形に載せたもの
   （src/ui/logo.ts の iconSvg）を SVG のまま読ませ、読めない環境には同じ絵の PNG を渡す
   （どちらも scripts/logo/export.mjs が書き出す）。地を敷くのは、光が白いから——透明の
-  ままだと明るいタブの帯では輪も横線も消え、黒い点だけになる。公開・管理・404 の
+  ままだと明るいタブの帯では光が消え、黒い点だけになる。公開・管理・404 の
   外枠がどれも置く。
 */
 export const FaviconLinks = () => (
@@ -333,6 +328,7 @@ export const Screen = ({
 
   orbit は入口の表紙（.hero--orbit）。左に大見出しの列、右に作品の軌道図
   （OrbitSystem）、底に件数の帯（Tally）を区画に並べる（app.css の「入口」）。
+  そのまわりの画面いっぱいに星空（Cosmos）を敷く。
 */
 export const Hero = ({
   profile,
@@ -344,6 +340,7 @@ export const Hero = ({
   children: Child
 }) => (
   <header class={profile ? 'hero hero--profile' : orbit ? 'hero hero--orbit' : 'hero'}>
+    {orbit ? <Cosmos map={cosmosMap()} id="hero-cosmos" place="hero" /> : null}
     {children}
   </header>
 )
@@ -385,30 +382,69 @@ export const Phrases = ({ text }: { text: string }) => (
 )
 
 /*
-  天体（作品1つ）の点。長さ0の線に丸い線端を付けて点にする——線の太さは
-  vector-effect: non-scaling-stroke（app.css の .orbit-body）で画面の px のまま
-  保たれるので、軌道図がどの大きさに縮んでも点の大きさが変わらない（circle の r は
-  viewBox と一緒に縮み、電話では 2px ほどまで潰れた）。
+  天体（作品1つ）。光る惑星——芯の点（orbit-body__dot）と、まわりのにじみ（__halo。
+  中心から外へ消える放射の坂。平らな円で描くと、ラジオボタンのような円盤に見えた）。
+  点は長さ0の線に丸い線端を付けたもので、太さは vector-effect: non-scaling-stroke
+  （app.css の .orbit-body）で画面の px のまま保つ（circle の r は viewBox と一緒に縮み、
+  電話では 2px ほどまで潰れた）。太さは枠の幅に比例する段（--orbit-body。cqi）に、
+  奥行き（orbits.ts の OrbitBody の scale。手前ほど大きい）を掛けたもの。にじみは
+  viewBox の単位の円（輪の半径の HALO 倍に同じ奥行きを掛ける）で、点と一緒に枠に比例する。
 
-  業務の天体は輪。同じ点を2回描き、2回目を地の色で小さく抜く。
+  業務の天体は輪のある惑星。輪は軌道面と同じ角度から見た楕円を少し傾けたもの（orbits.ts の
+  OrbitMap の ring。奥行きで同じだけ縮める）で、奥の半分を点の後ろ、手前の半分を前に描く。
+  区分を色だけで分けない（形で分ける）。前は白い点と抜いた輪で、図面の記号に見えた。輪を
+  水平のまま描いていたころは、横長の楕円の真ん中に点が乗った姿が「目」の記号に見えた。
 
-  lit は作品の星図（OrbitChart）で灯す天体（bodies の何番目か）。入口と締めでは渡さない。
+  id はにじみの坂の名前の頭（置く SVG ごとに変える）。lit は作品の星図（OrbitChart）で
+  灯す天体（bodies の何番目か）。入口と締めでは渡さない。
 */
-const Bodies = ({ bodies, lit }: { bodies: OrbitBody[]; lit?: number }) => (
-  <>
-    {bodies.map((body, i) => (
-      <g
-        key={`${body.x},${body.y}`}
-        class={`orbit-body orbit-body--${body.kind}${i === lit ? ' chart__lit' : ''}`}
-      >
-        <path d={`M${body.x} ${body.y}h0`} />
-        {body.kind === 'work' ? (
-          <path class="orbit-body__hole" d={`M${body.x} ${body.y}h0`} />
-        ) : null}
-      </g>
-    ))}
-  </>
-)
+const HALO = 1.6
+
+const Bodies = ({ map, id, lit }: { map: OrbitMap; id: string; lit?: number }) => {
+  const tenth = (value: number) => Math.round(value * 10) / 10
+  // 天体が無ければ何も描かない（にじみの坂も置かない）
+  if (!map.bodies.length) return null
+  return (
+    <>
+      <defs>
+        <radialGradient id={`${id}-halo`}>
+          <stop class="orbit-body__glow" offset="0" stop-opacity="1" />
+          <stop class="orbit-body__glow" offset="0.3" stop-opacity="0.4" />
+          <stop class="orbit-body__glow" offset="1" stop-opacity="0" />
+        </radialGradient>
+      </defs>
+      {map.bodies.map((body, i) => {
+        const dot = `M${body.x} ${body.y}h0`
+        const rx = tenth(map.ring.rx * body.scale)
+        const ry = tenth(map.ring.ry * body.scale)
+        // 輪の長軸の端（傾けた向き）
+        const dx = tenth(rx * Math.cos((map.ring.tilt * Math.PI) / 180))
+        const dy = tenth(rx * Math.sin((map.ring.tilt * Math.PI) / 180))
+        // 輪の半分。sweep 1 は左の端から上を回って右の端へ（奥の半分）、0 は下を回る（手前の半分）
+        const ring = (sweep: 0 | 1) =>
+          `M${tenth(body.x - dx)} ${tenth(body.y - dy)}A${rx} ${ry} ${map.ring.tilt} 0 ${sweep} ${tenth(body.x + dx)} ${tenth(body.y + dy)}`
+        return (
+          <g
+            key={`${body.x},${body.y}`}
+            class={`orbit-body orbit-body--${body.kind}${i === lit ? ' chart__lit' : ''}`}
+            style={`--scale:${body.scale}`}
+          >
+            <circle
+              class="orbit-body__halo"
+              cx={body.x}
+              cy={body.y}
+              r={tenth(map.ring.rx * HALO * body.scale)}
+              fill={`url(#${id}-halo)`}
+            />
+            {body.kind === 'work' ? <path class="orbit-body__ring" d={ring(1)} /> : null}
+            <path class="orbit-body__dot" d={dot} />
+            {body.kind === 'work' ? <path class="orbit-body__ring" d={ring(0)} /> : null}
+          </g>
+        )
+      })}
+    </>
+  )
+}
 
 /*
   軌道の線（入口と締め）。奥の半分（side = far。ブラックホールの後ろの層）か手前の半分
@@ -418,12 +454,19 @@ const Bodies = ({ bodies, lit }: { bodies: OrbitBody[]; lit?: number }) => (
     半分が同じ坂を読むので、継ぎ目で濃さが跳ばない（半分ずつの濃さを変えていたころは、
     楕円の左右の端で線が急に濃くなった）。坂の色と濃さは app.css の .orbit-depth__*。
     グラデーションは層ごとに id を分けて持つ（id は置く部品が渡す）
-  - 手前の半分に地の色の縁取りは敷かない。光の縁を締めた（logo.ts の LARGE_GLOW_STOPS）ので、
-    手前の線が光の前を通る所（焦点から黒い円の 1.3 倍ほど）では光はもう薄く、線はそのまま
-    見える。光が真っ白だったころは縁取りで線を浮かせていて、それが光を黒い筋で切っていた
+  - 手前の半分に地の色の縁取りは敷かない。手前の線はブラックホールの光の外を通る
+    （いちばん内側の軌道でも、円盤の光の端より外）。光が真っ白に広がっていたころは縁取りで
+    線を浮かせていて、それが光を黒い筋で切っていた
+  - 線は細い芯（orbit）。入口と締めでは、その下に光の帯（OrbitBands）と星屑（Stardust）を
+    敷く——細い芯だけのころは、製図の線に見えた（持ち主の「線と点が図面っぽい」「軌道が
+    ださい」）。作品の星図は帯と星屑の代わりに、同じ坂の淡いにじみ（orbit__glow）を敷く
+  - 外の軌道ほど淡い（入口と締め。--reach は内側の 0 から外側の 1 までの位置で、濃さは
+    app.css の --orbit-outer まで落ちる）。同じ濃さの輪が5本並んでいたころは、的か年輪の
+    ような平らな縞に見え、奥行きが付かなかった
   - lit は作品の星図（OrbitChart）で灯す軌道（orbits の何番目か）。灯す線も奥から手前へ
     続けて濃くなる坂で、坂の濃さだけが違う（.chart-depth__*）。奥と手前の半分が同じ坂を
-    読むので、灯した線も継ぎ目で跳ばない。入口と締めでは渡さない
+    読むので、灯した線も継ぎ目で跳ばない。入口と締めでは渡さない。星図は外ほど淡くしない
+    （灯す線は外の軌道でも元の濃さで指す）
 */
 const OrbitLines = ({
   map,
@@ -455,14 +498,92 @@ const OrbitLines = ({
         {slope(id, 'orbit-depth')}
         {lit === undefined ? null : slope(`${id}-lit`, 'chart-depth')}
       </defs>
-      {map.orbits.map((orbit, i) => (
-        <path
-          key={orbit[side]}
-          class={`orbit orbit--${orbit.kind}${i === lit ? ' chart__lit' : ''}`}
-          d={orbit[side]}
-          stroke={`url(#${i === lit ? `${id}-lit` : id})`}
-        />
-      ))}
+      {map.orbits.map((orbit, i) => {
+        const stroke = `url(#${i === lit ? `${id}-lit` : id})`
+        const litClass = i === lit ? ' chart__lit' : ''
+        // 内側の 0 から外側の 1 まで（星図では渡さない）
+        const reach =
+          lit === undefined
+            ? `--reach:${Math.round((i / Math.max(1, map.orbits.length - 1)) * 100) / 100}`
+            : undefined
+        return (
+          <g key={orbit[side]}>
+            {lit === undefined ? null : (
+              <path class={`orbit__glow${litClass}`} d={orbit[side]} stroke={stroke} />
+            )}
+            <path class={`orbit${litClass}`} d={orbit[side]} stroke={stroke} style={reach} />
+          </g>
+        )
+      })}
+    </>
+  )
+}
+
+/*
+  軌道に沿う光の帯（入口と締め。形は orbits.ts の OrbitMap の bands）。区間ごとの折れ線を、
+  区間ごとの太さと濃さでぼかして描く——手前ほど太く明るい（透視の手がかり）。色は線と同じ
+  アクセント（app.css の .orbit-bands）。奥の半分の区間はブラックホールの後ろの層、手前は前の
+  層に描く。ぼかしは動かない層（app.css の .system__orbits）の中だけで掛ける——流れる光と粒は
+  別の層なので、フィルタを毎コマ掛け直さない。id はフィルタの名前の頭
+*/
+const OrbitBands = ({ map, side, id }: { map: OrbitMap; side: 'far' | 'near'; id: string }) => {
+  const bands = map.bands.filter((band) => band.side === side)
+  if (!bands.length) return null
+  return (
+    <>
+      <defs>
+        <filter id={`${id}-blur`} x="-10%" y="-10%" width="120%" height="120%">
+          <feGaussianBlur stdDeviation="5" />
+        </filter>
+      </defs>
+      <g class="orbit-bands" filter={`url(#${id}-blur)`}>
+        {bands.map((band) => (
+          <path key={band.d} d={band.d} stroke-width={band.w} stroke-opacity={band.o} />
+        ))}
+      </g>
+    </>
+  )
+}
+
+/*
+  軌道に沿って散る星屑（入口と締め。形は orbits.ts の OrbitMap の stardust）。明るさの段
+  ごとに1本の path（長さ0の線の並びに丸い線端で、点の並び）で、段の太さと濃さは app.css の
+  .stardust__0 … が決める。濃さは線と同じ奥から手前への坂（奥ほど淡い）。粒のまわりには
+  ぼかした写しを重ねてにじませる（-glow。帯と同じく動かない層の中だけ）。id は坂と
+  フィルタの名前の頭
+*/
+const Stardust = ({ map, side, id }: { map: OrbitMap; side: 'far' | 'near'; id: string }) => {
+  const levels = map.stardust[side]
+  if (!levels.some(Boolean)) return null
+  return (
+    <>
+      <defs>
+        <linearGradient
+          id={`${id}-depth`}
+          gradientUnits="userSpaceOnUse"
+          x1={map.depth.x1}
+          y1={map.depth.y1}
+          x2={map.depth.x2}
+          y2={map.depth.y2}
+        >
+          <stop class="stardust-depth__far" offset="0" />
+          <stop class="stardust-depth__near" offset="1" />
+        </linearGradient>
+        <filter id={`${id}-glow`} x="-5%" y="-5%" width="110%" height="110%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="1.8" result="soft" />
+          <feMerge>
+            <feMergeNode in="soft" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+      <g class="stardust" filter={`url(#${id}-glow)`}>
+        {levels.map((d, level) =>
+          d ? (
+            <path key={level} class={`stardust__${level}`} d={d} stroke={`url(#${id}-depth)`} />
+          ) : null,
+        )}
+      </g>
     </>
   )
 }
@@ -472,6 +593,10 @@ const OrbitLines = ({
   ものを奥の層と手前の層に1つずつ置き、それぞれを軌道面の奥と手前の半面で切る（orbits.ts の
   OrbitMap の halves）——ブラックホールの向こうを流れるあいだは後ろに、こちらへ来るあいだは
   前に見える。動かし方は app.css の「動き続ける」。動きを減らす設定では出さない。
+
+  光は細い頭と、その後ろに長く淡い尾（orbit-flow--tail）を引く彗星の形。尾は頭と同じ
+  所で終わるように、長さの差だけ遅れて回る（app.css）。太い白い破線1本のころは、止まった
+  瞬間に読み込み中のバーか傷に見え、図の中で天体より明るかった
 
   天体は公転させない。天体はいつも番号の札と同じ止まった場所に居て（Bodies）、動くのは光
   だけ——公転する天体と止まった場所の札は食い違い、重ねたときに天体を札へ寄せると、跳ぶか
@@ -487,15 +612,20 @@ const Motion = ({ map, side, id }: { map: OrbitMap; side: 'far' | 'near'; id: st
         </clipPath>
       </defs>
       <g class="orbit-flows" clip-path={clip}>
-        {map.orbits.map((orbit, i) => (
-          <path
-            key={orbit.d}
-            class="orbit-flow"
-            d={orbit.d}
-            pathLength="100"
-            style={`--dur:${map.flows[i]}s;--delay:-${Math.round((map.flows[i] ?? 0) * ((i * 0.618) % 1) * 10) / 10}s`}
-          />
-        ))}
+        {map.orbits.map((orbit, i) => {
+          const timing = `--dur:${map.flows[i]}s;--delay:-${Math.round((map.flows[i] ?? 0) * ((i * 0.618) % 1) * 10) / 10}s`
+          return (
+            <g key={orbit.d}>
+              <path
+                class="orbit-flow orbit-flow--tail"
+                d={orbit.d}
+                pathLength="100"
+                style={timing}
+              />
+              <path class="orbit-flow" d={orbit.d} pathLength="100" style={timing} />
+            </g>
+          )
+        })}
       </g>
     </>
   )
@@ -529,54 +659,277 @@ const Dust = ({ map }: { map: OrbitMap }) => (
   </g>
 )
 
+/*
+  宇宙（入口と締め。形は orbits.ts の cosmosMap）。軌道図のまわりの画面いっぱいに敷く星空で、
+  入口と締めのページの本文（main）の幅いっぱいに広がる（app.css の .cosmos。main を
+  位置の基準にして inset: 0）。持ち主の「もっと壮大に」——軌道図だけが枠の中の絵に見えた。
+
+  - 星（cosmos__stars）。1枚の視野を枠いっぱいに切り取る（preserveAspectRatio slice）。
+    瞬く星は明るさだけが動く。いちばん明るい星には十字の光芒（cosmos__glint。長さは
+    viewBox の単位で、切り取る倍率と一緒に伸び縮みする）。光芒は真ん中から先へ消える坂
+    （-glint。十字の箱に合わせた放射の坂）——同じ明るさの細い十字だったころは、照準か
+    カーソルの印に見えた
+  - 流れ星（cosmos__meteors）。頭が明るく尾が消える短い筋を、置いた向きのまま流す。
+    動きを減らす設定では出さない（止まった筋は流れ星に見えない）
+  - 星雲（Nebula）。ブラックホールの位置（図の中の焦点の高さを --cosmos-focus で渡す）に、図の
+    幅に比例した大きさで置く（app.css の .cosmos__nebula。place ごとに図の位置が違う）
+  - 星雲の色の淡い広がりと、字の後ろで消える覆いも app.css
+
+  id は光芒と流れ星の坂の名前の頭。飾りなので読み上げには出さない。
+*/
+const Cosmos = ({ map, id, place }: { map: CosmosMap; id: string; place: 'hero' | 'contact' }) => {
+  const view = `0 0 ${map.width} ${map.height}`
+  // 光芒の腕の長さ（viewBox の単位。先は坂で消えるので、見える長さはこれより短い）
+  const arm = (star: { w: number }) => Math.round(star.w * 6 * 10) / 10
+  // 図の中の焦点（ブラックホール）の高さ（枠の高さに対する割合）。星雲をそこに置く（app.css）
+  const frame = place === 'hero' ? HERO_FRAME : CONTACT_FRAME
+  const focus = Math.round((frame.focus.y / frame.height) * 1000) / 1000
+  return (
+    <div class={`cosmos cosmos--${place}`} aria-hidden="true" style={`--cosmos-focus:${focus}`}>
+      <svg
+        class="cosmos__stars"
+        viewBox={view}
+        preserveAspectRatio="xMidYMid slice"
+        aria-hidden="true"
+        focusable="false"
+      >
+        {map.stars.map((star) => (
+          <path
+            key={`${star.x},${star.y}`}
+            class={star.twinkle ? 'cosmos__twinkle' : undefined}
+            d={`M${star.x} ${star.y}h0`}
+            opacity={star.o}
+            style={
+              star.twinkle
+                ? `stroke-width:${star.w}px;--dur:${star.twinkle.dur}s;--delay:${star.twinkle.delay}s`
+                : `stroke-width:${star.w}px`
+            }
+          />
+        ))}
+        <defs>
+          <radialGradient id={`${id}-glint`}>
+            <stop class="cosmos__spark" offset="0" stop-opacity="1" />
+            <stop class="cosmos__spark" offset="1" stop-opacity="0" />
+          </radialGradient>
+        </defs>
+        {map.stars
+          .filter((star) => star.glint)
+          .map((star) => (
+            <path
+              key={`glint-${star.x},${star.y}`}
+              class="cosmos__glint"
+              d={`M${star.x - arm(star)} ${star.y}h${arm(star) * 2}M${star.x} ${star.y - arm(star)}v${arm(star) * 2}`}
+              style={`stroke:url(#${id}-glint)`}
+            />
+          ))}
+      </svg>
+      <Nebula map={nebulaMap()} id={`${id}-nebula`} />
+      <svg
+        class="cosmos__meteors"
+        viewBox={view}
+        preserveAspectRatio="xMidYMid slice"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <defs>
+          <linearGradient id={`${id}-meteor`} x1="-90" x2="0" gradientUnits="userSpaceOnUse">
+            <stop class="cosmos__trail" offset="0" stop-opacity="0" />
+            <stop class="cosmos__trail" offset="1" stop-opacity="1" />
+          </linearGradient>
+        </defs>
+        {map.meteors.map((meteor) => (
+          <g
+            key={`${meteor.x},${meteor.y}`}
+            transform={`translate(${meteor.x} ${meteor.y}) rotate(${meteor.angle})`}
+          >
+            <path
+              class="cosmos__meteor"
+              d="M-90 0h90"
+              stroke={`url(#${id}-meteor)`}
+              style={`--dur:${meteor.dur}s;--delay:${meteor.delay}s`}
+            />
+          </g>
+        ))}
+      </svg>
+    </div>
+  )
+}
+
+/*
+  星雲（星空 Cosmos の中、ブラックホールのまわり。形は orbits.ts の nebulaMap）。
+
+  雲の塊（楕円を放射の坂で塗ったもの）を4枚重ねる。光る塊の束（defs の glow）を use で
+  3回呼び、2枚目と3枚目にだけ乱数の模様のフィルタを掛ける。4枚目は塵の帯——
+    1. 光（nebula__light）。坂のまま。雲の芯がぼんやり光る
+    2. 雲（nebula__cloud）。fractalNoise で綿のような塊に抜く
+    3. 筋（nebula__veil）。turbulence の尾根（模様が 0 に近い所）を細い筋として残し、低い
+       周波数の模様で押し流して渦にする（feDisplacementMap）
+    4. 塵（nebula__dust）。地の色の塊を、まだらの模様で抜いて明るい雲の上に重ねる——暗い
+       塵の帯が雲を横切る
+  模様の大きさは viewBox の単位で決まるので、どの大きさで置いても同じ雲に見える。乱数の
+  種は決まっていて、読み込むたびに同じ雲になる（写しの HTML も毎回同じ）。
+
+  色は塊ごとの役（tone）で、app.css が敷く——a・b・c は見た目のプリセットごとの3色
+  （--nebula-a / -b / -c。モノクロでも星雲だけは色を持つ）、ink は字の白（明るい芯）、dust は
+  地の色。層ごとの濃さも app.css（--nebula-*）。
+
+  雲は SVG ごと漂う（app.css の「動き続ける」。箱ごと動かすので、中は描き直さない——
+  フィルタを毎コマ掛け直さない）。瞬く星は別の SVG（cosmos__stars）に置く。同じ SVG に
+  置くと、瞬きのたびに雲のフィルタまで掛け直す。
+
+  id はページの中で星雲ごとに変える。坂（-a・-dust …）・塊の束（-lobes-*）・フィルタ（-f-*）は
+  名前の形を分ける——同じ名前が2つあると、url(#…) が先にある別の要素を指して黙って消える
+  （塵の坂と塵の束とフィルタが同じ -dust だったころ、塵の帯は1本も描かれていなかった）。
+  飾りなので読み上げには出さない。
+*/
+const NEBULA_TONES = ['a', 'b', 'c', 'ink', 'dust'] as const
+
+const Nebula = ({ map, id }: { map: NebulaMap; id: string }) => {
+  const view = `0 0 ${map.width} ${map.height}`
+  // フィルタの範囲は箱そのもの（はみ出す模様を作らない）
+  const region = {
+    x: 0,
+    y: 0,
+    width: map.width,
+    height: map.height,
+    filterUnits: 'userSpaceOnUse',
+    'color-interpolation-filters': 'sRGB',
+  }
+  const ellipse = (lobe: NebulaMap['lobes'][number]) => (
+    <ellipse
+      key={`${lobe.cx},${lobe.cy}`}
+      cx={lobe.cx}
+      cy={lobe.cy}
+      rx={lobe.rx}
+      ry={lobe.ry}
+      transform={`rotate(${lobe.rot} ${lobe.cx} ${lobe.cy})`}
+      fill={`url(#${id}-${lobe.tone})`}
+      opacity={lobe.o}
+    />
+  )
+  return (
+    <svg class="cosmos__nebula" viewBox={view} aria-hidden="true" focusable="false">
+      <defs>
+        {NEBULA_TONES.map((tone) => (
+          <radialGradient key={tone} id={`${id}-${tone}`}>
+            <stop class={`nebula__${tone}`} offset="0" stop-opacity="1" />
+            <stop class={`nebula__${tone}`} offset="0.45" stop-opacity="0.5" />
+            <stop class={`nebula__${tone}`} offset="1" stop-opacity="0" />
+          </radialGradient>
+        ))}
+        <g id={`${id}-lobes-glow`}>
+          {map.lobes.filter((lobe) => lobe.tone !== 'dust').map(ellipse)}
+        </g>
+        <g id={`${id}-lobes-dust`}>
+          {map.lobes.filter((lobe) => lobe.tone === 'dust').map(ellipse)}
+        </g>
+        <filter id={`${id}-f-cloud`} {...region}>
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.0042 0.0075"
+            numOctaves="5"
+            seed="4"
+            result="noise"
+          />
+          <feColorMatrix
+            in="noise"
+            type="matrix"
+            values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2.1 0 0 0 -0.62"
+            result="mask"
+          />
+          <feComposite in="SourceGraphic" in2="mask" operator="in" />
+        </filter>
+        <filter id={`${id}-f-veil`} {...region}>
+          <feTurbulence
+            type="turbulence"
+            baseFrequency="0.006 0.01"
+            numOctaves="4"
+            seed="9"
+            result="ridge"
+          />
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.003"
+            numOctaves="2"
+            seed="21"
+            result="warp"
+          />
+          <feDisplacementMap
+            in="ridge"
+            in2="warp"
+            scale="90"
+            xChannelSelector="R"
+            yChannelSelector="G"
+            result="bent"
+          />
+          <feColorMatrix
+            in="bent"
+            type="matrix"
+            values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -4.6 0 0 0 1.05"
+            result="mask"
+          />
+          <feComposite in="SourceGraphic" in2="mask" operator="in" />
+        </filter>
+        <filter id={`${id}-f-dust`} {...region}>
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.008 0.016"
+            numOctaves="4"
+            seed="33"
+            result="noise"
+          />
+          <feColorMatrix
+            in="noise"
+            type="matrix"
+            values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2.6 0 0 0 -0.9"
+            result="mask"
+          />
+          <feComposite in="SourceGraphic" in2="mask" operator="in" />
+        </filter>
+      </defs>
+      <use class="nebula__light" href={`#${id}-lobes-glow`} />
+      <use class="nebula__cloud" href={`#${id}-lobes-glow`} filter={`url(#${id}-f-cloud)`} />
+      <use class="nebula__veil" href={`#${id}-lobes-glow`} filter={`url(#${id}-f-veil)`} />
+      <use class="nebula__dust" href={`#${id}-lobes-dust`} filter={`url(#${id}-f-dust)`} />
+    </svg>
+  )
+}
+
 // 2桁にそろえた番号（01・02 …）。入口の軌道図の札と件数の帯で同じ書き方
 const twoDigits = (value: number) => String(value).padStart(2, '0')
 
 /*
-  ブラックホール（入口と締めと作品の星図）。ロゴの O と同じ絵——黒い円（影）、縁でくっきり
-  光って外へ消える輪、その後ろを通る横線（真横から見た円盤）——を、軌道図の焦点に大きく置く
-  （形は src/ui/logo.ts、描き方は icons.tsx の HoleLight / HoleCore）。ロゴと同じ1つのものに
-  見せるため、形の比も色（字の白と --hole-core）も変えない。大きく描くときだけ縁の光の質を
-  上げる——光の坂を抑え（LARGE_GLOW_STOPS）、黒い円の縁に細い光の輪（HoleRing）を足す
-  （理由は logo.ts）。横線は軌道面の傾きに合わせて回す（app.css の
-  .hole の --system-tilt。輪と円は回しても同じ）。
+  ブラックホール（入口と締めと作品の星図）。光の曲がりを計算して焼いた絵（logo.ts の
+  BLACKHOLE_ART。ロゴの O と同じ1枚）を、影の半径が枠の hole になる大きさで置く。影の黒い円
+  （--hole-shadow は円の径の、絵の幅に対する割合）は絵の下に敷く（app.css の .hole::before）。
+  黒い円・光の縁・横線の記号を大きく描いていたころは、星雲の中で日食かレンズのフレアに
+  見えた（持ち主の「ブラックホールが違和感」）。
 
-  大きさは枠の hole（黒い円の半径）から、置き場所は枠の focus から組んで style で渡す
-  （CSS に写すと、枠を変えた日に片方だけ古くなる）。
-
-  SVG を重ねる: 光（横線と縁の光。明るさがゆっくり揺らぐ）→ 縁の光の輪 →
-  縁を回る光（HoleSpot。回り続ける）→ 黒い円。動くのは SVG ごとの明るさと回転だけで、
-  中を描き直さない。id はグラデーションの名前の頭（入口と締めは別のページだが、ロゴの
-  wm / mk とは分ける）。飾りなので読み上げには出さない。
-
-  still は作品の星図（OrbitChart）の止まったブラックホール。縁を回る光を描かない（光の
-  揺らぎは app.css が星図の中で止める）。一覧には星図が行の数だけ並ぶので、1つずつ
-  回して揺らすと、読んでいる行の横でいくつもの光が動き続ける
+  大きさは枠の hole から、置き場所は枠の focus から組んで style で渡す（CSS に写すと、枠を
+  変えた日に片方だけ古くなる）。app.css が軌道面と同じ傾き（--system-tilt）で回す。光だけが
+  ゆっくり揺らぐ（app.css の「動き続ける」）。still は作品の星図の真ん中——揺らさない（一覧には
+  星図が行の数だけ並び、1つずつ揺らすと、読んでいる行の横でいくつもの光が動き続ける）。
+  飾りなので読み上げには出さない。
 */
-const Hole = ({ frame, id, still }: { frame: OrbitFrame; id: string; still?: boolean }) => {
+const Hole = ({ frame, still }: { frame: OrbitFrame; still?: boolean }) => {
   const pct = (value: number) => `${Math.round(value * 10000) / 100}%`
-  // 印の枠（±MARK_HALF）が黒い円の半径（HOLE.core）の何倍か
-  const width = (2 * MARK_HALF * frame.hole) / HOLE.core
+  // 絵の幅（枠の単位）。絵の影の半径（BLACKHOLE_ART.shadow）が hole になる倍率で
+  const width = (BLACKHOLE_ART.width / BLACKHOLE_ART.shadow) * frame.hole
+  const shadow = pct((2 * BLACKHOLE_ART.shadow) / BLACKHOLE_ART.width)
   return (
     <span
-      class="hole"
+      class={still ? 'hole hole--still' : 'hole'}
       aria-hidden="true"
-      style={`--hole-x:${pct(frame.focus.x / frame.width)};--hole-y:${pct(frame.focus.y / frame.height)};--hole-w:${pct(width / frame.width)}`}
+      style={`--hole-x:${pct(frame.focus.x / frame.width)};--hole-y:${pct(frame.focus.y / frame.height)};--hole-w:${pct(width / frame.width)};--hole-shadow:${shadow}`}
     >
-      <svg class="hole__light" viewBox={MARK_VIEWBOX} aria-hidden="true" focusable="false">
-        <HoleLight cx={0} cy={0} id={id} stops={LARGE_GLOW_STOPS} />
-      </svg>
-      <svg class="hole__ring" viewBox={MARK_VIEWBOX} aria-hidden="true" focusable="false">
-        <HoleRing id={id} />
-      </svg>
-      {still ? null : (
-        <svg class="hole__spin" viewBox={MARK_VIEWBOX} aria-hidden="true" focusable="false">
-          <HoleSpot id={id} />
-        </svg>
-      )}
-      <svg class="hole__core" viewBox={MARK_VIEWBOX} aria-hidden="true" focusable="false">
-        <HoleCore cx={0} cy={0} />
-      </svg>
+      <img
+        class="hole__art"
+        src={BLACKHOLE_ART.src}
+        width={BLACKHOLE_ART.width}
+        height={BLACKHOLE_ART.height}
+        alt=""
+        decoding="async"
+      />
     </span>
   )
 }
@@ -591,23 +944,28 @@ export type OrbitItem = { type: ItemKind; title: string; href: string | null; nu
   入口の軌道図。真ん中にブラックホールを置き、公開中の作品を1つずつ楕円の軌道に
   載せる（形は src/lib/orbits.ts の orbitMap。件数だけから決まる）。
 
-  - 軌道はブラックホールの円盤と同じ面にあり、奥の半分はブラックホールの後ろ、手前の
-    半分は前を通る（奥と手前で SVG を分け、そのあいだに Hole を挟む）。どの軌道も同じ形の
-    入れ子で交わらず、線は奥ほど薄い（OrbitLines）
+  - まわりの画面いっぱいに星空と星雲を敷く（Hero の Cosmos）
+  - 軌道は水平な面を斜め上の近い所から透視で見た楕円で、手前は大きく広がり、奥はブラック
+    ホールの後ろで詰まる。奥の半分はブラックホールの後ろ、手前の半分は前を通る（奥と手前で
+    SVG を分け、そのあいだに Hole を挟む）。どの軌道も同じ形の入れ子で交わらず、外ほど間が
+    広い。細い線（OrbitLines。奥ほど薄く、外の軌道ほど淡い）に、光の帯（OrbitBands。手前ほど
+    太く明るい）と星屑（Stardust）を重ねる。帯と星屑と線は動かない SVG（.system__orbits）、
+    流れる光と粒は動く SVG（.system__motion）——ぼかしを毎コマ掛け直さないため
   - 天体に作品の番号の札を添える（作品のページへのリンク）。名前は札の中にあり、
     マウスを重ねたときとキーボードで選んだときに見える（app.css の .system__name。
     読み上げとリンクの名前にはいつも入る）。札を出すのは枠が十分に広いときだけ
     （app.css の @container。orbits.ts の LABEL_MIN_WIDTH）で、狭い枠では点だけに
     なる——作品の名前はすぐ下の「一覧で見る →」の先に全部ある
   - 札の置き場所は、重ならない向きを orbits.ts の placeLabels が選ぶ
-  - 個人開発は塗りの点、業務は輪と破線の軌道（区分の呼び名は KIND_LABEL）
+  - 天体は光る惑星で、業務は輪のある惑星（区分の呼び名は KIND_LABEL）。手前ほど大きい（Bodies）
   - 天体はブラックホールのまわりの矩形（HERO_FRAME の clear）の外にだけ置く
   - 線と点の色は app.css が --accent と --ink から敷く（見た目のプリセットで変わる）。
-    ブラックホールだけはロゴの O と同じ色（字の白と --hole-core）
+    ブラックホールの絵は字の白だけ（BLACKHOLE_ART）
   - 軌道・天体・ブラックホールは aria-hidden。札（リンク）だけが読み上げに出る
-  - 着いたときに一度だけ、ブラックホールが灯り、軌道と天体が渦を巻いて収まる
-    （app.css の「入口に着いたとき」）。そのあとも光は動き続ける——軌道を光が流れ、光の粒が
-    渦を巻いて吸い込まれ、ブラックホールの縁を光が回り、光が揺らぐ（Motion・Dust・Hole）。
+  - 着いたときに一度だけ、星雲が凝って灯り、ブラックホールが灯り、軌道と天体が渦を巻いて
+    収まる（app.css の「入口に着いたとき」）。そのあとも光は動き続ける——軌道を光が流れ、光の粒が
+    渦を巻いて吸い込まれ、ブラックホールの光が揺らぎ、星雲が漂い、星が瞬く
+    （Motion・Dust・Hole・Nebula）。
     天体は公転させず、札と同じ止まった場所に居る（Motion）。札はマウスを重ねたとき・選んだ
     ときに番号の順に浮かぶ（指の端末では初めから出ている）。止まった姿がそのまま完成形
 
@@ -635,22 +993,40 @@ export const OrbitSystem = ({ counts, items }: { counts: KindCounts; items: Orbi
         aria-hidden="true"
         focusable="false"
       >
+        <OrbitBands map={map} side="far" id="system-far-bands" />
         <OrbitLines map={map} side="far" id="system-far-depth" />
+        <Stardust map={map} side="far" id="system-far-stardust" />
+      </svg>
+      <svg
+        class="system__motion system__motion--far"
+        viewBox={view}
+        aria-hidden="true"
+        focusable="false"
+      >
         <Motion map={map} side="far" id="system-far" />
         <Dust map={map} />
       </svg>
-      <Hole frame={HERO_FRAME} id="system-hole" />
+      <Hole frame={HERO_FRAME} />
       <svg
         class="system__orbits system__orbits--near"
         viewBox={view}
         aria-hidden="true"
         focusable="false"
       >
+        <OrbitBands map={map} side="near" id="system-near-bands" />
         <OrbitLines map={map} side="near" id="system-near-depth" />
+        <Stardust map={map} side="near" id="system-near-stardust" />
+      </svg>
+      <svg
+        class="system__motion system__motion--near"
+        viewBox={view}
+        aria-hidden="true"
+        focusable="false"
+      >
         <Motion map={map} side="near" id="system-near" />
       </svg>
       <svg class="system__bodies" viewBox={view} aria-hidden="true" focusable="false">
-        <Bodies bodies={map.bodies} />
+        <Bodies map={map} id="system-body" />
       </svg>
       {labels.length ? (
         <ol class="system__labels" aria-label="つくったもの">
@@ -751,24 +1127,34 @@ export const Cta = ({ href, children }: { href: string; children: Child }) => (
   （枠は orbits.ts の CONTACT_FRAME）。番号の札は持たない——作品へは目次と入口から行く。
 
   入口と同じく、軌道の奥の半分はブラックホールの後ろ、手前の半分は前に描き、天体
-  （止まった場所に居る。公転しない）はいちばん上。動き続けるものも入口と同じ（Motion・
-  Dust・Hole）。着いたときの一度きりの動きは持たない——入口で一度動けば足りる。
+  （止まった場所に居る。公転しない）はいちばん上。帯と星屑と線は動かない SVG
+  （.orbits__still）、流れる光と粒は別の SVG に分ける（入口と同じ理由）。まわりの星空と星雲は Contact が敷く
+  （Cosmos）。動き続けるものも入口と同じ（Motion・Dust・Hole・Cosmos）。着いたときの
+  一度きりの動きは持たない——入口で一度動けば足りる。
 */
 export const ContactOrbits = ({ counts }: { counts: KindCounts }) => {
   const map = orbitMap(counts, CONTACT_FRAME)
   const view = `0 0 ${map.width} ${map.height}`
   return (
     <div class="orbits">
-      <svg viewBox={view} aria-hidden="true" focusable="false">
+      <svg class="orbits__still" viewBox={view} aria-hidden="true" focusable="false">
+        <OrbitBands map={map} side="far" id="contact-far-bands" />
         <OrbitLines map={map} side="far" id="contact-far-depth" />
+        <Stardust map={map} side="far" id="contact-far-stardust" />
+      </svg>
+      <svg viewBox={view} aria-hidden="true" focusable="false">
         <Motion map={map} side="far" id="contact-far" />
         <Dust map={map} />
       </svg>
-      <Hole frame={CONTACT_FRAME} id="contact-hole" />
-      <svg viewBox={view} aria-hidden="true" focusable="false">
+      <Hole frame={CONTACT_FRAME} />
+      <svg class="orbits__still" viewBox={view} aria-hidden="true" focusable="false">
+        <OrbitBands map={map} side="near" id="contact-near-bands" />
         <OrbitLines map={map} side="near" id="contact-near-depth" />
+        <Stardust map={map} side="near" id="contact-near-stardust" />
+      </svg>
+      <svg viewBox={view} aria-hidden="true" focusable="false">
         <Motion map={map} side="near" id="contact-near" />
-        <Bodies bodies={map.bodies} />
+        <Bodies map={map} id="contact-body" />
       </svg>
     </div>
   )
@@ -776,15 +1162,16 @@ export const ContactOrbits = ({ counts }: { counts: KindCounts }) => {
 
 /*
   作品の星図。画像の無い作品の絵として、作品のページ（ItemDetail。文の列の横）と一覧の行
-  （ItemRow。サムネイルの位置）に置く。入口と同じ星系を締めの枠（orbits.ts の
+  （ItemRow。サムネイルの位置）に置く。締めの星系を縮めて背の低い横長の枠（orbits.ts の
   CHART_FRAME）に止めた姿で描き、その作品が載っている天体と軌道だけを灯す——入口の軌道図で
-  番号の札を付けていた天体が、作品のページではこの1つとして光る。
+  番号の札を付けていた天体が、作品のページではこの1つとして光る。星雲は敷かない（一覧に行の
+  数だけ並ぶ図で、灯した天体を指すのが役目）。
 
   - map は orbitMap(件数, CHART_FRAME)。一覧では行の数だけ描くので、呼ぶ側が1度だけ組んで
     渡す。body は灯す天体（map.bodies の何番目か。orbits.ts の bodyIndexOf）
   - 層は締めと同じ（軌道の奥の半分 → ブラックホール → 手前の半分と天体）。ブラックホールは
-    止まった姿（Hole の still）で、公転も流れる光も粒も持たない。止まった絵なので、着いた
-    ときの動きも持たない（入口で一度動けば足りる。締めと同じ判断）
+    入口と同じ絵の止まった姿（Hole の still。光を揺らさない）で、流れる光も粒も持たない。
+    止まった絵なので、着いたときの動きも持たない（入口で一度動けば足りる。締めと同じ判断）
   - 灯した天体には輪（.chart__ring）を重ねる。字の大きさと同じく画面の px で描くので、
     枠が縮んでも潰れない（輪は HTML の箱で、置き場所だけを天体の位置の % で渡す）
   - number は作品のページでだけ渡す一覧の番号。星図の左上に札として置く（一覧の行は
@@ -814,10 +1201,10 @@ export const OrbitChart = ({
       <svg viewBox={view} aria-hidden="true" focusable="false">
         <OrbitLines map={map} side="far" id={`${id}-far`} lit={spot.orbit} />
       </svg>
-      <Hole frame={CHART_FRAME} id={`${id}-hole`} still />
+      <Hole frame={CHART_FRAME} still />
       <svg viewBox={view} aria-hidden="true" focusable="false">
         <OrbitLines map={map} side="near" id={`${id}-near`} lit={spot.orbit} />
-        <Bodies bodies={map.bodies} lit={body} />
+        <Bodies map={map} id={`${id}-body`} lit={body} />
       </svg>
       <span class="chart__ring" />
       {number ? <span class="chart__number">{twoDigits(number)}</span> : null}
@@ -1726,6 +2113,7 @@ export const Contact = ({
 }) => (
   <Screen id="contact" label="Contact" orbital={!whole}>
     {whole ? <SectionHead title="Contact" /> : <HiddenHeading text="Contact" h1 />}
+    {whole ? null : <Cosmos map={cosmosMap()} id="contact-cosmos" place="contact" />}
     {whole ? null : <ContactOrbits counts={counts} />}
     <div class="contact">
       <p class="contact__lead">

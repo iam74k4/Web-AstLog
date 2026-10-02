@@ -28,7 +28,7 @@ const count = wrangler(
   [
     'd1',
     'execute',
-    'noctifex',
+    'astlog',
     '--remote',
     '--json',
     '--command',
@@ -59,15 +59,15 @@ if (filled.length > 0) {
       `本番の D1 には既に中身があります（${filled.map((table) => `${table} ${row[table]} 行`).join('・')}）。`,
       'seed.sql はこれを全部消してから入れ直すので、流さずに止めました。',
       '中身を変えたいなら管理画面から。どうしても入れ直すなら、先に',
-      '  npx wrangler d1 export noctifex --remote --no-data --output=schema.sql',
-      '  npx wrangler d1 export noctifex --remote --no-schema --output=data.sql',
+      '  npx wrangler d1 export astlog --remote --no-data --output=schema.sql',
+      '  npx wrangler d1 export astlog --remote --no-schema --output=data.sql',
       'で写しを取り（戻せる形は定義と中身の2本。README の「戻す」）、テーブルを手で空にしてから、もう一度このコマンドを流してください。',
     ].join('\n'),
   )
   process.exit(1)
 }
 
-const seed = wrangler(['d1', 'execute', 'noctifex', '--remote', '--file=./seed.sql'], false)
+const seed = wrangler(['d1', 'execute', 'astlog', '--remote', '--file=./seed.sql'], false)
 if (seed.status !== 0) process.exit(seed.status ?? 1)
 
 // 管理画面を通らない書き換えなので、公開ページの写しの版を自分で上げる

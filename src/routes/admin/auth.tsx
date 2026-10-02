@@ -48,7 +48,7 @@ export const authRoutes = new Hono<AppEnv>()
 */
 
 // state を入れるクッキー。往復の2本（start と callback）にだけ送られればよい
-const STATE_COOKIE = 'nx_oauth_state'
+const STATE_COOKIE = 'astlog_oauth_state'
 const STATE_PATH = '/admin/auth'
 const STATE_MINUTES = 10
 

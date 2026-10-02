@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """
-GitHub の Organization の顔（ブラックホールの絵）を焼く。
+光の曲がりを計算したブラックホールの絵を焼く。2枚——軌道図の真ん中とロゴの O の絵
+（hero）と、GitHub の Organization の顔（avatar）。どちらも持ち主が選んだ姿。
 
+    python3 scripts/blackhole/render.py hero               # public/assets/blackhole.webp
     python3 scripts/blackhole/render.py avatar             # public/assets/astlog-avatar.png
-    python3 scripts/blackhole/render.py avatar --preview   # 小さく試し焼き（PNG を BH_OUT へ）
+    python3 scripts/blackhole/render.py hero --preview     # 小さく試し焼き（PNG を BH_OUT へ）
 
-numpy と Pillow が要る。10 コアで約2分。
+numpy と Pillow が要る。10 コアでどちらも約2分。
 
-サイトの中のブラックホール（上の帯のロゴの O、入口と締めの軌道図の真ん中、favicon・
-iPhone のホーム画面）はここでは焼かない。どれもロゴの O と同じ絵で、形は src/ui/logo.ts が
-正（ページは直に SVG を描き、素材のファイルは scripts/logo/export.mjs が書く）。ここで
-焼くのは、ページの外で使う顔の1枚だけ——持ち主が選んだ、光の曲がりを計算した姿。
+hero の1枚は入口と締めと作品の星図の真ん中、上の帯のロゴの O、404・管理画面の頭の印が
+みな使う（src/ui/logo.ts の BLACKHOLE_ART）。焼き直したら、書き出す影の半径と版を
+BLACKHOLE_ART に写し、ロゴの素材（favicon・ワードマーク）を scripts/logo/export.mjs で
+書き直す。
 
 ## 何を計算しているか
 
@@ -24,8 +26,8 @@ x'' = -1.5 h² x / r⁵（h は |x × v|。光の道の形がシュワルツシ�
 不透明度ぶん奥を暗くする。円盤の奥の側は光が上へ曲がって影の上に弧として見え、
 下を回った光が影の下に細い弧を作る。地平面に落ちた光は黒（影）。
 
-カメラは円盤の面から elevation 度だけ上（PRESETS。顔は 7°）で、絵の幅に入る範囲は
-field_w（M の単位）。
+カメラは円盤の面から elevation 度だけ上（PRESETS。顔は 7°、軌道図は 12°）で、絵の幅に
+入る範囲は field_w（M の単位）。
 
 ## 絵の作り
 
@@ -33,9 +35,15 @@ field_w（M の単位）。
 ロゴの白にそろえる）。筋（細い同心の輪と、ゆるい渦と塊）は決まった乱数の種から
 作るので、焼き直すと同じ絵になる。最後に光のにじみ（ぼかしを重ねたもの）を足して、
 ACES の曲線で 0〜1 に収める。
+
+軌道図の絵（alpha のプリセット）は光だけを透過で焼く——星雲の上に置くので。光の明るさが
+そのまま不透明度で、光の無い所は透ける。影（円盤の内縁より内を通る光。地平面に落ちる光を
+含む）は焼かず、半径だけを書き出す。光がどこまで近づくかは画面の中心からの離れだけで
+決まるので影は真円で、ページが CSS の黒い円で光の下に敷く（奥を回る軌道と星雲を隠す）。
 """
 
 import argparse
+import hashlib
 import math
 import os
 import tempfile
@@ -97,6 +105,18 @@ BASE = {
 }
 
 PRESETS = {
+    # 入口と締めの軌道図の真ん中（src/ui/components.tsx の Hole と BLACKHOLE_ART）。12° から
+    # 見て、上へ回り込む光の弧と、影の前を横切る円盤で、ひと目でブラックホールと分かる姿。
+    # 軌道（28° から見下ろす）より寝かせる——28° で焼くと、手前の円盤が影の下で灰色の椀に
+    # 見えた。透過の WebP（alpha）。高さは光のにじみが上下で消えきる幅（影は真ん中）
+    'hero': {
+        'width': 1024,
+        'height': 576,
+        'field_w': 24.0,
+        'elevation': 12.0,
+        'alpha': 1,
+        'name': 'blackhole',
+    },
     # GitHub の Organization の顔（持ち主が選んだ姿）。低い 7° から見て、手前の
     # 円盤が影の前を細く明るい帯で横切り、影の下半分は黒いまま残る姿を、正方形に（見えて
     # いる黒い影が幅の約 4 分の 1）。黒い地に重ねて焼く（透明にしない——光が白いので、
@@ -192,6 +212,10 @@ def trace(args):
     # 前に円盤の面を横切ってから進んだ道のり。面をかすめる光が、数値の揺れで同じ所を
     # 何度も横切ったことにならないように、gap より短い間の2度目は数えない
     since = np.full(n, np.inf)
+    # 光がいちばん近づいた半径。地平面に落ちた光と、円盤の内縁より内を通った光が影になる
+    # （透過で焼くとき、ここは不透明な黒）。内縁の内を通って逃げる光まで透かすと、影の縁に
+    # 1画素ほどの細い輪で奥の星雲が透け、切り抜いた縁に見えた
+    nearest = np.full(n, np.inf)
     idx = np.arange(n)
     far = max(p['r_out'] * 2.0, 30.0)
 
@@ -234,11 +258,12 @@ def trace(args):
         x[idx] = nx
         v[idx] = nv
         rn = np.linalg.norm(nx, axis=1)
+        nearest[idx] = np.minimum(nearest[idx], rn)
         captured = rn < 2.0005
         escaped = (rn > far) & (np.sum(nx * nv, axis=1) > 0)
         done = captured | escaped | (trans[idx] < 1e-3)
         idx = idx[~done]
-    return light
+    return np.column_stack([light, (nearest < p['r_in']).astype(float)])
 
 
 def blur(image, sigma):
@@ -264,9 +289,10 @@ def render(p, workers):
     chunks = np.array_split(np.arange(a.size), workers * 8)
     with Pool(workers) as pool:
         parts = pool.map(trace, [(a[c], b[c], p) for c in chunks])
-    light = np.concatenate(parts).reshape(H, W, 3)
-    # 縦横 ss 画素ずつ平均して配信の大きさへ
-    light = light.reshape(p['height'], ss, p['width'], ss, 3).mean(axis=(1, 3))
+    traced = np.concatenate(parts).reshape(H, W, 4)
+    # 縦横 ss 画素ずつ平均して配信の大きさへ（影の縁もここでなめらかになる）
+    traced = traced.reshape(p['height'], ss, p['width'], ss, 4).mean(axis=(1, 3))
+    light = traced[..., :3]
     scale = p['width'] / 1280
     glow = np.zeros_like(light)
     for sigma, weight in p['bloom']:
@@ -274,21 +300,51 @@ def render(p, workers):
             glow[..., k] += weight * blur(light[..., k], sigma * scale)
     # ACES の近似（Narkowicz）。明るい所を白へなめらかに寝かせ、暗い所は暗いまま
     x = p['exposure'] * (light + glow)
-    return np.clip((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0)
+    rgb = np.clip((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0)
+    # 影（画素のうち地平面に落ちた光の割合）
+    return rgb, traced[..., 3]
 
 
-def save(rgb, name, p, preview):
+# 軌道図の絵の WebP の画質（光の坂に縞が出ない所）
+WEBP_QUALITY = 90
+
+
+def save(rgb, shadow, name, p, preview):
     to8 = lambda v: np.clip(np.round(v * 255), 0, 255).astype(np.uint8)  # noqa: E731
     bg = np.array([12, 12, 14]) / 255
+    # 確かめる用の絵はリポジトリの外へ（BH_OUT で置き場所を変えられる）
+    preview_dir = Path(os.environ.get('BH_OUT', Path(tempfile.gettempdir()) / 'astlog-blackhole'))
+    preview_dir.mkdir(parents=True, exist_ok=True)
+    if p.get('alpha'):
+        # 光だけの絵。光の明るさが不透明度（色は不透明度で割り戻す）。影は焼かない——影は
+        # 光線の近さだけで決まる真円なので、ページが CSS の黒い円で描く（光だけを揺らせる）
+        alpha = rgb.max(axis=2)
+        color = np.where(alpha[..., None] > 1e-6, rgb / np.maximum(alpha[..., None], 1e-6), 0.0)
+        art = Image.fromarray(np.dstack([to8(np.clip(color, 0, 1)), to8(alpha)]), 'RGBA')
+        # 確かめる用: 影を黒で重ねた姿
+        whole = np.maximum(shadow, alpha)
+        shown = np.where(whole[..., None] > 1e-6, rgb / np.maximum(whole[..., None], 1e-6), 0.0)
+        Image.fromarray(np.dstack([to8(np.clip(shown, 0, 1)), to8(whole)]), 'RGBA').save(
+            preview_dir / f'{name}-preview.png'
+        )
+        # 影の半径（真ん中の列を上から見て、影が半分を超える所まで）。src/ui/logo.ts の
+        # BLACKHOLE_ART.shadow はこの数（試し焼きは半分の大きさなので半分になる）
+        column = shadow[:, p['width'] // 2] >= 0.5
+        print(f'影の半径 {p["height"] / 2 - np.argmax(column):.1f}px（{p["width"]}x{p["height"]}）')
+        if preview:
+            return
+        out = ASSETS / f'{name}.webp'
+        art.save(out, 'WEBP', quality=WEBP_QUALITY, method=6, alpha_quality=100)
+        # URL の版（BLACKHOLE_ART.src の ?v=）。public/_headers が1年・immutable で配るので、
+        # 焼き直したら必ず写す（test/public.test.ts が中身と突き合わせる）
+        print(f'版 ?v={hashlib.sha256(out.read_bytes()).hexdigest()[:8]}')
+        return
     # 地に重ねずに、色と不透明度に分ける（黒い地に重ねたときに同じ見た目になる形）
     alpha = rgb.max(axis=2)
     color = np.where(alpha[..., None] > 1e-6, rgb / np.maximum(alpha[..., None], 1e-6), 0.0)
     rgba = np.dstack([to8(color), to8(alpha)])
     # 見て確かめる用: 地（app.css の --bg）に重ねた絵
     shown = bg[None, None, :] * (1 - alpha[..., None]) + color * alpha[..., None]
-    # 確かめる用の絵はリポジトリの外へ（BH_OUT で置き場所を変えられる）
-    preview_dir = Path(os.environ.get('BH_OUT', Path(tempfile.gettempdir()) / 'astlog-blackhole'))
-    preview_dir.mkdir(parents=True, exist_ok=True)
     Image.fromarray(to8(shown), 'RGB').save(preview_dir / f'{name}-preview.png')
     Image.fromarray(rgba, 'RGBA').save(preview_dir / f'{name}-preview-rgba.png')
     if preview:
@@ -317,8 +373,8 @@ def main():
         p['width'] //= 2
         p['height'] //= 2
         p['supersample'] = 1
-    rgb = render(p, os.cpu_count() or 4)
-    save(rgb, args.name or p['name'], p, args.preview)
+    rgb, shadow = render(p, os.cpu_count() or 4)
+    save(rgb, shadow, args.name or p['name'], p, args.preview)
 
 
 if __name__ == '__main__':

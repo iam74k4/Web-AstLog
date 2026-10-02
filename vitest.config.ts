@@ -22,11 +22,11 @@ const migrations = await readD1Migrations('./drizzle')
   ためでもある。addWatchFile で依存に入れておけば、CSS だけを直したときにも
   読み直される（設定ファイルは読み直されないので、ここで固めると古いまま残る）。
 */
-const CSS_TEXT = '\0noctifex-css:'
+const CSS_TEXT = '\0astlog-css:'
 const CSS_FILES = new Set(['app.css', 'admin.css'])
 
 const cssTextPlugin = (): Plugin => ({
-  name: 'noctifex:css-text',
+  name: 'astlog:css-text',
   enforce: 'pre',
   resolveId(id) {
     const name = id.match(/(?:^|\/)public\/([^/]+\.css)$/)?.[1]
@@ -49,16 +49,24 @@ const cssTextPlugin = (): Plugin => ({
   ファイルを読むのはここ（Node 側）しかない。
 */
 const ASSET = 'virtual:asset:'
-// public/assets/ にあるファイルの名前の一覧（画像は中身を文字として読めないので、名前だけ）
+// 画像の素材を base64 の文字として読む（中身を文字として読めないので。寸法を確かめるため）
+const ASSET_BYTES = 'virtual:asset-base64:'
+// public/assets/ にあるファイルの名前の一覧
 const ASSET_LIST = 'virtual:assets'
 
 const assetPlugin = (): Plugin => ({
-  name: 'noctifex:asset',
-  resolveId: (id) => (id.startsWith(ASSET) || id === ASSET_LIST ? `\0${id}` : null),
+  name: 'astlog:asset',
+  resolveId: (id) =>
+    id.startsWith(ASSET) || id.startsWith(ASSET_BYTES) || id === ASSET_LIST ? `\0${id}` : null,
   load(id) {
     if (id === `\0${ASSET_LIST}`) {
       this.addWatchFile('./public/assets')
       return `export default ${JSON.stringify(readdirSync('./public/assets'))}`
+    }
+    if (id.startsWith(`\0${ASSET_BYTES}`)) {
+      const file = `./public/assets/${id.slice(`\0${ASSET_BYTES}`.length)}`
+      this.addWatchFile(file)
+      return `export default ${JSON.stringify(readFileSync(file).toString('base64'))}`
     }
     if (!id.startsWith(`\0${ASSET}`)) return null
     const file = `./public/assets/${id.slice(`\0${ASSET}`.length)}`
@@ -86,7 +94,7 @@ const REPO_FILES = new Set([
 // 解決した id の末尾に .js を付ける。package.json のまま渡すと、vite の JSON の
 // 変換が（ここで作った JS を）JSON として読み直して落ちる
 const repoPlugin = (): Plugin => ({
-  name: 'noctifex:repo',
+  name: 'astlog:repo',
   resolveId: (id) => (id.startsWith(REPO) ? `\0${id}.js` : null),
   load(id) {
     if (!id.startsWith(`\0${REPO}`) || !id.endsWith('.js')) return null
@@ -122,7 +130,7 @@ const walk = (dir: string): string[] =>
   })
 
 const sourcePlugin = (): Plugin => ({
-  name: 'noctifex:sources',
+  name: 'astlog:sources',
   resolveId: (id) => (id === SOURCES ? `\0${SOURCES}.js` : null),
   load(id) {
     if (id !== `\0${SOURCES}.js`) return null
