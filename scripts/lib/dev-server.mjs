@@ -167,7 +167,7 @@ export async function devServer(given, port, persistTo) {
   返す cleanup() が置き場ごと消す。
 */
 export async function scratchState(label, sqlTexts) {
-  const dir = await mkdtemp(join(tmpdir(), `noctifex-${label}-`))
+  const dir = await mkdtemp(join(tmpdir(), `astlog-${label}-`))
   const wrangler = `${ROOT}node_modules/.bin/wrangler`
   const run = (args) =>
     new Promise((resolve, reject) => {
@@ -187,11 +187,11 @@ export async function scratchState(label, sqlTexts) {
     })
 
   try {
-    await run(['d1', 'migrations', 'apply', 'noctifex', '--local', '--persist-to', dir])
+    await run(['d1', 'migrations', 'apply', 'astlog', '--local', '--persist-to', dir])
     for (const [index, sql] of sqlTexts.entries()) {
       const file = join(dir, `data-${index}.sql`)
       await writeFile(file, sql)
-      await run(['d1', 'execute', 'noctifex', '--local', '--persist-to', dir, `--file=${file}`])
+      await run(['d1', 'execute', 'astlog', '--local', '--persist-to', dir, `--file=${file}`])
     }
   } catch (error) {
     await rm(dir, { recursive: true, force: true })

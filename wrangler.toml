@@ -1,4 +1,4 @@
-name = "noctifex"
+name = "astlog"
 main = "src/index.tsx"
 # テスト（vitest-pool-workers 同梱の workerd）が対応する最新日付に合わせている。
 # ここだけ新しくすると、本番の挙動をテストで確かめられなくなる。
@@ -27,14 +27,14 @@ fallthrough = true
 binding = "CF_VERSION_METADATA"
 
 # --- 作成してから id を入れ、コミットすること -----------------------------
-#   wrangler d1 create noctifex
+#   wrangler d1 create astlog
 #   wrangler kv namespace create MEDIA
 # ローカル（wrangler dev・テスト）は id を見ないので、この値のままでも動く。
 # id は秘密ではない。TO_BE_CREATED のままだと、本番に触れる入口（deploy ワークフロー・
 # npm run deploy / db:migrate / db:seed:remote:destroys-prod）が scripts/check-ids.mjs で止まる。
 [[d1_databases]]
 binding = "DB"
-database_name = "noctifex"
+database_name = "astlog"
 database_id = "TO_BE_CREATED"
 migrations_dir = "drizzle"
 

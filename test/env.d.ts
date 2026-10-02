@@ -42,6 +42,15 @@ declare module 'virtual:asset:*' {
 }
 
 /*
+  public/assets/ の画像を base64 の文字として読む（vitest.config.ts の assetPlugin）。
+  焼いた絵の寸法を、部品が置く寸法と突き合わせるため
+*/
+declare module 'virtual:asset-base64:*' {
+  const content: string
+  export default content
+}
+
+/*
   public/assets/ にあるファイルの名前の一覧（vitest.config.ts の assetPlugin）。
   画像は中身を文字として読めないので、ページと CSS が読む素材が在るかだけを見る
 */

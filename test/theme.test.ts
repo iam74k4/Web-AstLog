@@ -3,19 +3,21 @@ import adminCss from '../public/admin.css'
 import css from '../public/app.css'
 import * as schema from '../src/db/schema'
 import {
+  CHART_FRAME,
   CONTACT_FRAME,
   HERO_FRAME,
   LABEL_GAP,
   LABEL_MAX_WIDTH,
   LABEL_MIN_WIDTH,
+  NEBULA,
   TILT,
 } from '../src/lib/orbits'
 import { ACCENTS, THEME_KEYS, TYPEFACES } from '../src/theme'
-import { LOGO_COLORS } from '../src/ui/logo'
+import { BLACKHOLE_ART, LOGO_COLORS } from '../src/ui/logo'
 import { db, form, get, okText, resetDb, seedItem, seedMember, signIn } from './helpers'
 
 // 着いたあとも動き続ける animation の名前（app.css の「動き続ける」）
-const LASTING = /orbit-(flow|swirl|fall|spin|breathe)\b/
+const LASTING = /orbit-(flow|swirl|fall|breathe|drift|twinkle|meteor)\b/
 
 beforeEach(resetDb)
 
@@ -861,12 +863,6 @@ describe('部品の作法', () => {
     expect(bodyOf(sheet, '.oops__mark {')).toContain('display: flex')
   })
 
-  it('404 の印は字の色で光る。線の色に落とさない', () => {
-    // 印の光の縁と横線は currentColor。--line-strong に落としていたころ、光が暗い灰色に
-    // なり、影の黒い円だけが残って印に見えなかった
-    expect(bodyOf(sheet, '.oops__mark {')).not.toMatch(/(^|[\s;])color:/)
-  })
-
   it('見出しと添えは隣り合わせ。空いた幅ぶん引き離さない', () => {
     // space-between だと 1440 で見出しとラベルが 782px 離れ、1組に見えなくなる
     expect(bodyOf(sheet, '.head {')).not.toContain('space-between')
@@ -901,7 +897,11 @@ describe('部品の作法', () => {
     const orbits = bodyOf(sheet, '.orbits {')
     expect(orbits).toContain('align-self: stretch')
     expect(orbits).toContain('justify-self: center')
-    expect(orbits).toContain('width: min(100%, var(--contact-w))')
+    // 幅は列いっぱい・上限・画面の高さの割合から決まる幅の小さいほう（背の低い窓で字を押し出さない）
+    expect(orbits).toContain(
+      'width: min(100%, var(--contact-w), calc(var(--contact-h) * var(--contact-ratio)))',
+    )
+    expect(bodyOf(sheet, ':root {')).toMatch(/--contact-h: calc\(var\(--cover-h\) \* 0\.\d+\);/)
     expect(orbits).toContain('aspect-ratio: var(--contact-ratio)')
     expect(orbits).not.toContain('position: absolute')
     // 表紙の中で、図の行と字の行。余りは字の上（1fr）が受け、900 以上で字は底に寄る
@@ -914,8 +914,8 @@ describe('部品の作法', () => {
   it('着いたときの動きは入口の軌道図の中だけ。締めで動くのは入口と同じ動き続けるものだけ', () => {
     /*
       着いたときの動き（ブラックホールが灯り、軌道が渦を巻いて収まる）は入口で一度だけ。
-      締めで続くのは、入口と同じ動き続けるもの（公転・流れる光・吸い込まれる粒・縁を回る
-      光の点・光の揺らぎ）だけ。どちらの画面も npm run check:contrast が動きの途中の姿を
+      締めで続くのは、入口と同じ動き続けるもの（流れる光・吸い込まれる粒・ブラックホールの
+      光の揺らぎ・星雲の漂い・星の瞬き・流れ星）だけ。どちらの画面も npm run check:contrast が動きの途中の姿を
       測る
     */
     const moving = rulesOf(sheet).filter((rule) =>
@@ -981,22 +981,18 @@ describe('部品の作法', () => {
       重ねる。viewBox と枠の比が同じなので、枠の割合で置いたブラックホールがちょうど
       焦点に座る
     */
-    const layers = bodyOf(sheet, '.system__orbits,\n.system__bodies {')
+    const layers = bodyOf(sheet, '.system__orbits,\n.system__motion,\n.system__bodies {')
     expect(layers).toContain('position: absolute')
     expect(layers).toContain('inset: 0')
     const hole = bodyOf(sheet, '.hole {')
     expect(hole).toContain('left: var(--hole-x)')
     expect(hole).toContain('top: var(--hole-y)')
     expect(hole).toContain('width: var(--hole-w)')
-    expect(hole).toContain('aspect-ratio: 1')
     expect(hole).toContain('translate: -50% -50%')
-    // 横線（真横から見た円盤）を軌道面と同じだけ傾ける。光は字の白（ロゴと同じ）
+    // 絵（円盤）を軌道面と同じだけ傾ける
     expect(hole).toContain('rotate: var(--system-tilt)')
-    expect(hole).toContain('color: var(--ink)')
-    // 光・縁を回る光の点・黒い円の3枚を同じ箱に重ねる
-    const layers3 = bodyOf(sheet, '.hole > svg {')
-    expect(layers3).toContain('position: absolute')
-    expect(layers3).toContain('inset: 0')
+    // 箱の高さは絵の縦横比から（img の width / height）。箱に比を決め打たない
+    expect(hole).not.toContain('aspect-ratio')
     expect(sheet).not.toContain('.system > :not(')
     const system = bodyOf(sheet, '.system {')
     expect(system).toContain('width: 100%')
@@ -1206,15 +1202,18 @@ describe('一覧の行', () => {
 })
 
 /*
-  作品の星図（components.tsx の OrbitChart）。画像の無い作品の絵で、入口と同じ星系を締めの
-  枠に止めた姿で描き、その作品が載っている天体と軌道だけを灯す。
+  作品の星図（components.tsx の OrbitChart）。画像の無い作品の絵で、締めの星系を縮めて背の
+  低い横長の枠（orbits.ts の CHART_FRAME）に止めた姿で描き、その作品が載っている天体と
+  軌道だけを灯す。
 */
 describe('作品の星図', () => {
-  it('箱は締めの枠の縦横比から崩さず、層を箱いっぱいに重ねる。面は敷かない', () => {
+  it('箱は星図の枠の縦横比から崩さず、層を箱いっぱいに重ねる。面は敷かない', () => {
     const chart = bodyOf(sheet, '.chart {')
-    expect(chart).toContain('aspect-ratio: var(--contact-ratio)')
+    expect(chart).toContain('aspect-ratio: var(--chart-ratio)')
     // 縦に積んだとき（900 未満）は、画像の枠の高さ（--shot-h）を超えない幅まで
-    expect(chart).toContain('width: min(100%, calc(var(--shot-h) * var(--contact-ratio)))')
+    expect(chart).toContain('width: min(100%, calc(var(--shot-h) * var(--chart-ratio)))')
+    // 天体の点の大きさ（cqi）はこの箱の幅から
+    expect(chart).toContain('container-type: inline-size')
     expect(chart).toContain('min-height: 0')
     expect(chart).not.toMatch(/background|border|box-shadow/)
     expect(bodyOf(sheet, '.chart > svg {')).toContain('inset: 0')
@@ -1233,7 +1232,16 @@ describe('作品の星図', () => {
   })
 
   it('止まった図。ブラックホールの光も揺らさず、着いたときの動きも持たない', () => {
-    expect(bodyOf(sheet, '.chart .hole__light {')).toContain('animation: none')
+    // 星図の真ん中は入口と同じ絵だが、揺らすのは星図の外（.hole--still でない）の絵だけ
+    const breathing = rulesOf(sheet).filter(
+      (rule) =>
+        rule.selectors.some((one) => one.includes('.hole__art')) &&
+        rule.decls.some(([name, value]) => name.startsWith('animation') && value !== 'none'),
+    )
+    expect(breathing.length).toBeGreaterThan(0)
+    for (const rule of breathing) {
+      for (const one of rule.selectors) expect(one).toContain(':not(.hole--still)')
+    }
     const moving = rulesOf(sheet).filter(
       (rule) =>
         rule.selectors.some((one) => /\.chart/.test(one)) &&
@@ -1251,6 +1259,10 @@ describe('作品の星図', () => {
     )
     expect(bodyOf(sheet, '.chart :is(.orbit, .orbit-body):not(.chart__lit) {')).toContain(
       'opacity: var(--chart-dim)',
+    )
+    // にじみは自分の淡さに、沈める濃さを掛ける（沈める濃さで上書きすると、にじみが濃くなる）
+    expect(bodyOf(sheet, '.chart .orbit__glow:not(.chart__lit) {')).toContain(
+      'opacity: calc(var(--orbit-glow) * var(--chart-dim))',
     )
     // 輪は画面の px。枠が縮んでも潰れない
     expect(bodyOf(sheet, '.chart__ring {')).toContain('width: var(--chart-ring)')
@@ -1500,7 +1512,8 @@ describe('入口の軌道図', () => {
     // SVG は枠いっぱいに貼るので、比がずれるとブラックホールが軌道の焦点から外れる
     expect(root()).toContain(`--system-ratio: ${HERO_FRAME.width} / ${HERO_FRAME.height};`)
     expect(root()).toContain(`--contact-ratio: ${CONTACT_FRAME.width} / ${CONTACT_FRAME.height};`)
-    // 軌道は orbits.ts が傾けて描き、ブラックホールの横線（円盤は同じ面）は CSS が同じだけ回す
+    expect(root()).toContain(`--chart-ratio: ${CHART_FRAME.width} / ${CHART_FRAME.height};`)
+    // 軌道は orbits.ts が傾けて描き、ブラックホールの絵（円盤は軌道と同じ面）は CSS が同じだけ回す
     expect(root()).toContain(`--system-tilt: ${TILT}deg;`)
     // 札の置き場所は、この幅の枠とこのずれで重ならないように選んである（placeLabels）
     expect(sheet).toContain(`@container (min-width: ${LABEL_MIN_WIDTH}px)`)
@@ -1551,7 +1564,7 @@ describe('入口の軌道図', () => {
       紫のまま残った）。:root が持つのは濃さと不透明度の坂だけ
     */
     expect(root()).not.toMatch(
-      /--(orbit|system|hole|ignite|infall)[a-z-]*:[^;]*(color-mix|var\(--accent\))/,
+      /--(orbit|system|hole|ignite|infall|nebula|body|condense|drift|stardust)[a-z-]*:[^;]*(color-mix|var\(--accent\))/,
     )
 
     /*
@@ -1559,8 +1572,10 @@ describe('入口の軌道図', () => {
       ここで敷く。奥の端は薄く、手前へ続けて濃くなる（半分ずつ濃さを変えていたころは、
       継ぎ目で濃さが倍に跳んだ）。.orbit に stroke を書くと坂を上書きする
     */
-    const orbit = bodyOf(sheet, '.orbit {')
+    const orbit = bodyOf(sheet, '.orbit,\n.orbit__glow {')
     expect(orbit).not.toMatch(/\bstroke(-opacity)?:/)
+    expect(bodyOf(sheet, '\n.orbit {')).not.toMatch(/\bstroke(-opacity)?:/)
+    expect(bodyOf(sheet, '.orbit__glow {')).not.toMatch(/\bstroke(-opacity)?:/)
     const far = bodyOf(sheet, '.orbit-depth__far {')
     expect(far).toContain('stop-color: var(--accent)')
     expect(far).toContain('stop-opacity: calc(var(--orbit-ink) * var(--orbit-far))')
@@ -1568,7 +1583,10 @@ describe('入口の軌道図', () => {
     expect(near).toContain('stop-color: var(--accent)')
     expect(near).toContain('stop-opacity: var(--orbit-ink)')
     expect(sheet).not.toContain('.orbit--far')
-    expect(bodyOf(sheet, '.orbit-body path {')).toContain('stroke: var(--ink)')
+    // 天体は字の白の点と、アクセント色のにじみ。業務の輪も字の白
+    expect(bodyOf(sheet, '.orbit-body__dot {')).toContain('stroke: var(--ink)')
+    expect(bodyOf(sheet, '.orbit-body__glow {')).toContain('stop-color: var(--accent)')
+    expect(bodyOf(sheet, '.orbit-body__ring {')).toContain('stroke: var(--ink)')
     /*
       手前の半分に地の色の縁取りは敷かない。縁の光を締めたので、手前の線が光の前を通る所では
       光はもう薄く、線はそのまま見える。光が真っ白だったころの縁取りは、光を黒い筋で切っていた
@@ -1580,22 +1598,41 @@ describe('入口の軌道図', () => {
 
   it('線と点の太さは画面の px。枠が縮んでも点を潰さない', () => {
     for (const selector of [
-      '.orbit {',
+      '.orbit,\n.orbit__glow {',
       '.orbit-body path {',
+      '.stardust path {',
       '.orbit-flow {',
       '.orbit-grain__dot {',
+      '.cosmos__stars path {',
+      '.cosmos__meteor {',
     ]) {
       expect(bodyOf(sheet, selector), selector).toContain('vector-effect: non-scaling-stroke')
     }
     expect(root()).toMatch(/--orbit-line:\s*\d+px;/)
-    expect(root()).toMatch(/--orbit-body:\s*clamp\(\d+px, [\d.]+vw, \d+px\);/)
+    /*
+      点とにじみの太さは枠の幅に比例する（cqi）。業務の輪は viewBox の単位で描くので、点も枠と
+      一緒に伸び縮みしないと、輪との釣り合いが幅で変わる。下限と上限で止める（電話で潰さない）
+    */
+    expect(root()).toMatch(/--orbit-body:\s*clamp\(\d+px, [\d.]+cqi, \d+px\);/)
+    expect(root()).toMatch(/--orbit-glow-w:\s*clamp\(\d+px, [\d.]+cqi, \d+px\);/)
+    expect(bodyOf(sheet, '.orbit-body__dot {')).toContain(
+      'stroke-width: calc(var(--orbit-body) * var(--scale, 1))',
+    )
+    // cqi は軌道図の枠を容れ物にしたときだけ枠の幅を指す（入口・締め・星図のどれも）
+    for (const frame of ['.system {', '.orbits {', '.chart {']) {
+      expect(bodyOf(sheet, frame), frame).toContain('container-type: inline-size')
+    }
   })
 
-  it('業務は破線の軌道と輪の天体。区分を色だけで分けない', () => {
-    expect(bodyOf(sheet, '.orbit--work {')).toContain('stroke-dasharray: var(--orbit-dash)')
-    const hole = bodyOf(sheet, '.orbit-body .orbit-body__hole {')
-    expect(hole).toContain('stroke: var(--bg)')
-    expect(hole).toContain('stroke-width: calc(var(--orbit-body) / 2)')
+  it('業務は輪のある惑星。区分を色だけで分けない。軌道は破線にしない', () => {
+    /*
+      業務の軌道を破線、業務の天体を抜いた輪にしていたころは、線と点が図面に見えた
+      （持ち主の「線と点が図面っぽい」）。区分は天体の形（輪）で分ける
+    */
+    expect(sheet).not.toMatch(/\.orbit--work|--orbit-dash|orbit-body__hole/)
+    expect(bodyOf(sheet, '.orbit-body__ring {')).toContain('stroke-width: var(--orbit-line)')
+    // 天体から札へ引き出し線を引かない（札は天体のすぐ横に居る）
+    expect(sheet).not.toMatch(/--leader-to/)
   })
 
   it('番号の札は地を塗る。小さい字の 4.5:1 を軌道の線に削らせない', () => {
@@ -1625,30 +1662,34 @@ describe('入口の軌道図', () => {
     }
   })
 
-  it('ブラックホールはロゴの O と同じ SVG。焼いた絵を読まない。軌道と天体もページに直に描く', async () => {
+  it('ブラックホールは焼いた光の絵と、その下に敷く影の黒い円。軌道と天体はページに直に描く', async () => {
     /*
-      前は scripts/blackhole/render.py で焼いた絵（AVIF / WebP）を背景として読んでいた。
-      持ち主の「ワードマークのブラックホールと統一」で、ロゴの O をそのまま大きく描く
-      （components.tsx の Hole）。焼いた絵と前の月の素材を読む道は残さない
+      黒い円・光の縁・横線の記号を大きく描いていたころは、星雲の中で日食かレンズのフレアに
+      見えた（持ち主の「ブラックホールが違和感」）。光の曲がりを計算して焼いた光の絵
+      （src/ui/logo.ts の BLACKHOLE_ART）を img で置き、影は CSS の黒い円で絵の下に敷く——影は
+      真円なので分けても重ねた姿は同じで、光だけを揺らせる。絵を CSS の背景として読まない
+      （読む素材は img の1枚。前の月の素材を読む道も残さない）
     */
     expect(sheet).not.toMatch(/\/assets\/(moon|blackhole)/)
-    expect(sheet).not.toMatch(/\.hole::(before|after)/)
+    const shadow = bodyOf(sheet, '.hole::before {')
+    expect(shadow).toContain('width: var(--hole-shadow)')
+    expect(shadow).toContain('border-radius: 50%')
+    expect(shadow).toContain('background: var(--hole-core)')
+    // 光の絵は影より上（位置を持たない絵は、位置を持つ ::before の下に描かれる）
+    expect(bodyOf(sheet, '.hole__art {')).toContain('position: relative')
     await seedMember()
     await seedItem({ type: 'app' })
     const html = await okText('/')
-    expect(html).not.toMatch(/\/assets\/(moon|blackhole)/)
+    expect(html).not.toMatch(/\/assets\/moon/)
     expect(html).toContain('class="system__orbits system__orbits--far"')
-    expect(html).toContain('<span class="hole" aria-hidden="true"')
-    /*
-      光（横線と縁の光）→ 縁の光の輪 → 縁を回る光 → 黒い円の順に重ねる（DOM の順が重なりの
-      順）。光の輪は大きく描くときだけ（logo.ts の RING）
-    */
-    const hole = html.slice(html.indexOf('<span class="hole"'))
-    const order = ['hole__light', 'hole__ring', 'hole__spin', 'hole__core'].map((name) =>
-      hole.indexOf(`class="${name}"`),
+    const opening = '<span class="hole" aria-hidden="true"'
+    const hole = html.slice(html.indexOf(opening))
+    expect(hole.slice(0, hole.indexOf('</span>'))).toContain(
+      `<img class="hole__art" src="${BLACKHOLE_ART.src}" width="${BLACKHOLE_ART.width}" height="${BLACKHOLE_ART.height}" alt="" decoding="async"/>`,
     )
-    expect(order.every((at) => at > 0)).toBe(true)
-    expect([...order].sort((a, b) => a - b)).toEqual(order)
+    // 絵の後ろの奥の軌道 → ブラックホール → 手前の軌道（DOM の順が重なりの順）
+    expect(html.indexOf('system__orbits--far')).toBeLessThan(html.indexOf(opening))
+    expect(html.indexOf(opening)).toBeLessThan(html.indexOf('system__orbits--near'))
   })
 
   it('動くのは着いたときの一度だけ。止まった姿がそのまま完成形で、5 秒以内に止まる', () => {
@@ -1656,7 +1697,13 @@ describe('入口の軌道図', () => {
       出だしの姿（from）だけを書き、終わりの姿は持たせない——reduced-motion で
       animation: none になった姿が、そのまま動き終わった姿になる
     */
-    for (const name of ['orbit-light', 'orbit-ignite', 'orbit-infall', 'orbit-count']) {
+    for (const name of [
+      'orbit-light',
+      'orbit-ignite',
+      'orbit-infall',
+      'orbit-count',
+      'orbit-condense',
+    ]) {
       const frames = blockAt(sheet, `@keyframes ${name}`)
       expect(frames, name).toContain('from {')
       expect(frames, name).not.toMatch(/\bto\s*\{|\d+%\s*\{/)
@@ -1664,8 +1711,17 @@ describe('入口の軌道図', () => {
     // レーダー（走査線・波紋）はやめた。ブラックホールが灯り、軌道が引き寄せられる
     expect(sheet).not.toMatch(/system__beam|orbit-ring|orbit-sweep|--sweep|--radar-/)
     expect(bodyOf(sheet, '.system > .hole {')).toContain('animation: orbit-ignite')
+    // 星空は入口でだけ灯る（締めの星空は着いたときに動かない）
+    expect(bodyOf(sheet, '.hero > .cosmos {')).toContain('animation: orbit-light')
     expect(ruleWith(sheet, 'animation: orbit-infall').selector).toMatch(
-      /^\.system__orbits,\s*\.system__bodies$/,
+      /^\.system__orbits,\s*\.system__motion,\s*\.system__bodies$/,
+    )
+    /*
+      動かない層（帯・線・星屑）は自分の合成の層に描く。帯と星屑のぼかしを一度だけ描いて使い回し、
+      流れる光と粒が動くたびに描き直さない（動くものは別の SVG に分けてある）
+    */
+    expect(bodyOf(sheet, ':is(.system__orbits, .orbits__still) {')).toContain(
+      'will-change: transform',
     )
 
     // 着いたときの動きは繰り返さない（続くものは下の「動き続ける」）
@@ -1690,10 +1746,13 @@ describe('入口の軌道図', () => {
     const label =
       ms('--infall-delay') + ms('--infall-dur') * 0.75 + 8 * ms('--stagger') + ms('--dur')
     const count = ms('--infall-delay') + ms('--infall-dur') * 0.3 + ms('--count-dur')
+    const condense = ms('--condense-delay') + ms('--condense-dur')
     for (const end of [ignite, infall, label, count]) {
       expect(end).toBeGreaterThan(1000)
       expect(end).toBeLessThanOrEqual(5000)
     }
+    expect(condense).toBeGreaterThan(1000)
+    expect(condense).toBeLessThanOrEqual(5000)
     expect(root()).toContain('--label-delay: calc(var(--infall-delay) + var(--infall-dur) * 0.75)')
     expect(root()).toContain('--count-delay: calc(var(--infall-delay) + var(--infall-dur) * 0.3)')
     expect(ruleWith(sheet, 'min(var(--i, 0), 8) * var(--stagger)').selector).toBe('.system__label')
@@ -1703,7 +1762,8 @@ describe('入口の軌道図', () => {
 
   it('動き続けるものは、動きを減らす設定の外でだけ動く。keyframes は var() を持たない', () => {
     /*
-      公転・流れる光・吸い込まれる粒・縁を回る光の点・光の揺らぎは 5 秒を超えて続く。
+      流れる光・吸い込まれる粒・ブラックホールの光の揺らぎ・星雲の漂い・星の瞬き・流れ星は
+      5 秒を超えて続く。
       止める手は置かない（持ち主の「動きを止める 不要」）。動きを減らす設定では動く層を
       出さない——止まった天体と札が完成形
     */
@@ -1723,9 +1783,32 @@ describe('入口の軌道図', () => {
     const hidden = rulesOf(sheet).find(
       (rule) =>
         rule.context.length === 0 &&
-        rule.selectors.includes(':is(.orbit-flows, .orbit-dust, .hole__spin)'),
+        rule.selectors.includes(':is(.orbit-flows, .orbit-dust, .cosmos__meteors)'),
     )
     expect(hidden?.decls).toContainEqual(['display', 'none'])
+    /*
+      ブラックホールの光の揺らぎは、光の絵の不透明度だけ。下に敷いた影の黒い円は揺らさない
+      （影まで透けると、奥を回る軌道が影の中に浮かぶ）。filter で明るさを落とすと、白い光が
+      灰色にくすんだ
+    */
+    const breathing = blockAt(sheet, '@media (prefers-reduced-motion: no-preference)')
+    expect(bodyOf(breathing, '.hole:not(.hole--still) > .hole__art {')).toContain(
+      'animation: orbit-breathe',
+    )
+    expect(blockAt(sheet, '@keyframes orbit-breathe')).toMatch(/^\s*opacity:/m)
+    const shadowMoves = rulesOf(sheet).filter(
+      (rule) =>
+        rule.selectors.some((one) => one.includes('.hole') && one.includes('::before')) &&
+        rule.decls.some(([name]) => name.startsWith('animation')),
+    )
+    expect(shadowMoves).toEqual([])
+    /*
+      軌道を流れる光は、細い頭と長く淡い尾。尾は頭と同じ所で終わるように、長さの差だけ遅れて
+      回る（遅れを keyframes ではなく animation-delay で持つ——keyframes に var() を書かない）
+    */
+    expect(bodyOf(breathing, '.orbit-flow--tail {')).toContain(
+      'animation-delay: calc(var(--delay) + (var(--flow-tail) - var(--flow-len)) / 100 * var(--dur))',
+    )
     // 止める手は外した
     expect(sheet).not.toMatch(/\.motion\b|motion-toggle/)
 
@@ -1734,9 +1817,34 @@ describe('入口の軌道図', () => {
       許す）。var() を持つ keyframes は、動いている要素ごとに毎コマ解き直され、粒の多い
       入口では style の計算だけでコマの予算を食った（電話相当で 1 秒あたり 480ms）
     */
-    for (const name of ['orbit-flow', 'orbit-swirl', 'orbit-fall', 'orbit-spin']) {
+    for (const name of [
+      'orbit-flow',
+      'orbit-swirl',
+      'orbit-fall',
+      'orbit-drift',
+      'orbit-twinkle',
+      'orbit-meteor',
+    ]) {
       expect(blockAt(sheet, `@keyframes ${name}`), name).not.toContain('var(')
     }
+    /*
+      星雲が漂うのは雲の SVG の箱ごと（中を描き直さない。雲のフィルタを毎コマ掛け直さない）。
+      星の瞬きは明るさだけで、もとの明るさは星ごとの opacity 属性——keyframes は真ん中の
+      暗さだけを持つ（from / to を書くと、星ごとの明るさが消える）
+    */
+    const quietMotion = blockAt(sheet, '@media (prefers-reduced-motion: no-preference)')
+    expect(bodyOf(quietMotion, '.cosmos__nebula {')).toContain('animation: orbit-drift')
+    expect(bodyOf(quietMotion, '.cosmos__twinkle {')).toContain('animation: orbit-twinkle')
+    expect(bodyOf(quietMotion, '.cosmos__meteor {')).toContain('animation: orbit-meteor')
+    /*
+      入口の星雲は、着いたときに凝って灯る動きと漂う動きを1つの宣言に並べる（animation は
+      1つの宣言しか効かない。分けて書くと、後ろの宣言が前の動きを消す）
+    */
+    const hero = bodyOf(quietMotion, '.hero .cosmos__nebula {')
+    expect(hero).toContain('orbit-condense')
+    expect(hero).toContain('orbit-drift')
+    const twinkle = blockAt(sheet, '@keyframes orbit-twinkle')
+    expect(twinkle).not.toMatch(/\bfrom\s*\{|\bto\s*\{/)
     /*
       天体は公転させない。天体はいつも番号の札と同じ止まった場所に居て、動くのは光だけ——
       公転させていたころは、札と食い違う天体を重ねたときに札へ寄せていて、天体が跳ぶか軌道を
@@ -1784,6 +1892,115 @@ describe('入口の軌道図', () => {
     expect(bodyOf(sheet, '.hero__lead {')).toContain('color: var(--ink-mid)')
     expect(bodyOf(sheet, '.contact__go {')).toContain('color: var(--ink-mid)')
     expect(bodyOf(sheet, '.contact__sub {')).toContain('color: var(--ink-mid)')
+  })
+})
+
+/*
+  星空と星雲（components.tsx の Cosmos / Nebula。形は orbits.ts の cosmosMap / nebulaMap）。
+  入口と締めで、軌道図のまわりを本文の幅いっぱいの星空にし、ブラックホールのまわりに大きな
+  星雲を置く（持ち主の「もっと壮大に」「もっと星雲っぽさがほしい」）。
+*/
+describe('星空と星雲', () => {
+  it('星空は本文を位置の基準に、幅いっぱい・中身の後ろに敷く。押せるものの邪魔をしない', () => {
+    // 本文が位置の基準で、重なりの容れ物（-1 の星空がページの地の後ろへ沈まない）
+    const main = rulesOf(sheet).filter(
+      (rule) => rule.context.length === 0 && rule.selectors.includes('body[data-site] > main'),
+    )
+    const decls = main.flatMap((rule) => rule.decls)
+    expect(decls).toContainEqual(['position', 'relative'])
+    expect(decls).toContainEqual(['isolation', 'isolate'])
+    const cosmos = bodyOf(sheet, '.cosmos {')
+    for (const decl of [
+      'position: absolute',
+      'inset: 0',
+      'z-index: -1',
+      'overflow: hidden',
+      'pointer-events: none',
+    ]) {
+      expect(cosmos, decl).toContain(decl)
+    }
+  })
+
+  it('字の後ろには何も出さない。図の下（900 以上の入口は字の列と件数の帯）で消える', () => {
+    /*
+      小さい字は地の黒で 4.5:1 ぎりぎりの所があり（職種と所在地の札・件数の見出し）、星
+      1つが字の行に掛かるだけで割る。画素で確かめるのは npm run check:contrast
+    */
+    const base = bodyOf(sheet, '.cosmos--hero,\n.cosmos--contact {')
+    expect(base).toMatch(/mask-image: linear-gradient\(\s*to bottom/)
+    const wide = bodyOf(blockAt(sheet, '@media (min-width: 900px)'), '.cosmos--hero {')
+    expect(wide).toContain('mask-composite: intersect')
+    // 左の消え方は楕円（まっすぐな線で切ると、星雲が四角い板に見えた）
+    expect(wide).toMatch(/mask-image:\s*radial-gradient\(\s*ellipse/)
+    // はっきり見たい設定・背の低い窓・紙では出さない
+    for (const marker of [
+      '@media (forced-colors: active), (prefers-contrast: more)',
+      '@media (max-height: 400px)',
+      '@media print',
+    ]) {
+      expect(ruleWith(blockAt(sheet, marker), 'display: none').selector, marker).toContain(
+        '.cosmos',
+      )
+    }
+  })
+
+  it('星雲はブラックホールの位置に、図の幅に比例して置く。箱の縦横比は orbits.ts と同じ', () => {
+    const nebula = bodyOf(sheet, '.cosmos__nebula {')
+    expect(nebula).toContain('left: var(--cosmos-x)')
+    expect(nebula).toContain('top: var(--cosmos-y)')
+    expect(nebula).toContain(`aspect-ratio: ${NEBULA.width} / ${NEBULA.height}`)
+    expect(nebula).toContain('--nebula-w: calc(var(--cosmos-fig-w) *')
+    // 位置は余白で引く（translate は漂う動きが使う）
+    expect(nebula).toContain('margin-left: calc(var(--nebula-w) / -2)')
+    expect(nebula).toContain(
+      `margin-top: calc(var(--nebula-w) / -${(NEBULA.width / NEBULA.height) * 2})`,
+    )
+    expect(nebula).not.toMatch(/\btranslate:/)
+  })
+
+  it('色は使う場所で敷く。3色はプリセットごと（モノクロでも青紫と桃と空色）、芯は字の白、塵は地', () => {
+    expect(bodyOf(sheet, '.nebula__a {')).toContain('stop-color: var(--nebula-a)')
+    expect(bodyOf(sheet, '.nebula__b {')).toContain('stop-color: var(--nebula-b)')
+    expect(bodyOf(sheet, '.nebula__c {')).toContain('stop-color: var(--nebula-c)')
+    expect(bodyOf(sheet, '.nebula__ink {')).toContain('stop-color: var(--ink)')
+    expect(bodyOf(sheet, 'stop.nebula__dust {')).toContain('stop-color: var(--bg)')
+    /*
+      3色はパレットの色から選ぶ（生の色を書かない。色相を回して作ると、エンバーの相方が
+      黄緑になった）。どのアクセントも3色を持つ——足し忘れると、:root の色のまま残る
+    */
+    const value = (body: string, name: string) =>
+      body.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1]
+    const names = ['--nebula-a', '--nebula-b', '--nebula-c']
+    const root = bodyOf(sheet, ':root {')
+    for (const accent of ACCENTS) {
+      const preset = bodyOf(sheet, `[data-accent='${accent.key}'] {`)
+      for (const name of names) {
+        expect(value(preset, name), `${accent.key} ${name}`).toMatch(/^var\(--[a-z]+\)$/)
+      }
+    }
+    // 何も選んでいない姿はモノクロと同じ。モノクロでも星雲だけは色を持つ（持ち主の判断）
+    const mono = bodyOf(sheet, "[data-accent='mono'] {")
+    for (const name of names) {
+      expect(value(root, name), name).toBe(value(mono, name))
+      expect(value(mono, name), name).not.toBe('var(--mono)')
+    }
+  })
+
+  it('雲の4枚の濃さは :root の段。星と流れ星は字の白で、太さは画面の px', () => {
+    for (const [selector, token] of [
+      ['.nebula__light {', '--nebula-light'],
+      ['.nebula__cloud {', '--nebula-cloud'],
+      ['.nebula__veil {', '--nebula-veil'],
+      ['use.nebula__dust {', '--nebula-dust'],
+    ] as const) {
+      expect(bodyOf(sheet, selector), selector).toContain(`opacity: var(${token})`)
+      expect(bodyOf(sheet, ':root {'), token).toMatch(new RegExp(`${token}:\\s*0?\\.\\d+;`))
+    }
+    const stars = bodyOf(sheet, '.cosmos__stars path {')
+    expect(stars).toContain('stroke: var(--ink)')
+    expect(stars).toContain('vector-effect: non-scaling-stroke')
+    expect(bodyOf(sheet, '.cosmos__meteor {')).toContain('vector-effect: non-scaling-stroke')
+    expect(bodyOf(sheet, '.cosmos__trail {')).toContain('stop-color: var(--ink)')
   })
 })
 
@@ -1841,6 +2058,21 @@ describe('配色（黒基調と紙）', () => {
     for (const [, name] of paper.matchAll(/(--[\w-]+):/g)) {
       expect(screen, `${name} は :root に無い`).toContain(`${name}:`)
     }
+  })
+
+  it('強制色モードでは、ロゴの O を字と同じ色の輪に替える', () => {
+    /*
+      光は焼いた絵で色を変えられない（明るいテーマでは白い光が地に溶け、影の黒だけが塗りの
+      円で残る）。絵を隠し、影の円を地の色で抜いて、縁に字の色の線を引く（太さは
+      src/ui/icons.tsx の HoleArt が字の線と同じ値を属性で渡す）
+    */
+    const forced = blockAt(sheet, '@media (forced-colors: active) {')
+    expect(bodyOf(forced, '.logo-art {')).toContain('display: none')
+    const core = bodyOf(forced, '.logo-core {')
+    expect(core).toContain('fill: Canvas')
+    expect(core).toContain('stroke: currentColor')
+    // ふだんは線を引かない（stroke を持つのは強制色の括りの中だけ）
+    expect(bodyOf(sheet, '.logo-core {')).not.toContain('stroke')
   })
 
   it('ロゴの素材に焼く色は、画面の :root の段と同じ', () => {

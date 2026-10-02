@@ -74,21 +74,29 @@ const pageOptions = ({ width, height, touch }) => ({
   （visibility）、ink は字の色だけを抜いて面を残す（color: transparent）。
   塗りの押し手と地を塗った札は、面ごと隠すと実際と違う地で測ることになるので ink で抜く。
 
-  lines と art は、軌道図が「出ている」と言える画素数の下限（lines は軌道の線と点、
-  art はブラックホール。下の ORBIT_MIN_DELTA）。motion は動きの途中の姿を測るか——
-  入口は着いたときの動きと動き続けるもの、締めは動き続けるもの（天体が回り、粒が落ち、
-  ブラックホールの縁を光の点が回る）。
+  minPixels は、軌道図が「出ている」と言える画素数の下限（lines は軌道の線の芯と星屑、bodies は
+  天体の点、art はブラックホール、nebula は星雲、stars は星空の星。下の ORBIT_MIN_DELTA）。motion は動きの途中の
+  姿を測るか——入口は着いたときの動きと動き続けるもの、締めは動き続けるもの（粒が落ち、光が
+  流れ、ブラックホールの光が揺らぎ、星雲が漂い、星が瞬く）。
 */
 /*
   画素数の下限（SCREENS の minPixels）。seed で測ったいちばん少ない姿（どれも
-  390x844 指）の約半分——入口の線と点 6656・ブラックホール 2954、締めの線と点 6648・
-  ブラックホール 2953 画素（締めの星系は入口と同じ大きさ）。「描かれていない」を止める
-  数で、1割の目減りを止める数ではない（下の ORBIT_MIN_DELTA）
+  390x844 指）の約半分——入口の軌道の線と星屑 6626・天体 132・ブラックホール 1898・星雲 82314・
+  星空の星 123、締めの軌道の線と星屑 6632・天体 132・ブラックホール 1897・星雲 78442・星空の星
+  119 画素（締めの星系は入口と同じ大きさ。ブラックホールは影が小さく、光の絵が淡く広がる。
+  星空の星は細かく、字の後ろで消すぶん少ない）。「描かれていない」を止める数で、1割の目減りを
+  止める数ではない（下の ORBIT_MIN_DELTA）
 */
-const LINES_HERO = 3000
-const ART_HERO = 1500
-const LINES_CONTACT = 3000
-const ART_CONTACT = 1500
+const LINES_HERO = 3300
+const BODIES_HERO = 65
+const ART_HERO = 950
+const NEBULA_HERO = 45000
+const STARS_HERO = 60
+const LINES_CONTACT = 3300
+const BODIES_CONTACT = 65
+const ART_CONTACT = 950
+const NEBULA_CONTACT = 40000
+const STARS_CONTACT = 50
 
 const SCREENS = [
   {
@@ -107,7 +115,13 @@ const SCREENS = [
     hide: 'main > .hero :is(h1, .eyebrow, .hero__lead, .tally dt, .tally dd)',
     // 札の番号は自分の色を持つので、札の中の子も抜く
     ink: 'main > .hero :is(.cta, .cta *, .system__label > *, .system__label > * *)',
-    minPixels: { lines: LINES_HERO, art: ART_HERO },
+    minPixels: {
+      lines: LINES_HERO,
+      bodies: BODIES_HERO,
+      art: ART_HERO,
+      nebula: NEBULA_HERO,
+      stars: STARS_HERO,
+    },
     motion: true,
   },
   {
@@ -124,7 +138,13 @@ const SCREENS = [
     // どれも面を持たないので丸ごと隠す
     hide: 'main > .orbital :is(.contact__lead, .contact__address, .contact__go, .contact__sub)',
     ink: null,
-    minPixels: { lines: LINES_CONTACT, art: ART_CONTACT },
+    minPixels: {
+      lines: LINES_CONTACT,
+      bodies: BODIES_CONTACT,
+      art: ART_CONTACT,
+      nebula: NEBULA_CONTACT,
+      stars: STARS_CONTACT,
+    },
     motion: true,
   },
 ]
@@ -137,15 +157,23 @@ const SCREENS = [
   明るさそのものではなく差で見るのは、地の色に下限を縛らせないため。明るさで
   見ると、地を少し明るくしただけで線が「明るく」なったことになる。
 
-  軌道の線と点（SVG）と、ブラックホールは別々に消して測る。まとめて消すと、
-  ブラックホールだけで下限を越えてしまい、線が描かれなくなっても通る（光の縁は線の
-  何倍もの画素を持つ）。番号の札はどちらにも数えない。
+  軌道の線の芯と天体の点（SVG）と、ブラックホールと、星雲は別々に消して測る。まとめて
+  消すと、ブラックホールや星雲だけで下限を越えてしまい、線が描かれなくなっても通る（光の
+  縁と雲は線の何倍もの画素を持つ）。番号の札はどれにも数えない。
 
-  下限は実測（成功行の「いちばん少ない」の行。線と点の中央値は 23）から引いて
+  下限は実測（成功行の「いちばん少ない」の行。天体の中央値は 60）から引いて
   ある——見栄えを縛るのではなく、「描かれていない」「ほぼ見えない」を止めるための
-  数だから（地の明るさが 12 なので、明るさ 30 は差で 18）。
+  数だから（地の明るさが 12 なので、明るさ 30 は差で 18）。軌道の線と星屑・星雲・星空の星は
+  もともと淡い芯と細かい点と雲なので、下限を別に置く（ORBIT_TRACE_MIN_DELTA / NEBULA_MIN_DELTA /
+  STARS_MIN_DELTA。実測の中央値の最小 6.9・12.4・7.6 の約半分）。星雲を軌道の後ろで明るくすると
+  「軌道の線と星屑」が下がる——星屑と線を濃くする（--stardust-ink・--orbit-ink）か、明るい
+  塊を軌道の帯の外へ寄せる（orbits.ts の nebulaMap）。外の軌道ほど淡くする量（--orbit-outer）も
+  同じく下げる——外の軌道は長く、画素の多くを持つ
 */
 const ORBIT_MIN_DELTA = 18
+const ORBIT_TRACE_MIN_DELTA = 4
+const NEBULA_MIN_DELTA = 4
+const STARS_MIN_DELTA = 4
 
 /*
   入口の動き（public/app.css の「入口に着いたとき」。orbit-ignite / orbit-infall /
@@ -188,7 +216,7 @@ const holdOrbits = () => {
 
   /*
     止まる時刻は、名前が orbit- で始まる animation のいちばん遅い終わり。動き続けるもの
-    （orbit-flow / orbit-spin ほか）は終わらないので Infinity になる——そのときは
+    （orbit-flow / orbit-breathe ほか）は終わらないので Infinity になる——そのときは
     どの時刻のコマも動きの途中。ほかの動き（字の浮かび上がり）は終わらせる。終わらない
     動きは finish() できない（投げる）ので止めるだけ
   */
@@ -309,6 +337,22 @@ const collect = ([accent, screen]) => {
 }
 
 // 軌道図を消した絵と比べ、軌道図が描いた画素と、地からの離れ（明るさの差）を返す
+/*
+  書体と絵がそろうのを待つ。ブラックホールの光の絵は decoding="async" なので、読み込み（load）の
+  あとでも描かれる前のコマがある——そのコマを撮ると、影の黒い円だけの姿を測る。解き終えた
+  あとも、描かれるのは次のコマなので、2コマ待つ（待たないと、最初の1枚だけ絵が抜けた）
+*/
+const settled = () =>
+  Promise.all([
+    document.fonts.ready,
+    ...[...document.images].map((image) => image.decode().catch(() => undefined)),
+  ])
+    .then(
+      () =>
+        new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(true)))),
+    )
+    .then(() => true)
+
 const drawnBy = ([shownUrl, hiddenUrl]) => {
   const load = (src) =>
     new Promise((ok, ng) => {
@@ -416,12 +460,19 @@ async function main() {
   let checked = 0
   let tightest = { ratio: Number.POSITIVE_INFINITY, where: '' }
   /*
-    いちばん薄かった軌道図は画面ごと・描いたものごと（線と点・ブラックホール）に
+    いちばん薄かった軌道図は画面ごと・描いたものごと（線と点・ブラックホール・星雲）に
     持つ。混ぜると、片方の画面の目減りがもう片方に隠れる
   */
+  const LABELS = {
+    lines: '軌道の線と星屑',
+    bodies: '天体',
+    art: 'ブラックホール',
+    nebula: '星雲',
+    stars: '星空の星',
+  }
   const dimmest = new Map(
     SCREENS.flatMap((screen) =>
-      ['lines', 'art'].map((part) => [
+      Object.keys(LABELS).map((part) => [
         `${screen.name}:${part}`,
         { median: Number.POSITIVE_INFINITY, pixels: Number.POSITIVE_INFINITY, where: '' },
       ]),
@@ -499,7 +550,7 @@ async function main() {
           await page.close()
           continue
         }
-        await page.evaluate(() => document.fonts.ready.then(() => true))
+        await page.evaluate(settled)
 
         /*
         軌道図が**出ていること**を見る。
@@ -528,26 +579,55 @@ async function main() {
         }
         const parts = {
           lines: {
-            label: '軌道の線と点',
-            // 締めは枠の直下の SVG だけ（.hole の中の SVG はブラックホールのほうで数える）
-            drawn: await drawnWithout('.system__orbits, .system__bodies, .orbits > svg'),
-            why: 'SVG が出ていないか、線が見えていない',
+            label: '軌道の線と星屑',
+            /*
+              軌道の細い芯と星屑だけを消す。その後ろの光の帯（.orbit-bands）・星雲・ブラックホールは
+              消さずに残す——帯は幅が広く淡いので、まとめて消すと画素の大半が帯になり、中央値が
+              「軌道が見えるか」を言わなくなる。芯は淡く、星屑は細かい点なので、床は星空の星と
+              同じ考え方で低い（ORBIT_TRACE_MIN_DELTA）
+            */
+            drawn: await drawnWithout(':is(.system, .orbits) :is(.orbit, .stardust)'),
+            why: 'SVG が出ていないか、軌道が見えていない',
+            minDelta: ORBIT_TRACE_MIN_DELTA,
+          },
+          bodies: {
+            label: '天体',
+            // 天体の点（業務の輪も）だけを消す。くっきりした点なので、床は線のころと同じ
+            drawn: await drawnWithout(
+              ':is(.system, .orbits) :is(.orbit-body__dot, .orbit-body__ring)',
+            ),
+            why: '天体の点が描かれていない',
           },
           art: {
             label: 'ブラックホール',
+            // 焼いた光の絵と、その下に敷く影の黒い円をまとめて消す（components.tsx の Hole）
             drawn: await drawnWithout('.hole'),
-            why: 'ロゴの O（.hole の SVG）が描かれていない',
+            why: 'ブラックホールの絵（.hole__art）が読めていないか、影（.hole::before）が無い',
+          },
+          nebula: {
+            label: '星雲',
+            drawn: await drawnWithout('.cosmos__nebula'),
+            why: '星雲（.cosmos__nebula の SVG）が描かれていない',
+            minDelta: NEBULA_MIN_DELTA,
+          },
+          stars: {
+            label: '星空の星',
+            drawn: await drawnWithout('.cosmos__stars'),
+            why: '星空の星（.cosmos__stars の SVG）が描かれていない',
+            minDelta: STARS_MIN_DELTA,
           },
         }
-        for (const [part, { label, drawn, why }] of Object.entries(parts)) {
+        for (const [part, { label, drawn, why, minDelta = ORBIT_MIN_DELTA }] of Object.entries(
+          parts,
+        )) {
           const floor = screen.minPixels[part]
           if (drawn.pixels < floor) {
             failures.push(
               `${where} — ${label}が ${drawn.pixels} 画素しか描いていない（下限 ${floor}）。${why}`,
             )
-          } else if (drawn.median < ORBIT_MIN_DELTA) {
+          } else if (drawn.median < minDelta) {
             failures.push(
-              `${where} — ${label}の地からの離れの中央値が ${drawn.median.toFixed(1)}/255（下限 ${ORBIT_MIN_DELTA}）。薄すぎて出ていないのと変わらない`,
+              `${where} — ${label}の地からの離れの中央値が ${drawn.median.toFixed(1)}/255（下限 ${minDelta}）。薄すぎて出ていないのと変わらない`,
             )
           }
           const key = `${screen.name}:${part}`
@@ -581,7 +661,7 @@ async function main() {
       */
         const moving = await browser.newPage(pageOptions(viewport))
         await moving.goto(base + screen.path, { waitUntil: 'load' })
-        await moving.evaluate(() => document.fonts.ready.then(() => true))
+        await moving.evaluate(settled)
         const end = await moving.evaluate(holdOrbits)
         if (end === 0) {
           failures.push(
@@ -622,7 +702,7 @@ async function main() {
   )
   for (const [key, dim] of dimmest) {
     const [name, part] = key.split(':')
-    const label = part === 'lines' ? '軌道の線と点' : 'ブラックホール'
+    const label = LABELS[part]
     console.log(
       `  ${name}の${label}はいちばん少ない ${dim.where} でも ${dim.pixels} 画素・地からの離れ（中央値の最小）${dim.median.toFixed(1)}/255`,
     )

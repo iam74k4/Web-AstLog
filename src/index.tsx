@@ -22,7 +22,8 @@ const app = new Hono<AppEnv>()
     （--i）、件数の数え上げの値（--to）、ブラックホールの置き場所と大きさ（--hole-x …）、
     ページの切り替えの名前（view-transition-name）、アバターの寸法（--avatar-size）を
     style 属性で渡している。スクリプトではない
-  - img-src は 'self' だけ——favicon は public/assets のファイル、ロゴはページに直に描く SVG
+  - img-src は 'self' だけ——favicon は public/assets のファイル、ロゴはページに直に描く SVG で、
+    O の光の絵（と軌道図の真ん中の絵）は同じオリジンの /assets/blackhole.webp
   - form-action 'self'——管理画面のフォームはどれも同じオリジンへ送る。
     OAuth の入口はフォームではなく GET のリンクなので、ここに掛からない
   - frame-ancestors 'none'——どのページもほかのサイトの枠に入れさせない

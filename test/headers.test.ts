@@ -71,7 +71,7 @@ describe('応答のヘッダ', () => {
     // D1 を持たない env で動かし、公開ページの読み出しを落とす（写しがあると
     // stale-if-error でそれが 200 で出るので、写しを持たない env で）
     const response = await app.fetch(
-      new Request('https://noctifex.test/'),
+      new Request('https://astlog.test/'),
       uncachedEnv({ DB: undefined as unknown as D1Database }),
       ctx,
     )
@@ -165,7 +165,11 @@ describe('応答のヘッダ', () => {
     const values = rules.get('/*') ?? {}
     expect(values['x-content-type-options']).toBe('nosniff')
     expect(values['referrer-policy']).toBe('strict-origin-when-cross-origin')
-    expect(values['content-security-policy']).toBe("default-src 'none'; sandbox")
+    /*
+      読み込みを許すのは data: の画像だけ。ロゴの SVG（ワードマークと favicon）は O の光の絵を
+      data URI で抱えていて、ブラウザによっては <img> や favicon で使うときもこの CSP が効く
+    */
+    expect(values['content-security-policy']).toBe("default-src 'none'; img-src data:; sandbox")
     // 規則の数には上限がある（Workers Static Assets は 100 まで）
     expect(rules.size).toBeLessThanOrEqual(100)
   })
@@ -175,15 +179,20 @@ describe('応答のヘッダ', () => {
     移るたびに描画を止めて条件付き GET を1往復していた。いまは中身から作った版を
     URL に付け（src/ui/components.tsx の Stylesheets）、_headers が1年・immutable で配る。
     長く持たせてよいのは版つきの URL で読まれるものだけ——版の無い素材（ロゴの素材・GitHub の顔）を
-    immutable にすると、差し替えた絵が1年届かない
+    immutable にすると、差し替えた絵が1年届かない。ブラックホールの絵も版つき（上の帯のロゴの O が
+    どのページでも読む。版は src/ui/logo.ts の BLACKHOLE_ART で、test/public.test.ts が中身と突き合わせる）
   */
   it('スタイルシートは版つきの URL で読み、1年・immutable で配る', async () => {
     const rules = headerRules()
-    for (const path of ['/app.css', '/admin.css']) {
+    for (const path of ['/app.css', '/admin.css', '/assets/blackhole.webp']) {
       expect(rules.get(path)?.['cache-control'], path).toBe('public, max-age=31536000, immutable')
     }
     const long = [...rules].filter(([, values]) => values['cache-control']?.includes('immutable'))
-    expect(long.map(([path]) => path).sort()).toEqual(['/admin.css', '/app.css'])
+    expect(long.map(([path]) => path).sort()).toEqual([
+      '/admin.css',
+      '/app.css',
+      '/assets/blackhole.webp',
+    ])
 
     const version = /^\/(app|admin)\.css\?v=[0-9a-z]+$/
     const sheets = (html: string) =>
@@ -203,6 +212,10 @@ describe('応答のヘッダ', () => {
       expect(links, path).toHaveLength(1)
       expect(links[0], path).toMatch(version)
       expect(links[0], path).toMatch(/^\/app\.css/)
+      // ブラックホールの絵（上の帯のロゴの O と入口の真ん中）も、版の無い URL では読まない
+      const art = [...html.matchAll(/\/assets\/blackhole\.webp[^"]*/g)].map((found) => found[0])
+      expect(art.length, path).toBeGreaterThan(0)
+      for (const url of art) expect(url, path).toMatch(/^\/assets\/blackhole\.webp\?v=[0-9a-f]{8}$/)
     }
     // 管理画面（壁の中と外）は app.css のあとに admin.css
     const signed = await signIn()

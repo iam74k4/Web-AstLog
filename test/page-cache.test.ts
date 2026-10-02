@@ -17,7 +17,7 @@ afterEach(() => {
 /*
   公開ページの写し（src/lib/page-cache.ts）。
 
-  写しから出たことは、応答の印（x-noctifex-cache）だけでなく中身でも確かめる——
+  写しから出たことは、応答の印（x-astlog-cache）だけでなく中身でも確かめる——
   D1 を直に書き換えて版を上げずに見ると、写しなら前の題が、描き直しなら新しい題が出る。
 */
 
@@ -30,7 +30,7 @@ const retitle = (title: string) =>
 async function run(path: string, overrides: Partial<Cloudflare.Env>) {
   const ctx = createExecutionContext()
   const response = await app.fetch(
-    new Request(`https://noctifex.test${path}`, { redirect: 'manual' }),
+    new Request(`https://astlog.test${path}`, { redirect: 'manual' }),
     { ...env, ...overrides },
     ctx,
   )
@@ -66,8 +66,8 @@ describe('公開ページの写し', () => {
     expect(html).not.toContain('改名した題')
     // 写しの印（版・置いた時刻・Cache API の期限）は訪問者に出さない
     expect(second.headers.get('cache-control')).toBeNull()
-    expect(second.headers.get('x-noctifex-version')).toBeNull()
-    expect(second.headers.get('x-noctifex-stored')).toBeNull()
+    expect(second.headers.get('x-astlog-version')).toBeNull()
+    expect(second.headers.get('x-astlog-stored')).toBeNull()
     // ヘッダの1本（src/index.tsx）は写しにも同じものを付ける
     expect(second.headers.get('content-security-policy')).toContain("script-src 'none'")
 

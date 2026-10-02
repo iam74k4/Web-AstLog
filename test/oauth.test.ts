@@ -22,7 +22,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-const ORIGIN = 'https://noctifex.test'
+const ORIGIN = 'https://astlog.test'
 const GOOGLE_CLIENT = 'test-google-client.apps.googleusercontent.com'
 const GITHUB_TOKEN = 'gho_secret_token_do_not_leak'
 const GOOGLE_TOKEN = 'ya29.secret_token_do_not_leak'
@@ -110,7 +110,7 @@ async function start(provider: Provider, next?: string) {
   expect(response.status).toBe(302)
   const location = new URL(response.headers.get('location') ?? '')
   const stateCookie =
-    response.headers.getSetCookie().find((one) => one.startsWith('nx_oauth_state=')) ?? ''
+    response.headers.getSetCookie().find((one) => one.startsWith('astlog_oauth_state=')) ?? ''
   return {
     location,
     stateCookie,
@@ -162,7 +162,7 @@ describe('GitHub でログイン', () => {
     for (const attribute of ['HttpOnly', 'Secure', 'SameSite=Lax', 'Path=/admin/auth']) {
       expect(flow.stateCookie).toContain(attribute)
     }
-    expect(flow.cookie).toBe(`nx_oauth_state=${flow.state}`)
+    expect(flow.cookie).toBe(`astlog_oauth_state=${flow.state}`)
 
     const [row] = await states()
     expect(row?.state).toBe(flow.state)
@@ -185,7 +185,7 @@ describe('GitHub でログイン', () => {
       expect(cookie).toContain(attribute)
     }
     // state のクッキーは使い切ったので消す
-    expect(response.headers.getSetCookie().join('\n')).toMatch(/nx_oauth_state=;.*Max-Age=0/)
+    expect(response.headers.getSetCookie().join('\n')).toMatch(/astlog_oauth_state=;.*Max-Age=0/)
 
     // トークンの交換: PKCE の verifier は、送った challenge の元になった値
     const verifier = mock.seen.body?.get('code_verifier') ?? ''
@@ -520,7 +520,7 @@ describe('セッション', () => {
     const response = await phone('/admin/account/logout-all', { method: 'POST' })
     expect(response.status).toBe(303)
     expect(response.headers.get('location')).toBe('/admin/login?out=all')
-    expect(response.headers.get('set-cookie')).toMatch(/nx_session=;.*Max-Age=0/)
+    expect(response.headers.get('set-cookie')).toMatch(/astlog_session=;.*Max-Age=0/)
 
     expect((await phone('/admin/members')).status).toBe(303)
     expect((await laptop('/admin/members')).status).toBe(303)

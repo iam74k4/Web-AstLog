@@ -214,4 +214,4 @@ export async function accountLabel(db: Db, userId: number): Promise<string | nul
   return row?.label || null
 }
 
-export const SESSION_COOKIE = 'nx_session'
+export const SESSION_COOKIE = 'astlog_session'

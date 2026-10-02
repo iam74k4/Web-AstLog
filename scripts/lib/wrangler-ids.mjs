@@ -43,7 +43,7 @@ export function requireRealIds() {
     [
       `wrangler.toml の ${missing.map(([name]) => name).join(' と ')} がまだ ${PLACEHOLDER} です。`,
       '本番の D1 と KV を作って、出力の id を wrangler.toml に書いてコミットしてください:',
-      '  npx wrangler d1 create noctifex          # database_id',
+      '  npx wrangler d1 create astlog          # database_id',
       '  npx wrangler kv namespace create MEDIA   # [[kv_namespaces]] の id',
       '（README の「本番に出す」）',
     ].join('\n'),

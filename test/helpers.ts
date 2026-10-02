@@ -100,11 +100,11 @@ export async function ensureOwner() {
   return owner
 }
 
-// セッションのクッキー（nx_session=…）を持った fetch
+// セッションのクッキー（astlog_session=…）を持った fetch
 export const withCookie =
   (cookie: string) =>
   (path: string, init: RequestInit = {}) =>
-    SELF.fetch(`https://noctifex.test${path}`, {
+    SELF.fetch(`https://astlog.test${path}`, {
       ...init,
       redirect: 'manual',
       headers: { ...init.headers, cookie },
@@ -125,7 +125,7 @@ export async function signIn() {
 }
 
 export const get = (path: string, init: RequestInit = {}) =>
-  SELF.fetch(`https://noctifex.test${path}`, { redirect: 'manual', ...init })
+  SELF.fetch(`https://astlog.test${path}`, { redirect: 'manual', ...init })
 
 /*
   公開ページを 200 で受け取り、本文を返す。**本文を読んで確かめるテストはこれを通す。**

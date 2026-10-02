@@ -388,7 +388,7 @@ public/app.css         --moon-ratio: 325 / 480;  →  --moon-ratio: 373 / 574;
 ## 4. 焼く手順
 
 ```sh
-cd /Users/iam74k4/Git/Noctifex/.claude/worktrees/local-behavior-check-b1183e
+cd .claude/worktrees/local-behavior-check-b1183e   # リポジトリの根から
 B=/Applications/Blender.app/Contents/MacOS/Blender
 
 # 1) 下見（EEVEE・700px・16 サンプル）0.9 秒。構図と折り方だけを見る

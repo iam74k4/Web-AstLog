@@ -63,7 +63,7 @@ INSERT OR REPLACE INTO settings (key, value) VALUES ('layout', 'rail');
 `
 
 const query = async (sql, cwd, persistTo) => {
-  const args = ['d1', 'execute', 'noctifex', '--local', '--json', `--command=${sql}`]
+  const args = ['d1', 'execute', 'astlog', '--local', '--json', `--command=${sql}`]
   if (persistTo) args.push('--persist-to', persistTo)
   const [{ results }] = JSON.parse(await run(args, cwd))
   return results
@@ -84,19 +84,19 @@ async function picture(cwd, persistTo) {
   return { definitions: await query(DEFINITIONS, cwd, persistTo), rows }
 }
 
-const source = await mkdtemp(join(tmpdir(), 'noctifex-restore-source-'))
-const target = await mkdtemp(join(tmpdir(), 'noctifex-restore-target-'))
+const source = await mkdtemp(join(tmpdir(), 'astlog-restore-source-'))
+const target = await mkdtemp(join(tmpdir(), 'astlog-restore-target-'))
 const failures = []
 try {
   // 1. 元の D1（写した wrangler.toml の既定の置き場 = source/.wrangler/state）
   await cp(join(ROOT, 'wrangler.toml'), join(source, 'wrangler.toml'))
   await cp(join(ROOT, 'drizzle'), join(source, 'drizzle'), { recursive: true })
-  await run(['d1', 'migrations', 'apply', 'noctifex', '--local'], source)
+  await run(['d1', 'migrations', 'apply', 'astlog', '--local'], source)
   const data = [await readFile(join(ROOT, 'seed.sql'), 'utf8'), fixture().sql, AUTH_AND_REDIRECTS]
   for (const [index, sql] of data.entries()) {
     const file = join(source, `data-${index}.sql`)
     await writeFile(file, sql)
-    await run(['d1', 'execute', 'noctifex', '--local', `--file=${file}`], source)
+    await run(['d1', 'execute', 'astlog', '--local', `--file=${file}`], source)
   }
   const before = await picture(source)
   const empty = Object.entries(before.rows).filter(([, rows]) => rows.length === 0)
@@ -110,13 +110,13 @@ try {
   // 2. deploy.yml と同じ2本
   const schema = join(source, 'schema.sql')
   const rows = join(source, 'data.sql')
-  await run(['d1', 'export', 'noctifex', '--local', '--no-data', `--output=${schema}`], source)
-  await run(['d1', 'export', 'noctifex', '--local', '--no-schema', `--output=${rows}`], source)
+  await run(['d1', 'export', 'astlog', '--local', '--no-data', `--output=${schema}`], source)
+  await run(['d1', 'export', 'astlog', '--local', '--no-schema', `--output=${rows}`], source)
 
   // 3. 空の D1 に、定義 → 中身の順で（README の「戻す」と同じ順）
   for (const file of [schema, rows]) {
     await run(
-      ['d1', 'execute', 'noctifex', '--local', '--persist-to', target, `--file=${file}`],
+      ['d1', 'execute', 'astlog', '--local', '--persist-to', target, `--file=${file}`],
       source,
     )
   }
@@ -134,7 +134,7 @@ try {
     }
   }
   const pending = await run(
-    ['d1', 'migrations', 'list', 'noctifex', '--local', '--persist-to', target],
+    ['d1', 'migrations', 'list', 'astlog', '--local', '--persist-to', target],
     source,
   )
   if (!/No migrations to apply/.test(pending)) {

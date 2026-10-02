@@ -1,17 +1,19 @@
 import { env } from 'cloudflare:test'
 import wordmarkFile from 'virtual:asset:astlog-wordmark.svg'
 import faviconFile from 'virtual:asset:favicon.svg'
+import blackholeArt from 'virtual:asset-base64:blackhole.webp'
 import assetFiles from 'virtual:assets'
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import css from '../public/app.css'
 import * as schema from '../src/db/schema'
 import { ITEM_KINDS, type KindCounts } from '../src/domain'
-import { CONTACT_FRAME, HERO_FRAME, orbitMap } from '../src/lib/orbits'
+import { sniffImage } from '../src/lib/image'
+import { CHART_FRAME, CONTACT_FRAME, HERO_FRAME, orbitMap } from '../src/lib/orbits'
 import { publicRoutes } from '../src/routes/public/routes'
 import { SITE } from '../src/site'
 import { itemHref, LinkList, LinkRow, splitPhrases } from '../src/ui/components'
-import { GLOW_STOPS, HOLE, iconSvg, LARGE_GLOW_STOPS, wordmarkSvg } from '../src/ui/logo'
+import { BLACKHOLE_ART, HOLE, holeArt, iconSvg, WORDMARK, wordmarkSvg } from '../src/ui/logo'
 import { db, form, get, okText, resetDb, seedItem, seedMember, signIn, touch } from './helpers'
 
 beforeEach(resetDb)
@@ -258,9 +260,27 @@ describe('名乗り', () => {
       `(await get('/assets/…')).text()` を見る書き方は素通りで緑になる
       （実際にそう書いて通ってしまった）。ファイルの中身は
       vitest.config.ts の assetPlugin が渡す。
+
+      O の光は入口と同じ絵を、小さく描き直して data URI で抱える（ファイルはページの外で
+      開かれ、/assets の絵を読みに行けない）。抱えた絵はファイルから取り出し、形はそれを
+      渡した logo.ts の中身と比べる。絵そのものは、縦横比が入口の絵と同じ軽い WebP であることを見る
     */
-    expect(wordmarkFile).toBe(wordmarkSvg())
-    expect(faviconFile).toBe(iconSvg())
+    for (const [file, build] of [
+      [wordmarkFile, wordmarkSvg],
+      [faviconFile, iconSvg],
+    ] as const) {
+      const art = file.match(/<image href="data:image\/webp;base64,([^"]+)"/)?.[1] ?? ''
+      expect(file).toBe(build(art))
+      const bytes = Uint8Array.from(atob(art), (char) => char.charCodeAt(0))
+      const sniffed = sniffImage(bytes)
+      expect(sniffed?.type).toBe('image/webp')
+      expect((sniffed?.width ?? 0) / (sniffed?.height ?? 1)).toBeCloseTo(
+        BLACKHOLE_ART.width / BLACKHOLE_ART.height,
+        2,
+      )
+      // 元の絵（36KB）のままにしない。favicon は小さく保つ
+      expect(bytes.length).toBeLessThan(12_000)
+    }
   })
 
   it('ページと CSS が読む素材は、どれも public/assets にある', async () => {
@@ -312,8 +332,12 @@ describe('名乗り', () => {
       top.indexOf('</a>', top.indexOf('<a class="brand"')),
     )
     expect(brand).toContain('<svg class="brand__word"')
-    // O の黒い円は CSS の段（--hole-core）で塗る。焼いた画像は置かない
+    /*
+      O は入口と同じブラックホールの絵（SVG の image。読み上げに出ない）と、その下に敷く影の
+      黒い円（CSS の段 --hole-core で塗る）。img は置かない（名前は字が持つ）
+    */
     expect(brand).toContain('<circle class="logo-core"')
+    expect(brand).toContain(`<image class="logo-art" href="${BLACKHOLE_ART.src}"`)
     expect(brand).not.toContain('<img')
     expect(brand.match(/aria-hidden="true"/g)).toHaveLength(1)
     expect(brand).toContain(`<span class="sr-only">${SITE.name}</span>`)
@@ -915,6 +939,71 @@ describe('連絡先の行き先', () => {
   })
 })
 
+/*
+  星空と星雲（components.tsx の Cosmos / Nebula）。入口と締めで、軌道図のまわりを本文の幅
+  いっぱいの星空にし、ブラックホールのまわりに大きな星雲を置く（持ち主の「ブラックホール
+  だけじゃ面白みがない」「もっと壮大に」「もっと星雲っぽさがほしい」）。
+*/
+describe('星空と星雲', () => {
+  it('入口と締めに星空と星雲を敷く。作品の星図と、ほかのページには敷かない', async () => {
+    await seedMember()
+    await seedItem({ type: 'app' })
+    await seedItem({ type: 'work', slug: 'w' })
+    const home = mainOf(await okText('/'))
+    const contact = mainOf(await okText('/contact'))
+    // 入口は表紙の先頭（軌道図とは別の層。本文の幅いっぱいに敷く）
+    // 星雲は図の中の焦点（ブラックホール）の高さに置く（--cosmos-focus。app.css）
+    const focus = (frame: typeof HERO_FRAME) =>
+      Math.round((frame.focus.y / frame.height) * 1000) / 1000
+    expect(home).toContain(
+      `<header class="hero hero--orbit"><div class="cosmos cosmos--hero" aria-hidden="true" style="--cosmos-focus:${focus(HERO_FRAME)}">`,
+    )
+    expect(contact).toContain(
+      `<div class="cosmos cosmos--contact" aria-hidden="true" style="--cosmos-focus:${focus(CONTACT_FRAME)}">`,
+    )
+    // 軌道図の枠の中には星雲を置かない
+    expect(home.slice(home.indexOf('<div class="system">'))).not.toContain('cosmos__nebula')
+    for (const [path, main] of [
+      ['/', home],
+      ['/contact', contact],
+    ] as const) {
+      const from = main.indexOf('<div class="cosmos')
+      const cosmos = main.slice(from, main.indexOf('</div>', from))
+      // 星（瞬く星と光芒）・星雲・流れ星の3枚
+      expect(cosmos, path).toContain('<svg class="cosmos__stars"')
+      expect(cosmos, path).toContain('class="cosmos__twinkle"')
+      expect(cosmos, path).toContain('class="cosmos__glint"')
+      expect(cosmos, path).toContain('<svg class="cosmos__nebula"')
+      expect(cosmos, path).toContain('<svg class="cosmos__meteors"')
+      // 雲は光・雲・筋・塵の4枚。模様のフィルタは雲と筋と塵にだけ掛ける
+      expect(cosmos.match(/<use class="nebula__(light|cloud|veil|dust)"/g), path).toHaveLength(4)
+      expect(cosmos.match(/<filter id="[a-z-]+-f-(cloud|veil|dust)"/g), path).toHaveLength(3)
+      expect(cosmos, path).toContain('<feTurbulence')
+      // 外の素材を読まない（焼いた絵を持たない。CSP の img-src 'self' の外へも出ない）
+      expect(cosmos, path).not.toMatch(/<image|url\((?!#)/)
+    }
+    // ブラックホールの絵は入口と締めのまわりの星空の真ん中。作品の星図は同じ絵でも星空を持たない
+    expect(home).toContain('<img class="hole__art"')
+    expect(contact).toContain('<img class="hole__art"')
+    const list = mainOf(await okText('/projects'))
+    expect(list).not.toContain('class="cosmos')
+    expect(mainOf(await okText('/works/item/w'))).not.toContain('class="cosmos')
+    // 全体ページ（印刷・Ctrl-F の宛先）にも敷かない
+    expect(mainOf(await okText('/all'))).not.toContain('class="cosmos')
+  })
+
+  it('ページの中の id は重ならない（グラデーションとフィルタの名前が重なると、片方が消える）', async () => {
+    await seedMember()
+    await seedItem({ type: 'app', slug: 'a' })
+    await seedItem({ type: 'work', slug: 'w' })
+    for (const path of ['/', '/contact', '/projects', '/apps/item/a']) {
+      const ids = [...(await okText(path)).matchAll(/\sid="([^"]+)"/g)].map((match) => match[1])
+      expect(ids.length, path).toBeGreaterThan(0)
+      expect(new Set(ids).size, path).toBe(ids.length)
+    }
+  })
+})
+
 describe('締めのページ（Contact）', () => {
   it('入口と同じ星系の軌道図を置く。外へ抜ける道（脱出軌道と探査機）は持たない', async () => {
     await seedMember()
@@ -925,12 +1014,15 @@ describe('締めのページ（Contact）', () => {
     const main = mainOf(await okText('/contact'))
     // 締めの表紙（見出しの錨を持たない節）。図は装飾なので読み上げに流さない
     expect(main).toContain('<section id="contact" class="orbital"')
+    // 動かない層（帯・線・星屑）と動く層（流れる光・粒）を分ける（帯と星屑のぼかしを毎コマ描き直さない）
     expect(main).toContain(
-      `<div class="orbits"><svg viewBox="0 0 ${CONTACT_FRAME.width} ${CONTACT_FRAME.height}" aria-hidden="true"`,
+      `<div class="orbits"><svg class="orbits__still" viewBox="0 0 ${CONTACT_FRAME.width} ${CONTACT_FRAME.height}" aria-hidden="true"`,
     )
-    // 入口と同じ件数の天体（個人開発は点、業務は輪）
+    expect(main.match(/<svg class="orbits__still"/g)).toHaveLength(2)
+    // 入口と同じ件数の天体（個人開発は光る惑星、業務は輪のある惑星）
     expect(main.match(/class="orbit-body orbit-body--app"/g)).toHaveLength(2)
     expect(main.match(/class="orbit-body orbit-body--work"/g)).toHaveLength(1)
+    expect(main.match(/class="orbit-body__ring"/g)).toHaveLength(2)
     // 持ち主が外した（「スイングバイの軌道はいらない」）
     expect(main).not.toMatch(/orbit-escape|orbit-probe/)
     // 図は誘いの1文より前（上）に置き、字には重ねない
@@ -950,12 +1042,17 @@ describe('締めのページ（Contact）', () => {
         天体を札へ寄せると、跳ぶか軌道を外れて飛んだ
       */
       expect(main, path).not.toMatch(/orbit-mover|orbit-settle/)
-      // 軌道を流れる光も奥と手前に。吸い込まれる粒はブラックホールの後ろの層にだけ
+      /*
+        軌道を流れる光も奥と手前に。光は細い頭と、その後ろに引く淡い尾（彗星の形）。吸い込まれる
+        粒はブラックホールの後ろの層にだけ
+      */
       expect(main.match(/class="orbit-flow"/g), path).toHaveLength(4)
+      expect(main.match(/class="orbit-flow orbit-flow--tail"/g), path).toHaveLength(4)
       expect(main.match(/<g class="orbit-dust"/g), path).toHaveLength(1)
       expect(main, path).toContain('class="orbit-grain__dot"')
-      // ブラックホールの縁を回る光の点
-      expect(main.match(/<svg class="hole__spin"/g), path).toHaveLength(1)
+      // ブラックホールの光は揺らぐ（app.css）。縁を回る光の点は外した（焼いた絵に合わない）
+      expect(main.match(/<img class="hole__art"/g), path).toHaveLength(1)
+      expect(main, path).not.toContain('hole__spin')
       expect(
         main.match(/<clipPath id="[a-z]+-(far|near)" clipPathUnits="userSpaceOnUse">/g),
         path,
@@ -964,47 +1061,89 @@ describe('締めのページ（Contact）', () => {
     }
   })
 
-  it('入口と締めのブラックホールは、ロゴの O と同じ形。大きく描くときだけ縁の光を締める', async () => {
+  it('ブラックホールはどこも同じ焼いた光の絵（入口・締め・作品の星図・ロゴの O）', async () => {
     /*
-      持ち主の「ワードマークのブラックホールと統一してほしい」。前は測地線を追って焼いた
-      絵（斜めから見た円盤が影の前を横切る姿）で、上の帯のロゴの O と別のものに見えた。
-      黒い円の大きさと横線はロゴのまま。縁の光だけ、大きく描くときは坂を抑えて細い光の輪を
-      足す（ロゴの坂のまま大きくすると、白い光の塗りつぶしで日食か電球に見えた。
-      src/ui/logo.ts の LARGE_GLOW_STOPS / RING）
+      黒い円・光の縁・横線の記号を大きく描いていたころは、星雲の中で日食かレンズのフレアに
+      見えた（持ち主の「ブラックホールが違和感」）。入口と締めは光の曲がりを計算して焼いた光の
+      絵（GitHub の Organization の顔と同じ作り。src/ui/logo.ts の BLACKHOLE_ART）を、影の半径が
+      枠の hole になる大きさで置き、影は黒い円で絵の下に敷く。ロゴの O も同じ絵にした（持ち主の
+      「AstLog の o もブラックホールのデザインに合わせて」）——記号の O が残ると、入口の
+      ブラックホールと別のものに見える。作品の星図の真ん中も同じ絵で、揺らさない（hole--still）
     */
     await seedMember()
-    await seedItem({ type: 'app' })
-    const gradient = (html: string, kind: 'radialGradient' | 'linearGradient', name: string) =>
-      html.match(new RegExp(`<${kind} id="[a-z-]+-${name}"[^>]*>(.*?)</${kind}>`))?.[1] ?? ''
-    const stops = (list: readonly (readonly [number, number])[]) =>
-      list
-        .map(
-          ([at, alpha]) =>
-            `<stop offset="${at}" stop-color="currentColor" stop-opacity="${alpha}"></stop>`,
-        )
-        .join('')
-    const top = topOf(await okText('/'))
-    // 上の帯のロゴの O は今の坂のまま。光の輪は持たない
-    expect(gradient(top, 'radialGradient', 'glow')).toBe(stops(GLOW_STOPS))
-    expect(top).not.toContain('hole__ring')
-    for (const path of ['/', '/contact']) {
+    await seedItem({ type: 'app', slug: 'a' })
+    const pct = (value: number) => `${Math.round(value * 10000) / 100}%`
+    for (const [path, frame, still] of [
+      ['/', HERO_FRAME, false],
+      ['/contact', CONTACT_FRAME, false],
+      ['/projects', CHART_FRAME, true],
+    ] as const) {
       const main = mainOf(await okText(path))
-      const hole = main.slice(main.indexOf('<span class="hole" aria-hidden="true"'))
-      expect(gradient(hole, 'radialGradient', 'glow'), path).toBe(stops(LARGE_GLOW_STOPS))
-      expect(gradient(hole, 'linearGradient', 'line'), path).toBe(
-        gradient(top, 'linearGradient', 'line'),
+      const opening = still
+        ? '<span class="hole hole--still" aria-hidden="true"'
+        : '<span class="hole" aria-hidden="true"'
+      const from = main.indexOf(opening)
+      expect(from, path).toBeGreaterThan(-1)
+      const hole = main.slice(from, main.indexOf('</span>', from))
+      // 絵の幅は、絵の影の半径が枠の hole になる大きさ。影の円の径は絵の幅に対する割合
+      const width = (BLACKHOLE_ART.width / BLACKHOLE_ART.shadow) * frame.hole
+      expect(hole, path).toContain(`--hole-w:${pct(width / frame.width)}`)
+      expect(hole, path).toContain(
+        `--hole-shadow:${pct((2 * BLACKHOLE_ART.shadow) / BLACKHOLE_ART.width)}`,
       )
-      expect(hole, path).toContain(`<circle class="logo-core" cx="0" cy="0" r="${HOLE.core}"`)
-      expect(hole, path).toContain('<svg class="hole__ring"')
-      expect(main, path).not.toContain('/assets/blackhole')
+      expect(hole, path).toContain(`<img class="hole__art" src="${BLACKHOLE_ART.src}"`)
+      // 前の記号の O（光の坂・黒い円・光の輪の SVG）は描かない
+      expect(hole, path).not.toMatch(/logo-core|hole__light|hole__ring|<svg/)
     }
+    /*
+      ロゴの O は同じ絵を、影の半径が O の大きさ（HOLE.core）になるように置き、影の黒い円を
+      下に敷く。前の記号（光の坂と横線のグラデーション）は残さない
+    */
+    const top = topOf(await okText('/'))
+    const box = holeArt(HOLE.cx, HOLE.cy)
+    expect(top).toContain(
+      `<circle class="logo-core" cx="${HOLE.cx}" cy="${HOLE.cy}" r="${HOLE.core}" stroke-width="${WORDMARK.stroke}"></circle><image class="logo-art" href="${BLACKHOLE_ART.src}" x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}"></image>`,
+    )
+    expect(top).not.toMatch(/<(radial|linear)Gradient/)
+    // 絵の箱は、絵の影の半径が O の大きさになる寸法（縦横比は絵のまま）
+    expect(box.width / (2 * HOLE.core)).toBeCloseTo(
+      BLACKHOLE_ART.width / (2 * BLACKHOLE_ART.shadow),
+      2,
+    )
+    expect(box.width / box.height).toBeCloseTo(BLACKHOLE_ART.width / BLACKHOLE_ART.height, 2)
+    // 404 の印も同じ O を1つで
+    const missing = await get('/no-such-page')
+    expect(missing.status).toBe(404)
+    const notFound = await missing.text()
+    const mark = holeArt(0, 0)
+    expect(notFound).toContain(
+      `<image class="logo-art" href="${BLACKHOLE_ART.src}" x="${mark.x}" y="${mark.y}" width="${mark.width}" height="${mark.height}"></image>`,
+    )
   })
 
-  it('作品が0件でも、ブラックホールは粒を吸い込み、縁を光の点が回る', async () => {
+  it('ブラックホールの絵のファイルは、部品が置く寸法と同じ。軽い透過の WebP で、URL に中身の版', async () => {
+    // 寸法が違うと、影の黒い円と絵の影がずれる（絵の幅と影の径を BLACKHOLE_ART から組むので）
+    const bytes = Uint8Array.from(atob(blackholeArt), (char) => char.charCodeAt(0))
+    const sniffed = sniffImage(bytes)
+    expect(sniffed?.type).toBe('image/webp')
+    expect(sniffed?.width).toBe(BLACKHOLE_ART.width)
+    expect(sniffed?.height).toBe(BLACKHOLE_ART.height)
+    /*
+      版はファイルの SHA-256 の頭8桁。public/_headers が1年・immutable で配るので、焼き直して
+      版を変え忘れると、前の絵を持つ人には1年届かない
+    */
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
+    const hex = [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+    expect(BLACKHOLE_ART.src).toBe(`/assets/blackhole.webp?v=${hex.slice(0, 8)}`)
+    // 入口の頭と、どのページの上の帯でも読む絵なので、重くしない（いまは 36KB ほど）
+    expect(bytes.length).toBeLessThan(80_000)
+  })
+
+  it('作品が0件でも、ブラックホールは粒を吸い込み、光が揺らぐ', async () => {
     await seedMember()
     const main = mainOf(await okText('/'))
     expect(main).toContain('class="orbit-grain__dot"')
-    expect(main).toContain('<svg class="hole__spin"')
+    expect(main).toContain('<img class="hole__art"')
     // 天体が無いので、止まった天体の点も無い
     expect(main).not.toContain('class="orbit-body')
   })
@@ -1217,10 +1356,13 @@ describe('ページの URL', () => {
     )
     expect(labels.indexOf('>01<')).toBeLessThan(labels.indexOf('>02<'))
     /*
-      ブラックホールはロゴの O と同じ SVG（<img> で貼らない。飾り）。軌道と天体の色は
-      app.css が --accent と --ink から敷くので、**見た目プリセットで軌道図の色も変わる**
+      img はブラックホールの焼いた光の絵の1枚だけ（飾りなので alt は空）。軌道と天体は
+      ページに直に描く SVG で、色は app.css が --accent と --ink から敷くので、**見た目
+      プリセットで軌道図の色も変わる**
     */
-    expect(home).not.toContain('<img')
+    expect(home.match(/<img\b[^>]*>/g)).toEqual([
+      `<img class="hole__art" src="${BLACKHOLE_ART.src}" width="${BLACKHOLE_ART.width}" height="${BLACKHOLE_ART.height}" alt="" decoding="async"/>`,
+    ])
     expect(home).not.toMatch(/(?:stroke|fill)="#/)
 
     /*
@@ -3429,16 +3571,23 @@ describe('作品の星図', () => {
     expect(list).not.toContain('chart__number')
   })
 
-  it('止まった図。灯すのは天体1つとその軌道だけで、ブラックホールの縁を回る光の点も持たない', async () => {
+  it('止まった図。灯すのは天体1つとその軌道だけで、真ん中は揺らさないブラックホール', async () => {
     await seedItem({ title: 'A', slug: 'a' })
     await seedItem({ title: 'B', slug: 'b', type: 'work', sortOrder: 20 })
     const chart = rowOf(mainOf(await okText('/projects')), 'a')
-    expect(chart).toContain('<span class="hole" aria-hidden="true"')
-    expect(chart).not.toContain('hole__spin')
+    /*
+      真ん中は入口と同じ絵（ロゴの O とも同じ）。一覧には星図が行の数だけ並ぶので、光は
+      揺らさない（hole--still。app.css の「動き続ける」が外す）
+    */
+    expect(chart).toContain('<span class="hole hole--still" aria-hidden="true"')
+    expect(chart).toContain(`<img class="hole__art" src="${BLACKHOLE_ART.src}"`)
     expect(chart).not.toMatch(/orbit-mover|orbit-flow|orbit-grain/)
     expect(chart.match(/<g class="orbit-body[^"]* chart__lit"/g)).toHaveLength(1)
-    // 軌道は奥と手前の半分に分けて描くので、灯す線は2本（同じ軌道の2つの半分）
-    expect(chart.match(/<path class="orbit orbit--\w+ chart__lit"/g)).toHaveLength(2)
+    // 軌道は奥と手前の半分に分けて描くので、灯す線は2本（同じ軌道の2つの半分）。にじみも同じ
+    expect(chart.match(/<path class="orbit chart__lit"/g)).toHaveLength(2)
+    expect(chart.match(/<path class="orbit__glow chart__lit"/g)).toHaveLength(2)
+    // 星雲は敷かない（一覧に行の数だけ並ぶ図で、灯した天体を指すのが役目）
+    expect(chart).not.toContain('class="nebula"')
     // 飾り。読み上げには何も言わない
     expect(chart).toContain('<span class="chart entry__chart" aria-hidden="true"')
   })
@@ -3476,7 +3625,7 @@ describe('転送をブラウザに覚えさせるか', () => {
       expect(response.headers.get('location'), `${path} ${round}`).toBe(location)
       // 写しから返すとき（hit）も、同じ cache-control を付け直す
       expect(response.headers.get('cache-control'), `${path} ${round}`).toBe('no-cache')
-      expect(response.headers.get('x-noctifex-cache'), path).toBe(round)
+      expect(response.headers.get('x-astlog-cache'), path).toBe(round)
     }
   }
 
