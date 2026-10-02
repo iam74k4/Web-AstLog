@@ -269,6 +269,44 @@
     混ぜる割合）
   */
   --cosmos-wash: 16%;
+  /*
+    字の暗がり（「入口の軌道図」の .hero__copy と、Contact の .contact の ::before）。字の塊の
+    箱は地の色で塗りきり、その外で星空と星雲へ溶かす長さ。上と下と左（--veil）は短く——900
+    未満ではすぐ上に図がある。右（--veil-side）は長く——900 以上の入口では右に図があり、短い
+    坂の縦の縁が、星雲を断ち切る線に見えた。
+
+    坂は覆い（--veil-y は縦、--veil-x は横。900 以上だけ重ねる）。濃さは S 字に変える
+    （3次のなめらかな段差の 1/4・1/2・3/4 の値）——まっすぐな坂は、両端の折れ目が淡い星雲の上で
+    線に見えた
+  */
+  --veil: clamp(40px, 5vw, 72px);
+  --veil-side: clamp(64px, 14vw, 240px);
+  --veil-y: linear-gradient(
+    to bottom,
+    transparent,
+    rgb(0 0 0 / 0.16) calc(var(--veil) * 0.25),
+    rgb(0 0 0 / 0.5) calc(var(--veil) * 0.5),
+    rgb(0 0 0 / 0.84) calc(var(--veil) * 0.75),
+    #000 var(--veil),
+    #000 calc(100% - var(--veil)),
+    rgb(0 0 0 / 0.84) calc(100% - var(--veil) * 0.75),
+    rgb(0 0 0 / 0.5) calc(100% - var(--veil) * 0.5),
+    rgb(0 0 0 / 0.16) calc(100% - var(--veil) * 0.25),
+    transparent
+  );
+  --veil-x: linear-gradient(
+    to right,
+    transparent,
+    rgb(0 0 0 / 0.16) calc(var(--veil) * 0.25),
+    rgb(0 0 0 / 0.5) calc(var(--veil) * 0.5),
+    rgb(0 0 0 / 0.84) calc(var(--veil) * 0.75),
+    #000 var(--veil),
+    #000 calc(100% - var(--veil-side)),
+    rgb(0 0 0 / 0.84) calc(100% - var(--veil-side) * 0.75),
+    rgb(0 0 0 / 0.5) calc(100% - var(--veil-side) * 0.5),
+    rgb(0 0 0 / 0.16) calc(100% - var(--veil-side) * 0.25),
+    transparent
+  );
 
   /*
     天体の札（.system__label）を天体からずらす量と、札の幅の上限（長い名前は末尾を
@@ -659,11 +697,17 @@ body[data-site] > main {
 /*
   本文は、入口と締めの星空（.cosmos）の位置の基準で、重なりの容れ物。星空は本文の幅いっぱい
   （inset: 0）に、本文の中身の後ろ（z-index: -1）に敷く。容れ物にしないと、-1 の星空が
-  ページの地の後ろへ沈むことがある
+  ページの地の後ろへ沈むことがある。
+
+  横だけ切る（overflow-x: clip。スクロール箱は作らず、縦は出してよい）。字の暗がり（「入口の
+  軌道図」）は字の塊の外へ広げて溶かすので、締めの字が長いと画面の右端の先まで伸びる——
+  切らないと、見えない暗がりでページが横に動く。本文の幅は画面の幅なので、ほかに切られる
+  ものは無い（目次と絞り込みのはみ出しは右の余白の中まで）
 */
 body[data-site] > main {
   position: relative;
   isolation: isolate;
+  overflow-x: clip;
 }
 
 /* --- 上の帯 --- */
@@ -1109,13 +1153,17 @@ body[data-site] > main {
 
 /*
   宇宙（components.tsx の Cosmos。入口と締め）。軌道図のまわりを、本文の幅いっぱいの星空に
-  する——星と、星雲の2色の淡い広がり（背景の放射の坂。図の焦点のあたりに置く）と流れ星。
+  する——星と、星雲（ブラックホールのまわりから画面の端まで）と、星雲の2色の淡い広がり
+  （背景の放射の坂。図の焦点のあたりに置く）と流れ星。
 
-  字の後ろには何も出さない（覆い mask-image で消す）。小さい字は地の黒で 4.5:1 ぎりぎりの
-  所があり（職種と所在地の札・件数の見出し）、星1つが字の行に掛かるだけで割る。覆いは
-  図の場所に合わせる——
-  - 入口（1列）と締め: 図の下で消える（図の高さは枠の縦横比と本文の幅から組む --cosmos-fig）
-  - 入口（900 以上）: 左の字の列（本文の幅の半分）で消え、底の件数の帯の上で消える
+  字の後ろには何も出さない。小さい字は地の黒で 4.5:1 ぎりぎりの所があり（職種と所在地の札・
+  件数の見出し）、星1つが字の行に掛かるだけで割る。消し方は2つ——
+  - 字の塊（入口の見出しの列・締めの字）は、自分の後ろに地の色の暗がりを敷く（下の「字の
+    暗がり」）。暗がりは塊の箱に付いてくるので、字の長さや画面の幅で塊が動いても外れない。
+    図の場所から字の列を見積もった覆いで消していたころは、900 以上で左の列を丸ごと消すぶん、
+    星雲が画面の右半分に寄っていた
+  - 星空は底で消える（覆い mask-image）。入口は件数の帯の上で、締めは本文の底で（足元の罫線で
+    雲を断ち切らない）
   位置の基準は本文（main。「骨格」）。npm run check:contrast が字の下を測る。
 */
 .cosmos {
@@ -1170,13 +1218,21 @@ body[data-site] > main {
 }
 
 /*
-  図の幅（--cosmos-fig-w）と高さ（--cosmos-fig）と、星雲の色の広がり。入口の図は本文の幅
+  図の幅（--cosmos-fig-w）と高さ（--cosmos-fig）と、底の消え方。入口の図は本文の幅
   いっぱい（900 以上は右の列）で縦横比が --system-ratio、締めの図は .orbits と同じ幅の
-  決め方で --contact-ratio。本文の幅は min(画面 − 余白, 版面)
+  決め方で --contact-ratio。本文の幅は min(画面 − 余白, 版面)。
+
+  入口は件数の帯の上で消えきる（帯と行の間は約 112px。帯の上の罫線より 20px ほど上）。
+  締めは本文の底（足元の罫線）の手前で消えきる
 */
 .cosmos--hero {
   --cosmos-fig-w: min(100vw - 2 * var(--gutter), var(--w-page));
   --cosmos-fig: calc(var(--cosmos-fig-w) / (var(--system-ratio)));
+  mask-image: linear-gradient(
+    to bottom,
+    #000 calc(100% - var(--page-pad) - 220px),
+    transparent calc(100% - var(--page-pad) - 100px)
+  );
 }
 
 .cosmos--contact {
@@ -1187,8 +1243,10 @@ body[data-site] > main {
     (var(--contact-ratio))
   );
   --cosmos-fig: calc(var(--cosmos-fig-w) / (var(--contact-ratio)));
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--page-pad) * 2), transparent);
 }
 
+/* 図の焦点の高さと、星雲の色の淡い広がり（星雲の芯のまわり） */
 .cosmos--hero,
 .cosmos--contact {
   --cosmos-y: calc(var(--page-pad) + var(--cosmos-fig) * var(--cosmos-focus));
@@ -1205,33 +1263,55 @@ body[data-site] > main {
       color-mix(in srgb, var(--nebula-b) var(--cosmos-wash), transparent),
       transparent
     );
-  mask-image: linear-gradient(
-    to bottom,
-    #000 calc(var(--page-pad) + var(--cosmos-fig) * 0.75),
-    transparent calc(var(--page-pad) + var(--cosmos-fig) + var(--sp-5))
-  );
 }
 
 /*
-  星雲（components.tsx の Nebula。星空の中、ブラックホールのまわり）。ブラックホールの位置
-  （--cosmos-x / --cosmos-y）を真ん中に、図の幅（--cosmos-fig-w）に比例した大きさで置く。
-  箱の縦横比は orbits.ts の NEBULA と同じ（test/theme.test.ts が突き合わせる）。図より大きく、
-  はみ出したぶんは星空（.cosmos）が切る。位置は余白（margin）で引く——translate は漂う動きが
-  使う（「動き続ける」）。
+  字の暗がり。入口の見出しの列と、締めの字の塊の後ろに、地の色を敷く。塊の箱は塗りきり、
+  上と下へ --veil だけ広げた所で、星空と星雲へ溶かす。900 未満は字の塊が本文の列いっぱい
+  なので、横は本文の端から端まで（左右の余白 --gutter ぶん広げる）の帯にする。900 以上は
+  塊を中身の幅に縮め、左は --veil、右は --veil-side で溶かす（「900px 以上」）。
+
+  重なりは星空（.cosmos）と同じ z-index: -1 の層で、文書の順が星空より後——星空と星雲の上、
+  字の下に描かれる（本文 main が重なりの容れ物。「骨格」）。軌道図（.system・.orbits）は
+  ふつうの層なので、暗がりが図に掛かっても、軌道の線と天体は消さない。
+*/
+.hero--orbit > .hero__copy,
+.orbital > .contact {
+  position: relative;
+}
+
+.hero--orbit > .hero__copy::before,
+.orbital > .contact::before {
+  content: '';
+  position: absolute;
+  inset: calc(-1 * var(--veil)) calc(-1 * var(--gutter));
+  z-index: -1;
+  background: var(--bg);
+  mask-image: var(--veil-y);
+  pointer-events: none;
+}
+
+/*
+  星雲（components.tsx の Nebula。星空の中、ブラックホールのまわりから画面の端まで）。
+  ブラックホールの位置（--cosmos-x / --cosmos-y）を真ん中に、図の幅（--cosmos-fig-w）に
+  比例した大きさで置く——軌道のまわりの芯の雲は図と一緒に伸び縮みし、外の雲が画面の端へ
+  届く（900 以上の入口では、箱の左の端が本文の左の端より外に出る）。箱の縦横比は orbits.ts の
+  NEBULA と同じ（test/theme.test.ts が突き合わせる）。はみ出したぶんは星空（.cosmos）が切る。
+  位置は余白（margin）で引く——translate は漂う動きが使う（「動き続ける」）。
 
   色は塊の役ごとに使う場所で敷く（:root で混ぜない。[data-accent] が効かなくなる）——
   3色は --nebula-a / -b / -c（見た目のプリセットごと）、明るい芯は字の白、塵は地の色。
   4枚の濃さは :root の --nebula-*。
 */
 .cosmos__nebula {
-  --nebula-w: calc(var(--cosmos-fig-w) * 1.57);
+  --nebula-w: calc(var(--cosmos-fig-w) * 3.53);
   position: absolute;
   left: var(--cosmos-x);
   top: var(--cosmos-y);
   width: var(--nebula-w);
-  aspect-ratio: 1600 / 1000;
+  aspect-ratio: 3600 / 2000;
   margin-left: calc(var(--nebula-w) / -2);
-  margin-top: calc(var(--nebula-w) / -3.2);
+  margin-top: calc(var(--nebula-w) / -3.6);
 }
 
 .nebula__a {
@@ -1839,7 +1919,7 @@ use.nebula__dust {
 
 @keyframes orbit-drift {
   to {
-    translate: 1.5% -1%;
+    translate: 0.7% -0.45%;
   }
 }
 
@@ -3566,9 +3646,29 @@ use.nebula__dust {
   }
 
   /*
-    入口の星空は、左の字の列と、底の件数の帯の上で消える（2つの覆いの重なる所だけを残す）。
-    図（--cosmos-fig-w）は右の列で、焦点（--cosmos-x / -y）は横がその真ん中、縦は件数の帯と
-    行の間（約 112px）を除いた残りの真ん中から、図の中の焦点の高さ（--cosmos-focus）だけずらした所
+    字の暗がり（「入口の軌道図」）。入口の見出しの列と締めの字の塊（下の .orbital > .contact）は
+    中身の幅に縮める——列いっぱいのままだと、短い字の右に空いた所（入口では図の左の端まで）の
+    星雲を消す。字の折り返しは変わらない（列より長い塊があれば、列の幅で止まる）。
+
+    暗がりは縦と横の坂の覆いを重ねる（角は2つの坂の積で丸まる）。左は --veil、右は
+    --veil-side（:root）。右へ広げたぶんが画面の外へ出ても、本文が横に切る（「骨格」）
+  */
+  .hero--orbit > .hero__copy {
+    justify-self: start;
+  }
+
+  .hero--orbit > .hero__copy::before,
+  .orbital > .contact::before {
+    inset: calc(-1 * var(--veil)) calc(-1 * var(--veil-side)) calc(-1 * var(--veil))
+      calc(-1 * var(--veil));
+    mask-image: var(--veil-y), var(--veil-x);
+    mask-composite: intersect;
+  }
+
+  /*
+    入口の星空の図（--cosmos-fig-w）は右の列で、焦点（--cosmos-x / -y）は横がその真ん中、縦は
+    件数の帯と行の間（約 112px）を除いた残りの真ん中から、図の中の焦点の高さ（--cosmos-focus）
+    だけずらした所。星雲は左の字の列の上と下まで広がり、字の後ろは字の暗がりが消す
   */
   .cosmos--hero {
     --cosmos-fig-w: calc((min(100vw - 2 * var(--gutter), var(--w-page)) - var(--sp-7) * 1.5) / 2);
@@ -3580,24 +3680,6 @@ use.nebula__dust {
       (var(--cosmos-focus) - 0.5) *
       var(--cosmos-fig)
     );
-    /*
-      左の消え方は楕円（真ん中は焦点より右）。左の端は本文の幅の半分より 12px 左——字の列の
-      右の端（半分より 24px 左）の外——で、そこから焦点の手前まで長く薄れる。右は画面の端の
-      先まで開いたまま。まっすぐな線で切っていたころは、星雲が四角い板に見えた
-    */
-    mask-image:
-      radial-gradient(
-        ellipse calc(var(--cosmos-fig-w) * 0.8 + 48px) calc(var(--cosmos-fig) * 1.15) at
-          calc(var(--cosmos-x) + var(--cosmos-fig-w) * 0.3) var(--cosmos-y),
-        #000 45%,
-        transparent 100%
-      ),
-      linear-gradient(
-        to bottom,
-        #000 calc(100% - var(--page-pad) - 220px),
-        transparent calc(100% - var(--page-pad) - 100px)
-      );
-    mask-composite: intersect;
   }
 
   /*
@@ -3620,8 +3702,10 @@ use.nebula__dust {
     gap: 0;
   }
 
+  /* 締めの字は表紙の底に寄せ、中身の幅に縮める（字の暗がり。上の .hero__copy と同じ） */
   .orbital > .contact {
     align-self: end;
+    justify-self: start;
   }
 
   /*
@@ -4005,13 +4089,16 @@ use.nebula__dust {
   軌道図は装飾で、forced-colors（Windows のハイコントラスト）では線と点がシステム色に
   置き換わって札の地と見分けが付かなくなる。prefers-contrast: more も同じ意図の申告
   なので、まとめて受ける。消しても失われる情報は無い（作品の名前は「一覧で見る →」の
-  先に全部あり、件数は件数の帯が字で言う）。締めの図（.orbits）も同じ。
+  先に全部あり、件数は件数の帯が字で言う）。締めの図（.orbits）も同じ。星空を消すので、
+  字の後ろの暗がり（「入口の軌道図」）も要らない。
 */
 @media (forced-colors: active), (prefers-contrast: more) {
   .system,
   .orbits,
   .chart,
-  .cosmos {
+  .cosmos,
+  .hero--orbit > .hero__copy::before,
+  .orbital > .contact::before {
     display: none;
   }
 
@@ -4060,7 +4147,9 @@ use.nebula__dust {
 @media (max-height: 400px) {
   .system,
   .orbits,
-  .cosmos {
+  .cosmos,
+  .hero--orbit > .hero__copy::before,
+  .orbital > .contact::before {
     display: none;
   }
 
@@ -4308,7 +4397,9 @@ use.nebula__dust {
   .system,
   .orbits,
   .chart,
-  .cosmos {
+  .cosmos,
+  .hero--orbit > .hero__copy::before,
+  .orbital > .contact::before {
     display: none;
   }
 

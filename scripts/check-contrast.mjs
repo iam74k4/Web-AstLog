@@ -81,22 +81,23 @@ const pageOptions = ({ width, height, touch }) => ({
 */
 /*
   画素数の下限（SCREENS の minPixels）。seed で測ったいちばん少ない姿（どれも
-  390x844 指）の約半分——入口の軌道の線と星屑 6626・天体 132・ブラックホール 1898・星雲 82314・
-  星空の星 123、締めの軌道の線と星屑 6632・天体 132・ブラックホール 1897・星雲 78442・星空の星
-  119 画素（締めの星系は入口と同じ大きさ。ブラックホールは影が小さく、光の絵が淡く広がる。
-  星空の星は細かく、字の後ろで消すぶん少ない）。「描かれていない」を止める数で、1割の目減りを
-  止める数ではない（下の ORBIT_MIN_DELTA）
+  390x844 指）の約半分——入口の軌道の線と星屑 6616・天体 132・ブラックホール 1871・星雲 99245・
+  星空の星 169、締めの軌道の線と星屑 6618・天体 132・ブラックホール 1871・星雲 103655・星空の星
+  267 画素（締めの星系は入口と同じ大きさ。ブラックホールは影が小さく、光の絵が淡く広がる。
+  星空の星は細かく、字の後ろで消すぶん少ない。星雲は画面の端まで広がるが、電話の幅では
+  図のまわりに収まる）。「描かれていない」を止める数で、1割の目減りを止める数ではない
+  （下の ORBIT_MIN_DELTA）
 */
 const LINES_HERO = 3300
 const BODIES_HERO = 65
-const ART_HERO = 950
-const NEBULA_HERO = 45000
-const STARS_HERO = 60
+const ART_HERO = 930
+const NEBULA_HERO = 49000
+const STARS_HERO = 80
 const LINES_CONTACT = 3300
 const BODIES_CONTACT = 65
-const ART_CONTACT = 950
-const NEBULA_CONTACT = 40000
-const STARS_CONTACT = 50
+const ART_CONTACT = 930
+const NEBULA_CONTACT = 51000
+const STARS_CONTACT = 130
 
 const SCREENS = [
   {
@@ -165,7 +166,7 @@ const SCREENS = [
   ある——見栄えを縛るのではなく、「描かれていない」「ほぼ見えない」を止めるための
   数だから（地の明るさが 12 なので、明るさ 30 は差で 18）。軌道の線と星屑・星雲・星空の星は
   もともと淡い芯と細かい点と雲なので、下限を別に置く（ORBIT_TRACE_MIN_DELTA / NEBULA_MIN_DELTA /
-  STARS_MIN_DELTA。実測の中央値の最小 6.9・12.4・7.6 の約半分）。星雲を軌道の後ろで明るくすると
+  STARS_MIN_DELTA。実測の中央値の最小 6.9・14.5・9.0 の約半分）。星雲を軌道の後ろで明るくすると
   「軌道の線と星屑」が下がる——星屑と線を濃くする（--stardust-ink・--orbit-ink）か、明るい
   塊を軌道の帯の外へ寄せる（orbits.ts の nebulaMap）。外の軌道ほど淡くする量（--orbit-outer）も
   同じく下げる——外の軌道は長く、画素の多くを持つ
