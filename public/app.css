@@ -157,6 +157,18 @@
   --shot-h: clamp(120px, min(30vw, 20svh), 280px);
 
   /*
+    作品のページの画像の帯（.strip。画像が2枚以上の作品）。--strip-h は帯の高さで、
+    絵の幅は絵の縦横比から取る（img の width / height）。可変部は幅と高さの小さいほう
+    ——電話では次の1枚の端がのぞく幅になり（横に送れると分かる）、背の低い窓では帯が
+    画面を食わない。--strip-ratio は寸法の分からない画像の枠の比（Mac の画面と同じ）。
+
+    --head-icon は作品のページの見出しの左のアイコンの大きさ（.head__icon）
+  */
+  --strip-h: clamp(180px, min(48vw, 46svh), 440px);
+  --strip-ratio: 16 / 10;
+  --head-icon: clamp(44px, 5vw, 64px);
+
+  /*
     横に送る帯（上の帯の目次と、狭い画面の絞り込み）の右端のぼかし。切れている
     ことを見せる。覆いなので色ではなく不透明度の坂で、地の色とは関わらない。
 
@@ -344,6 +356,8 @@
   --entry-thumb: 320px;
   --entry-go: var(--sp-6);
   --entry-title-lh: calc(var(--fs-display-xs) * 1.3);
+  /* 行の題の左のアイコン（.entry__icon）。題の字より一回り大きく、1行目の高さの真ん中に置く */
+  --entry-icon: calc(var(--fs-display-xs) * 1.7);
 
   --ease: cubic-bezier(0.23, 1, 0.32, 1);
   --dur-fast: 180ms;
@@ -2140,6 +2154,17 @@ use.nebula__dust {
 }
 
 /*
+  作品のページの見出しの左のアイコン（components.tsx の SectionHead の icon）。見出しの
+  字の高さの真ん中に置く（並びの基準の字の下端に座らせると、大きな見出しの下へ沈む）
+*/
+.head__icon {
+  flex: none;
+  align-self: center;
+  width: var(--head-icon);
+  height: var(--head-icon);
+}
+
+/*
   見出しのすぐ後ろの件数（Projects の「07」。SectionHead の count）。見出しの字の
   右上に、等幅の小さな数字で添える（英数字の札）。
 */
@@ -2220,6 +2245,53 @@ use.nebula__dust {
 */
 .story {
   margin-top: var(--sp-7);
+}
+
+/*
+  作品の画像の帯（components.tsx の ItemShots。小節「Screenshots」）。説明の組から
+  Story と同じだけ離す。
+
+  帯は横にだけ送れる箱（ページは縦に読むまま。目次の帯と同じく、溢れは帯の中で送る）。
+  1枚ずつ左端に止まり（scroll-snap）、細いスクロールバーを見せる——ホイールしか無い
+  マウスでも、バーを掴めば送れる。高さは --strip-h、幅は絵の縦横比から（寸法の分からない
+  画像は --strip-ratio の枠）。帯より横に長い絵は帯の幅に縮めて収める（切らない）。
+  地は面の色（読み込むまでの枠が見える）。箱には入れず、角は立てたまま。
+
+  帯は右の余白へ --gutter だけはみ出し（本文の外の余白は --gutter より狭くならないので、
+  画面の外へは出ない）、そこで薄れる（目次と同じ --fade-right）。本文の幅にちょうど2枚
+  収まる画面（1440 の 16:10 がそう）でも、次の1枚の端が余白にのぞき、横に送れると分かる。
+  終わりの空き（padding）も同じ幅で、最後の1枚は本文の右端で止まる
+*/
+.shots {
+  margin-top: var(--sp-7);
+}
+
+.strip {
+  display: flex;
+  gap: var(--sp-4);
+  margin-inline-end: calc(var(--gutter) * -1);
+  padding-inline-end: var(--gutter);
+  padding-bottom: var(--sp-3);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+  mask-image: var(--fade-right);
+}
+
+.strip img {
+  flex: none;
+  width: auto;
+  max-width: 100%;
+  height: var(--strip-h);
+  object-fit: contain;
+  scroll-snap-align: start;
+  background: var(--surface);
+}
+
+.strip img:not([width]) {
+  aspect-ratio: var(--strip-ratio);
 }
 
 /* --- 節の中身の2つの箱 --- */
@@ -2545,6 +2617,24 @@ use.nebula__dust {
   font-weight: 600;
   line-height: 1.3;
   letter-spacing: -0.01em;
+}
+
+/*
+  題の左のアイコン（components.tsx の ItemRow）。題の1行目の高さの真ん中に置き、はみ出す
+  ぶんは上下の負の余白で受ける——行の高さを変えない（番号と矢印は題の1行目の真ん中に
+  そろえてある。--entry-title-lh）。題が2行に折れても、アイコンは1行目の横のまま
+*/
+.entry__title--icon {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+}
+
+.entry__icon {
+  flex: none;
+  width: var(--entry-icon);
+  height: var(--entry-icon);
+  margin-block: calc((var(--entry-title-lh) - var(--entry-icon)) / 2);
 }
 
 /*
@@ -3796,6 +3886,54 @@ use.nebula__dust {
   .contact__sub:hover {
     color: var(--ink);
   }
+
+  /*
+    作品の画像の帯（.strip）を送る手。マウスの端末だけ——ホイールしか無いマウスでは横に
+    送る手が分かりにくい（指と、横に送れるトラックパッドは帯をそのまま送れる）。CSS の
+    ::scroll-button で、JavaScript は置かない。押すと帯が1画面ぶん送られて次の1枚に止まり、
+    端まで送ると消える（:disabled）。帯の縦の真ん中の、本文の左右の端の内側に置く
+    （右の手は、帯が右の余白へはみ出したぶんだけ内へ。.strip の注記）。知らない
+    ブラウザは規則ごと捨て、帯をそのまま送ってもらう（列に並べない。:has と同じ理由）
+  */
+  .strip {
+    anchor-name: --strip;
+  }
+
+  .strip::scroll-button(*) {
+    position: fixed;
+    position-anchor: --strip;
+    top: anchor(center);
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: var(--tap);
+    height: var(--tap);
+    translate: 0 -50%;
+    border: 1px solid var(--line-strong);
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    color: var(--ink);
+    font-size: var(--fs-lg);
+    cursor: pointer;
+    transition: opacity var(--dur-fast) var(--ease);
+  }
+
+  .strip::scroll-button(*):disabled {
+    opacity: 0;
+    cursor: default;
+  }
+
+  /* biome-ignore lint/correctness/noUnknownTypeSelector: ::scroll-button の引数（left）は向きの語で、要素の型ではない（Biome の CSS の読み方がまだ知らない） */
+  .strip::scroll-button(left) {
+    content: '←' / '前の画像';
+    left: calc(anchor(left) + var(--sp-4));
+  }
+
+  /* biome-ignore lint/correctness/noUnknownTypeSelector: ::scroll-button の引数（right）は向きの語で、要素の型ではない（Biome の CSS の読み方がまだ知らない） */
+  .strip::scroll-button(right) {
+    content: '→' / '次の画像';
+    right: calc(anchor(right) + var(--gutter) + var(--sp-4));
+  }
 }
 
 /* タッチ端末では当たり判定を広げる。iPad の横向きは幅が広くてもこちら */
@@ -4146,6 +4284,15 @@ use.nebula__dust {
   }
 
   .entry {
+    break-inside: avoid;
+  }
+
+  /* 画像の帯は紙では送れないので、折り返して全部を刷る（折り返せば帯の幅に収まり、溢れない） */
+  .strip {
+    flex-wrap: wrap;
+  }
+
+  .strip img {
     break-inside: avoid;
   }
 }

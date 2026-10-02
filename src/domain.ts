@@ -50,14 +50,46 @@ export type KindCounts = Record<ItemKind, number>
 export const totalOf = (counts: KindCounts) =>
   ITEM_KIND_KEYS.reduce((sum, kind) => sum + counts[kind], 0)
 
+// 作品の画像1枚（メインの画像か、ほかの画像の1枚）。寸法は読めたときだけ
+export type ItemImage = {
+  url: string
+  alt: string
+  width: number | null
+  height: number | null
+}
+
 // 作品1件を画面に出す形（src/db/queries.ts の toItemView が DB の行から開く）
 export type ItemView = Item & {
   tags: string[]
   links: { label: string; url: string }[]
+  // ほかの画像（item_shots）。並び順のまま
+  shots: ItemImage[]
   platformLabel: string | null
   memberName: string | null
   memberSlug: string | null
 }
+
+/*
+  作品の画像を見せる順に。メインの画像（items.image_url）が先で、ほかの画像が続く。
+  先頭の1枚がその作品の顔——一覧の行のサムネイル・共有カード（メインの画像が無い
+  作品では、ほかの画像の1枚目）。作品のページは、2枚以上あれば全部を横に並べる
+  （components.tsx の ItemShots）。
+*/
+export const itemImages = (
+  item: Pick<ItemView, 'imageUrl' | 'imageAlt' | 'imageWidth' | 'imageHeight' | 'shots'>,
+): ItemImage[] => [
+  ...(item.imageUrl
+    ? [
+        {
+          url: item.imageUrl,
+          alt: item.imageAlt,
+          width: item.imageWidth,
+          height: item.imageHeight,
+        },
+      ]
+    : []),
+  ...item.shots,
+]
 
 /*
   いま効いている絞り込み。区分（個人開発 / 業務）とメンバーの2軸で、

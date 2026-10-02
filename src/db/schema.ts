@@ -142,9 +142,10 @@ export const items = sqliteTable(
     */
     body: text('body').notNull().default(''),
     /*
-      スクリーンショット。/images/items/<…>（管理画面から KV に上げたもの）か、
-      /assets/…（同梱）。null なら画像なし——作品ページに figure を出さず、
-      一覧にもサムネイルを出さない。
+      メインの画像（スクリーンショット）。/images/items/<…>（管理画面から KV に上げたもの）か、
+      /assets/…（同梱）。作品の顔の1枚で、作品のページ・一覧のサムネイル・共有カードに出る。
+      null ならメインの画像なし——ほかの画像（item_shots）があれば、その1枚目が顔になり
+      （src/domain.ts の itemImages）、どちらも無ければ画像の位置に星図が出る。
 
       代替テキストは別の列で持つ（画像そのものに焼き込めない）。空のまま
       公開させない検査は src/blocks.ts の publishErrors（公開の関門）。
@@ -163,6 +164,12 @@ export const items = sqliteTable(
     */
     imageWidth: integer('image_width'),
     imageHeight: integer('image_height'),
+    /*
+      アイコン（アプリのアイコンなど、正方形の画像）。/images/items/<…>（管理画面から
+      KV に上げたもの）。null ならアイコンなし。一覧の行の題と作品のページの見出しの
+      左に小さく出る飾りで、代替テキストは持たない（名前はすぐ隣の題が言う）
+    */
+    iconUrl: text('icon_url'),
     // 実績値。1項目に1つだけ。無い項目のほうが多い
     metricValue: text('metric_value'),
     metricUnit: text('metric_unit'),
@@ -245,6 +252,33 @@ export const itemLinks = sqliteTable(
     sortOrder: integer('sort_order').notNull().default(0),
   },
   (t) => [index('idx_item_links_item').on(t.itemId, t.sortOrder)],
+)
+
+/*
+  作品のほかの画像（スクリーンショット）。作品のページで、メインの画像（items.image_url）の
+  あとに横に並べて見せる（components.tsx の ItemShots）。
+
+  代替テキストは1枚ずつ持ち、空のまま公開させない（src/blocks.ts の publishErrors。
+  メインの画像と同じ）。寸法は上げたときに中身の頭から読んだもの——横に並べる帯は
+  高さを決めて幅を絵の縦横比から取るので、読み込む前から幅が決まっている
+  （img の width / height）。読めなかった画像は null で、帯は決まった比の枠に収める。
+  並びは sort_order（小さいほど先）→ id。行を消すと一緒に消える（cascade）が、KV の
+  画像は消える前に呼ぶ側が消す（src/routes/admin/items.tsx）。
+*/
+export const itemShots = sqliteTable(
+  'item_shots',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    url: text('url').notNull(),
+    alt: text('alt').notNull().default(''),
+    width: integer('width'),
+    height: integer('height'),
+    sortOrder: integer('sort_order').notNull().default(0),
+  },
+  (t) => [index('idx_item_shots_item').on(t.itemId, t.sortOrder)],
 )
 
 /*
@@ -481,6 +515,7 @@ export const itemsRelations = relations(items, ({ one, many }) => ({
   platform: one(platforms, { fields: [items.platformKey], references: [platforms.key] }),
   tags: many(itemTags),
   links: many(itemLinks),
+  shots: many(itemShots),
 }))
 
 export const itemTagsRelations = relations(itemTags, ({ one }) => ({
@@ -491,8 +526,13 @@ export const itemLinksRelations = relations(itemLinks, ({ one }) => ({
   item: one(items, { fields: [itemLinks.itemId], references: [items.id] }),
 }))
 
+export const itemShotsRelations = relations(itemShots, ({ one }) => ({
+  item: one(items, { fields: [itemShots.itemId], references: [items.id] }),
+}))
+
 export type Member = typeof members.$inferSelect
 export type Item = typeof items.$inferSelect
+export type ItemShot = typeof itemShots.$inferSelect
 export type Platform = typeof platforms.$inferSelect
 export type User = typeof users.$inferSelect
 export type Block = typeof blocks.$inferSelect

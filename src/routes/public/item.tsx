@@ -10,7 +10,7 @@ import {
   publishedBlocks,
 } from '../../db/queries'
 import * as schema from '../../db/schema'
-import { type ItemKind, type ItemView, KIND_LABEL } from '../../domain'
+import { type ItemKind, type ItemView, itemImages, KIND_LABEL } from '../../domain'
 import type { AppEnv } from '../../env'
 import { IMAGE_FORMATS, imageTypeOfPath } from '../../lib/image'
 import { bodyIndexOf, CHART_FRAME, orbitMap } from '../../lib/orbits'
@@ -19,6 +19,7 @@ import { SITE } from '../../site'
 import {
   BackLink,
   ItemDetail,
+  ItemShots,
   ItemStory,
   itemCardId,
   itemHref,
@@ -34,7 +35,8 @@ import { movedTo, screenPage } from './page'
 import { sitePageLinks, sitePages } from './site'
 
 /*
-  作品のページの共有カードの画像（src/ui/Layout.tsx の OgImage）。
+  作品のページの共有カードの画像（src/ui/Layout.tsx の OgImage）。その作品の顔の1枚
+  （メインの画像。無ければほかの画像の1枚目。src/domain.ts の itemImages）。
 
   使うのは、こちらが上げた画像（/images/items/…）で、種類が貼り先に読まれる
   もの（AVIF 以外の4種類）だけ。種類は拡張子から（putImage が判定の結果から
@@ -46,16 +48,15 @@ const SHARE_TYPES = new Set(
 )
 
 function itemOgImage(item: ItemView): OgImage | undefined {
-  if (!item.imageUrl?.startsWith('/images/items/')) return undefined
-  const type = imageTypeOfPath(item.imageUrl)
+  const cover = itemImages(item)[0]
+  if (!cover?.url.startsWith('/images/items/')) return undefined
+  const type = imageTypeOfPath(cover.url)
   if (!type || !SHARE_TYPES.has(type)) return undefined
   return {
-    url: absoluteUrl(item.imageUrl),
-    alt: item.imageAlt || item.title,
+    url: absoluteUrl(cover.url),
+    alt: cover.alt || item.title,
     type,
-    ...(item.imageWidth && item.imageHeight
-      ? { width: item.imageWidth, height: item.imageHeight }
-      : {}),
+    ...(cover.width && cover.height ? { width: cover.width, height: cover.height } : {}),
   }
 }
 
@@ -82,7 +83,8 @@ const itemFacts = (item: ItemView) =>
   日に、貼られた作品のリンクまで死んではいけない。出る条件は「作品が公開中」の
   1つだけ。
 
-  中身は一覧の行を開いたもの（ItemDetail。画像の無い作品は画像の位置に星図）と、本文の
+  中身は一覧の行を開いたもの（ItemDetail。画像の無い作品は画像の位置に星図）と、画像が
+  2枚以上の作品の小節「Screenshots」（#screenshots。横に送る帯。ItemShots）と、本文の
   小節「Story」（#story。本文を書いた作品にだけ。ItemStory）。以前は本文を次の画面
   （…/story）に分け、作品同士を画面の底の左右の手でめくっていた。1ページにまとめたので、
   前の本文の URL は #story へ 301（story が true）。
@@ -134,6 +136,7 @@ export async function renderItem(
   if (item.type !== kind) return movedTo(c, href)
 
   const solo = soloMember(members)
+  const images = itemImages(item)
   /*
     目次はサイトのページのまま。このページに絞り込みは無いので、素の並びを聞く。
     画像の無い作品は、公開中の全件の並びも引く——星図（ItemDetail の chart）が灯す
@@ -141,7 +144,7 @@ export async function renderItem(
   */
   const [{ pages, counted }, order] = await Promise.all([
     sitePages(db, blocks, members, NO_FILTER),
-    item.imageUrl ? null : listPublishedItemKeys(db),
+    images.length ? null : listPublishedItemKeys(db),
   ])
   const links = sitePageLinks(pages, NO_FILTER, solo)
   const body = order ? bodyIndexOf(counted.counts, order).get(item.id) : undefined
@@ -163,8 +166,9 @@ export async function renderItem(
   const list = links.find((link) => link.key === 'projects')
 
   /*
-    見出しと添え（SectionHead）の下は ItemDetail——一覧の行を開いたもの（なぜ
-    行の部品かは ItemDetail に書いてある）。その下に本文の小節（ItemStory）。
+    見出しと添え（SectionHead。アイコンがあれば見出しの左）の下は ItemDetail——一覧の行を
+    開いたもの（なぜ行の部品かは ItemDetail に書いてある）。その下に画像の帯（ItemShots）と
+    本文の小節（ItemStory）。
   */
   const note = [item.platformLabel ?? item.category, item.year].filter(Boolean).join(' · ')
   const destinations = [
@@ -198,8 +202,10 @@ export async function renderItem(
           note={note || undefined}
           h1
           transition={itemTransition(item)}
+          icon={item.iconUrl}
         />
         <ItemDetail item={item} links={destinations} chart={chart} />
+        <ItemShots images={images} />
         <ItemStory paragraphs={paragraphs} />
       </Screen>
     ),
@@ -221,7 +227,12 @@ export async function renderItem(
       name: item.title,
       url: `${SITE.origin}${href}`,
       ...(item.summary ? { description: item.summary } : {}),
-      ...(item.imageUrl ? { image: absoluteUrl(item.imageUrl) } : {}),
+      // 画像は見せる順に（1枚なら URL、2枚以上なら並び）
+      ...(images.length === 1
+        ? { image: absoluteUrl(images[0]?.url ?? '') }
+        : images.length
+          ? { image: images.map((image) => absoluteUrl(image.url)) }
+          : {}),
     },
     theme,
     footer: <SiteIdentity solo={solo} />,

@@ -1091,6 +1091,60 @@ describe('部品の作法', () => {
     expect(beside).toContain('min-height: var(--shot-h)')
   })
 
+  it('作品の画像の帯は横にだけ送る箱。高さは :root の段、幅は絵の比から。右の余白へはみ出して薄れる', () => {
+    /*
+      画像が2枚以上の作品（components.tsx の ItemShots）。1枚ずつ左端に止まり、帯の高さは
+      --strip-h、幅は絵の縦横比から（img の width / height）——読み込む前から幅が決まる。
+      寸法の分からない画像は --strip-ratio の枠。帯は右の余白へ --gutter だけはみ出して
+      薄れ、本文の幅にちょうど2枚入る画面（1440 の 16:10）でも、次の1枚の端がのぞく
+    */
+    const root = bodyOf(sheet, ':root {')
+    expect(root).toContain('--strip-h:')
+    expect(root).toContain('--strip-ratio:')
+    const strip = bodyOf(sheet, '.strip {')
+    expect(strip).toContain('overflow-x: auto')
+    expect(strip).toContain('scroll-snap-type: x mandatory')
+    expect(strip).toContain('margin-inline-end: calc(var(--gutter) * -1)')
+    expect(strip).toContain('padding-inline-end: var(--gutter)')
+    expect(strip).toContain('mask-image: var(--fade-right)')
+    // 縦には送らない（縦のスクロール箱はページ1つ）
+    expect(strip).not.toMatch(/overflow-y|overflow:/)
+    const img = bodyOf(sheet, '.strip img {')
+    expect(img).toContain('height: var(--strip-h)')
+    expect(img).toContain('width: auto')
+    expect(img).toContain('object-fit: contain')
+    expect(img).toContain('scroll-snap-align: start')
+    expect(bodyOf(sheet, '.strip img:not([width]) {')).toContain('aspect-ratio: var(--strip-ratio)')
+    // 紙では送れないので、折り返して全部を刷る
+    expect(bodyOf(blockAt(sheet, '@media print'), '.strip {')).toContain('flex-wrap: wrap')
+  })
+
+  it('帯を送る手はマウスの端末だけ。::scroll-button は列に並べず、端まで送ると消える', () => {
+    const buttons = rulesOf(sheet).filter((rule) =>
+      rule.selectors.some((one) => one.includes('::scroll-button')),
+    )
+    expect(buttons.length).toBeGreaterThan(0)
+    for (const rule of buttons) {
+      // 知らないブラウザが列ごと捨てないよう、1つの規則に1つのセレクタ（:has と同じ）
+      expect(rule.selectors).toHaveLength(1)
+      expect(rule.context).toContain('@media (hover: hover)')
+    }
+    const hover = blockAt(sheet, '@media (hover: hover)')
+    expect(bodyOf(hover, '.strip::scroll-button(*):disabled {')).toContain('opacity: 0')
+    // 矢印の字と、読み上げの名前
+    expect(bodyOf(hover, '.strip::scroll-button(left) {')).toMatch(/content: '←' \/ '[^']+'/)
+    expect(bodyOf(hover, '.strip::scroll-button(right) {')).toMatch(/content: '→' \/ '[^']+'/)
+    // 押す的は指の的と同じ大きさ
+    expect(bodyOf(hover, '.strip::scroll-button(*) {')).toContain('width: var(--tap)')
+  })
+
+  it('アイコンは題の行の高さを変えない（はみ出しは負の余白で受ける）。見出しの字の真ん中に置く', () => {
+    expect(bodyOf(sheet, '.entry__icon {')).toContain(
+      'margin-block: calc((var(--entry-title-lh) - var(--entry-icon)) / 2)',
+    )
+    expect(bodyOf(sheet, '.head__icon {')).toContain('align-self: center')
+  })
+
   it('作品のページの列は grid。高さの足りない箱で flex の子のように潰れない', () => {
     expect(bodyOf(sheet, '.detail,\n.detail__text {')).toContain('display: grid')
   })

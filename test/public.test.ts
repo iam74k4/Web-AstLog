@@ -1895,6 +1895,100 @@ describe('作品1件の恒久リンク', () => {
   左右の手でめくっていたころのページャは外した（一覧は全件を1ページに並べるので、
   隣の作品は戻った一覧のすぐ隣の行にある）。
 */
+/*
+  作品の画像の見せ方（メインの画像・ほかの画像・アイコン）。見せる順はメインの画像が先で、
+  ほかの画像が並び順で続く（src/domain.ts の itemImages）。先頭の1枚がその作品の顔
+  （一覧のサムネイル・共有カード）。作品のページは1枚なら説明の組の絵、2枚以上なら
+  全部を横の帯（小節「Screenshots」）に並べる——同じ画像を2度出さない。
+*/
+describe('作品の画像の見せ方', () => {
+  const ldOf = (html: string) =>
+    JSON.parse(html.match(/<script type="application\/ld\+json">(.*?)<\/script>/)?.[1] ?? 'null')
+
+  it('画像が1枚の作品は、今までどおり説明の組の絵。帯は出さない', async () => {
+    await seedItem({
+      slug: 'one',
+      summary: '説明。',
+      imageUrl: '/images/items/one-aaaaaaaa.png',
+      imageAlt: '一枚の画面',
+    })
+    const main = mainOf(await okText('/apps/item/one'))
+    expect(main).toContain(
+      '<figure class="shot"><img src="/images/items/one-aaaaaaaa.png" alt="一枚の画面" decoding="async"/></figure>',
+    )
+    expect(main).not.toContain('class="strip"')
+    expect(main).not.toContain('id="screenshots"')
+  })
+
+  it('メインの画像が無い作品は、ほかの画像の1枚目がその作品の顔（サムネイル・共有カード・説明の組の絵）', async () => {
+    const item = await seedItem({ slug: 'face', summary: '説明。' })
+    await db().insert(schema.itemShots).values({
+      itemId: item.id,
+      url: '/images/items/face-aaaaaaaa.png',
+      alt: 'ほかの画像の1枚目',
+      width: 1200,
+      height: 630,
+      sortOrder: 10,
+    })
+    await touch()
+    const page = await okText('/apps/item/face')
+    expect(mainOf(page)).toContain(
+      '<figure class="shot"><img src="/images/items/face-aaaaaaaa.png" alt="ほかの画像の1枚目" decoding="async"/></figure>',
+    )
+    expect(page).toContain(
+      `<meta property="og:image" content="${SITE.origin}/images/items/face-aaaaaaaa.png"/>`,
+    )
+    expect(page).toContain('<meta property="og:image:width" content="1200"/>')
+    const list = mainOf(await okText('/projects'))
+    expect(list).toContain(
+      '<span class="entry__thumb" aria-hidden="true"><img src="/images/items/face-aaaaaaaa.png" alt="" loading="lazy" decoding="async"/></span>',
+    )
+    // 画像があるので星図は置かない
+    expect(list).not.toContain('entry__chart')
+  })
+
+  it('2枚以上なら帯に見せる順で並べ、構造化データの image も同じ並び。寸法の分からない画像は寸法を名乗らない', async () => {
+    const item = await seedItem({
+      slug: 'many',
+      summary: '説明。',
+      imageUrl: '/images/items/many-aaaaaaaa.png',
+      imageAlt: 'メイン',
+      imageWidth: 1440,
+      imageHeight: 900,
+    })
+    // 並び順で並ぶ（入れた順ではなく）
+    await db()
+      .insert(schema.itemShots)
+      .values([
+        { itemId: item.id, url: '/images/items/many-cccccccc.png', alt: '三', sortOrder: 20 },
+        {
+          itemId: item.id,
+          url: '/images/items/many-bbbbbbbb.png',
+          alt: '二',
+          width: 1440,
+          height: 900,
+          sortOrder: 10,
+        },
+      ])
+    await touch()
+    const html = await okText('/apps/item/many')
+    expect(html).toContain(
+      '<div class="shots" id="screenshots"><div class="head head--sub"><h2>Screenshots</h2></div>',
+    )
+    // 初めの2枚はすぐ読み、3枚目からは帯を送って近づいたときに読む
+    expect(html).toContain(
+      '<img src="/images/items/many-aaaaaaaa.png" alt="メイン" width="1440" height="900" decoding="async"/><img src="/images/items/many-bbbbbbbb.png" alt="二" width="1440" height="900" decoding="async"/><img src="/images/items/many-cccccccc.png" alt="三" loading="lazy" decoding="async"/>',
+    )
+    expect(ldOf(html).image).toEqual(
+      ['many-aaaaaaaa', 'many-bbbbbbbb', 'many-cccccccc'].map(
+        (name) => `${SITE.origin}/images/items/${name}.png`,
+      ),
+    )
+    // 説明の組には絵を置かない（帯に全部ある）
+    expect(mainOf(html)).not.toContain('<figure class="shot">')
+  })
+})
+
 describe('作品1件のページの行き来', () => {
   // 本文の頭の「← 一覧に戻る」の行き先。無ければ null
   const backOf = (html: string) => mainOf(html).match(/<a class="back" href="([^"]*)"/)?.[1] ?? null

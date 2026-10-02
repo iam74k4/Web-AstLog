@@ -35,6 +35,7 @@ import {
   imageNotKept,
   type PickedImage,
   pickImage,
+  pickImages,
   putImage,
   removeImage,
 } from './images'
@@ -164,7 +165,11 @@ type ItemFormData = {
   type: ItemKind
   members: schema.Member[]
   platforms: schema.Platform[]
-  item?: schema.Item & { tags: { tag: string }[]; links: { label: string; url: string }[] }
+  item?: schema.Item & {
+    tags: { tag: string }[]
+    links: { label: string; url: string }[]
+    shots: schema.ItemShot[]
+  }
   // 追加のフォームの一度きりの札（newFormKey）。編集では持たない
   formKey?: string | null
   // 入力エラーで描き直すとき、送られてきた内容をそのまま返すために使う
@@ -178,6 +183,14 @@ type ItemFormData = {
   打った内容が消えるのは、ここを分けていないと起きる。
 */
 function itemDraft(item?: ItemFormData['item'], submitted?: Record<string, string>): ItemDraft {
+  // いまあるほかの画像。弾いたあとの描き直しでは、送られてきた欄の値を採る
+  const shots = (item?.shots ?? []).map((shot) => ({
+    id: shot.id,
+    url: shot.url,
+    alt: submitted?.[`shotAlt-${shot.id}`] ?? shot.alt,
+    order: submitted?.[`shotOrder-${shot.id}`] ?? String(shot.sortOrder),
+    remove: submitted?.[`shotRemove-${shot.id}`] === '1',
+  }))
   if (submitted) {
     return {
       title: submitted.title ?? '',
@@ -190,6 +203,9 @@ function itemDraft(item?: ItemFormData['item'], submitted?: Record<string, strin
       body: submitted.body ?? '',
       imageAlt: submitted.imageAlt ?? '',
       removeImage: submitted.removeImage === '1',
+      removeIcon: submitted.removeIcon === '1',
+      shots,
+      newShotAlts: submitted.newShotAlts ? JSON.parse(submitted.newShotAlts) : [],
       tags: submitted.tags ?? '',
       sortOrder: submitted.sortOrder ?? '10',
       published: submitted.published === '1' ? 1 : 0,
@@ -210,6 +226,9 @@ function itemDraft(item?: ItemFormData['item'], submitted?: Record<string, strin
     body: item?.body ?? '',
     imageAlt: item?.imageAlt ?? '',
     removeImage: false,
+    removeIcon: false,
+    shots,
+    newShotAlts: [],
     tags: (item?.tags ?? []).map((tag) => tag.tag).join(', '),
     sortOrder: String(item?.sortOrder ?? 10),
     published: item?.published ?? 0,
@@ -231,6 +250,11 @@ type ItemDraft = {
   body: string
   imageAlt: string
   removeImage: boolean
+  removeIcon: boolean
+  // いまあるほかの画像（欄の値は字のまま。並び順は読めない字でも描き直す）
+  shots: { id: number; url: string; alt: string; order: string; remove: boolean }[]
+  // 足す欄の代替テキスト（弾いたあとの描き直しで残す。選んだファイルは残せない）
+  newShotAlts: string[]
   tags: string
   sortOrder: string
   published: number
@@ -251,6 +275,97 @@ const METRIC_NOTE_HINT =
 
 // リンクの欄を空けて出す行の数（ItemForm）。上限ではない
 const LINK_ROWS = 3
+
+/*
+  ほかの画像（スクリーンショット）の上限と、1度の保存で足せる空いた欄の数。上限は
+  作品のページの横の帯で送って見られる枚数として（1枚 1MB まで）。JavaScript が無いので
+  欄を足す手が無く、もっと足すなら保存して開き直す（リンクの欄と同じ）
+*/
+const MAX_SHOTS = 8
+const SHOT_SLOTS = 4
+
+// 画像を受け取る欄（弾いたときに「まだ保存していません」と言う欄。imageNotKept）
+const IMAGE_FIELDS = ['image', 'icon', 'newShot'] as const
+
+/*
+  ほかの画像（スクリーンショット）の欄。いまある画像は1枚ずつ見本・代替テキスト・
+  並び順・外す、の1行で、その下に足す欄（ファイルと代替テキストの組）を空けて出す。
+  欄の名前に画像の id を入れる（readShotEdits）——送った欄だけを読み、欄の無い画像は
+  いまのまま残す。
+
+  作品のページでは、メインの画像のあとに並び順で横に並べる（components.tsx の
+  ItemShots）。代替テキストは公開するときに1枚ずつ要る（publishErrors）。
+*/
+const ShotFields = ({
+  shots,
+  alts,
+  errors,
+  slots,
+}: {
+  shots: ItemDraft['shots']
+  alts: string[]
+  errors?: Record<string, string>
+  slots: number
+}) => (
+  <fieldset class="field field--wide fieldset">
+    <legend class="field__label">ほかの画像（スクリーンショット）</legend>
+    {shots.map((shot, index) => (
+      <div class="shot-row" key={shot.id}>
+        {/* 見本。何が写っているかは隣の欄が言うので、ここでは名前を持たせない */}
+        <img class="shot-row__image" src={shot.url} alt="" loading="lazy" />
+        <input
+          class={errors?.shots && !shot.alt && !shot.remove ? 'input input--error' : 'input'}
+          type="text"
+          name={`shotAlt-${shot.id}`}
+          value={shot.alt}
+          placeholder="何が写っているかを1文で"
+          aria-label={`${index + 1} 枚目の代替テキスト`}
+        />
+        <input
+          class={errors?.shotOrder ? 'input input--error' : 'input'}
+          type="text"
+          inputmode="numeric"
+          name={`shotOrder-${shot.id}`}
+          value={shot.order}
+          aria-label={`${index + 1} 枚目の並び順`}
+        />
+        <label class="check">
+          <input type="checkbox" name={`shotRemove-${shot.id}`} value="1" checked={shot.remove} />
+          外す
+        </label>
+      </div>
+    ))}
+    {Array.from({ length: slots }, (_, index) => (
+      <div class="shot-row shot-row--new" key={`new-${index}`}>
+        <input
+          class={errors?.newShot ? 'input input--file input--error' : 'input input--file'}
+          type="file"
+          name="newShot"
+          accept={IMAGE_ACCEPT}
+          aria-label={`足す画像（${index + 1}）`}
+        />
+        <input
+          class="input"
+          type="text"
+          name="newShotAlt"
+          value={alts[index] ?? ''}
+          placeholder="代替テキスト（何が写っているかを1文で）"
+          aria-label={`足す画像（${index + 1}）の代替テキスト`}
+        />
+      </div>
+    ))}
+    {errors?.newShot ? <span class="field__error">{errors.newShot}</span> : null}
+    {errors?.shotOrder ? <span class="field__error">{errors.shotOrder}</span> : null}
+    {errors?.shots ? <span class="field__error">{errors.shots}</span> : null}
+    <span class="field__hint">
+      作品のページで、メインの画像のあとに横に並べる（横に送って見る）。並び順は小さいほど先 ·
+      1枚ずつ {IMAGE_LABELS}（1MB まで） · 公開するときは1枚ずつ代替テキストが必須 ·{' '}
+      {slots
+        ? `${MAX_SHOTS} 枚まで。もっと足すときは、保存してから開き直すと空いた欄が出る`
+        : `${MAX_SHOTS} 枚に達している。足すときは、外してから保存する`}
+    </span>
+  </fieldset>
+)
 
 const ItemForm = (props: ItemFormData) => {
   const item = props.item
@@ -443,6 +558,41 @@ const ItemForm = (props: ItemFormData) => {
               </label>
             </div>
           ) : null}
+          {/*
+            アイコンは題の左に小さく出る飾り（代替テキストは持たない。名前は隣の題が言う）。
+            正方形で描くので、正方形の画像を勧める
+          */}
+          <label class="field">
+            <span class="field__label">アイコン</span>
+            <input
+              class={props.errors?.icon ? 'input input--file input--error' : 'input input--file'}
+              type="file"
+              name="icon"
+              accept={IMAGE_ACCEPT}
+            />
+            {props.errors?.icon ? <span class="field__error">{props.errors.icon}</span> : null}
+            <span class="field__hint">
+              {item?.iconUrl
+                ? `選ぶと差し替わる。空なら今のまま · ${IMAGE_LABELS}（1MB まで）`
+                : `正方形の画像（アプリのアイコンなど）。${IMAGE_LABELS}（1MB まで） · 一覧の行と作品のページで、題の左に小さく出る`}
+            </span>
+          </label>
+          {item?.iconUrl ? (
+            <div class="field">
+              <span class="field__label">いまのアイコン</span>
+              <img class="icon-preview" src={item.iconUrl} alt="" width="64" height="64" />
+              <label class="check">
+                <input type="checkbox" name="removeIcon" value="1" checked={d.removeIcon} />
+                アイコンを外す
+              </label>
+            </div>
+          ) : null}
+          <ShotFields
+            shots={d.shots}
+            alts={d.newShotAlts}
+            errors={props.errors}
+            slots={Math.max(0, Math.min(SHOT_SLOTS, MAX_SHOTS - d.shots.length))}
+          />
           <Field
             label="タグ"
             name="tags"
@@ -574,6 +724,7 @@ itemRoutes.get('/items/:id/edit', async (c) => {
     with: {
       tags: { orderBy: [asc(schema.itemTags.sortOrder)] },
       links: { orderBy: [asc(schema.itemLinks.sortOrder)] },
+      shots: { orderBy: shotOrder },
     },
   })
   if (!item) return c.notFound()
@@ -708,6 +859,14 @@ function submittedItem(form: FormData): Record<string, string> {
     body: str(form.get('body')),
     imageAlt: str(form.get('imageAlt')),
     removeImage: bool(form.get('removeImage')) ? '1' : '',
+    removeIcon: bool(form.get('removeIcon')) ? '1' : '',
+    // いまあるほかの画像の欄（shotAlt-<id> など）はそのままの名前で返す（itemDraft が id で引く）
+    ...Object.fromEntries(
+      [...form.keys()]
+        .filter((key) => /^shot(Alt|Order|Remove)-\d+$/.test(key))
+        .map((key) => [key, str(form.get(key))]),
+    ),
+    newShotAlts: JSON.stringify(form.getAll('newShotAlt').map((value) => str(value))),
     tags: str(form.get('tags')),
     sortOrder: str(form.get('sortOrder')),
     published: bool(form.get('published')) ? '1' : '',
@@ -756,6 +915,94 @@ function readLinks(form: FormData): { links: ItemLink[]; error?: string } {
     else if (label && url) links.push({ label, url })
   }
   return problems.length ? { links, error: `${problems.join('。')}。` } : { links }
+}
+
+// ほかの画像の並び（公開ページと同じ。src/db/queries.ts の itemWith）
+const shotOrder = [asc(schema.itemShots.sortOrder), asc(schema.itemShots.id)]
+
+/*
+  いまあるほかの画像の欄（ShotFields）を読む。欄の無い画像（追加のフォームの2度目の
+  送信。1度目が作った画像はそのフォームに無い）はいまのまま残す。並び順は全角の数字も
+  読み、読めなければ何枚目かを言って止める（黙って別の数に倒さない。作品の並び順と同じ）
+*/
+type ShotEdit = { shot: schema.ItemShot; alt: string; sortOrder: number; remove: boolean }
+
+function readShotEdits(form: FormData, shots: schema.ItemShot[]) {
+  const unreadable: number[] = []
+  const edits: ShotEdit[] = shots.map((shot, index) => {
+    const alt = form.get(`shotAlt-${shot.id}`)
+    const order = str(form.get(`shotOrder-${shot.id}`))
+    const sortOrder = order ? int(order) : shot.sortOrder
+    if (sortOrder === null) unreadable.push(index + 1)
+    return {
+      shot,
+      alt: alt === null ? shot.alt : str(alt),
+      sortOrder: sortOrder ?? shot.sortOrder,
+      remove: bool(form.get(`shotRemove-${shot.id}`)) === 1,
+    }
+  })
+  return {
+    edits,
+    error: unreadable.length
+      ? { shotOrder: `並び順は数字で書いてください（${unreadable.join('・')} 枚目）` }
+      : null,
+  }
+}
+
+/*
+  足す欄（ファイルと代替テキストの組）を読む。どの欄も pickImage と同じ検査で、
+  通らない欄は何番目の欄かを言って止める。代替テキストだけを書いた欄は数えない
+*/
+async function readNewShots(form: FormData) {
+  const picks = await pickImages(form, 'newShot')
+  const alts = form.getAll('newShotAlt').map((value) => str(value))
+  const problems = picks.flatMap((pick, index) =>
+    pick.error ? [`${index + 1} 番目の欄: ${pick.error}`] : [],
+  )
+  const added = picks.flatMap((pick, index) =>
+    pick.image ? [{ image: pick.image, alt: alts[index] ?? '' }] : [],
+  )
+  return { added, error: problems.length ? { newShot: problems.join('。') } : null }
+}
+
+/*
+  保存したあとのほかの画像（残す分を並び順に、足す分をその後ろへ）。足す画像の並び順は
+  残す分のいちばん大きい数から 10 刻み。上限（MAX_SHOTS）を超えるなら止める
+*/
+function shotPlan(edits: ShotEdit[], added: { image: PickedImage; alt: string }[]) {
+  const kept = edits
+    .filter((edit) => !edit.remove)
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.shot.id - b.shot.id)
+  const base = kept.reduce((max, edit) => Math.max(max, edit.sortOrder), 0)
+  return {
+    kept,
+    orders: added.map((_, index) => base + 10 * (index + 1)),
+    alts: [...kept.map((edit) => edit.alt), ...added.map((shot) => shot.alt)],
+    error:
+      kept.length + added.length > MAX_SHOTS
+        ? {
+            newShot: `ほかの画像は ${MAX_SHOTS} 枚までです（残すのが ${kept.length} 枚、足すのが ${added.length} 枚）。外してから足してください`,
+          }
+        : null,
+  }
+}
+
+/*
+  画像を KV に置く（putImage）。何枚か置いたあとで落ちたら、置いた分を消してから
+  投げ直す——どの行からも指されない画像を KV に残さない（commitWithImage と同じ約束）
+*/
+async function placeImages(
+  kv: KVNamespace,
+  images: { image: PickedImage; name: string }[],
+): Promise<string[]> {
+  const placed: string[] = []
+  try {
+    for (const { image, name } of images) placed.push(await putImage(kv, image, 'items', name))
+  } catch (error) {
+    for (const url of placed) await removeImage(kv, url).catch((cleanup) => console.error(cleanup))
+    throw error
+  }
+  return placed
 }
 
 /*
@@ -807,6 +1054,54 @@ function childWrites(
       links.map((link, index) => ({ itemId, ...link, sortOrder: index })),
       rowsPerInsert(4),
     ).map((rows) => database.insert(schema.itemLinks).values(rows)),
+  ]
+}
+
+/*
+  ほかの画像の書き込み（作品の保存と同じ batch に入れる）。外す画像を消し、残す画像の
+  代替テキストと並び順を書き、足す画像を入れる。新しく作る作品では、親を slug で引く
+  （childWrites と同じ）。1行の束縛変数は item_id か親を引く slug・url・alt・寸法2つ・
+  sort_order の6つ
+*/
+type AddedShot = {
+  url: string
+  alt: string
+  width: number | null
+  height: number | null
+  sortOrder: number
+}
+
+function shotWrites(
+  database: Db,
+  owner: number | string,
+  edits: ShotEdit[],
+  added: AddedShot[],
+): BatchItem<'sqlite'>[] {
+  const itemId: number | SQL =
+    typeof owner === 'number'
+      ? owner
+      : sql`(select ${schema.items.id} from ${schema.items} where ${schema.items.slug} = ${owner})`
+  return [
+    ...edits
+      .filter((edit) => edit.remove)
+      .map((edit) =>
+        database.delete(schema.itemShots).where(eq(schema.itemShots.id, edit.shot.id)),
+      ),
+    ...edits
+      .filter(
+        (edit) =>
+          !edit.remove && (edit.alt !== edit.shot.alt || edit.sortOrder !== edit.shot.sortOrder),
+      )
+      .map((edit) =>
+        database
+          .update(schema.itemShots)
+          .set({ alt: edit.alt, sortOrder: edit.sortOrder })
+          .where(eq(schema.itemShots.id, edit.shot.id)),
+      ),
+    ...chunk(
+      added.map((shot) => ({ itemId, ...shot })),
+      rowsPerInsert(6),
+    ).map((rows) => database.insert(schema.itemShots).values(rows)),
   ]
 }
 
@@ -862,16 +1157,22 @@ itemRoutes.post('/items', async (c) => {
         platforms={context.platforms}
         formKey={sent}
         submitted={submittedItem(form)}
-        errors={imageNotKept(form, 'image', errors)}
+        errors={imageNotKept(form, IMAGE_FIELDS, errors)}
       />,
       400,
     )
 
   // 画像の種類と大きさ、リンクの形は下書きでも見る。長さの話ではなく、受け取れない値
   const picked = await pickImage(form, 'image')
+  const icon = await pickImage(form, 'icon')
+  const shots = await readNewShots(form)
+  const plan = shotPlan([], shots.added)
   const links = readLinks(form)
   const errors = mergeErrors(
     picked.error ? { image: picked.error } : null,
+    icon.error ? { icon: icon.error } : null,
+    shots.error,
+    plan.error,
     links.error ? { links: links.error } : null,
     unreadable,
     itemValueErrors(values),
@@ -882,6 +1183,7 @@ itemRoutes.post('/items', async (c) => {
           summary: values.summary,
           imageAlt: values.imageAlt,
           hasImage: picked.image !== null,
+          shotAlts: plan.alts,
         })
       : null,
     await itemSlugTaken(database, values.slug, null),
@@ -889,16 +1191,33 @@ itemRoutes.post('/items', async (c) => {
   if (errors) return back(errors)
 
   // 検査が全部通ってから KV に置き、D1 が落ちたら置いた画像を消す（commitWithImage）
-  const imageUrl = picked.image
-    ? await putImage(c.env.MEDIA, picked.image, 'items', values.slug)
-    : null
+  const placed = await placeImages(c.env.MEDIA, [
+    ...(picked.image ? [{ image: picked.image, name: values.slug }] : []),
+    ...(icon.image ? [{ image: icon.image, name: `${values.slug}-icon` }] : []),
+    ...shots.added.map((shot) => ({ image: shot.image, name: values.slug })),
+  ])
+  // 置いた順（メインの画像 → アイコン → ほかの画像）に取り出す
+  const imageUrl = picked.image ? (placed.shift() ?? null) : null
+  const iconUrl = icon.image ? (placed.shift() ?? null) : null
+  const shotUrls = placed
+  const added = shots.added.map((shot, index) => ({
+    url: shotUrls[index] ?? '',
+    alt: shot.alt,
+    width: shot.image.width ?? null,
+    height: shot.image.height ?? null,
+    sortOrder: plan.orders[index] ?? 0,
+  }))
   try {
-    await commitWithImage(c.env.MEDIA, imageUrl, () =>
+    await commitWithImage(c.env.MEDIA, [imageUrl, iconUrl, ...shotUrls], () =>
       database.batch([
-        database
-          .insert(schema.items)
-          .values({ ...values, ...imageColumns(imageUrl, picked.image), formKey: sent }),
+        database.insert(schema.items).values({
+          ...values,
+          ...imageColumns(imageUrl, picked.image),
+          iconUrl,
+          formKey: sent,
+        }),
         ...childWrites(database, values.slug, tags, links.links),
+        ...shotWrites(database, values.slug, [], added),
       ]),
     )
   } catch (error) {
@@ -942,6 +1261,10 @@ async function saveItem(
   const id = existing.id
   const database = db(c)
   const { values, tags, errors: unreadable } = readItemForm(form, context, existing)
+  const existingShots = await database.query.itemShots.findMany({
+    where: eq(schema.itemShots.itemId, id),
+    orderBy: shotOrder,
+  })
   const back = (errors: Record<string, string>) =>
     c.html(
       <ItemForm
@@ -949,14 +1272,26 @@ async function saveItem(
         type={values.type}
         members={context.members}
         platforms={context.platforms}
-        item={{ ...existing, tags: [], links: [] }}
+        item={{ ...existing, tags: [], links: [], shots: existingShots }}
         submitted={submittedItem(form)}
-        errors={imageNotKept(form, 'image', errors)}
+        errors={imageNotKept(form, IMAGE_FIELDS, errors)}
       />,
       400,
     )
 
   const picked = await pickImage(form, 'image')
+  const icon = await pickImage(form, 'icon')
+  // アイコンも画像と同じ: 選べば差し替え、「外す」なら無し、どちらでもなければいまのまま
+  const keepsIcon = bool(form.get('removeIcon')) !== 1 && existing.iconUrl !== null
+  const read = readShotEdits(form, existingShots)
+  const shots = await readNewShots(form)
+  /*
+    追加のフォームの2度目の送信で画像を選んであれば、1度目が作ったほかの画像と入れ替える
+    （同じ画像を2度重ねない）。選んでいなければ1度目の画像をそのまま残す
+  */
+  const edits =
+    again && shots.added.length ? read.edits.map((edit) => ({ ...edit, remove: true })) : read.edits
+  const plan = shotPlan(edits, shots.added)
   const links = readLinks(form)
   /*
     保存したあとの画像。新しく選んだならそれ（差し替え）、「画像を外す」なら
@@ -967,6 +1302,10 @@ async function saveItem(
   const keeps = !removing && existing.imageUrl !== null
   const errors = mergeErrors(
     picked.error ? { image: picked.error } : null,
+    icon.error ? { icon: icon.error } : null,
+    read.error,
+    shots.error,
+    plan.error,
     links.error ? { links: links.error } : null,
     unreadable,
     itemValueErrors(values),
@@ -977,6 +1316,7 @@ async function saveItem(
           summary: values.summary,
           imageAlt: values.imageAlt,
           hasImage: picked.image !== null || keeps,
+          shotAlts: plan.alts,
         })
       : null,
     await itemSlugTaken(database, values.slug, id),
@@ -984,19 +1324,38 @@ async function saveItem(
   if (errors) return back(errors)
 
   // 新しい画像を置く → D1 → 通ってから前の画像を消す（commitWithImage の順序）
-  const placed = picked.image
-    ? await putImage(c.env.MEDIA, picked.image, 'items', values.slug)
-    : null
-  const image = placed ? imageColumns(placed, picked.image) : keeps ? {} : imageColumns(null, null)
+  const placed = await placeImages(c.env.MEDIA, [
+    ...(picked.image ? [{ image: picked.image, name: values.slug }] : []),
+    ...(icon.image ? [{ image: icon.image, name: `${values.slug}-icon` }] : []),
+    ...shots.added.map((shot) => ({ image: shot.image, name: values.slug })),
+  ])
+  // 置いた順（メインの画像 → アイコン → ほかの画像）に取り出す
+  const imageUrl = picked.image ? (placed.shift() ?? null) : null
+  const iconUrl = icon.image ? (placed.shift() ?? null) : null
+  const shotUrls = placed
+  const image = imageUrl
+    ? imageColumns(imageUrl, picked.image)
+    : keeps
+      ? {}
+      : imageColumns(null, null)
+  const iconColumn = iconUrl ? { iconUrl } : keepsIcon ? {} : { iconUrl: null }
+  const added = shots.added.map((shot, index) => ({
+    url: shotUrls[index] ?? '',
+    alt: shot.alt,
+    width: shot.image.width ?? null,
+    height: shot.image.height ?? null,
+    sortOrder: plan.orders[index] ?? 0,
+  }))
   try {
-    await commitWithImage(c.env.MEDIA, placed, () =>
+    await commitWithImage(c.env.MEDIA, [imageUrl, iconUrl, ...shotUrls], () =>
       database.batch([
         database
           .update(schema.items)
-          .set({ ...values, ...image })
+          .set({ ...values, ...image, ...iconColumn })
           .where(eq(schema.items.id, id)),
         ...itemSlugMoves(database, id, existing.slug, values.slug),
         ...childWrites(database, id, tags, links.links),
+        ...shotWrites(database, id, edits, added),
       ]),
     )
   } catch (error) {
@@ -1004,7 +1363,9 @@ async function saveItem(
     throw error
   }
   // 差し替えた・外した画像は KV から消す（removeImage の注記）
-  if (placed || !keeps) await removeImage(c.env.MEDIA, existing.imageUrl)
+  if (imageUrl || !keeps) await removeImage(c.env.MEDIA, existing.imageUrl)
+  if (iconUrl || !keepsIcon) await removeImage(c.env.MEDIA, existing.iconUrl)
+  for (const edit of edits) if (edit.remove) await removeImage(c.env.MEDIA, edit.shot.url)
   /*
     前の URL が変わったか。slug を変えたときと、区分を変えたとき（1語目の
     apps / works が変わる。公開ページが前の区分の URL を 301 で寄せる）
@@ -1022,9 +1383,11 @@ itemRoutes.get('/items/:id/delete', async (c) => {
   if (!id) return c.notFound()
   const item = await db(c).query.items.findFirst({
     where: eq(schema.items.id, id),
-    with: { tags: true, links: true },
+    with: { tags: true, links: true, shots: true },
   })
   if (!item) return c.notFound()
+  // 一緒に消える画像（メインの画像・アイコン・ほかの画像）の枚数
+  const images = (item.imageUrl ? 1 : 0) + (item.iconUrl ? 1 : 0) + item.shots.length
 
   return c.html(
     <AdminLayout title="削除の確認" active="items" account={c.get('account')}>
@@ -1035,7 +1398,8 @@ itemRoutes.get('/items/:id/delete', async (c) => {
         cancelHref={cameFromEdit(c) ? `/admin/items/${id}/edit` : `/admin/items?type=${item.type}`}
       >
         <p>
-          タグ {item.tags.length} 件とリンク {item.links.length} 件{item.imageUrl ? '、画像' : ''}
+          タグ {item.tags.length} 件とリンク {item.links.length} 件
+          {images ? `、画像 ${images} 枚` : ''}
           も一緒に消えます。
           <br />
           サイトから隠したいだけなら、編集で「公開する」を外すほうが安全です。
@@ -1048,10 +1412,16 @@ itemRoutes.get('/items/:id/delete', async (c) => {
 itemRoutes.post('/items/:id/delete', async (c) => {
   const id = parseId(c.req.param('id'))
   if (!id) return c.notFound()
-  const item = await db(c).query.items.findFirst({ where: eq(schema.items.id, id) })
+  const item = await db(c).query.items.findFirst({
+    where: eq(schema.items.id, id),
+    with: { shots: true },
+  })
   if (!item) return c.notFound()
 
+  // D1 → KV の順（ほかの画像の行は cascade で消える。URL は消す前に引いておく）
   await db(c).delete(schema.items).where(eq(schema.items.id, id))
-  await removeImage(c.env.MEDIA, item.imageUrl)
+  for (const url of [item.imageUrl, item.iconUrl, ...item.shots.map((shot) => shot.url)]) {
+    await removeImage(c.env.MEDIA, url)
+  }
   return c.redirect(`/admin/items?type=${item.type}&deleted=1`, 303)
 })

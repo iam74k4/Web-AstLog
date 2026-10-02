@@ -65,11 +65,13 @@ const itemsWhere = (scope: ItemScope) =>
     scope.memberId ? eq(schema.items.memberId, scope.memberId) : undefined,
   )
 
-// 一覧の行1つぶんに要る子（タグ・リンク・担当・プラットフォーム）を一緒に引く形。
-// タグとリンクは idx_item_tags_item / idx_item_links_item を作品ごとに並びのまま読む
+// 一覧の行1つぶんに要る子（タグ・リンク・ほかの画像・担当・プラットフォーム）を一緒に引く形。
+// タグとリンクとほかの画像は idx_item_tags_item / idx_item_links_item / idx_item_shots_item を
+// 作品ごとに並びのまま読む（ほかの画像の同じ並び順は id の順。索引の末尾の rowid が受ける）
 const itemWith = {
   tags: { orderBy: [asc(schema.itemTags.sortOrder)] },
   links: { orderBy: [asc(schema.itemLinks.sortOrder)] },
+  shots: { orderBy: [asc(schema.itemShots.sortOrder), asc(schema.itemShots.id)] },
   // true をそのまま書くと boolean に広がって、drizzle の with が受け取らない
   member: true as const,
   platform: true as const,
@@ -83,6 +85,7 @@ const itemWith = {
 type ItemRow = schema.Item & {
   tags: { tag: string }[]
   links: { label: string; url: string }[]
+  shots: schema.ItemShot[]
   member: schema.Member | null
   platform: schema.Platform | null
 }
@@ -95,6 +98,12 @@ function toItemView(row: ItemRow): ItemView {
     ...row,
     tags: row.tags.map((tag) => tag.tag),
     links: row.links.map((link) => ({ label: link.label, url: link.url })),
+    shots: row.shots.map((shot) => ({
+      url: shot.url,
+      alt: shot.alt,
+      width: shot.width,
+      height: shot.height,
+    })),
     platformLabel: row.platform?.label ?? null,
     memberName: member?.name ?? null,
     memberSlug: member?.slug ?? null,
