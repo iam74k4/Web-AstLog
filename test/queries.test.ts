@@ -82,6 +82,7 @@ describe('索引', () => {
       // 子は作品ごとに自分の索引で引く（その場で作る AUTOMATIC INDEX に頼らない）
       expect(plan, name).toContain('SEARCH items_links USING INDEX idx_item_links_item (item_id=?)')
       expect(plan, name).toContain('SEARCH items_tags USING INDEX idx_item_tags_item (item_id=?)')
+      expect(plan, name).toContain('SEARCH items_shots USING INDEX idx_item_shots_item (item_id=?)')
     }
   })
 
@@ -130,6 +131,7 @@ describe('索引', () => {
     expect(indexes.results.map((row) => row.name).sort()).toEqual(
       [
         'idx_item_links_item',
+        'idx_item_shots_item',
         'idx_item_slug_redirects_item',
         'idx_item_tags_item',
         'idx_items_kind',

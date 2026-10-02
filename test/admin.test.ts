@@ -1,11 +1,11 @@
 import { env } from 'cloudflare:test'
 import seedSql from 'virtual:repo:seed.sql'
-import { eq } from 'drizzle-orm'
+import { asc, eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { blockType, MAX_CHARS } from '../src/blocks'
 import * as schema from '../src/db/schema'
 import { yearFrom } from '../src/lib/format'
-import { db, form, get, okText, resetDb, seedItem, seedMember, signIn } from './helpers'
+import { db, form, get, okText, resetDb, seedItem, seedMember, signIn, touch } from './helpers'
 import { avif, file, gif, heic, jpeg, png, svg, webp } from './images'
 
 beforeEach(resetDb)
@@ -494,7 +494,7 @@ describe('Items — 本文と画像', () => {
     await env.MEDIA.put('items/del-aaaa.png', 'bytes')
     const item = await seedItem({ imageUrl: '/images/items/del-aaaa.png', imageAlt: '消える' })
     const signed = await signIn()
-    expect(await (await signed(`/admin/items/${item.id}/delete`)).text()).toContain('、画像も')
+    expect(await (await signed(`/admin/items/${item.id}/delete`)).text()).toContain('、画像 1 枚も')
 
     await signed(`/admin/items/${item.id}/delete`, { method: 'POST' })
     expect(await itemKeys()).toEqual([])
@@ -521,6 +521,344 @@ describe('Items — 本文と画像', () => {
   入れて同じオリジンから配っていた——SVG の <script> がサイトのオリジンで走り、
   HEIC は Chrome と Firefox で壊れて見えた。
 */
+/*
+  作品のアイコンとほかの画像（スクリーンショット）。どちらも管理画面から上げ、KV の
+  items/ に置く（メインの画像と同じ経路と検査）。ほかの画像は作品のページの横の帯に
+  並び（components.tsx の ItemShots）、1枚ずつ代替テキストが要る（公開の関門）。
+*/
+describe('Items — アイコンとほかの画像', () => {
+  const itemKeys = async () =>
+    (await env.MEDIA.list({ prefix: 'items/' })).keys.map((k) => k.name).sort()
+
+  beforeEach(async () => {
+    for (const key of await itemKeys()) await env.MEDIA.delete(key)
+  })
+
+  // フォームの値に画像を足す（同じ名前の欄は足した順に並ぶ）
+  const withFiles = (values: Record<string, string | string[]>, files: [string, File][]) => {
+    const body = form(values)
+    for (const [name, one] of files) body.append(name, one)
+    return body
+  }
+  const pngFile = (name: string) => file(png(), name, 'image/png')
+  const shotsOf = (itemId: number) =>
+    db()
+      .select()
+      .from(schema.itemShots)
+      .where(eq(schema.itemShots.itemId, itemId))
+      .orderBy(asc(schema.itemShots.sortOrder), asc(schema.itemShots.id))
+  // 下ごしらえ: KV に置いた画像と、それを指すほかの画像の行
+  const seedShots = async (
+    itemId: number,
+    shots: { key: string; alt: string; sortOrder: number }[],
+  ) => {
+    for (const shot of shots) {
+      await env.MEDIA.put(shot.key, 'bytes', { metadata: { contentType: 'image/png' } })
+    }
+    await db()
+      .insert(schema.itemShots)
+      .values(
+        shots.map((shot) => ({
+          itemId,
+          url: `/images/${shot.key}`,
+          alt: shot.alt,
+          width: 1440,
+          height: 900,
+          sortOrder: shot.sortOrder,
+        })),
+      )
+    await touch()
+  }
+  // 作品のページの帯の画像（src と代替テキスト）を並びのまま
+  const stripOf = (html: string) => {
+    const from = html.indexOf('<section class="strip"')
+    if (from < 0) return []
+    const strip = html.slice(from, html.indexOf('</section>', from))
+    return [...strip.matchAll(/<img src="([^"]+)" alt="([^"]*)"/g)].map((m) => [m[1], m[2]])
+  }
+
+  it('アイコンとほかの画像を上げると KV の items/ に置き、作品のページで横の帯に並ぶ', async () => {
+    const signed = await signIn()
+    const response = await signed('/admin/items', {
+      method: 'POST',
+      body: withFiles(
+        {
+          type: 'app',
+          title: 'AppMixer',
+          slug: 'appmixer',
+          summary: '音量を分ける常駐アプリ。',
+          imageAlt: 'メインの画面',
+          newShotAlt: ['通話中の画面', '機能の一覧'],
+          published: '1',
+        },
+        [
+          ['image', pngFile('main.png')],
+          ['icon', pngFile('icon.png')],
+          ['newShot', pngFile('a.png')],
+          ['newShot', pngFile('b.png')],
+        ],
+      ),
+    })
+    expect(response.status).toBe(303)
+
+    const [row] = await db().select().from(schema.items)
+    // アイコンのキーも /images/* の検査を通る形（置き場/slug-icon-乱数.拡張子）
+    expect(row?.iconUrl).toMatch(/^\/images\/items\/appmixer-icon-[0-9a-f]{8}\.png$/)
+    const shots = await shotsOf(row?.id ?? 0)
+    // 寸法は中身の頭から読む（帯は読み込む前から幅が決まる）。並び順は 10 刻み
+    expect(shots.map((shot) => [shot.alt, shot.sortOrder, shot.width, shot.height])).toEqual([
+      ['通話中の画面', 10, 1200, 630],
+      ['機能の一覧', 20, 1200, 630],
+    ])
+    for (const shot of shots)
+      expect(shot.url).toMatch(/^\/images\/items\/appmixer-[0-9a-f]{8}\.png$/)
+    expect(await itemKeys()).toEqual(
+      [row?.imageUrl, row?.iconUrl, ...shots.map((shot) => shot.url)]
+        .map((url) => (url ?? '').replace('/images/', ''))
+        .sort(),
+    )
+
+    const html = await okText('/apps/item/appmixer')
+    expect(html).toContain(
+      `<img class="head__icon" src="${row?.iconUrl}" alt="" width="64" height="64" decoding="async"/>`,
+    )
+    // 2枚以上なので、説明の組には絵を置かず、帯に全部を並べる（メインの画像が先）
+    expect(html).not.toContain('<figure class="shot">')
+    expect(html).toContain(
+      '<section class="strip" aria-label="Screenshots" tabindex="0"><img src="',
+    )
+    expect(stripOf(html)).toEqual([
+      [row?.imageUrl, 'メインの画面'],
+      [shots[0]?.url, '通話中の画面'],
+      [shots[1]?.url, '機能の一覧'],
+    ])
+    // 一覧の行は題の左にアイコン（飾り）
+    expect(await okText('/projects')).toContain(
+      `<img class="entry__icon" src="${row?.iconUrl}" alt=""`,
+    )
+  })
+
+  it('ほかの画像も1枚ずつ代替テキストが要る（公開のとき）。何枚目かを言い、画像は書かない', async () => {
+    const signed = await signIn()
+    const values = {
+      type: 'app',
+      title: 'AppMixer',
+      summary: '説明。',
+      newShotAlt: ['通話中の画面', ''],
+    }
+    const files = (): [string, File][] => [
+      ['newShot', pngFile('a.png')],
+      ['newShot', pngFile('b.png')],
+    ]
+    const blocked = await signed('/admin/items', {
+      method: 'POST',
+      body: withFiles({ ...values, published: '1' }, files()),
+    })
+    expect(blocked.status).toBe(400)
+    const html = await blocked.text()
+    expect(html).toContain('1枚ずつ代替テキストが要ります（2 枚目）')
+    // ファイルの欄は描き直せない。打った代替テキストは残す
+    expect(html).toContain('画像はまだ保存していません')
+    expect(html).toContain('value="通話中の画面"')
+    expect(await itemKeys()).toEqual([])
+    expect(await db().select().from(schema.items)).toHaveLength(0)
+
+    // 下書きなら通る（代替テキストは公開するときにだけ見る）
+    const draft = await signed('/admin/items', { method: 'POST', body: withFiles(values, files()) })
+    expect(draft.status).toBe(303)
+    expect(await db().select().from(schema.itemShots)).toHaveLength(2)
+  })
+
+  it('並び順を書き換えると帯の並びが変わり、外した画像は行も KV も消える（全角の数字も読む）', async () => {
+    const item = await seedItem({ slug: 'appmixer', summary: '説明。' })
+    await seedShots(item.id, [
+      { key: 'items/appmixer-aaaaaaaa.png', alt: '一枚目', sortOrder: 10 },
+      { key: 'items/appmixer-bbbbbbbb.png', alt: '二枚目', sortOrder: 20 },
+      { key: 'items/appmixer-cccccccc.png', alt: '三枚目', sortOrder: 30 },
+    ])
+    const [a, b, c] = await shotsOf(item.id)
+    if (!a || !b || !c) throw new Error('ほかの画像を作れなかった')
+    const signed = await signIn()
+    const edit = await (await signed(`/admin/items/${item.id}/edit`)).text()
+    expect(edit).toContain(`name="shotAlt-${a.id}" value="一枚目"`)
+    expect(edit).toContain(`name="shotRemove-${c.id}" value="1"`)
+
+    const response = await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: form({
+        type: 'app',
+        title: 'AppMixer',
+        slug: 'appmixer',
+        summary: '説明。',
+        published: '1',
+        [`shotAlt-${a.id}`]: '一枚目',
+        [`shotOrder-${a.id}`]: '３０',
+        [`shotAlt-${b.id}`]: '二枚目（直した）',
+        [`shotOrder-${b.id}`]: '10',
+        [`shotAlt-${c.id}`]: '',
+        [`shotOrder-${c.id}`]: '20',
+        [`shotRemove-${c.id}`]: '1',
+      }),
+    })
+    // 外す画像の代替テキストは空でも公開を止めない（残らないので）
+    expect(response.status).toBe(303)
+    expect((await shotsOf(item.id)).map((shot) => [shot.alt, shot.sortOrder])).toEqual([
+      ['二枚目（直した）', 10],
+      ['一枚目', 30],
+    ])
+    expect(await itemKeys()).toEqual(['items/appmixer-aaaaaaaa.png', 'items/appmixer-bbbbbbbb.png'])
+    expect(stripOf(await okText('/apps/item/appmixer'))).toEqual([
+      ['/images/items/appmixer-bbbbbbbb.png', '二枚目（直した）'],
+      ['/images/items/appmixer-aaaaaaaa.png', '一枚目'],
+    ])
+  })
+
+  it('並び順が数字でなければ 400 で何枚目かを言い、何も書かない', async () => {
+    const item = await seedItem({ slug: 'appmixer' })
+    await seedShots(item.id, [{ key: 'items/appmixer-aaaaaaaa.png', alt: '一枚目', sortOrder: 10 }])
+    const [a] = await shotsOf(item.id)
+    const signed = await signIn()
+    const response = await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: form({
+        type: 'app',
+        title: 'AppMixer',
+        slug: 'appmixer',
+        [`shotAlt-${a?.id}`]: '一枚目',
+        [`shotOrder-${a?.id}`]: 'いちばん先',
+      }),
+    })
+    expect(response.status).toBe(400)
+    const html = await response.text()
+    expect(html).toContain('並び順は数字で書いてください（1 枚目）')
+    // 打った字はそのまま描き直す
+    expect(html).toContain('value="いちばん先"')
+    expect((await shotsOf(item.id)).map((shot) => shot.sortOrder)).toEqual([10])
+  })
+
+  it('ほかの画像は 8 枚まで。足す欄は残りの数だけ出し、超えて足そうとすると止める', async () => {
+    const item = await seedItem({ slug: 'many' })
+    await seedShots(
+      item.id,
+      Array.from({ length: 7 }, (_, index) => ({
+        key: `items/many-${index}aaaaaaa.png`,
+        alt: `${index + 1} 枚目`,
+        sortOrder: (index + 1) * 10,
+      })),
+    )
+    const signed = await signIn()
+    const edit = await (await signed(`/admin/items/${item.id}/edit`)).text()
+    expect(edit.match(/name="newShot"/g)).toHaveLength(1)
+
+    const response = await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: withFiles(
+        { type: 'app', title: 'AppMixer', slug: 'many', newShotAlt: ['八枚目', '九枚目'] },
+        [
+          ['newShot', pngFile('8.png')],
+          ['newShot', pngFile('9.png')],
+        ],
+      ),
+    })
+    expect(response.status).toBe(400)
+    expect(await response.text()).toContain('ほかの画像は 8 枚までです')
+    expect(await shotsOf(item.id)).toHaveLength(7)
+    expect(await itemKeys()).toHaveLength(7)
+  })
+
+  it('アイコンを差し替える・外すと、前のアイコンは KV から消える', async () => {
+    await env.MEDIA.put('items/appmixer-icon-aaaaaaaa.png', 'bytes')
+    const item = await seedItem({
+      slug: 'appmixer',
+      iconUrl: '/images/items/appmixer-icon-aaaaaaaa.png',
+    })
+    const signed = await signIn()
+    expect(await (await signed(`/admin/items/${item.id}/edit`)).text()).toContain('アイコンを外す')
+
+    const swapped = await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: withFiles({ type: 'app', title: 'AppMixer', slug: 'appmixer' }, [
+        ['icon', pngFile('new.png')],
+      ]),
+    })
+    expect(swapped.status).toBe(303)
+    const [row] = await db().select().from(schema.items)
+    expect(row?.iconUrl).toMatch(/^\/images\/items\/appmixer-icon-[0-9a-f]{8}\.png$/)
+    expect(row?.iconUrl).not.toBe('/images/items/appmixer-icon-aaaaaaaa.png')
+    expect(await itemKeys()).toEqual([(row?.iconUrl ?? '').replace('/images/', '')])
+
+    const removed = await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: form({ type: 'app', title: 'AppMixer', slug: 'appmixer', removeIcon: '1' }),
+    })
+    expect(removed.status).toBe(303)
+    const [after] = await db().select().from(schema.items)
+    expect(after?.iconUrl).toBeNull()
+    expect(await itemKeys()).toEqual([])
+  })
+
+  it('作品を削除すると、アイコンとほかの画像も KV から消える', async () => {
+    await env.MEDIA.put('items/appmixer-icon-aaaaaaaa.png', 'bytes')
+    const item = await seedItem({
+      slug: 'appmixer',
+      iconUrl: '/images/items/appmixer-icon-aaaaaaaa.png',
+    })
+    await seedShots(item.id, [
+      { key: 'items/appmixer-bbbbbbbb.png', alt: '一枚目', sortOrder: 10 },
+      { key: 'items/appmixer-cccccccc.png', alt: '二枚目', sortOrder: 20 },
+    ])
+    const signed = await signIn()
+    expect(await (await signed(`/admin/items/${item.id}/delete`)).text()).toContain('、画像 3 枚も')
+
+    await signed(`/admin/items/${item.id}/delete`, { method: 'POST' })
+    expect(await itemKeys()).toEqual([])
+    expect(await db().select().from(schema.itemShots)).toHaveLength(0)
+  })
+
+  it('追加のフォームを2度送っても、ほかの画像は重ならない（2度目の画像に入れ替える）', async () => {
+    const signed = await signIn()
+    const html = await (await signed('/admin/items/new?type=app')).text()
+    const key = html.match(/name="formKey" value="([0-9a-f]{16})"/)?.[1] ?? ''
+    const send = () =>
+      signed('/admin/items', {
+        method: 'POST',
+        body: withFiles(
+          { type: 'app', title: 'AppMixer', formKey: key, newShotAlt: ['通話中の画面'] },
+          [['newShot', pngFile('a.png')]],
+        ),
+      })
+    expect((await send()).status).toBe(303)
+    expect((await send()).status).toBe(303)
+    const [row] = await db().select().from(schema.items)
+    const shots = await shotsOf(row?.id ?? 0)
+    expect(shots.map((shot) => shot.alt)).toEqual(['通話中の画面'])
+    // 1度目の画像は KV から消えている
+    expect(await itemKeys()).toEqual([(shots[0]?.url ?? '').replace('/images/', '')])
+  })
+
+  it('D1 が落ちたら、置いたアイコンとほかの画像は KV に残らない', async () => {
+    await env.DB.prepare(
+      "CREATE TRIGGER IF NOT EXISTS fail_shots BEFORE INSERT ON item_shots BEGIN SELECT RAISE(ABORT, 'D1 を落とす'); END",
+    ).run()
+    try {
+      const signed = await signIn()
+      const response = await signed('/admin/items', {
+        method: 'POST',
+        body: withFiles({ type: 'app', title: '落ちる', newShotAlt: ['一枚目'] }, [
+          ['icon', pngFile('icon.png')],
+          ['newShot', pngFile('a.png')],
+        ]),
+      })
+      expect(response.status).toBe(500)
+    } finally {
+      await env.DB.prepare('DROP TRIGGER IF EXISTS fail_shots').run()
+    }
+    // 行も書かれない（1つの batch）
+    expect(await itemKeys()).toEqual([])
+    expect(await db().select().from(schema.items)).toHaveLength(0)
+  })
+})
+
 describe('画像の受け入れ', () => {
   const keys = async (prefix: string) =>
     (await env.MEDIA.list({ prefix })).keys.map((key) => key.name)

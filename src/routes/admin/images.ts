@@ -28,8 +28,7 @@ type Picked = { image: PickedImage | null; error?: string }
 
 const IMAGE_TYPE_ERROR = `${IMAGE_LABELS} の画像を選んでください（SVG と HEIC は受け付けません。iPhone の写真は JPEG で書き出してください）`
 
-export async function pickImage(form: FormData, field: string): Promise<Picked> {
-  const file = form.get(field)
+async function pickFile(file: File | string | null): Promise<Picked> {
   if (!(file instanceof File) || file.size === 0) return { image: null }
   if (file.size > IMAGE_MAX_BYTES) {
     return { image: null, error: '画像は 1MB までです。小さくしてから選び直してください' }
@@ -39,6 +38,17 @@ export async function pickImage(form: FormData, field: string): Promise<Picked> 
   if (!sniffed) return { image: null, error: IMAGE_TYPE_ERROR }
   return { image: { ...sniffed, bytes } }
 }
+
+export const pickImage = (form: FormData, field: string): Promise<Picked> =>
+  pickFile(form.get(field))
+
+/*
+  同じ名前の欄が並ぶとき（作品のほかの画像の、追加の欄）。欄の順に1つずつ同じ検査を
+  通す。空の欄も「選ばれていない」として並びに残す——並んだ代替テキストの欄と、
+  何番目かで組にするため
+*/
+export const pickImages = (form: FormData, field: string): Promise<Picked[]> =>
+  Promise.all(form.getAll(field).map(pickFile))
 
 /*
   キーは /images/ 側の検査（src/routes/public/images.ts の IMAGE_KEY——置き場の
@@ -74,8 +84,9 @@ export async function removeImage(kv: KVNamespace, url: string | null | undefine
   KV と D1 は1つのトランザクションにできない。だから順序で守る。
 
   1. 新しい画像を KV に置く（putImage）
-  2. D1 を書く（write）。ここで落ちたら、1 で置いた画像を消してから投げ直す
-     ——どの行からも指されない画像を KV に残さない
+  2. D1 を書く（write）。ここで落ちたら、1 で置いた画像を全部消してから投げ直す
+     ——どの行からも指されない画像を KV に残さない。作品はメインの画像・アイコン・
+     ほかの画像を1度の保存で何枚も置くので、placed は置いた URL の並び
   3. D1 が通ってから、使われなくなった前の画像を消す（呼ぶ側。removeImage）
 
   逆（D1 を先に書いて、あとで KV に置く）にすると、KV で落ちたときに D1 が
@@ -86,13 +97,16 @@ export async function removeImage(kv: KVNamespace, url: string | null | undefine
 */
 export async function commitWithImage<T>(
   kv: KVNamespace,
-  placed: string | null,
+  placed: string | null | readonly (string | null)[],
   write: () => Promise<T>,
 ): Promise<T> {
   try {
     return await write()
   } catch (error) {
-    if (placed) await removeImage(kv, placed).catch((cleanup) => console.error(cleanup))
+    const urls = Array.isArray(placed) ? placed : [placed]
+    for (const url of urls) {
+      if (url) await removeImage(kv, url).catch((cleanup) => console.error(cleanup))
+    }
     throw error
   }
 }
@@ -103,11 +117,19 @@ export async function commitWithImage<T>(
   ときは KV にも書いていない（putImage は検査が全部通ってから）。
   アバターと作品の画像で同じ（field が欄の名前）。
 */
-export const imageNotKept = (form: FormData, field: string, errors: Record<string, string>) => {
-  const file = form.get(field)
-  if (errors[field] || !(file instanceof File) || file.size === 0) return errors
-  return {
-    ...errors,
-    [field]: '画像はまだ保存していません。直したあとで、もう一度選んでください',
+export const imageNotKept = (
+  form: FormData,
+  field: string | readonly string[],
+  errors: Record<string, string>,
+) => {
+  let kept = errors
+  for (const name of Array.isArray(field) ? field : [field]) {
+    const chosen = form.getAll(name).some((file) => file instanceof File && file.size > 0)
+    if (kept[name] || !chosen) continue
+    kept = {
+      ...kept,
+      [name]: '画像はまだ保存していません。直したあとで、もう一度選んでください',
+    }
   }
+  return kept
 }

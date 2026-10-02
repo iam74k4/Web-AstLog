@@ -6,8 +6,10 @@ import type { Item, Member } from '../db/schema'
 import {
   ITEM_KIND_KEYS,
   type ItemFilter,
+  type ItemImage,
   type ItemKind,
   type ItemView,
+  itemImages,
   KIND_LABEL,
   KIND_PATH,
   type KindCounts,
@@ -236,6 +238,9 @@ export const Avatar = ({
   章で、main の子の section の h2。節の見出しと同じ線で章の切れ目を見せるが、字は
   頭の大見出し（h1。--fs-display）より小さい --fs-display-sm に下げる（同じ大きさ
   だと、章が h1 と同じ格に見える）。章の上は1段空ける（前の章の本文と地続きに見せない）。
+
+  icon は作品のページの見出しの左に置くアイコン（items.icon_url）。飾りなので alt は空
+  （名前はすぐ隣の見出しが言う）。遅延読み込みにしない（開いた画面の頭にある）。
 */
 export const SectionHead = ({
   title,
@@ -245,6 +250,7 @@ export const SectionHead = ({
   sub,
   chapter,
   transition,
+  icon,
 }: {
   title: string
   note?: string
@@ -254,8 +260,12 @@ export const SectionHead = ({
   chapter?: boolean
   // ページを移るときにつなぐ名前（作品のページの h1。itemTransition）
   transition?: string
+  icon?: string | null
 }) => (
   <div class={sub ? 'head head--sub' : chapter ? 'head head--chapter' : 'head'}>
+    {icon ? (
+      <img class="head__icon" src={icon} alt="" width="64" height="64" decoding="async" />
+    ) : null}
     {h1 ? <h1 style={transition}>{title}</h1> : sub === 3 ? <h3>{title}</h3> : <h2>{title}</h2>}
     {count === undefined ? null : (
       <span class="head__count">
@@ -1325,9 +1335,14 @@ export const itemTransition = (item: { slug: string | null }) =>
   slug の無い行（恒久リンクがまだ無い作品）は題を素の字のまま出し、押せる面も
   矢印も付かない——押しても何も起きない行に、押せる合図を出さない。
 
-  サムネイルは画像のある作品だけ（飾りなので alt="" と aria-hidden。名前は題の
+  サムネイルは画像のある作品だけで、絵はその作品の顔（メインの画像。無ければほかの
+  画像の1枚目。src/domain.ts の itemImages）。飾りなので alt="" と aria-hidden（名前は題の
   リンクが持つ）。loading="lazy" は、一覧が縦に長いため。枠の縦横比は CSS が
   決めているので、読み込みを待っても高さは動かない。
+
+  アイコン（items.icon_url）は題の左に小さく。これも飾り（alt=""）で、h3 の中・題の
+  リンクの外に置く（行の面は題のリンクの覆いが受けるので、押せば作品のページへ。
+  リンクの名前と、ページを移るときにつなぐ題の字は題だけのまま）。
 
   画像の無い作品は、同じ位置に星図（OrbitChart。入口の軌道図でその作品が載っている天体を
   灯した絵）を置く。chart は呼ぶ側が組む（件数と公開中の全件の並びを知っているのは一覧の
@@ -1346,6 +1361,18 @@ export const ItemRow = ({
 }) => {
   const href = itemHref(item)
   const where = item.platformLabel ?? item.category
+  const cover = itemImages(item)[0]
+  const icon = item.iconUrl ? (
+    <img
+      class="entry__icon"
+      src={item.iconUrl}
+      alt=""
+      width="40"
+      height="40"
+      loading="lazy"
+      decoding="async"
+    />
+  ) : null
   return (
     // id は作品のページの「← 一覧に戻る」の着地点（itemCardId）
     <article class="entry" id={itemCardId(item)}>
@@ -1353,7 +1380,8 @@ export const ItemRow = ({
         {twoDigits(number)}
       </span>
       <div class="entry__main">
-        <h3>
+        <h3 class={icon ? 'entry__title--icon' : undefined}>
+          {icon}
           {href ? (
             <a class="entry__link" href={href} style={itemTransition(item)}>
               {item.title}
@@ -1379,9 +1407,9 @@ export const ItemRow = ({
         ) : null}
       </ul>
       <Tags tags={item.tags} />
-      {item.imageUrl ? (
+      {cover ? (
         <span class="entry__thumb" aria-hidden="true">
-          <img src={item.imageUrl} alt="" loading="lazy" decoding="async" />
+          <img src={cover.url} alt="" loading="lazy" decoding="async" />
         </span>
       ) : chart ? (
         <OrbitChart {...chart} id={`chart-${item.id}`} class="entry__chart" />
@@ -1495,7 +1523,8 @@ export const Shot = ({ src, alt }: { src: string; alt: string }) => (
 
   画像の無い作品は、画像の位置に星図（OrbitChart）を置く（.detail--chart。並べ方は画像と
   同じで、900 以上は文の列の右）。chart には一覧の番号も入れて渡す（星図の左上の札）。
-  画像がある作品は画像だけ——絵は1つにする。
+  画像が1枚の作品は画像だけ——絵は1つにする。画像が2枚以上の作品は、ここには絵を置かず、
+  すぐ下の横の帯（ItemShots）に全部を並べる（同じ画像を2度出さない）。
 */
 export const ItemDetail = ({
   item,
@@ -1505,21 +1534,60 @@ export const ItemDetail = ({
   item: ItemView
   links: { label: string; url: string }[]
   chart?: ChartSpot & { number: number }
-}) => (
-  <div class={item.imageUrl ? 'detail detail--shot' : chart ? 'detail detail--chart' : 'detail'}>
-    {item.imageUrl ? (
-      <Shot src={item.imageUrl} alt={item.imageAlt} />
-    ) : chart ? (
-      <OrbitChart {...chart} id={`chart-${item.id}`} />
-    ) : null}
-    <div class="detail__text">
-      {item.summary ? <Note paragraphs={[item.summary]} /> : null}
-      <Metric item={item} />
-      <Tags tags={item.tags} />
-      <LinkRow links={links} />
+}) => {
+  const images = itemImages(item)
+  const only = images.length === 1 ? images[0] : undefined
+  const drawn = !images.length && chart
+  return (
+    <div class={only ? 'detail detail--shot' : drawn ? 'detail detail--chart' : 'detail'}>
+      {only ? (
+        <Shot src={only.url} alt={only.alt} />
+      ) : drawn ? (
+        <OrbitChart {...chart} id={`chart-${item.id}`} />
+      ) : null}
+      <div class="detail__text">
+        {item.summary ? <Note paragraphs={[item.summary]} /> : null}
+        <Metric item={item} />
+        <Tags tags={item.tags} />
+        <LinkRow links={links} />
+      </div>
     </div>
-  </div>
-)
+  )
+}
+
+/*
+  作品の画像を横に並べた帯（作品のページの小節「Screenshots」。#screenshots）。画像が
+  2枚以上の作品だけで、メインの画像が先、ほかの画像が並び順で続く（src/domain.ts の
+  itemImages）。App Store の画面の並べ方と同じく、横に送って見る（持ち主の「画像を
+  いい感じに横並びで見れるように」）。帯は横にだけ送れる箱で、ページは縦に読むまま。
+
+  - 高さは CSS が決め（:root の --strip-h）、幅は絵の縦横比から取る。寸法（width /
+    height）を img に書くので、読み込む前から幅が決まり、読み込んでも何も動かない。
+    寸法の分からない画像は決まった比の枠に収める（app.css の .strip img）
+  - 代替テキストは1枚ずつ（空のまま公開させない。publishErrors）
+  - 帯は Tab で止まり、矢印のキーで送れる（tabindex と、名前を持つ section）。初めの2枚だけすぐ読み、
+    残りは帯を送って近づいたときに読む（loading="lazy"）
+*/
+export const ItemShots = ({ images }: { images: ItemImage[] }) =>
+  images.length > 1 ? (
+    <div class="shots" id="screenshots">
+      <SectionHead title="Screenshots" sub={2} />
+      {/* 名前を持つ section は読み上げで1つの区画になる。Tab で止まり、矢印のキーで送れる */}
+      <section class="strip" aria-label="Screenshots" tabindex={0}>
+        {images.map((image, index) => (
+          <img
+            key={image.url}
+            src={image.url}
+            alt={image.alt}
+            width={image.width ?? undefined}
+            height={image.height ?? undefined}
+            loading={index < 2 ? undefined : 'lazy'}
+            decoding="async"
+          />
+        ))}
+      </section>
+    </div>
+  ) : null
 
 /*
   作品のページの本文の小節「Story」（#story）。ItemDetail のすぐ下に置く

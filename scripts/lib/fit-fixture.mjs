@@ -284,6 +284,8 @@ function itemRows() {
     image_alt: '作品の画面',
     image_width: 144,
     image_height: 144,
+    // 題の左のアイコン（一覧の行と作品のページの見出し）
+    icon_url: '/assets/apple-touch-icon.png',
     metric_value: '20',
     metric_unit: '人日',
     metric_note: '見込み 40人日から半減',
@@ -385,11 +387,41 @@ function itemRows() {
 }
 
 /*
+  作品のほかの画像（作品のページの横の帯）。画像のある行に、横長・正方形・寸法の分からない
+  画像を混ぜて並べる（帯は高さを決めて幅を絵の比から取る。寸法の無い画像は比の枠）。
+  いちばん重い行（id 1）は上限の 8 枚——帯がいちばん長く溢れる姿。どれも同梱の素材を指す
+  （KV を持たない使い捨ての D1 でも絵が出る）
+*/
+const SHOT_SOURCES = [
+  { url: '/assets/blackhole.webp', width: 1024, height: 576 },
+  { url: '/assets/avatar.png', width: 144, height: 144 },
+  { url: '/assets/apple-touch-icon.png', width: null, height: null },
+]
+
+function shotRows(items) {
+  return items
+    .filter((item) => item.image_url)
+    .flatMap((item) =>
+      Array.from({ length: item.id === 1 ? 8 : 2 }, (_, index) => {
+        const source = SHOT_SOURCES[index % SHOT_SOURCES.length]
+        return {
+          item_id: item.id,
+          url: source.url,
+          alt: `作品の画面（${index + 1} 枚目）`,
+          width: source.width,
+          height: source.height,
+          sort_order: (index + 1) * 10,
+        }
+      }),
+    )
+}
+
+/*
   作った中身が公開の関門（publishErrors）を通るかを確かめる。通らない中身は公開
   できないので、それを測っても意味が無い（上限を超えた名前・空の説明・代替テキストの
   無い画像）。黙って起きるので、ここで止める。
 */
-function audit(blocks, members, items) {
+function audit(blocks, members, items, shots) {
   const problems = []
   for (const block of blocks) {
     const type = blockType(block.type)
@@ -408,6 +440,7 @@ function audit(blocks, members, items) {
       summary: item.summary,
       imageAlt: item.image_alt,
       hasImage: Boolean(item.image_url),
+      shotAlts: shots.filter((shot) => shot.item_id === item.id).map((shot) => shot.alt),
     })
     if (errors) problems.push(`item ${item.slug}: ${JSON.stringify(errors)}`)
   }
@@ -453,10 +486,13 @@ export function fixture({ solo = false } = {}) {
     })),
   )
 
-  audit(blocks, members, items)
+  const shots = shotRows(items)
+
+  audit(blocks, members, items, shots)
 
   const text = [
     '-- scripts/lib/fit-fixture.mjs が作った、check:fit 専用の重い中身',
+    'DELETE FROM item_shots;',
     'DELETE FROM item_links;',
     'DELETE FROM item_tags;',
     'DELETE FROM items;',
@@ -467,6 +503,7 @@ export function fixture({ solo = false } = {}) {
     insert('items', items),
     insert('item_tags', tags),
     insert('item_links', links),
+    insert('item_shots', shots),
   ].join('\n')
 
   const itemPath = (item) => `/${item.type === 'app' ? 'apps' : 'works'}/item/${item.slug}`

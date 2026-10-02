@@ -120,6 +120,13 @@
       "when": 1790447305123,
       "tag": "0016_owner_claims_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1790917883086,
+      "tag": "0017_item_shots",
+      "breakpoints": true
     }
   ]
 }

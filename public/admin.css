@@ -457,6 +457,35 @@
   margin-top: var(--sp-4);
 }
 
+/*
+  作品のほかの画像の1行（src/routes/admin/items.tsx の ShotFields）。いまある画像は
+  見本・代替テキスト・並び順・外す、足す欄はファイルと代替テキストの組。600 未満は
+  1列に積み、組と組のあいだを空ける（リンクの組と同じ。下の「600px 以上」で横1行）。
+  見本は作品のページの帯と同じく、絵を切らずに枠に収める
+*/
+.shot-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+.shot-row + .shot-row {
+  margin-top: var(--sp-4);
+}
+
+.shot-row__image {
+  width: 96px;
+  aspect-ratio: var(--strip-ratio);
+  object-fit: contain;
+  background: var(--surface);
+}
+
+/* いまのアイコンの見本（作品のフォーム）。作品の題の左と同じく、正方形に収める */
+.icon-preview {
+  object-fit: contain;
+}
+
 .form-foot {
   display: flex;
   flex-direction: column;
@@ -920,6 +949,18 @@
   }
 
   .link-row + .link-row {
+    margin-top: 0;
+  }
+
+  .shot-row {
+    grid-template-columns: 96px minmax(0, 1fr) 72px auto;
+  }
+
+  .shot-row--new {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .shot-row + .shot-row {
     margin-top: 0;
   }
 
