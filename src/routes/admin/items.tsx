@@ -309,6 +309,10 @@ const ShotFields = ({
 }) => (
   <fieldset class="field field--wide fieldset">
     <legend class="field__label">ほかの画像（スクリーンショット）</legend>
+    {/* 行の欄に目に見える名前が無いので、何の列かを頭で言う（読み上げは各欄の aria-label） */}
+    {shots.length ? (
+      <span class="field__hint">いまある画像 — 代替テキスト・並び順（小さいほど先）・外す</span>
+    ) : null}
     {shots.map((shot, index) => (
       <div class="shot-row" key={shot.id}>
         {/* 見本。何が写っているかは隣の欄が言うので、ここでは名前を持たせない */}
@@ -335,6 +339,7 @@ const ShotFields = ({
         </label>
       </div>
     ))}
+    {slots ? <span class="field__hint">足す画像 — ファイルと代替テキストの組</span> : null}
     {Array.from({ length: slots }, (_, index) => (
       <div class="shot-row shot-row--new" key={`new-${index}`}>
         <input
@@ -951,14 +956,20 @@ function readShotEdits(form: FormData, shots: schema.ItemShot[]) {
 
 /*
   足す欄（ファイルと代替テキストの組）を読む。どの欄も pickImage と同じ検査で、
-  通らない欄は何番目の欄かを言って止める。代替テキストだけを書いた欄は数えない
+  通らない欄は何番目の欄かを言って止める。代替テキストだけを書いてファイルを選んで
+  いない欄も止める——黙って捨てると、書いた代替テキストが消えたのに「保存しました」と
+  出る（弾いたあとの描き直しでファイルの欄は空に戻るので、選び直し忘れがここに来る）
 */
 async function readNewShots(form: FormData) {
   const picks = await pickImages(form, 'newShot')
   const alts = form.getAll('newShotAlt').map((value) => str(value))
-  const problems = picks.flatMap((pick, index) =>
-    pick.error ? [`${index + 1} 番目の欄: ${pick.error}`] : [],
-  )
+  const problems = Array.from({ length: Math.max(picks.length, alts.length) }, (_, index) => {
+    const pick = picks[index]
+    if (pick?.error) return `${index + 1} 番目の欄: ${pick.error}`
+    return alts[index] && !pick?.image
+      ? `${index + 1} 番目の欄: 代替テキストがあるのに画像が選ばれていません`
+      : null
+  }).filter((problem) => problem !== null)
   const added = picks.flatMap((pick, index) =>
     pick.image ? [{ image: pick.image, alt: alts[index] ?? '' }] : [],
   )

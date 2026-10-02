@@ -2294,6 +2294,16 @@ use.nebula__dust {
   aspect-ratio: var(--strip-ratio);
 }
 
+/*
+  帯そのものにフォーカスが来たとき（Tab で止まり、矢印のキーで1枚ずつ送れる）。輪郭は帯の
+  内側に描き、そのあいだは右端のぼかしを外す——ぼかし（mask）は箱の外を描かないので、素の
+  輪郭（外へ --focus-offset 離す）は丸ごと消え、どこにフォーカスがあるか見えなかった
+*/
+.strip:focus-visible {
+  outline-offset: calc(var(--focus-ring) * -1);
+  mask-image: none;
+}
+
 /* --- 節の中身の2つの箱 --- */
 
 /*

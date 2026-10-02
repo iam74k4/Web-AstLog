@@ -669,6 +669,22 @@ describe('Items — アイコンとほかの画像', () => {
     expect(await db().select().from(schema.itemShots)).toHaveLength(2)
   })
 
+  it('代替テキストだけを書いて画像を選んでいない欄は止める（書いた字を黙って捨てない）', async () => {
+    const signed = await signIn()
+    const body = form({ type: 'app', title: 'AppMixer', newShotAlt: ['通話中の画面', ''] })
+    // ブラウザは空のファイルの欄も送る（名前の無い 0 バイト）
+    body.append('newShot', file(new Uint8Array(0), '', 'application/octet-stream'))
+    body.append('newShot', file(new Uint8Array(0), '', 'application/octet-stream'))
+    const response = await signed('/admin/items', { method: 'POST', body })
+    expect(response.status).toBe(400)
+    const html = await response.text()
+    expect(html).toContain('1 番目の欄: 代替テキストがあるのに画像が選ばれていません')
+    // 2番目の欄（どちらも空）は数えない。書いた代替テキストは描き直す
+    expect(html).not.toContain('2 番目の欄')
+    expect(html).toContain('value="通話中の画面"')
+    expect(await db().select().from(schema.items)).toHaveLength(0)
+  })
+
   it('並び順を書き換えると帯の並びが変わり、外した画像は行も KV も消える（全角の数字も読む）', async () => {
     const item = await seedItem({ slug: 'appmixer', summary: '説明。' })
     await seedShots(item.id, [
