@@ -18,8 +18,8 @@ const app = new Hono<AppEnv>()
   1つ見つかっても、ここがあればスクリプトは走らない。
   - script-src 'none'——JSON-LD（type="application/ld+json"）はデータの塊で
     実行されないので、これで止まらない（ブラウザで確かめてある）
-  - style-src に 'unsafe-inline'——入口の軌道図の札の位置（--x / --y）と出る順
-    （--i）、件数の数え上げの値（--to）、ブラックホールの置き場所と大きさ（--hole-x …）、
+  - style-src に 'unsafe-inline'——軌道図の天体の大きさ（--scale）と軌道の濃さ（--reach）、
+    件数の数え上げの値（--to）、ブラックホールの置き場所と大きさ（--hole-x …）、
     ページの切り替えの名前（view-transition-name）、アバターの寸法（--avatar-size）を
     style 属性で渡している。スクリプトではない
   - img-src は 'self' だけ——favicon は public/assets のファイル、ロゴはページに直に描く SVG で、

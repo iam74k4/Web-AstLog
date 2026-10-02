@@ -146,22 +146,29 @@ describe('前の DB ＋ 今のコード', () => {
     }
   })
 
-  it('列を足す移行を流していない D1 では 500 になる——だから deploy は移行をいつも流す', async () => {
+  it('移行を流していない D1 では正しく描けない（表が無ければ 500、列が無ければ列の名前が字で出る）——だから deploy は移行をいつも流す', async () => {
     /*
-      列を足した移行は、読む側で受けられない。drizzle は列を名指しで SELECT する
-      ので、列の無い D1 では「no such column」で落ちる。だから deploy.yml は移行を
-      選択肢にせず毎回流し、README もそう書く。この事実が変わった（落ちなくなった）
-      なら、この説明ごと見直すこと
+      表や列を足した移行は、読む側で受けられない。drizzle は表と列を名指しで SELECT する
+      ので、表を足す移行（0017 の item_shots）を流していない D1 では「no such table」で
+      落ちる。列を足すだけの移行（0018 の story_*）では落ちない——SQLite は二重引用符で
+      書いた名前が列に見つからないと文字列として読む（DQS）ので、列の名前そのものが中身として
+      返り、作品のページにその字が出る。黙って違う字を出す形で、500 より気づきにくい。
+      だから deploy.yml は移行を選択肢にせず毎回流し、README もそう書く。この事実が
+      変わったなら、この説明ごと見直すこと
     */
-    const additive = env.TEST_MIGRATIONS.filter((one) =>
-      one.queries.some((query) => /ALTER TABLE `?\w+`? ADD/i.test(query)),
-    ).at(-1)
-    if (!additive) throw new Error('列を足す移行が1つも無い')
+    const shots = migrationNamed('item_shots')
     await emptyD1()
-    await migrate((name) => name < additive.name)
+    await migrate((name) => name < shots)
     await legacyRows()
-
     expect((await open('/projects')).status).toBe(500)
+
+    const story = migrationNamed('item_story')
+    await emptyD1()
+    await migrate((name) => name < story)
+    await legacyRows()
+    const page = await open('/apps/item/appmixer')
+    expect(page.status).toBe(200)
+    expect(await page.text()).toContain('<p>story_background</p>')
   })
 })
 

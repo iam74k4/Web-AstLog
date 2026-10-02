@@ -4,7 +4,14 @@ import { type Context, Hono } from 'hono'
 import { MAX_CHARS, publishErrors } from '../../blocks'
 import { type Db, itemOrder } from '../../db/queries'
 import * as schema from '../../db/schema'
-import { ITEM_KINDS, type ItemKind, KIND_LABEL, readKind } from '../../domain'
+import {
+  ITEM_KINDS,
+  type ItemKind,
+  KIND_LABEL,
+  readKind,
+  STORY_SECTIONS,
+  type StoryColumn,
+} from '../../domain'
 import type { AppEnv } from '../../env'
 import { newToken } from '../../lib/auth'
 import {
@@ -60,8 +67,9 @@ export const itemRoutes = new Hono<AppEnv>()
 
 /*
   管理画面の呼び名は公開ページにそろえる（src/domain.ts の ITEM_KINDS。
-  「個人開発 / 業務」）。公開ページでは1つの一覧（Projects）だが、入力欄は区分
-  ごとに違う（個人開発はプラットフォーム、業務は業界と実績値）ので、タブは区分ごと。
+  「個人開発 / 業務」）。公開ページでは1つの一覧（Projects）だが、入力欄の一部は区分
+  ごとに違う（個人開発はプラットフォーム、業務は業界）ので、タブは区分ごと。本文の
+  テンプレート（STORY_SECTIONS）と実績値は、どちらの区分も同じ欄。
 */
 itemRoutes.get('/items', async (c) => {
   const type = readKind(c.req.query('type'))
@@ -93,13 +101,14 @@ itemRoutes.get('/items', async (c) => {
             ))}
           </div>
         </div>
+        {/* 押す手の言葉は日本語（CLAUDE.md「文言」。空の一覧の「＋ 最初の項目を追加」と同じ言い方） */}
         <a class="btn btn--primary" href={`/admin/items/new?type=${type}`}>
-          ＋ Add item
+          ＋ 項目を追加
         </a>
       </div>
 
       {/*
-        タブは入力欄の違い（プラットフォーム / 業界と実績値）で分けているだけで、
+        タブは入力欄の違い（プラットフォーム / 業界）で分けているだけで、
         公開ページでは1つの一覧。並びの規則を1文で言っておく
       */}
       <p class="form-note">
@@ -178,6 +187,13 @@ type ItemFormData = {
   errors?: Record<string, string>
 }
 
+// 本文のテンプレートの欄の値を、列ごとに読む（DB の行・送られた欄・弾いたあとの描き直し）
+const storyOf = (read: (column: StoryColumn) => string) =>
+  Object.fromEntries(STORY_SECTIONS.map(({ column }) => [column, read(column)])) as Record<
+    StoryColumn,
+    string
+  >
+
 /*
   フォームが描く値は、DB の行から来ることも、送信されて弾かれた内容から
   来ることもある。どちらも同じ形にしてから渡す。入力エラーのたびに
@@ -202,6 +218,7 @@ function itemDraft(item?: ItemFormData['item'], submitted?: Record<string, strin
       year: submitted.year ?? '',
       summary: submitted.summary ?? '',
       body: submitted.body ?? '',
+      story: storyOf((column) => submitted[column] ?? ''),
       imageAlt: submitted.imageAlt ?? '',
       removeImage: submitted.removeImage === '1',
       removeIcon: submitted.removeIcon === '1',
@@ -225,6 +242,7 @@ function itemDraft(item?: ItemFormData['item'], submitted?: Record<string, strin
     year: item?.year ?? '',
     summary: item?.summary ?? '',
     body: item?.body ?? '',
+    story: storyOf((column) => item?.[column] ?? ''),
     imageAlt: item?.imageAlt ?? '',
     removeImage: false,
     removeIcon: false,
@@ -248,7 +266,10 @@ type ItemDraft = {
   category: string
   year: string
   summary: string
+  // テンプレートより前に書いた本文（中身があるときだけ欄を出す。StoryFields）
   body: string
+  // 本文のテンプレートの欄（STORY_SECTIONS の列ごと）
+  story: Record<StoryColumn, string>
   imageAlt: string
   removeImage: boolean
   removeIcon: boolean
@@ -274,6 +295,15 @@ type ItemDraft = {
 const METRIC_NOTE_HINT =
   '添えは値と単位のあとに続けて読まれる。「20 人日 見込み 40人日から半減」のように、続けて読んで意味が通る形で'
 
+/*
+  実績値の欄の例（placeholder）。欄はどちらの区分も同じだが、例は区分らしい数にする——
+  個人開発の欄に「人日」の例を出すと、業務の数しか書けない欄に見える
+*/
+const METRIC_EXAMPLE: Record<ItemKind, { value: string; unit: string; note: string }> = {
+  app: { value: '1,200', unit: 'DL', note: '公開から3か月' },
+  work: { value: '20', unit: '人日', note: '見込み 40人日から半減' },
+}
+
 // リンクの欄を空けて出す行の数（ItemForm）。上限ではない
 const LINK_ROWS = 3
 
@@ -287,6 +317,55 @@ const SHOT_SLOTS = 4
 
 // 画像を受け取る欄（弾いたときに「まだ保存していません」と言う欄。imageNotKept）
 const IMAGE_FIELDS = ['image', 'icon', 'newShot'] as const
+
+/*
+  作品の本文（Story）のテンプレート。個人開発も業務も同じ欄（src/domain.ts の
+  STORY_SECTIONS。背景・取り組み・工夫・成果）で、作品のページにはこの順で小見出し
+  （BACKGROUND …）を付けて出る。中身の無い欄は出ない。欄ごとの手がかりは、何を書くかの
+  問い（「なぜつくったか」）——区分が違っても同じ問いに答えれば、同じ形の本文になる。
+
+  テンプレートより前に書いた本文（items.body）の欄は、中身があるときだけ出す。Story の頭に
+  見出しの無い段落で出たまま残るので、欄へ移して空にすれば次から欄ごと消える。新しく書く
+  本文はテンプレートの欄にだけ入る。
+*/
+const StoryFields = ({
+  story,
+  body,
+  error,
+}: {
+  story: ItemDraft['story']
+  body: string
+  error?: string
+}) => (
+  <fieldset class="field field--wide fieldset fieldset--story">
+    <legend class="field__label">Story — 個人開発と業務で同じ見出し</legend>
+    <span class="field__hint">
+      {
+        'どの欄も「です・ます」で、空行で段落を分ける · 作品のページの「Story」に出る（欄の順に見出しを付けて。空の欄は出ない。一覧には出ない）'
+      }
+    </span>
+    {body ? (
+      <Area
+        label="前の本文（見出しなし）"
+        name="body"
+        value={body}
+        rows={6}
+        hint="テンプレートより前に書いた本文。Story の頭に見出しの無い段落で出る。下の欄へ移したら空にして保存する（空にすると、この欄は次から出ない）"
+        error={error}
+      />
+    ) : null}
+    {STORY_SECTIONS.map((section) => (
+      <Area
+        key={section.column}
+        label={section.label}
+        name={section.column}
+        value={story[section.column]}
+        rows={4}
+        hint={`${section.hint}（作品のページの見出しは ${section.heading}）`}
+      />
+    ))}
+  </fieldset>
+)
 
 /*
   ほかの画像（スクリーンショット）の欄。いまある画像は1枚ずつ見本・代替テキスト・
@@ -420,7 +499,7 @@ const ItemForm = (props: ItemFormData) => {
         <FormKey value={props.formKey} />
         <div class="form-grid">
           {/*
-            作品名は一覧の行の題・入口の軌道図の札・作品のページの見出しに出る。長さは公開する
+            作品名は一覧の行の題・作品のページの見出しに出る。長さは公開する
             ときにだけ見る（MAX_CHARS.itemTitle。理由は src/blocks.ts）
           */}
           <Field
@@ -525,14 +604,7 @@ const ItemForm = (props: ItemFormData) => {
             本文は作品のページの説明の下に、小節「Story」として出る（一覧には
             出ない）。空なら小節は作らない。長さに上限は無い（ページは縦に読む）
           */}
-          <Area
-            label="本文"
-            name="body"
-            value={d.body}
-            rows={6}
-            hint="背景・やったこと・結果を「です・ます」で。空行で段落を分ける（作品のページの「Story」に出る。空なら出ない。一覧には出ない）"
-            error={props.errors?.body}
-          />
+          <StoryFields story={d.story} body={d.body} error={props.errors?.body} />
           <label class="field">
             <span class="field__label">画像</span>
             <input
@@ -666,36 +738,38 @@ const ItemForm = (props: ItemFormData) => {
             </span>
           </fieldset>
 
-          {props.type === 'work' ? (
-            <fieldset class="field field--wide fieldset">
-              <legend class="field__label">実績値 — 1項目に1つだけ</legend>
-              <div class="metric-row">
-                <input
-                  class="input"
-                  type="text"
-                  name="metricValue"
-                  value={d.metricValue}
-                  placeholder="20"
-                />
-                <input
-                  class="input"
-                  type="text"
-                  name="metricUnit"
-                  value={d.metricUnit}
-                  placeholder="人日"
-                />
-                <input
-                  class="input"
-                  type="text"
-                  name="metricNote"
-                  value={d.metricNote}
-                  placeholder="見込み 40人日から半減"
-                />
-              </div>
-              {/* 添えは値のあとに続けて読まれる（METRIC_NOTE_HINT を見ること） */}
-              <span class="field__hint">{METRIC_NOTE_HINT}</span>
-            </fieldset>
-          ) : null}
+          {/*
+            実績値はどちらの区分も同じ欄（個人開発ならダウンロード数・利用者数など）。
+            業務にだけ出していたころは、同じ一覧の中で個人開発の行だけ成果の数字を持てなかった
+          */}
+          <fieldset class="field field--wide fieldset">
+            <legend class="field__label">実績値 — 1項目に1つだけ</legend>
+            <div class="metric-row">
+              <input
+                class="input"
+                type="text"
+                name="metricValue"
+                value={d.metricValue}
+                placeholder={METRIC_EXAMPLE[props.type].value}
+              />
+              <input
+                class="input"
+                type="text"
+                name="metricUnit"
+                value={d.metricUnit}
+                placeholder={METRIC_EXAMPLE[props.type].unit}
+              />
+              <input
+                class="input"
+                type="text"
+                name="metricNote"
+                value={d.metricNote}
+                placeholder={METRIC_EXAMPLE[props.type].note}
+              />
+            </div>
+            {/* 添えは値のあとに続けて読まれる（METRIC_NOTE_HINT を見ること） */}
+            <span class="field__hint">{METRIC_NOTE_HINT}</span>
+          </fieldset>
         </div>
 
         <div class="form-foot">
@@ -810,7 +884,12 @@ function readItemForm(
       slug: readSlug(str(form.get('slug')), existing?.slug, title) ?? `item-${newToken(3)}`,
       year,
       summary: str(form.get('summary')),
+      /*
+        前の本文の欄は、中身があるときだけフォームに出る（StoryFields）。欄の無い送信は
+        空として読む——欄が無いのは中身が空だったときだけなので、書き換わらない
+      */
       body: str(form.get('body')),
+      ...storyOf((column) => str(form.get(column))),
       imageAlt: str(form.get('imageAlt')),
       metricValue: str(form.get('metricValue')) || null,
       metricUnit: str(form.get('metricUnit')) || null,
@@ -874,6 +953,7 @@ function submittedItem(form: FormData): Record<string, string> {
     year: halfWidthDigits(str(form.get('year'))),
     summary: str(form.get('summary')),
     body: str(form.get('body')),
+    ...storyOf((column) => str(form.get(column))),
     imageAlt: str(form.get('imageAlt')),
     removeImage: bool(form.get('removeImage')) ? '1' : '',
     removeIcon: bool(form.get('removeIcon')) ? '1' : '',

@@ -74,26 +74,19 @@ export const bandOf = (blocks: schema.Block[], counts: KindCounts, query = ''): 
 
   total は絞り込みを外したときの件数で、節を出すかどうかを決める
   （src/blocks.ts の blockShown）。行は絞り込んだあとの全件（Projects のページと
-  全体ページ）と、入口では軌道図の札のための公開中の全件。ほかのページを描くときは
-  空——作品の行は、それを描くページでだけ引く（site.ts の pageRows）。
+  全体ページ）と、入口では件数の帯のいちばん古い年（Since）のための公開中の全件。ほかの
+  ページを描くときは空——作品の行は、それを描くページでだけ引く（site.ts の pageRows）。
 
   numbers は絞り込んだ一覧の行の番号（作品の id → 絞り込む前の並びでの位置。1 から）。
-  番号は入口の軌道図の札と同じ番号で結ぶので、業務だけに絞っても 03 の作品は 03。
-  絞り込まない一覧では持たず、行の順がそのまま番号（rowNumber）。
-
-  order は絞り込んだ一覧の、絞り込む前の並び（公開中の全件の id と区分）。行の星図が
-  灯す天体を引くのに使う（orbits.ts の bodyIndexOf。天体は区分の中の順で作品と結ぶので、
-  メンバーで絞った行だけでは別の天体を指す）。絞り込まない一覧では持たず、行がその並び。
+  番号は作品ごとに1つで、業務だけに絞っても 03 の作品は 03（絞り込みで番号が入れ替わると、
+  同じ作品が見る一覧ごとに別の番号になる）。絞り込まない一覧では持たず、行の順がそのまま
+  番号（rowNumber）。
 */
 export type ItemListData = {
   total: number
   rows: ItemView[]
   numbers?: ReadonlyMap<number, number>
-  order?: readonly { id: number; type: ItemKind }[]
 }
-
-// 一覧の行の星図が灯す天体を引くための、公開中の全件の並び（ItemListData の order）
-export const fullOrder = (list: ItemListData) => list.order ?? list.rows
 
 // 一覧の行の番号（1 から）。絞り込んだ一覧では、絞り込む前の並びでの位置
 export const rowNumber = (list: ItemListData, item: ItemView, order: number) =>
@@ -138,7 +131,7 @@ export const siteCountsOf = (data: TopData): SiteCounts => ({
   区分もメンバーもそこに効く（scopeOf）。
 
   目次の行き先に絞り込みを付けるか（site.ts の pageQuery）、DB から絞り込んだ行を
-  引くか（pageRows。入口だけは軌道図の札のために絞り込まずに全件を引く）は、どちらも
+  引くか（pageRows。入口だけは件数の帯の Since のために絞り込まずに全件を引く）は、どちらも
   この1本に聞く。効かないページに付けると、中身は1文字も変わらないのに URL だけが
   増える（/contact?member=… のたぐい）。
 */

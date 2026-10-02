@@ -70,6 +70,49 @@ export type ItemView = Item & {
 }
 
 /*
+  作品の本文（Story）のテンプレート。個人開発も業務も同じ欄・同じ見出し・同じ順で書く
+  （持ち主の「個人開発と業務で内容を統一するテンプレート」）。列（items の story_*）・
+  管理画面の欄と書き方の手がかり・作品のページの小見出しの対応は、この表が正。
+
+  - label と hint は管理画面の欄（src/routes/admin/items.tsx の StoryFields）
+  - heading は作品のページの小見出し（components.tsx の StoryParts）。節の名前は英語の
+    決まり（CLAUDE.md「文言」）で、Skills の英字の小見出しと同じく大文字
+  - 並びは読む順（なぜ → 何を → どう → どうなった）。中身の無い欄は出さない
+    （src/blocks.ts の itemStory）
+
+  欄を足すときは、ここに1行と、src/db/schema.ts に列（npm run db:generate）。
+*/
+export const STORY_SECTIONS = [
+  {
+    column: 'storyBackground',
+    label: '背景',
+    heading: 'BACKGROUND',
+    hint: 'なぜつくったか・何が困っていたか',
+  },
+  {
+    column: 'storyApproach',
+    label: '取り組み',
+    heading: 'APPROACH',
+    hint: '自分の役割と、やったこと',
+  },
+  {
+    column: 'storyHighlights',
+    label: '工夫',
+    heading: 'HIGHLIGHTS',
+    hint: '技術の選び方・こだわった点',
+  },
+  { column: 'storyResults', label: '成果', heading: 'RESULTS', hint: '結果・数字・使われ方' },
+] as const satisfies readonly { column: keyof Item; label: string; heading: string; hint: string }[]
+
+export type StoryColumn = (typeof STORY_SECTIONS)[number]['column']
+
+/*
+  Story の塊（src/blocks.ts の itemStory が開く）。heading はテンプレートの欄の小見出しで、
+  null はテンプレートより前に書いた本文（見出しの無い段落）
+*/
+export type StoryPart = { heading: string | null; paragraphs: string[] }
+
+/*
   作品の画像を見せる順に。メインの画像（items.image_url）が先で、ほかの画像が続く。
   先頭の1枚がその作品の顔——一覧の行のサムネイル・共有カード（メインの画像が無い
   作品では、ほかの画像の1枚目）。作品のページは、2枚以上あれば全部を横に並べる

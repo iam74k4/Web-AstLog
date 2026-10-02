@@ -99,19 +99,19 @@ const pageQuery = (slug: string, filter: ItemFilter): string =>
   filterApplies(slug) ? filterQuery(filter) : ''
 
 /*
-  いま出すページの行を引く。一覧（Projects）は絞り込みを効かせて、入口は軌道図の札の
-  ために公開中の全件を（入口に絞り込みは効かない）。ほかのページでは1件も引かない
-  ——そのページに作品は出ない。
+  いま出すページの行を引く。一覧（Projects）は絞り込みを効かせて、入口は件数の帯の
+  いちばん古い年（Since）のために公開中の全件を（入口に絞り込みは効かない）。ほかの
+  ページでは1件も引かない——そのページに作品は出ない。
 
-  絞り込んだ一覧は、行の番号と星図のために公開中の並び（id と区分）も引く。番号は
-  絞り込む前の並びでの位置で、入口の軌道図の札と同じ番号（data.ts の ItemListData）。
+  絞り込んだ一覧は、行の番号のために公開中の並び（id）も引く。番号は絞り込む前の並びでの
+  位置（data.ts の ItemListData）。
 */
 export async function pageRows(
   db: Db,
   page: BlockPage,
   filter: ItemFilter,
   memberId: number | null,
-): Promise<Pick<ItemListData, 'rows' | 'numbers' | 'order'>> {
+): Promise<Pick<ItemListData, 'rows' | 'numbers'>> {
   if (page.block.type === 'hero') return { rows: await listPublishedItems(db) }
   if (!filterApplies(page.block.type)) return { rows: [] }
   const scope = scopeOf(filter, memberId)
@@ -120,7 +120,7 @@ export async function pageRows(
     listPublishedItems(db, scope),
     listPublishedItemKeys(db),
   ])
-  return { rows, numbers: new Map(order.map((key, index) => [key.id, index + 1])), order }
+  return { rows, numbers: new Map(order.map((key, index) => [key.id, index + 1])) }
 }
 
 /*

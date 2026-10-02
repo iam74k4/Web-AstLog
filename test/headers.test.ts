@@ -32,7 +32,7 @@ function expectPageHeaders(response: Response, label: string) {
   expect(csp['base-uri'], label).toBe("'none'")
   expect(csp['form-action'], label).toBe("'self'")
   expect(csp['frame-ancestors'], label).toBe("'none'")
-  // 画像は同じオリジンだけ（favicon も public/assets のファイル）。軌道図の札の位置や件数は style 属性で渡す
+  // 画像は同じオリジンだけ（favicon も public/assets のファイル）。軌道図の置き場所や件数は style 属性で渡す
   expect(csp['img-src'], label).toBe("'self'")
   expect(csp['style-src'], label).toBe("'self' 'unsafe-inline'")
   expect(response.headers.get('x-content-type-options'), label).toBe('nosniff')

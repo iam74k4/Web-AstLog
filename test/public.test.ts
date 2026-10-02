@@ -8,9 +8,9 @@ import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import css from '../public/app.css'
 import * as schema from '../src/db/schema'
-import { ITEM_KINDS, type KindCounts } from '../src/domain'
+import { ITEM_KINDS } from '../src/domain'
 import { sniffImage } from '../src/lib/image'
-import { CHART_FRAME, CONTACT_FRAME, HERO_FRAME, orbitMap } from '../src/lib/orbits'
+import { CONTACT_FRAME, HERO_FRAME } from '../src/lib/orbits'
 import { publicRoutes } from '../src/routes/public/routes'
 import { SITE } from '../src/site'
 import { itemHref, LinkList, LinkRow, splitPhrases } from '../src/ui/components'
@@ -96,11 +96,11 @@ describe('トップページ', () => {
     await seedItem({ type: 'app', platformKey: 'web' })
 
     // 個人開発しか無いサイトで「業務」を置いても、押した先は0件の知らせだけ
-    const only = await okText('/all')
+    const only = await okText('/projects')
     expect(only).not.toContain('kind=')
 
     await seedItem({ type: 'work', title: '業務の実績' })
-    const both = await okText('/all')
+    const both = await okText('/projects')
     expect(both).toContain('href="/projects?kind=app"')
     expect(both).toContain('href="/projects?kind=work"')
     // プラットフォームでは絞らない（一覧の行の札には残る）
@@ -612,6 +612,19 @@ describe('入口の件数', () => {
     expect(whole).not.toContain('class="tally"')
   })
 
+  it('全体ページの Projects には絞り込みを置かない。Projects のページには置く', async () => {
+    /*
+      全体ページの絞り込みは /projects?kind=… へ移るリンクで、「すべて」の印（aria-current）が
+      別のページを「いまのページ」と名乗っていた。全体ページは中身を全部載せる場所
+    */
+    await seedMember()
+    await seedItem({ type: 'app', slug: 'a' })
+    await seedItem({ type: 'work', slug: 'w', sortOrder: 20 })
+
+    expect(mainOf(await okText('/all'))).not.toContain('class="filters"')
+    expect(mainOf(await okText('/projects'))).toContain('class="filters"')
+  })
+
   it('一覧のページが無ければ、一覧への1本も件数も置かない（0件の知らせへ送らない）', async () => {
     await seedMember()
     await seedItem()
@@ -957,7 +970,7 @@ describe('連絡先の行き先', () => {
   だけじゃ面白みがない」「もっと壮大に」「もっと星雲っぽさがほしい」）。
 */
 describe('星空と星雲', () => {
-  it('入口と締めに星空と星雲を敷く。作品の星図と、ほかのページには敷かない', async () => {
+  it('入口と締めに星空と星雲を敷く。ほかのページには敷かない', async () => {
     await seedMember()
     await seedItem({ type: 'app' })
     await seedItem({ type: 'work', slug: 'w' })
@@ -994,7 +1007,7 @@ describe('星空と星雲', () => {
       // 外の素材を読まない（焼いた絵を持たない。CSP の img-src 'self' の外へも出ない）
       expect(cosmos, path).not.toMatch(/<image|url\((?!#)/)
     }
-    // ブラックホールの絵は入口と締めのまわりの星空の真ん中。作品の星図は同じ絵でも星空を持たない
+    // ブラックホールの絵は入口と締めのまわりの星空の真ん中
     expect(home).toContain('<img class="hole__art"')
     expect(contact).toContain('<img class="hole__art"')
     const list = mainOf(await okText('/projects'))
@@ -1026,15 +1039,22 @@ describe('締めのページ（Contact）', () => {
     const main = mainOf(await okText('/contact'))
     // 締めの表紙（見出しの錨を持たない節）。図は装飾なので読み上げに流さない
     expect(main).toContain('<section id="contact" class="orbital"')
-    // 動かない層（帯・線・星屑）と動く層（流れる光・粒）を分ける（帯と星屑のぼかしを毎コマ描き直さない）
+    /*
+      動かない層（帯・線）と、回る星屑の層と、動く層（天体・流れる星・粒）を分ける（帯のぼかしと
+      千を超える星屑を毎コマ描き直さない）
+    */
     expect(main).toContain(
       `<div class="orbits"><svg class="orbits__still" viewBox="0 0 ${CONTACT_FRAME.width} ${CONTACT_FRAME.height}" aria-hidden="true"`,
     )
     expect(main.match(/<svg class="orbits__still"/g)).toHaveLength(2)
-    // 入口と同じ件数の天体（個人開発は光る惑星、業務は輪のある惑星）
-    expect(main.match(/class="orbit-body orbit-body--app"/g)).toHaveLength(2)
-    expect(main.match(/class="orbit-body orbit-body--work"/g)).toHaveLength(1)
-    expect(main.match(/class="orbit-body__ring"/g)).toHaveLength(2)
+    expect(main.match(/<svg class="orbits__stardust"/g)).toHaveLength(2)
+    /*
+      入口と同じ件数の天体（個人開発は光る惑星、業務は輪のある惑星）。天体は軌道を回るので、
+      奥と手前の層に1つずつ置いて半面で切る
+    */
+    expect(main.match(/class="orbit-body orbit-body--app"/g)).toHaveLength(2 * 2)
+    expect(main.match(/class="orbit-body orbit-body--work"/g)).toHaveLength(1 * 2)
+    expect(main.match(/class="orbit-body__ring"/g)).toHaveLength(2 * 2)
     // 持ち主が外した（「スイングバイの軌道はいらない」）
     expect(main).not.toMatch(/orbit-escape|orbit-probe/)
     // 図は誘いの1文より前（上）に置き、字には重ねない
@@ -1050,16 +1070,33 @@ describe('締めのページ（Contact）', () => {
       // 持ち主が外した（「動きを止める 不要」）。動きを減らす設定だけが止める
       expect(main, path).not.toMatch(/motion-toggle|class="motion"|動きを止める/)
       /*
-        天体は公転させない（札と同じ止まった場所に居る）。前は公転させていて、重ねたときに
-        天体を札へ寄せると、跳ぶか軌道を外れて飛んだ
+        星屑と天体は軌道ごと公転する（持ち主の「軌道の線を星と一緒に動かして」）。軌道ごとに
+        回る枠（orbit-spin）を、星屑・天体・流れる星の奥と手前の層に1つずつ。天体と流れる星は
+        回る枠の中で回転を打ち消し（orbit-unspin）、大きさの揺れを linear() で受け取る。星屑は
+        刻んで進む（--ticks）
       */
-      expect(main, path).not.toMatch(/orbit-mover|orbit-settle/)
+      const spins = [...main.matchAll(/<g class="orbit-spin" style="([^"]+)"/g)].map(
+        (found) => found[1] ?? '',
+      )
+      expect(spins, path).toHaveLength(3 * 4)
+      expect(
+        spins.filter((style) => /^--dur:[\d.]+s;--ticks:\d+$/.test(style)),
+        path,
+      ).toHaveLength(4)
+      expect(
+        spins.filter((style) => /^--dur:[\d.]+s;--sway:linear\([\d.,]+\)$/.test(style)),
+        path,
+      ).toHaveLength(2 * 4)
+      expect(main.match(/<g class="orbit-unspin">/g), path).toHaveLength(2 * 4)
       /*
-        軌道を流れる光も奥と手前に。光は細い頭と、その後ろに引く淡い尾（彗星の形）。吸い込まれる
-        粒はブラックホールの後ろの層にだけ
+        軌道を流れる星も奥と手前に。光芒のある星が淡い尾を引く（持ち主の「移動する線をもっと
+        星っぽく」。軌道の線の破線を送る光は、移る線に見えた）。吸い込まれる粒はブラックホールの
+        後ろの層にだけ
       */
-      expect(main.match(/class="orbit-flow"/g), path).toHaveLength(4)
-      expect(main.match(/class="orbit-flow orbit-flow--tail"/g), path).toHaveLength(4)
+      expect(main.match(/class="orbit-flow__star"/g), path).toHaveLength(4)
+      expect(main.match(/class="orbit-flow__glint"/g), path).toHaveLength(4)
+      expect(main.match(/class="orbit-flow__trail"/g), path).toHaveLength(4)
+      expect(main, path).not.toMatch(/stroke-dasharray|class="orbit-flow"/)
       expect(main.match(/<g class="orbit-dust"/g), path).toHaveLength(1)
       expect(main, path).toContain('class="orbit-grain__dot"')
       // ブラックホールの光は揺らぐ（app.css）。縁を回る光の点は外した（焼いた絵に合わない）
@@ -1073,28 +1110,24 @@ describe('締めのページ（Contact）', () => {
     }
   })
 
-  it('ブラックホールはどこも同じ焼いた光の絵（入口・締め・作品の星図・ロゴの O）', async () => {
+  it('ブラックホールはどこも同じ焼いた光の絵（入口・締め・ロゴの O）', async () => {
     /*
       黒い円・光の縁・横線の記号を大きく描いていたころは、星雲の中で日食かレンズのフレアに
       見えた（持ち主の「ブラックホールが違和感」）。入口と締めは光の曲がりを計算して焼いた光の
       絵（GitHub の Organization の顔と同じ作り。src/ui/logo.ts の BLACKHOLE_ART）を、影の半径が
       枠の hole になる大きさで置き、影は黒い円で絵の下に敷く。ロゴの O も同じ絵にした（持ち主の
       「AstLog の o もブラックホールのデザインに合わせて」）——記号の O が残ると、入口の
-      ブラックホールと別のものに見える。作品の星図の真ん中も同じ絵で、揺らさない（hole--still）
+      ブラックホールと別のものに見える
     */
     await seedMember()
     await seedItem({ type: 'app', slug: 'a' })
     const pct = (value: number) => `${Math.round(value * 10000) / 100}%`
-    for (const [path, frame, still] of [
-      ['/', HERO_FRAME, false],
-      ['/contact', CONTACT_FRAME, false],
-      ['/projects', CHART_FRAME, true],
+    for (const [path, frame] of [
+      ['/', HERO_FRAME],
+      ['/contact', CONTACT_FRAME],
     ] as const) {
       const main = mainOf(await okText(path))
-      const opening = still
-        ? '<span class="hole hole--still" aria-hidden="true"'
-        : '<span class="hole" aria-hidden="true"'
-      const from = main.indexOf(opening)
+      const from = main.indexOf('<span class="hole" aria-hidden="true"')
       expect(from, path).toBeGreaterThan(-1)
       const hole = main.slice(from, main.indexOf('</span>', from))
       // 絵の幅は、絵の影の半径が枠の hole になる大きさ。影の円の径は絵の幅に対する割合
@@ -1156,8 +1189,9 @@ describe('締めのページ（Contact）', () => {
     const main = mainOf(await okText('/'))
     expect(main).toContain('class="orbit-grain__dot"')
     expect(main).toContain('<img class="hole__art"')
-    // 天体が無いので、止まった天体の点も無い
+    // 天体が無いので、天体の点も、回る星屑も無い
     expect(main).not.toContain('class="orbit-body')
+    expect(main).not.toContain('class="orbit-spin"')
   })
 
   it('ページに出すのは誘いの1文とメールと GitHub の手。見出しは読み上げのためにだけ置く', async () => {
@@ -1316,7 +1350,7 @@ describe('ページの URL', () => {
     expect(html.match(/aria-current="page"/g)).toHaveLength(1)
   })
 
-  it('入口の軌道図は、入口のページにだけ出る。真ん中はブラックホール、天体には作品の札', async () => {
+  it('入口の軌道図は、入口のページにだけ出る。真ん中はブラックホール。天体に札は添えない', async () => {
     await seedMember()
     await seedItem({ type: 'app', title: 'AppMixer', slug: 'appmixer', year: '2026' })
     await seedItem({ type: 'work', title: '開発工程の効率化', slug: 'dev', year: '2024' })
@@ -1324,20 +1358,25 @@ describe('ページの URL', () => {
     const home = mainOf(await okText('/'))
     expect(home).toContain('<header class="hero hero--orbit">')
     /*
-      重なりの順は DOM の順——軌道の奥の半分、ブラックホール、手前の半分、天体。
-      絵の層は装飾なので読み上げに流さない
+      重なりの順は DOM の順——軌道の奥の半分（帯と線、回る星屑、天体と流れる星）、
+      ブラックホール、手前の半分（同じ順）。天体は回って奥と手前を行き来するので、奥と手前の
+      層に1つずつ置いて半面で切る。絵の層は装飾なので読み上げに流さない
     */
     const system = home.slice(home.indexOf('<div class="system">'))
-    const far = system.indexOf(
+    const layers = [
       '<svg class="system__orbits system__orbits--far" viewBox="0 0 1000 560" aria-hidden="true" focusable="false">',
-    )
-    const hole = system.indexOf('<span class="hole" aria-hidden="true"')
-    const near = system.indexOf('<svg class="system__orbits system__orbits--near"')
-    const bodies = system.indexOf('<svg class="system__bodies"')
-    expect(far).toBeGreaterThan(-1)
-    expect(hole).toBeGreaterThan(far)
-    expect(near).toBeGreaterThan(hole)
-    expect(bodies).toBeGreaterThan(near)
+      '<svg class="system__stardust system__stardust--far"',
+      '<svg class="system__motion system__motion--far"',
+      '<span class="hole" aria-hidden="true"',
+      '<svg class="system__orbits system__orbits--near"',
+      '<svg class="system__stardust system__stardust--near"',
+      '<svg class="system__motion system__motion--near"',
+    ].map((tag) => system.indexOf(tag))
+    expect(layers[0]).toBeGreaterThan(-1)
+    for (let i = 1; i < layers.length; i += 1) {
+      expect(layers[i], `${i} 枚目`).toBeGreaterThan(layers[i - 1] ?? 0)
+    }
+    const [far = 0, , farMotion = 0, hole = 0, near = 0, nearDust = 0, nearMotion = 0] = layers
     /*
       線は奥から手前へ続けて濃くなる坂を読む（層ごとに id を分けたグラデーション）
     */
@@ -1345,28 +1384,34 @@ describe('ページの URL', () => {
       '<linearGradient id="system-far-depth" gradientUnits="userSpaceOnUse"',
     )
     expect(system.slice(far, hole)).toContain('stroke="url(#system-far-depth)"')
-    expect(system.slice(near, bodies)).toContain('stroke="url(#system-near-depth)"')
+    expect(system.slice(near, nearDust)).toContain('stroke="url(#system-near-depth)"')
+    // 天体は動く層にだけ居る（止まった天体だけの層は無い）
+    expect(system).not.toContain('system__bodies')
+    expect(system.slice(farMotion, hole)).toContain('class="orbit-body orbit-body--app"')
+    expect(system.slice(nearMotion)).toContain('class="orbit-body orbit-body--app"')
     // 地の色の縁取りは敷かない（光を締めたので線はそのまま見える。縁取りは光を黒い筋で切った）
     expect(system).not.toContain('orbit__casing')
     // レーダー（走査線・波紋・走査の時刻）はやめた
     expect(home).not.toMatch(/system__beam|orbit-ring|--at:/)
-    // 作品1つに天体1つ。個人開発は点、業務は輪
-    expect(home.match(/class="orbit-body orbit-body--app"/g)).toHaveLength(1)
-    expect(home.match(/class="orbit-body orbit-body--work"/g)).toHaveLength(1)
+    // 作品1つに天体1つ（奥と手前の層に1つずつ）。個人開発は光、業務は輪のある光
+    expect(home.match(/class="orbit-body orbit-body--app"/g)).toHaveLength(1 * 2)
+    expect(home.match(/class="orbit-body orbit-body--work"/g)).toHaveLength(1 * 2)
     /*
-      札は作品のページへのリンクで、一覧と同じ番号（一覧の並び: 年の新しい順）。
-      天体の横に見えるのは番号だけで、名前は札の中（重ねたときと選んだときに見える。
-      読み上げとリンクの名前にはいつも入る）。番号の順に並べる
+      天体は中心から外へ溶ける光（放射の坂で塗った円）。縁のくっきりした白い点（長さ0の線の
+      丸い線端）は、軌道を回る平らな丸い点に見えた（持ち主の「軌道の丸い点が違和感」）
     */
-    const labels = system.slice(system.indexOf('<ol class="system__labels"'))
-    expect(labels).toContain('<ol class="system__labels" aria-label="つくったもの">')
-    expect(labels).toContain(
-      '<a href="/apps/item/appmixer"><span class="system__number">01</span><span class="system__name" lang="en">AppMixer</span></a>',
-    )
-    expect(labels).toContain(
-      '<a href="/works/item/dev"><span class="system__number">02</span><span class="system__name">開発工程の効率化</span></a>',
-    )
-    expect(labels.indexOf('>01<')).toBeLessThan(labels.indexOf('>02<'))
+    expect(
+      home.match(
+        /<circle class="orbit-body__core" r="[\d.]+" fill="url\(#system-(far|near)-body-core\)"/g,
+      ),
+    ).toHaveLength(2 * 2)
+    expect(home).not.toContain('orbit-body__dot')
+    /*
+      天体に作品の番号の札（作品のページへのリンク）は添えない（持ち主の「いらない」）。図は
+      全部飾りで、リンクを持たない。作品へは「一覧で見る →」から
+    */
+    expect(system).not.toMatch(/system__(labels|label|number|name)/)
+    expect(system.slice(0, system.indexOf('</div>'))).not.toContain('<a ')
     /*
       img はブラックホールの焼いた光の絵の1枚だけ（飾りなので alt は空）。軌道と天体は
       ページに直に描く SVG で、色は app.css が --accent と --ink から敷くので、**見た目
@@ -1391,7 +1436,7 @@ describe('ページの URL', () => {
     expect(await okText('/members/okazaki')).not.toContain('class="system"')
   })
 
-  it('作品が1件も無いサイトの入口は、軌道も天体も札も無くブラックホールだけ', async () => {
+  it('作品が1件も無いサイトの入口は、軌道も天体も無くブラックホールだけ', async () => {
     await seedMember()
 
     const home = mainOf(await okText('/'))
@@ -1399,7 +1444,6 @@ describe('ページの URL', () => {
     expect(home).toContain('<span class="hole" aria-hidden="true"')
     expect(home).not.toContain('class="orbit ')
     expect(home).not.toContain('class="orbit-body')
-    expect(home).not.toContain('system__labels')
     // 一覧への1本と件数も出さない。数える作品が無い
     expect(home).not.toContain('class="cta"')
     expect(home).not.toContain('class="tally"')
@@ -1676,7 +1720,7 @@ describe('作品1件の恒久リンク', () => {
     /*
       以前は1画面2件で /projects/2 … に割っていた。いまは全件が1ページに並び、
       作品のページの「← 一覧に戻る」はその行（#item-<slug>）へ戻る。番号は一覧の
-      並びで、入口の軌道図の札と同じ番号
+      並び
     */
     for (const [index, title] of ['A', 'B', 'C', 'D', 'E'].entries()) {
       await seedItem({ title, slug: title.toLowerCase(), sortOrder: (index + 1) * 10 })
@@ -1696,9 +1740,9 @@ describe('作品1件の恒久リンク', () => {
     expect(html).not.toContain('card--lean')
   })
 
-  it('絞り込んでも行の番号は絞り込む前の並びのまま。入口の札と同じ番号で結ぶ', async () => {
+  it('絞り込んでも行の番号は絞り込む前の並びのまま。同じ作品はどの一覧でも同じ番号', async () => {
     /*
-      絞り込んだ行を 01 から数え直していたころ、入口の札で 03 の作品が、業務だけに
+      絞り込んだ行を 01 から数え直していたころ、すべての一覧で 03 の作品が、業務だけに
       絞った一覧では 01 になっていた
     */
     await seedMember()
@@ -1723,9 +1767,8 @@ describe('作品1件の恒久リンク', () => {
     const apps = mainOf(await okText('/projects?kind=app'))
     expect(numberOf(apps, 'a')).toBe('01')
     expect(numberOf(apps, 'c')).toBe('03')
-    // 入口の札も同じ番号
-    const top = mainOf(await okText('/'))
-    expect(top).toMatch(/href="\/works\/item\/d"><span class="system__number">04<\/span>/)
+    // 絞り込まない一覧でも同じ番号
+    expect(numberOf(mainOf(await okText('/projects')), 'd')).toBe('04')
   })
 
   it('画像のある作品の行にはサムネイル。飾りなので名前を持たず、遅延読み込み', async () => {
@@ -1785,7 +1828,7 @@ describe('作品1件の恒久リンク', () => {
     for (const path of ['/projects', '/all', '/apps/item/appmixer']) {
       expect((await okText(path)).split(name).length - 1, path).toBe(1)
     }
-    // 入口の軌道図の札には付けない（小さな札を大きな見出しへ引き伸ばさない）
+    // 入口には付けない（入口に作品の題は無い）
     expect(await okText('/')).not.toContain(name)
   })
 
@@ -1853,7 +1896,7 @@ describe('作品1件の恒久リンク', () => {
     expect(main).toContain('<div class="bio"><p>音を配る常駐アプリ。</p></div>')
     expect(main).not.toContain('class="more"')
     expect(main).toContain(
-      '<div class="story" id="story"><div class="head head--sub"><h2>Story</h2></div><div class="bio"><p>背景の段落。</p><p>結果の段落。</p></div></div>',
+      '<div class="story" id="story"><div class="head head--sub"><h2>Story</h2></div><div class="story-parts"><div class="bio"><p>背景の段落。</p><p>結果の段落。</p></div></div></div>',
     )
     // 本文は説明・画像・行き先（.detail）のあと
     expect(main.indexOf('id="story"')).toBeGreaterThan(main.indexOf('class="detail'))
@@ -1863,15 +1906,14 @@ describe('作品1件の恒久リンク', () => {
     expect(html).toContain('<meta name="description" content="音を配る常駐アプリ。"/>')
   })
 
-  it('画像も本文も無ければ、figure も本文の小節も出さず、画像の位置に星図を置く', async () => {
+  it('画像も本文も無ければ、figure も本文の小節も出さない。代わりの絵も置かない', async () => {
     await seedItem({ title: 'AppMixer', slug: 'appmixer', summary: '音を配る常駐アプリ。' })
 
     const html = await okText('/apps/item/appmixer')
     const main = mainOf(html)
-    // 画像と同じ組み方（900 以上は文の列の横。app.css の .detail--chart）で、絵は星図
-    expect(main).toContain(
-      '<div class="detail detail--chart"><span class="chart" aria-hidden="true"',
-    )
+    // 文の列だけ（前は画像の位置に入口の軌道図を縮めた星図を置いていた。持ち主の「開くとまだある」）
+    expect(main).toContain('<div class="detail"><div class="detail__text">')
+    expect(main).not.toMatch(/class="(chart|hole|orbit)/)
     expect(main).not.toContain('<figure')
     expect(main).toContain('<div class="bio"><p>音を配る常駐アプリ。</p></div>')
     expect(main).not.toContain('id="story"')
@@ -1955,8 +1997,8 @@ describe('作品の画像の見せ方', () => {
     expect(list).toContain(
       '<span class="entry__thumb" aria-hidden="true"><img src="/images/items/face-aaaaaaaa.png" alt="" loading="lazy" decoding="async"/></span>',
     )
-    // 画像があるので星図は置かない
-    expect(list).not.toContain('entry__chart')
+    // 一覧の行に星図は置かない（画像の有無によらず）
+    expect(list).not.toContain('class="chart')
   })
 
   it('2枚以上なら帯に見せる順で並べ、構造化データの image も同じ並び。寸法の分からない画像は寸法を名乗らない', async () => {
@@ -2168,7 +2210,7 @@ describe('作品の本文（Story）', () => {
 
     const whole = mainOf(await okText('/all'))
     expect(whole).toContain(
-      '<div class="stories"><div><div class="head head--sub"><h3>AppMixer</h3><span class="note">Story</span></div><div class="bio"><p>背景の段落です。</p>',
+      '<div class="stories"><div><div class="head head--sub"><h3>AppMixer</h3><span class="note">Story</span></div><div class="story-parts"><div class="bio"><p>背景の段落です。</p>',
     )
     // 一覧の行のあと（行の中には入れない。行は面ごと作品のページへのリンク）
     expect(whole.indexOf('class="entries"')).toBeGreaterThan(-1)
@@ -2177,6 +2219,86 @@ describe('作品の本文（Story）', () => {
     expect(whole).not.toContain('<h3>AllTasks</h3>')
     // ページごとの一覧には出さない（本文は作品のページの小節）
     expect(mainOf(await okText('/projects'))).not.toContain('class="stories"')
+  })
+
+  /*
+    本文のテンプレート（src/domain.ts の STORY_SECTIONS）。個人開発も業務も同じ欄で、
+    Story に決まった順で英語の小見出しを付けて出す（持ち主の「個人開発と業務で内容を
+    統一するテンプレート」）。テンプレートより前に書いた本文（body）は見出しなしで先頭
+  */
+  const headingsOf = (html: string, level: 3 | 4) =>
+    [
+      ...html.matchAll(
+        new RegExp(`<h${level} class="side-head" lang="en">(\\w+)</h${level}>`, 'g'),
+      ),
+    ].map((match) => match[1])
+
+  it('テンプレートの欄は決まった順に小見出し（h3）を付けて出す。空の欄は出さない。区分によらず同じ形', async () => {
+    for (const [type, slug] of [
+      ['app', 'mixer'],
+      ['work', 'support'],
+    ] as const) {
+      await seedItem({
+        type,
+        title: slug,
+        slug,
+        storyResults: '成果の段落です。',
+        storyBackground: '背景の1段落目です。\n\n背景の2段落目です。',
+        storyHighlights: '  \n\n ',
+        storyApproach: '取り組みの段落です。',
+        sortOrder: type === 'app' ? 10 : 20,
+      })
+    }
+    const pages = await Promise.all(
+      ['/apps/item/mixer', '/works/item/support'].map(async (path) => mainOf(await okText(path))),
+    )
+    for (const main of pages) {
+      const story = main.slice(main.indexOf('<div class="story" id="story">'))
+      // 書いた欄の順ではなく、テンプレートの順。空白だけの欄（工夫）は出さない
+      expect(headingsOf(story, 3)).toEqual(['BACKGROUND', 'APPROACH', 'RESULTS'])
+      expect(story).toContain(
+        '<div class="story-parts"><div><h3 class="side-head" lang="en">BACKGROUND</h3><div class="bio"><p>背景の1段落目です。</p><p>背景の2段落目です。</p></div></div>',
+      )
+    }
+    // 個人開発と業務で、Story の形は1字も違わない
+    const storyOf = (main: string) => main.slice(main.indexOf('<div class="story" id="story">'))
+    expect(storyOf(pages[0] ?? '')).toBe(storyOf(pages[1] ?? ''))
+  })
+
+  it('テンプレートより前の本文は、見出しなしで先頭。テンプレートの欄だけでも小節と #story が付く', async () => {
+    await seedItem({
+      title: 'AppMixer',
+      slug: 'appmixer',
+      body: '前に書いた本文です。',
+      storyBackground: '背景の段落です。',
+      sortOrder: 10,
+    })
+    await seedItem({
+      title: 'AllTasks',
+      slug: 'alltasks',
+      storyResults: '成果の段落です。',
+      sortOrder: 20,
+    })
+    expect(mainOf(await okText('/apps/item/appmixer'))).toContain(
+      '<div class="story-parts"><div class="bio"><p>前に書いた本文です。</p></div><div><h3 class="side-head" lang="en">BACKGROUND</h3>',
+    )
+    // 前の本文の画面（…/story）は、テンプレートの欄だけの作品でも小節へ
+    const told = await get('/apps/item/alltasks/story')
+    expect(told.status).toBe(301)
+    expect(told.headers.get('location')).toBe('/apps/item/alltasks#story')
+  })
+
+  it('全体ページでは、テンプレートの欄の小見出しは作品名（h3）の下の h4', async () => {
+    await seedItem({
+      title: 'AppMixer',
+      slug: 'appmixer',
+      storyBackground: '背景の段落です。',
+      storyResults: '成果の段落です。',
+    })
+    const whole = mainOf(await okText('/all'))
+    const stories = whole.slice(whole.indexOf('<div class="stories">'))
+    expect(headingsOf(stories, 4)).toEqual(['BACKGROUND', 'RESULTS'])
+    expect(headingsOf(stories, 3)).toEqual([])
   })
 })
 
@@ -3597,139 +3719,33 @@ describe('前の URL', () => {
 })
 
 /*
-  作品の星図（components.tsx の OrbitChart）。画像の無い作品の絵で、入口の軌道図でその
-  作品が載っている天体を灯す——入口の札・一覧の行・作品のページが同じ天体でつながる。
-  天体の位置は件数だけで決まるので、札の位置から入口の天体（HERO_FRAME の何番目か）を引き、
-  星図が同じ番目の天体を灯しているかを見る
+  作品の星図（入口の軌道図を縮めて、その作品の天体を灯した図）は、画像の無い作品の絵として
+  一覧の行と作品のページに置いていたが、どちらからも外した（持ち主の「なんか違う」「開くと
+  まだある」）。画像の無い作品は、一覧では字だけの行、作品のページでは文の列だけ
 */
-describe('作品の星図', () => {
-  const at = (value: number, whole: number) => Math.round((value / whole) * 10000) / 100
-  // 入口の札が付いている天体（HERO_FRAME の bodies の何番目か）。札の位置（--x / --y）から引く
-  const landingBody = (html: string, href: string, counts: KindCounts) => {
-    const style = html.match(
-      new RegExp(`style="--x:([\\d.]+)%;--y:([\\d.]+)%;[^"]*"><a href="${href}"`),
-    )
-    return orbitMap(counts, HERO_FRAME).bodies.findIndex(
-      (body) =>
-        at(body.x, HERO_FRAME.width) === Number(style?.[1]) &&
-        at(body.y, HERO_FRAME.height) === Number(style?.[2]),
-    )
-  }
-  // 星図が灯している天体（星図の中の天体の並びでの位置。灯していなければ -1）
-  const litBody = (chart: string) =>
-    [...chart.matchAll(/<g class="orbit-body orbit-body--\w+( chart__lit)?"/g)].findIndex(
-      (match) => match[1],
-    )
+describe('作品の星図を置かない', () => {
   // 一覧の行（id="item-<slug>"）の中
   const rowOf = (html: string, slug: string) =>
     html.split(`id="item-${slug}"`)[1]?.split('</article>')[0] ?? ''
 
-  it('一覧の画像の無い行は、入口でその作品が載っている天体を灯す。絞り込んでも同じ天体', async () => {
-    /*
-      天体は区分の中の順で作品と結ぶ。メンバーで絞った行だけで数えると、d（区分 app の
-      3つ目）が絞った行の中では2つ目になり、別の天体を灯す
-    */
-    const okazaki = await seedMember()
-    const futari = await seedMember({ slug: 'futari', name: '二人目', sortOrder: 20 })
-    const rows: [string, 'app' | 'work', number][] = [
-      ['a', 'app', okazaki.id],
-      ['b', 'app', futari.id],
-      ['c', 'work', okazaki.id],
-      ['d', 'app', okazaki.id],
-      ['e', 'work', futari.id],
-    ]
-    for (const [index, [slug, type, memberId]] of rows.entries()) {
-      await seedItem({
-        title: slug.toUpperCase(),
-        slug,
-        type,
-        memberId,
-        sortOrder: (index + 1) * 10,
-      })
-    }
-    const counts: KindCounts = { app: 3, work: 2 }
-    const top = mainOf(await okText('/'))
-    const all = mainOf(await okText('/projects'))
-    const bodies = new Set<number>()
-    for (const [slug, type] of rows) {
-      const body = landingBody(top, `/${type === 'app' ? 'apps' : 'works'}/item/${slug}`, counts)
-      expect(body, slug).toBeGreaterThanOrEqual(0)
-      expect(litBody(rowOf(all, slug)), slug).toBe(body)
-      bodies.add(body)
-    }
-    // 行ごとに別の天体
-    expect(bodies.size).toBe(rows.length)
-
-    const mine = mainOf(await okText('/projects?member=okazaki'))
-    for (const slug of ['a', 'c', 'd']) {
-      expect(litBody(rowOf(mine, slug)), slug).toBe(litBody(rowOf(all, slug)))
-    }
-    const works = mainOf(await okText('/projects?kind=work'))
-    for (const slug of ['c', 'e']) {
-      expect(litBody(rowOf(works, slug)), slug).toBe(litBody(rowOf(all, slug)))
-    }
-    // 星図ごとにグラデーションの名前を分ける（同じ名前が2つあると、片方の線が消える）
-    const ids = [...all.matchAll(/<linearGradient id="([^"]+)"/g)].map((match) => match[1])
-    expect(ids.length).toBeGreaterThan(rows.length)
-    expect(new Set(ids).size).toBe(ids.length)
-  })
-
-  it('作品のページの星図は一覧の行と同じ天体を灯し、左上に一覧の番号を添える', async () => {
-    await seedMember()
-    await seedItem({ title: 'A', slug: 'a', sortOrder: 10 })
-    await seedItem({ title: 'B', slug: 'b', type: 'work', sortOrder: 20 })
-    const list = mainOf(await okText('/projects'))
-    for (const [slug, path, number] of [
-      ['a', '/apps/item/a', '01'],
-      ['b', '/works/item/b', '02'],
-    ] as const) {
-      const main = mainOf(await okText(path))
-      const chart = main.split('<span class="chart"')[1] ?? ''
-      expect(litBody(chart), slug).toBeGreaterThanOrEqual(0)
-      expect(litBody(chart), slug).toBe(litBody(rowOf(list, slug)))
-      expect(chart, slug).toContain(`<span class="chart__number">${number}</span>`)
-    }
-    // 一覧の行の星図は番号を持たない（行の頭に同じ番号がある）
-    expect(list).toContain('class="chart entry__chart"')
-    expect(list).not.toContain('chart__number')
-  })
-
-  it('止まった図。灯すのは天体1つとその軌道だけで、真ん中は揺らさないブラックホール', async () => {
-    await seedItem({ title: 'A', slug: 'a' })
-    await seedItem({ title: 'B', slug: 'b', type: 'work', sortOrder: 20 })
-    const chart = rowOf(mainOf(await okText('/projects')), 'a')
-    /*
-      真ん中は入口と同じ絵（ロゴの O とも同じ）。一覧には星図が行の数だけ並ぶので、光は
-      揺らさない（hole--still。app.css の「動き続ける」が外す）
-    */
-    expect(chart).toContain('<span class="hole hole--still" aria-hidden="true"')
-    expect(chart).toContain(`<img class="hole__art" src="${BLACKHOLE_ART.src}"`)
-    expect(chart).not.toMatch(/orbit-mover|orbit-flow|orbit-grain/)
-    expect(chart.match(/<g class="orbit-body[^"]* chart__lit"/g)).toHaveLength(1)
-    // 軌道は奥と手前の半分に分けて描くので、灯す線は2本（同じ軌道の2つの半分）。にじみも同じ
-    expect(chart.match(/<path class="orbit chart__lit"/g)).toHaveLength(2)
-    expect(chart.match(/<path class="orbit__glow chart__lit"/g)).toHaveLength(2)
-    // 星雲は敷かない（一覧に行の数だけ並ぶ図で、灯した天体を指すのが役目）
-    expect(chart).not.toContain('class="nebula"')
-    // 飾り。読み上げには何も言わない
-    expect(chart).toContain('<span class="chart entry__chart" aria-hidden="true"')
-  })
-
-  it('画像のある作品は画像だけ。星図は置かない（絵は1つ）', async () => {
+  it('画像のある作品は画像だけ。画像の無い作品は、一覧にも作品のページにも代わりの絵を置かない', async () => {
     await seedItem({
       title: 'A',
       slug: 'a',
       imageUrl: '/images/items/a-ab12.png',
       imageAlt: '画面',
     })
-    await seedItem({ title: 'B', slug: 'b', sortOrder: 20 })
+    await seedItem({ title: 'B', slug: 'b', type: 'work', sortOrder: 20 })
     const list = mainOf(await okText('/projects'))
     expect(rowOf(list, 'a')).toContain('class="entry__thumb"')
-    expect(rowOf(list, 'a')).not.toContain('class="chart')
-    expect(rowOf(list, 'b')).toContain('class="chart entry__chart"')
-    const page = mainOf(await okText('/apps/item/a'))
-    expect(page).toContain('<div class="detail detail--shot">')
-    expect(page).not.toContain('class="chart')
+    expect(rowOf(list, 'b')).not.toMatch(/class="(entry__thumb|chart)/)
+    const shot = mainOf(await okText('/apps/item/a'))
+    expect(shot).toContain('<div class="detail detail--shot">')
+    const bare = mainOf(await okText('/works/item/b'))
+    expect(bare).toContain('<div class="detail"><div class="detail__text">')
+    for (const main of [list, shot, bare, mainOf(await okText('/all'))]) {
+      expect(main).not.toMatch(/class="chart|chart__|detail--chart/)
+    }
   })
 })
 

@@ -435,6 +435,15 @@
   gap: var(--sp-2);
 }
 
+/*
+  本文のテンプレート（items.tsx の StoryFields）。中は見出しと手がかりを持つ欄が4つ積まれる
+  ので、欄と欄のあいだをフォームの欄どうしと同じだけ空ける（--sp-2 では、どの手がかりが
+  どの欄のものか分からない）
+*/
+.fieldset--story {
+  gap: var(--sp-4);
+}
+
 .link-row,
 .metric-row {
   display: grid;

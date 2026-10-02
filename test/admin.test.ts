@@ -4,6 +4,7 @@ import { asc, eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { blockType, MAX_CHARS } from '../src/blocks'
 import * as schema from '../src/db/schema'
+import { STORY_SECTIONS } from '../src/domain'
 import { yearFrom } from '../src/lib/format'
 import { db, form, get, okText, resetDb, seedItem, seedMember, signIn, touch } from './helpers'
 import { avif, file, gif, heic, jpeg, png, svg, webp } from './images'
@@ -99,6 +100,22 @@ describe('認証', () => {
     const logout = html.slice(html.indexOf('action="/admin/logout"'))
     expect(logout.slice(0, logout.indexOf('</form>'))).toContain('>ログアウト</button>')
     expect(html).not.toContain('Sign out')
+  })
+
+  it('一覧の「追加」の手も日本語。メンバーの削除の手はメンバーと言う', async () => {
+    // 「＋ Add item」「＋ Add member」が、空の一覧の「＋ 最初の項目を追加」と別の言葉で並んでいた
+    const member = await seedMember()
+    await seedItem()
+    const signed = await signIn()
+    const items = await (await signed('/admin/items?type=app')).text()
+    expect(items).toContain('＋ 項目を追加')
+    const members = await (await signed('/admin/members')).text()
+    expect(members).toContain('＋ メンバーを追加')
+    expect(items + members).not.toMatch(/Add (item|member)/)
+    // 共通の既定の「この項目を削除…」は作品の言い方。メンバーに「項目」は合わない
+    const edit = await (await signed(`/admin/members/${member.id}/edit`)).text()
+    expect(edit).toContain('このメンバーを削除…')
+    expect(edit).not.toContain('この項目を削除')
   })
 })
 
@@ -323,7 +340,7 @@ describe('Items — 本文と画像', () => {
     // 説明の段落のあとに、本文の小節が同じ段落の部品（Note）で出る
     expect(html).toContain('<div class="bio"><p>音量を分ける常駐アプリ。</p></div>')
     expect(html).toContain(
-      '<div class="story" id="story"><div class="head head--sub"><h2>Story</h2></div><div class="bio"><p>背景と結果の段落です。</p></div></div>',
+      '<div class="story" id="story"><div class="head head--sub"><h2>Story</h2></div><div class="story-parts"><div class="bio"><p>背景と結果の段落です。</p></div></div></div>',
     )
   })
 
@@ -500,6 +517,24 @@ describe('Items — 本文と画像', () => {
     expect(await itemKeys()).toEqual([])
   })
 
+  it('作品のページの小節の形は区分によらず同じ（テンプレートの欄の小見出しは h3）', async () => {
+    const signed = await signIn()
+    await signed('/admin/items', {
+      method: 'POST',
+      body: form({
+        type: 'work',
+        title: '問い合わせ対応',
+        slug: 'support',
+        summary: '説明。',
+        storyApproach: '資料を整理しました。',
+        published: '1',
+      }),
+    })
+    expect(await okText('/works/item/support')).toContain(
+      '<div class="story-parts"><div><h3 class="side-head" lang="en">APPROACH</h3><div class="bio"><p>資料を整理しました。</p></div></div></div>',
+    )
+  })
+
   it('本文の出る場所と画像の欄は書く前に見える。フォームは画像を送れる形', async () => {
     const signed = await signIn()
     const html = await (await signed('/admin/items/new?type=app')).text()
@@ -509,6 +544,116 @@ describe('Items — 本文と画像', () => {
     expect(html).toContain('name="imageAlt"')
     // 外す画像が無い作品には「画像を外す」を出さない
     expect(html).not.toContain('画像を外す')
+  })
+})
+
+/*
+  作品の本文のテンプレート（src/domain.ts の STORY_SECTIONS。背景・取り組み・工夫・成果）。
+  個人開発も業務も同じ欄・同じ順で書き、作品のページの Story にも同じ小見出しで出る
+  （持ち主の「個人開発と業務で内容を統一するテンプレート」）。実績値の欄もどちらの区分にも出す
+*/
+describe('Items — 本文のテンプレート', () => {
+  const storyFields = (html: string) =>
+    [...html.matchAll(/<textarea class="[^"]*" name="(story\w+)"/g)].map((match) => match[1])
+
+  it('個人開発も業務も、同じテンプレートの欄と実績値の欄を同じ順で出す', async () => {
+    const signed = await signIn()
+    for (const type of ['app', 'work']) {
+      const html = await (await signed(`/admin/items/new?type=${type}`)).text()
+      expect(storyFields(html), type).toEqual(STORY_SECTIONS.map((section) => section.column))
+      for (const section of STORY_SECTIONS) {
+        expect(html, type).toContain(`<span class="field__label">${section.label}</span>`)
+        expect(html, type).toContain(`作品のページの見出しは ${section.heading}`)
+      }
+      expect(html, type).toContain('name="metricValue"')
+      // テンプレートより前の本文の欄は、中身の無い作品（新しい作品）には出さない
+      expect(html, type).not.toContain('name="body"')
+    }
+  })
+
+  it('欄はそれぞれの列に入る。弾いたときは書いた内容を欄に返す', async () => {
+    const signed = await signIn()
+    const values = {
+      type: 'app',
+      title: 'AppMixer',
+      slug: 'appmixer',
+      storyBackground: '音量を分けたかったからです。\n\n既存の道具では足りませんでした。',
+      storyResults: 'Mac App Store で配布しています。',
+    }
+    // 公開には説明が要る（公開の関門）。弾いても、書いた欄は消さない
+    const blocked = await signed('/admin/items', {
+      method: 'POST',
+      body: form({ ...values, published: '1' }),
+    })
+    expect(blocked.status).toBe(400)
+    const again = await blocked.text()
+    expect(again).toContain('音量を分けたかったからです。')
+    expect(again).toContain('Mac App Store で配布しています。')
+
+    const saved = await signed('/admin/items', { method: 'POST', body: form(values) })
+    expect(saved.status).toBe(303)
+    const [row] = await db().select().from(schema.items)
+    expect(row?.storyBackground).toBe(values.storyBackground)
+    expect(row?.storyApproach).toBe('')
+    expect(row?.storyHighlights).toBe('')
+    expect(row?.storyResults).toBe(values.storyResults)
+    expect(row?.body).toBe('')
+  })
+
+  it('前の本文の欄は中身があるときだけ出す。空にして保存すれば、Story からも欄からも消える', async () => {
+    const item = await seedItem({ slug: 'legacy', summary: '説明。', body: '前に書いた本文です。' })
+    const signed = await signIn()
+    const edit = await (await signed(`/admin/items/${item.id}/edit`)).text()
+    expect(edit).toContain('前の本文（見出しなし）')
+    expect(edit).toContain('前に書いた本文です。')
+
+    const save = (body: string) =>
+      signed(`/admin/items/${item.id}`, {
+        method: 'POST',
+        body: form({
+          type: 'app',
+          title: 'AppMixer',
+          slug: 'legacy',
+          summary: '説明。',
+          body,
+          storyBackground: '背景の段落です。',
+          published: '1',
+        }),
+      })
+    // 前の本文が先、テンプレートの欄が続く
+    expect((await save('前に書いた本文です。')).status).toBe(303)
+    expect(await okText('/apps/item/legacy')).toContain(
+      '<div class="story-parts"><div class="bio"><p>前に書いた本文です。</p></div><div><h3 class="side-head" lang="en">BACKGROUND</h3>',
+    )
+
+    expect((await save('')).status).toBe(303)
+    const [row] = await db().select().from(schema.items)
+    expect(row?.body).toBe('')
+    expect(await (await signed(`/admin/items/${item.id}/edit`)).text()).not.toContain('name="body"')
+    const page = await okText('/apps/item/legacy')
+    expect(page).not.toContain('前に書いた本文です。')
+    expect(page).toContain('背景の段落です。')
+  })
+
+  it('個人開発の実績値も、一覧の行と作品のページに出る', async () => {
+    const signed = await signIn()
+    await signed('/admin/items', {
+      method: 'POST',
+      body: form({
+        type: 'app',
+        title: 'AppMixer',
+        slug: 'appmixer',
+        summary: '説明。',
+        metricValue: '1,200',
+        metricUnit: 'DL',
+        metricNote: '公開から3か月',
+        published: '1',
+      }),
+    })
+    const metric =
+      '<div class="metric"><span class="metric__value">1,200</span><span class="metric__unit">DL</span><span class="metric__note">公開から3か月</span></div>'
+    expect(await okText('/projects')).toContain(metric)
+    expect(await okText('/apps/item/appmixer')).toContain(metric)
   })
 })
 
