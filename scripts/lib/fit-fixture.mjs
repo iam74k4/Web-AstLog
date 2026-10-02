@@ -272,6 +272,18 @@ function storyBody(shape) {
   return paragraphed(900, 6, shape, 2)
 }
 
+/*
+  本文のテンプレートの欄（src/domain.ts の STORY_SECTIONS の列）。4つとも埋めた姿と、
+  1つだけの姿。欄ごとに2段落・300 字（小見出しと段落の組が縦に4つ積まれる）
+*/
+const STORY_COLUMNS = ['story_background', 'story_approach', 'story_highlights', 'story_results']
+const noStory = Object.fromEntries(STORY_COLUMNS.map((column) => [column, '']))
+function storySections(shape, count = STORY_COLUMNS.length) {
+  return Object.fromEntries(
+    STORY_COLUMNS.map((column, i) => [column, i < count ? paragraphed(300, 2, shape, 3 + i) : '']),
+  )
+}
+
 function itemRows() {
   const heavy = (row) => ({
     member_id: 1,
@@ -280,6 +292,7 @@ function itemRows() {
     year: '2024 — 現在',
     summary: text(MAX_CHARS.itemSummary, row.id),
     body: '',
+    ...noStory,
     image_url: '/assets/avatar.png',
     image_alt: '作品の画面',
     image_width: 144,
@@ -293,7 +306,11 @@ function itemRows() {
     ...row,
   })
   return [
-    // いちばん重い行が2件（画像・実績値・タグ・リンク・担当者名が全部そろう）
+    /*
+      いちばん重い行が2件（画像・実績値・タグ・リンク・担当者名が全部そろう）。本文は
+      1件がテンプレートより前の本文とテンプレートの4つの欄の両方、もう1件が前の本文と
+      テンプレートの欄1つ
+    */
     heavy({
       id: 1,
       type: 'app',
@@ -302,6 +319,7 @@ function itemRows() {
       slug: 'fixture-app',
       year: '2026',
       body: storyBody('even'),
+      ...storySections('even'),
       sort_order: 10,
     }),
     heavy({
@@ -314,9 +332,10 @@ function itemRows() {
       year: '2026',
       member_id: 2,
       body: storyBody('lump'),
+      ...storySections('lump', 1),
       sort_order: 20,
     }),
-    // 画像のある行と無い行
+    // 画像のある行と無い行。画像のある行の本文はテンプレートの欄だけ（これから書く本文の形）
     heavy({
       id: 3,
       type: 'work',
@@ -324,6 +343,7 @@ function itemRows() {
       title: 'Fixture Work',
       slug: 'fixture-work',
       year: '2025',
+      ...storySections('lump'),
       sort_order: 30,
     }),
     heavy({

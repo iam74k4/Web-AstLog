@@ -131,16 +131,27 @@ export const items = sqliteTable(
     // 「何であるか。何をしたか。」の2文。常体（目録の文。本文 body は「です・ます」）
     summary: text('summary').notNull().default(''),
     /*
-      作品ページの本文。背景・やったこと・結果を段落で。
-      一覧には出さない——出るのは作品のページの説明の下の小節「Story」（#story）
-      だけで、空なら（段落が1つも無ければ）その小節を作らない（src/blocks.ts の
-      itemStory）。一覧の行の説明（summary）は目録の2文で、作品のページの頭は
-      行を開いたもの。
+      テンプレート（下の story_*）より前に書いた本文。作品のページの説明の下の小節
+      「Story」（#story）の頭に、見出しの無い段落として出る（src/blocks.ts の itemStory）。
+      一覧には出さない。管理画面は中身があるときだけ欄を出す——新しく書く本文は
+      テンプレートの欄へ入れ、ここは欄へ移して空にすれば消える。
 
       既にある行は '' のまま（NOT NULL に定数の既定値なので ALTER で入る）。
       本人の作品の中身をこちらで書いて埋めない。
     */
     body: text('body').notNull().default(''),
+    /*
+      本文のテンプレートの欄（src/domain.ts の STORY_SECTIONS。背景・取り組み・工夫・成果）。
+      個人開発も業務も同じ欄で、Story に決まった順で小見出しを付けて出る（中身の無い欄は
+      出ない）。どれも「です・ます」の段落で、空行で段落を分ける。一覧の行の説明（summary）は
+      目録の2文で、作品のページの頭は行を開いたもの。
+
+      既にある行は '' のまま（body と同じく ALTER で入る）。
+    */
+    storyBackground: text('story_background').notNull().default(''),
+    storyApproach: text('story_approach').notNull().default(''),
+    storyHighlights: text('story_highlights').notNull().default(''),
+    storyResults: text('story_results').notNull().default(''),
     /*
       メインの画像（スクリーンショット）。/images/items/<…>（管理画面から KV に上げたもの）か、
       /assets/…（同梱）。作品の顔の1枚で、作品のページ・一覧のサムネイル・共有カードに出る。

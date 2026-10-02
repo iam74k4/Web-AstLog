@@ -1,4 +1,5 @@
-import type { Block, Member } from './db/schema'
+import type { Block, Item, Member } from './db/schema'
+import { STORY_SECTIONS, type StoryColumn, type StoryPart } from './domain'
 import { isSafeUrl, paragraphs, parseLines, parseSkills } from './lib/format'
 
 /*
@@ -100,7 +101,7 @@ export const BLOCK_TYPES = [
   書く場所の上限。どれも「名前」か「目録の1文」の長さで、ページの高さの都合ではない
   （ページは縦にスクロールするので、段落や行の数には上限を置かない）。
 
-    itemTitle       作品名。一覧の行の題・入口の軌道図の札・作品のページの見出し・<title> と
+    itemTitle       作品名。一覧の行の題・作品のページの見出し・<title> と
                     共有カードの題に出る名前。32 字は、行の題が 390 の電話で2行に収まる長さ
     itemSummary     一覧の行の説明（目録の文。「何であるか。何をしたか。」の2文）。行は
                     説明を行数で切らずに全部出すので、長いと一覧が縦に伸びる。2文ぶんの
@@ -403,16 +404,26 @@ export function memberUnits(member: Pick<Member, 'bio' | 'skillsText' | 'careerT
 }
 
 /*
-  作品の本文（items.body）を段落の列に開く。段落が1つでもあれば、作品のページに
-  小節「Story」（#story）が付く。
+  作品の本文を、見出しと段落の塊（src/domain.ts の StoryPart）の並びに開く。塊が1つでも
+  あれば、作品のページに小節「Story」（#story）が付く。
+
+  - テンプレートより前に書いた本文（items.body）は、見出しの無い塊として先頭に
+  - テンプレートの欄（STORY_SECTIONS）は決まった順に、英語の小見出しを付けて続ける
+  - 段落は空行で分ける。空白と空行だけの欄は塊にしない（見出しだけ残さない）
 
   開く式はこの1本——公開ページ（src/routes/public/ の item.tsx と、全体ページの
   blocks.tsx）が小節を出すかどうかを決めるのも、前の本文の URL（…/story）を
-  #story へ送るか作品のページの頭へ送るかを決めるのも、ここを読む。空白と空行だけの
-  本文は0段落で、小節を作らない（見出しだけ残さない）。
+  #story へ送るか作品のページの頭へ送るかを決めるのも、ここを読む。
 */
-export function itemStory(body: string): string[] {
-  return paragraphs(body)
+export function itemStory(item: Pick<Item, 'body' | StoryColumn>): StoryPart[] {
+  const lead = paragraphs(item.body)
+  return [
+    ...(lead.length ? [{ heading: null, paragraphs: lead }] : []),
+    ...STORY_SECTIONS.flatMap((section) => {
+      const texts = paragraphs(item[section.column])
+      return texts.length ? [{ heading: section.heading, paragraphs: texts }] : []
+    }),
+  ]
 }
 
 /*

@@ -27,8 +27,13 @@
     含まないときだけ lang="en" が付き（components.tsx の langOf）、等幅はその
     :lang(en) にだけ掛ける。年と期間は「2024 — 現在」と和文を含む書き方に
     決めた（CLAUDE.md「文言」）ので、等幅にせず数字の幅だけそろえる（tabular-nums）。
+
+    Windows の書体（Consolas）も名指しする。ui-monospace と Mac の名前は Windows の Chrome に
+    無く、素の monospace に落ちる——lang="en" の札は Consolas になるが、番号だけの札（一覧の
+    行の番号・見出しの件数）は日本語のページの等幅（MS ゴシック）になり、細い古い数字で
+    英字の札と別の書体に見えた
   */
-  --font-mono: ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, monospace;
+  --font-mono: ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, Consolas, monospace;
   --font-serif: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', Georgia, serif;
 
   /* 見出しの書体。本文は読みやすさを優先して常に --font-sans */
@@ -145,16 +150,17 @@
     この列より前の画像には無いので、この2つの枠には使わない。使うのは共有カードと、
     高さを決めて幅を絵の比から取る作品のページの帯 .strip）。
 
-    --thumb-ratio は一覧のサムネイルの縦横比。横長に寄せてあるのは、一覧を
-    画像で縦に伸ばさないため——一覧の主役は題と説明で、画像は作品のページで
-    大きく見られる。
+    --thumb-ratio は一覧のサムネイルの縦横比。Mac の画面と同じ 16:10 で、画面の
+    スクリーンショットがそのまま枠いっぱいに収まる（絵は切らない。.entry__thumb）。
+    3:1 の帯に切り抜いていたころは、画面の上の半分だけが部品の途中で切れて見えた
+    （持ち主の「途切れている」）。
 
     --shot-h は作品ページの画像の枠の高さ。絵はこの中に縮めて収める
     （object-fit: contain。切らない）。可変部は幅と高さの小さいほうで、
     背の低い窓ほど小さくなる——ページを開いた最初の画面に、見出しと画像だけで
     なく説明の頭まで入るように。
   */
-  --thumb-ratio: 3 / 1;
+  --thumb-ratio: 16 / 10;
   --shot-h: clamp(120px, min(30vw, 20svh), 280px);
 
   /*
@@ -195,13 +201,9 @@
     --system-tilt は軌道面の画面の中での傾き（orbits.ts の TILT と同じ数。test が
     突き合わせる）。軌道は orbits.ts が傾けて描き、ブラックホールの絵（円盤は軌道と同じ面）は
     ここで同じだけ回す。いまは水平（0deg）。
-
-    --chart-ratio は作品の星図の枠（orbits.ts の CHART_FRAME。締めの星系を縮めたもの）。
-    一覧の画像の枠（--thumb-ratio）とほぼ同じ背の低い横長で、一覧の行の高さがそろう。
   */
   --system-ratio: 1000 / 560;
   --contact-ratio: 1000 / 512;
-  --chart-ratio: 1000 / 320;
   --system-tilt: 0deg;
   /*
     締めの軌道図の幅の上限と、高さの上限（表紙の高さの半分）。星系は枠の幅いっぱいに描くので、
@@ -215,19 +217,15 @@
   /*
     軌道の線と天体。
 
-    線と天体の点の太さは画面の px（vector-effect: non-scaling-stroke）。viewBox の単位で
-    持つと、電話で点が 2px まで潰れた。線は 1px のまま。点は枠の幅に比例する（cqi。
-    業務の天体の輪は viewBox の単位で描くので、点も枠と一緒に伸び縮みしないと、輪との
-    釣り合いが幅で変わる）が、下限と上限で止める。手前の天体ほど大きい（orbits.ts の
-    OrbitBody の scale を掛ける）。
+    線の太さは画面の px（vector-effect: non-scaling-stroke）で、1px のまま。天体（中心から
+    溶ける白い光と、まわりのにじみと、業務の天体の輪）は枠の単位で描き、枠の幅に比例する。
+    手前の天体ほど大きい（奥行きの倍率。回る天体の大きさは transform で変える）。
 
     線はアクセント色。濃さは軌道面の奥から手前へ続けて変わる——手前の端が --orbit-ink、
     奥の端はそれに --orbit-far を掛けた薄さ（奥ほど遠い）。外の軌道ほど淡く、いちばん外側は
-    内側の --orbit-outer 倍（同じ濃さの輪が並ぶと、的のような平らな縞に見えた）。細い芯の
-    下に、同じ坂の淡いにじみ（幅 --orbit-glow-w。点と同じく枠の幅に比例する。濃さ
-    --orbit-glow）を敷く。
-    天体の点のまわりにも外へ消えるにじみ（濃さ --body-halo。色はアクセント。大きさは
-    components.tsx の Bodies）。字は軌道の上に乗せない（番号の札は地を塗る）ので、濃さの
+    内側の --orbit-outer 倍（同じ濃さの輪が並ぶと、的のような平らな縞に見えた）。
+    天体の光のまわりにも外へ消えるにじみ（濃さ --body-halo。色はアクセント。大きさは
+    components.tsx の Bodies）。字は軌道の上に乗せないので、濃さの
     上限は見た目だけで決まり、下限は npm run check:contrast が測る（線が消えるのは改善
     ではない）。
   */
@@ -241,20 +239,21 @@
     濃いと、星屑の円盤よりブラックホールが先に目に入った（持ち主の「主張が強すぎる」）
   */
   --hole-light: 0.72;
-  --stardust-w: clamp(0.5px, 0.13cqi, 1px);
-  --stardust-ink: 0.9;
+  /*
+    星屑の粒の太さと濃さ（components.tsx の Stardust）。星屑は回るのでぼかしを掛けない。
+    ぼかしてにじませていたころと同じ明るさに見えるよう、粒を少し太く濃くしてある
+  */
+  --stardust-w: clamp(0.6px, 0.16cqi, 1.25px);
+  --stardust-ink: 1;
   --stardust-far: 0.35;
-  --orbit-glow: 0.14;
-  --orbit-glow-w: clamp(3px, 0.9cqi, 6px);
-  --orbit-body: clamp(4px, 1.3cqi, 9px);
   --body-halo: 0.55;
 
   /*
     星雲（components.tsx の Nebula。形は orbits.ts の nebulaMap）。雲の4枚（光・雲・筋・塵）の
     濃さ。色は見た目のプリセットごとの3色（--nebula-a / -b / -c。下の「見た目の
     プリセット」）で、モノクロのときも星雲だけは青紫と桃と空色にする（持ち主の「星雲だけ色を
-    付ける」）。字は星雲の上に乗せない（星空の覆いが字の後ろで消す。番号の札は地を
-    塗る）。下限は npm run check:contrast が測る
+    付ける」）。字は星雲の上に乗せない（星空の覆いが字の後ろで消す）。下限は
+    npm run check:contrast が測る
   */
   --nebula-light: 0.3;
   --nebula-cloud: 0.95;
@@ -309,78 +308,52 @@
   );
 
   /*
-    天体の札（.system__label）を天体からずらす量と、札の幅の上限（長い名前は末尾を
-    省く）。src/lib/orbits.ts の LABEL_GAP / LABEL_MAX_WIDTH と同じ数（札の重なりを
-    避ける置き場所は、この量で測ってある）。
-  */
-  --label-dx: 10px;
-  --label-dy: 6px;
-  --label-max: 180px;
+    入口に着いたときの動き（「入口に着いたとき」）。星系が生まれる——星空が灯り（--sky-dur）、
+    ブラックホールが小さな光の点（--ignite-spark）から明るく霞んで --ignite-flare まで広がり、
+    明るさを落としながら縮んで締まる（--ignite-*）。内側の軌道から順に光の線が引かれ
+    （--trace-*。奥と手前の半分をそれぞれ --trace-dur で、外側の軌道ほど --trace-stagger まで
+    遅れる）、帯と星屑が線を追って灯り（--fill-dur）、引き終えた軌道の天体が光の点から閃いて
+    灯る（--birth-*）。星雲は広がった姿から凝って灯る（--condense-*）。件数は軌道を引き終えた
+    ところから（--count-delay）数え上がる。
 
-  /*
-    作品の星図（.chart。components.tsx の OrbitChart）。灯す軌道の坂の濃さ（手前の端が
-    --chart-lit、奥の端はそれに --chart-lit-far を掛けた薄さ。入口の坂と同じ向き）と、
-    ほかの軌道と天体を沈める濃さ（--chart-dim）。灯した天体に重ねる輪の径（--chart-ring。
-    画面の px）と、押せる行にマウスを重ねたとき・選んだときの輪の大きさ（--chart-ring-grow 倍）
+    いちばん遅い動きでも 5 秒以内に止まる（WCAG 2.2.2。test/theme.test.ts が足し算を見る）。
   */
-  --chart-lit: 0.9;
-  --chart-lit-far: 0.45;
-  --chart-dim: 0.45;
-  --chart-ring: 18px;
-  --chart-ring-grow: 1.35;
-
-  /*
-    入口に着いたときの動き（「入口に着いたとき」）。見出しの列が浮かび上がるあいだに、
-    星雲が広がった姿から凝って灯り（--condense-*）、
-    ブラックホールが灯り（--ignite-*。大きく霞んだ姿から、明るさを落としながら縮んで
-    締まる）、軌道と天体が渦を巻いて収まる（--infall-*。--infall-turn だけ回って霞んだ
-    姿から、焦点のまわりへ巻き込まれるように）。番号の札は収まった
-    あとに1つずつ（--label-delay から --stagger ずつ。8つ目より後はまとめて）、件数は
-    回り込みの途中から（--count-delay）数え上がる。
-
-    いちばん遅い札でも 5 秒以内に止まる（WCAG 2.2.2。test/theme.test.ts が足し算を見る）。
-  */
+  --sky-dur: 1400ms;
   --ignite-delay: 150ms;
-  --ignite-dur: 1800ms;
-  --ignite-scale: 1.3;
-  --ignite-blur: 14px;
-  --ignite-glow: 2.4;
-  --condense-delay: 0ms;
-  --condense-dur: 2600ms;
+  --ignite-dur: 2000ms;
+  --ignite-spark: 0.1;
+  --ignite-flare: 1.7;
+  --ignite-blur: 10px;
+  --ignite-glow: 8;
+  --condense-delay: 800ms;
+  --condense-dur: 3200ms;
   --condense-scale: 1.12;
-  --infall-delay: 400ms;
-  --infall-dur: 2200ms;
-  --infall-turn: 28deg;
-  --infall-blur: 6px;
-  --label-delay: calc(var(--infall-delay) + var(--infall-dur) * 0.75);
+  --trace-delay: 800ms;
+  --trace-dur: 500ms;
+  --trace-stagger: 800ms;
+  --fill-dur: 1400ms;
+  --birth-dur: 900ms;
+  --birth-flare: 2.4;
   --count-dur: 1200ms;
-  --count-delay: calc(var(--infall-delay) + var(--infall-dur) * 0.3);
+  --count-delay: calc(var(--trace-delay) + var(--trace-stagger) + var(--trace-dur) * 2);
 
   /*
-    着いたあとも動き続けるもの（「動き続ける」）。軌道を流れる光（1周の長さは orbits.ts の
-    INNER_PERIOD から。外側の軌道ほど長い）、吸い込まれる粒（落ち方の曲線 --fall-ease。
-    落ちるほど速く回り、速く寄る）、ブラックホールの光の揺らぎ（明るさが --breathe-low まで
-    沈んで戻る。片道 --breathe-dur）、星雲の漂い（片道 --drift-dur）と星の瞬き（周期は星ごと。
-    orbits.ts の nebulaMap）。天体は動かさない。止める手は置かない（持ち主の判断。動きを
+    着いたあとも動き続けるもの（「動き続ける」）。星屑と天体の公転と軌道を流れる星（1周の長さは
+    orbits.ts の INNER_PERIOD から。外側の軌道ほど長い）、吸い込まれる粒（落ちるほど速く回り、
+    速く寄る。曲線は keyframes の orbit-grain-*）、ブラックホールの光の揺らぎ（明るさが
+    --breathe-low まで沈んで戻る。片道 --breathe-dur）、星雲の漂い（片道 --drift-dur）と星の
+    瞬き（周期は星ごと。orbits.ts の nebulaMap）。止める手は置かない（持ち主の判断。動きを
     減らす設定では全部止まる）
   */
   --drift-dur: 40s;
   --breathe-dur: 4s;
   --breathe-low: 0.82;
-  --fall-ease: cubic-bezier(0.5, 0, 0.85, 0.45);
   /*
-    軌道を流れる光の長さ（軌道1周を 100 とした長さ）。細い頭（--flow-len）と、その後ろに
-    引く長く淡い尾（--flow-tail。濃さ --flow-tail-ink）
+    軌道を流れる星（components.tsx の Motion）。後ろに引く尾の、星の側の濃さ（--flow-trail。
+    後ろへ消える）と、十字の光芒の濃さ（--flow-glint）
   */
-  --flow-len: 3;
-  --flow-tail: 12;
-  --flow-tail-ink: 0.3;
-
-  /*
-    入口の番号の札を、図にマウスを重ねたとき・選んだときに出すまでの待ち（「動き続ける」）。
-    図の上をマウスが通り過ぎただけでは出さない
-  */
-  --label-wait: 120ms;
+  --flow-trail: 0.5;
+  --flow-glint: 0.75;
 
   /* 塗りの押し手（.cta）の高さ。指の的（--tap）より大きく取る、ページでいちばん強い1本 */
   --cta-h: 52px;
@@ -1108,7 +1081,7 @@ body[data-site] > main {
 /*
   入口の軌道図（components.tsx の OrbitSystem）。真ん中にブラックホールを置き、
   そのまわりに作品を1つずつ軌道に載せる（形は src/lib/orbits.ts。件数だけから
-  決まる）。天体には作品の番号の札を添える（名前は札の中にあり、選んだときに出る）。
+  決まる）。天体に作品の札は添えない（持ち主が「いらない」と外した）。図は全部飾り。
 
   絵の層は枠いっぱいに重ねる——軌道の奥の半分・ブラックホール（.hole）・軌道の手前の
   半分・天体の順（DOM の順がそのまま重なりの順）。星雲と星空は枠の外、本文の幅いっぱいに
@@ -1116,11 +1089,11 @@ body[data-site] > main {
   --system-ratio（orbits.ts の HERO_FRAME と同じ数）。
 
   横だけ切る（overflow-x: clip。縦は出してよい——着いたときに灯るブラックホールと、
-  渦を巻いて収まる軌道が、枠の上下へ少し出る）。札が見積もりより長い書体でも、
-  ページを横に動かさない。
+  渦を巻いて収まる軌道が、枠の上下へ少し出る）。回して霞ませた出だしの軌道が枠の左右へ
+  出ても、ページを横に動かさない。
 
-  枠は札を出すかどうかを自分の幅で決める容れ物（container）。札の重なりの順は枠の
-  中に閉じる（isolation。選んだ札を上に出しても、貼り付いた上の帯より上には来ない）。
+  枠は星屑の太さ（cqi）を自分の幅から取る容れ物（container）。重なりの順は
+  枠の中に閉じる（isolation。貼り付いた上の帯より上には来ない）。
 */
 .system {
   grid-area: map;
@@ -1132,7 +1105,9 @@ body[data-site] > main {
   isolation: isolate;
 }
 
+.system__bands,
 .system__orbits,
+.system__stardust,
 .system__motion,
 .system__bodies {
   position: absolute;
@@ -1142,12 +1117,28 @@ body[data-site] > main {
 }
 
 /*
-  動かない層（軌道の線・光の帯・星屑。入口の .system__orbits と締めの .orbits__still）は、
-  自分の合成の層に描く——帯と星屑のぼかし（SVG のフィルタ）を一度だけ描いて使い回すため。
-  同じ層に流れる光や粒が居ると、それが動くたびにぼかしまで描き直す（だから動くものは
-  .system__motion と締めの別の SVG に分けてある）
+  動かない層と、刻んで動く層は、それぞれ自分の合成の層に描き、描いた層を使い回す。
+
+  - 動かない層（光の帯 .system__bands・軌道の線 .system__orbits、締めはまとめて .orbits__still）。
+    帯のぼかし（SVG のフィルタ）を一度だけ描いて使い回す。入口の帯は層ごと灯す（層の濃さは
+    描き直さずに変えられる）。線を引くあいだも、帯は別の層なので掛け直さない
+  - 刻んで動く層（星屑 .system__stardust / .orbits__stardust、天体 .system__bodies /
+    .orbits__bodies）。どれも同じ刻み（orbits.ts の TICK・BODY_TICK）でだけ姿を変える
+    （「動き続ける」の steps()）ので、そのあいだは描き直さない
+
+  毎コマ描き直すのは、流れる星と吸い込まれる粒の層（.system__motion と締めの名前の無い
+  SVG）だけ。動くものをまとめて毎コマ描き直していたころは、144Hz の画面で GPU の仕事が
+  1コマの枠を超え、ブラウザごと重くなった
 */
-:is(.system__orbits, .orbits__still) {
+:is(
+  .system__bands,
+  .system__orbits,
+  .orbits__still,
+  .system__stardust,
+  .orbits__stardust,
+  .system__bodies,
+  .orbits__bodies
+) {
   will-change: transform;
 }
 
@@ -1359,7 +1350,7 @@ use.nebula__dust {
   焼いた光の絵（logo.ts の BLACKHOLE_ART。ロゴの O と同じ1枚）と、その下に敷く影の黒い円
   （::before。径は部品が絵の幅に対する割合 --hole-shadow で渡す）。箱の高さは絵の縦横比
   （img の width / height）から決まる。影は不透明なので、奥を回る軌道はその後ろに隠れる。
-  入口と締めでは光だけが揺らぐ（「動き続ける」）。作品の星図（.hole--still）は揺らさない。
+  光だけが揺らぐ（「動き続ける」）。
 
   色は字の白だけ——光は焼いた白、影は --hole-core（ロゴの O の .logo-core と同じ段）。見た目の
   プリセットのアクセント色では塗らない（ロゴの O と同じ1つのものに見せる）。
@@ -1396,29 +1387,25 @@ use.nebula__dust {
 
 /*
   軌道と天体（入口と締めで同じ）。絵は色を持たず、線はアクセント色、点は字の色。
-  太さは画面の px（non-scaling-stroke。:root の --orbit-line / --orbit-body の話）。
+  線の太さは画面の px（non-scaling-stroke。:root の --orbit-line の話）。
 
   線の色は、部品が線ごとに渡す坂（components.tsx の OrbitLines。stroke 属性の
   url(#…)）が持つ。坂の両端の色と濃さはここで敷く——奥の端は --orbit-far を掛けて薄く、
-  手前へ続けて --orbit-ink まで濃くなる（奥ほど遠い）。.orbit と .orbit__glow に stroke を
-  書かない（書くと坂を上書きする）。細い芯（.orbit）の下に、同じ坂の淡いにじみ
-  （.orbit__glow）を敷く。外の軌道ほど淡い——部品が軌道ごとに内側の 0 から外側の 1 までの
-  位置（--reach）を渡し、濃さは外側で --orbit-outer 倍まで落ちる（星図は渡さない）
+  手前へ続けて --orbit-ink まで濃くなる（奥ほど遠い）。.orbit に stroke を書かない（書くと
+  坂を上書きする）。外の軌道ほど淡い——部品が軌道ごとに内側の 0 から外側の 1 までの
+  位置（--reach）を渡し、濃さは外側で --orbit-outer 倍まで落ちる
 */
-.orbit,
-.orbit__glow {
+.orbit {
   fill: none;
   vector-effect: non-scaling-stroke;
-}
-
-.orbit {
   stroke-width: var(--orbit-line);
   opacity: calc(1 - var(--reach, 0) * (1 - var(--orbit-outer)));
-}
-
-.orbit__glow {
-  stroke-width: var(--orbit-glow-w);
-  opacity: calc(var(--orbit-glow) * (1 - var(--reach, 0) * (1 - var(--orbit-outer))));
+  /*
+    線の長さは部品が pathLength 100 にそろえてあり、破線1本ぶん（100）で1周を覆う——止まった
+    姿は全部引いた線。入口に着いたときは、この破線を送って線を引く（「入口に着いたとき」の
+    orbit-trace）
+  */
+  stroke-dasharray: 100;
 }
 
 /*
@@ -1433,13 +1420,20 @@ use.nebula__dust {
 
 /*
   軌道に沿って散る星屑（components.tsx の Stardust）。明るさの段ごとの太さ（--stardust-w の
-  倍）と濃さ。濃さは線と同じ奥から手前への坂（奥の端は --stardust-far）。太さは画面の px
-  （点を潰さない）で、枠の幅に比例する（電話の小さな枠で粒が帯を埋めない）
+  倍）と濃さ。太さは画面の px（点を軌道の楕円の枠で潰さない）で、枠の幅に比例する（電話の
+  小さな枠で粒が帯を埋めない）。色は字の白で、濃さの奥から手前への坂（奥の端は
+  --stardust-far）は回らない覆い（.stardust-fade。濃さだけを読む）が掛ける——星屑は回るので、
+  点の色に坂を塗ると坂も一緒に回る
 */
 .stardust path {
   fill: none;
+  stroke: var(--ink);
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
+}
+
+.stardust-fade {
+  mask-type: alpha;
 }
 
 .stardust__0 {
@@ -1483,21 +1477,20 @@ use.nebula__dust {
 }
 
 /*
-  天体は光る惑星（components.tsx の Bodies）。芯の点（長さ0の線に丸い線端）と、その
-  まわりのにじみ（アクセント色の、外へ消える放射の坂）。大きさは --orbit-body に奥行きの倍率
-  （--scale。手前ほど大きい）を掛けたもの。業務は輪のある惑星——軌道面と同じ角度から
-  見た輪を、奥の半分は点の後ろ、手前の半分は前に描く。区分を色だけで分けない（形で
-  分ける）
+  天体は光る惑星（components.tsx の Bodies）。中心がいちばん明るく外へ溶ける白い光（字の色の
+  放射の坂）と、そのまわりのにじみ（アクセント色の、外へ消える放射の坂）。縁のくっきりした
+  白い円は、軌道を回る平らな丸い点に見えた。奥行きの倍率（手前ほど大きい）は部品が scale で
+  掛け、光・にじみ・輪がそろって縮む（線の太さを画面の px に保つ non-scaling-stroke は輪の
+  線だけ）。業務は輪のある惑星——軌道面と同じ角度から見た輪を、奥の半分は光の後ろ、手前の
+  半分は前に描く。区分を色だけで分けない（形で分ける）
 */
 .orbit-body path {
   fill: none;
   stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
 }
 
-.orbit-body__dot {
-  stroke: var(--ink);
-  stroke-width: calc(var(--orbit-body) * var(--scale, 1));
+.orbit-body__light {
+  stop-color: var(--ink);
 }
 
 .orbit-body__halo {
@@ -1511,164 +1504,7 @@ use.nebula__dust {
 .orbit-body__ring {
   stroke: var(--ink);
   stroke-width: var(--orbit-line);
-}
-
-/*
-  天体の札（作品の番号と名前。作品のページへのリンク）。置き場所は天体の右上・
-  左上・右下・左下のどれか（.system__label--ne …。重ならない向きを orbits.ts の
-  placeLabels が選ぶ）。天体の点を原点に置き、札の箱をその向きへずらす。ずらす量は
-  orbits.ts の LABEL_GAP と同じ数（:root の --label-dx / --label-dy）。天体から札へ
-  引き出し線は引かない（札は天体のすぐ横に居る。線を引いていたころは図面に見えた）。
-
-  札は枠が十分に広いときだけ出す（下の @container。orbits.ts の LABEL_MIN_WIDTH と
-  同じ数）。狭い枠では点だけ——作品の名前は「一覧で見る →」の先に全部ある。
-
-  札の地は --bg で塗る。軌道の線が字の後ろを横切らないように（小さい字なので
-  4.5:1 が要る。npm run check:contrast が札の字も測る）。地の縁は同じ色でぼかし、星雲へ
-  溶かす（縁の立った黒い四角は、柔らかい絵の上に貼った付箋かデバッグの表示に見えた）。
-*/
-.system__labels {
-  position: absolute;
-  inset: 0;
-  display: none;
-}
-
-@container (min-width: 520px) {
-  .system__labels {
-    display: block;
-  }
-}
-
-.system__label {
-  position: absolute;
-  left: var(--x);
-  top: var(--y);
-  z-index: 1;
-}
-
-/* 選んだ札は隣の札より上に出す（名前が伸びて隣に重なっても、隣の札の地に隠れない） */
-.system__label:is(:hover, :focus-within) {
-  z-index: 2;
-}
-
-/*
-  札の幅の上限は、札の長さの上限（--label-max）と、札の伸びる向きの枠の端までの
-  空き（--room。部品が orbits.ts の labelRoom から cqi で渡す。枠の縁から --sp-1 だけ
-  離す）の小さいほう。名前を出して札が伸びても枠の外へ出ない——出ると枠の
-  overflow-x: clip に番号ごと切られ、フォーカスの輪も欠ける。
-
-  札は番号と名前の2列。名前の列はふだん幅を持たず（0fr）、名前を出すときに字の幅（1fr）
-  まで伸びる——列の幅を送るので、札は天体の反対側へ滑らかに伸びる（下の「名前」）。列の
-  下限 1px は、名前を幅 0 の箱にしないため（.sr-only が 1px を残すのと同じ。幅 0 の箱を
-  読み上げから落とす環境がある）。
-
-  幅は中身の幅（max-content）と書く。札の箱は幅 0 の li に対して置かれるので、書かないと
-  いちばん狭い幅（名前の列が 1px のまま）で組まれ、名前の列が伸びない
-*/
-.system__label > :is(a, span) {
-  position: absolute;
-  display: grid;
-  grid-template-columns: auto minmax(1px, 0fr);
-  align-items: baseline;
-  width: max-content;
-  max-width: min(var(--label-max), calc(var(--room) - var(--label-dx) - var(--sp-1)));
-  padding-inline: var(--sp-2);
-  background: var(--bg);
-  box-shadow: 0 0 var(--sp-2) var(--sp-2) var(--bg);
-  color: var(--ink-mid);
-  font-size: var(--fs-meta);
-  line-height: 1.4;
-  white-space: nowrap;
-  transition:
-    color var(--dur-fast) var(--ease),
-    grid-template-columns var(--dur) var(--ease),
-    column-gap var(--dur) var(--ease);
-}
-
-.system__label--ne > :is(a, span) {
-  left: var(--label-dx);
-  bottom: var(--label-dy);
-}
-
-.system__label--nw > :is(a, span) {
-  right: var(--label-dx);
-  bottom: var(--label-dy);
-}
-
-.system__label--se > :is(a, span) {
-  left: var(--label-dx);
-  top: var(--label-dy);
-}
-
-.system__label--sw > :is(a, span) {
-  right: var(--label-dx);
-  top: var(--label-dy);
-}
-
-/* 番号は英数字の札なので等幅。名前は英字だけなら等幅の小さな大文字、和文ならそのまま */
-.system__number {
-  color: var(--ink-weak);
-  font-family: var(--font-mono);
-  font-size: var(--fs-label);
-  letter-spacing: 0.08em;
-}
-
-.system__label :lang(en) {
-  font-family: var(--font-mono);
-  font-size: var(--fs-label);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-/*
-  名前。ふだんは見せず（番号だけの札。名前まで並べると、札がブラックホールの影と弧に
-  掛かる）、札にマウスを重ねたときとキーボードで選んだときに番号の横へ出す。隠すのは
-  幅を持たない列（上の札の 0fr）と透明で、読み上げとリンクの名前にはいつも入る。
-  出すときは列が伸びるのに合わせて字が浮かぶ（前は字がその場に現れ、札が一度に伸びた）。
-
-  出したときの長い名前は札の幅（--label-max）で末尾を省く。全部は押した先の作品の
-  ページにある。
-*/
-.system__name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  opacity: 0;
-  transition: opacity var(--dur) var(--ease);
-}
-
-.system__label a:focus-visible {
-  grid-template-columns: auto minmax(1px, 1fr);
-  column-gap: var(--sp-3);
-}
-
-.system__label a:focus-visible .system__name {
-  opacity: 1;
-}
-
-/*
-  指で押せる的。札の見た目（番号だけで 23×15px ほど）より大きい透明の面を、札の中心に
-  重ねる（--tap。指なら 44px）。見た目の札の箱は変えない——箱を広げると地の塗りが
-  軌道の線を広く隠し、札の置き場所（placeLabels）の見積もりもずれる
-*/
-.system__label a::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: max(100%, var(--tap));
-  height: var(--tap);
-  translate: -50% -50%;
-}
-
-/*
-  札の箱は横に送れる箱の中ではないが、隣の札に近い。フォーカスの輪郭は札の内側に
-  描く（外へ出すと、隣の札の字に掛かる）
-*/
-.system__label a:focus-visible {
-  outline-offset: calc(var(--focus-ring) * -1);
-  border-radius: 0;
+  vector-effect: non-scaling-stroke;
 }
 
 /* --- 入口の件数の帯 --- */
@@ -1744,27 +1580,32 @@ use.nebula__dust {
 /* --- 入口に着いたとき --- */
 
 /*
-  入口に着いたときの一度だけの動き。見出しの列が浮かび上がるあいだに、星雲が凝って
-  灯り、ブラックホールが灯り、軌道と天体が渦を巻いて焦点のまわりに収まり、番号の札が
-  1つずつ出る。件数の帯は数え上がる。
+  入口に着いたときの一度だけの動き。星系が生まれる（持ち主が「初期表示をかっこよく」で選んだ
+  形）——暗い中で星空が灯り、ブラックホールが小さな光の点から閃いて灯り、内側の軌道から順に
+  光の線が引かれて外へ広がる。引き終えた軌道の天体が閃いて灯り、帯と星屑と星雲が満ちる。
+  見出しの列は着いてすぐ浮かび上がり（字を待たせない）、件数の帯は軌道を引き終えてから
+  数え上がる。全部が同時に浮かんで回り込んでいたころは、2 秒足らずで終わる平らな登場だった。
 
-  - 星雲は、少し広がって見えない姿から、縮みながら灯る（orbit-condense。量は --condense-*）。
-    枠の横へ広がったぶんは枠が切る（雲の縁はもともと透明）
-  - ブラックホールは、大きく霞んで明るすぎる姿から、縮みながら締まって落ち着く
-    （orbit-ignite。重力で潰れていくように。量は --ignite-*）
-  - 軌道と天体は、回って霞んだ姿から、焦点のまわりへ巻き込まれるように収まる
-    （orbit-infall。奥と手前の軌道と天体を同じ1つの動きで。量は --infall-*）。
-    回る中心は焦点——入口の枠では真ん中（transform-origin の既定）。大きさは変えない
-    （広げると、軌道が枠の左右で断ち切られて見える）
-  - 曲線は --ease の1本（ばねは使わない。止まる向きを行き過ぎて、軌道が揺り戻して
-    見える）
+  - 星空は灯るだけ（orbit-light。画面いっぱいの層を動かさない）。星雲は少し広がって見えない
+    姿から、縮みながら灯る（orbit-condense。量は --condense-*）。枠の横へ広がったぶんは枠が
+    切る（雲の縁はもともと透明）
+  - ブラックホールは、小さな光の点から明るく霞んで広がり、明るさを落としながら縮んで締まる
+    （orbit-ignite。量は --ignite-*）
+  - 軌道の線は、左の継ぎ目から時計回りに引かれる——奥の半分を引いてから手前の半分
+    （orbit-trace。線の長さは pathLength 100 にそろえてあり、破線1本ぶんで1周を覆う）。内側の
+    軌道から順に、外側ほど遅れる（部品が渡す --reach）。継ぎ目で速さが変わらないよう linear で
+    引く。大きさと向きは変えない（広げると枠の左右で断ち切られ、回すと引く向きと食い違う）
+  - 帯と星屑は線を追って灯る（orbit-light）。天体は乗る軌道を引き終えたところで、光の点から
+    閃いて灯る（orbit-birth。大きさの揺れの上に重ねる。「動き続ける」）。流れる星と吸い込まれる
+    粒は最後に灯る
+  - 曲線は --ease の1本（ばねは使わない。止まる向きを行き過ぎて、揺り戻して見える）。線を引く
+    速さだけは linear
 
-  どれも一度きりで、5 秒以内に止まる（WCAG 2.2.2。着いたあとも続く光の流れや揺らぎは
-  下の「動き続ける」）。keyframes には出だしの姿（from）だけを書き、終わりの姿を
-  持たせない——止まった姿（reduced-motion で animation: none になったとき）が
-  そのまま完成形になる。
-  npm run check:contrast は止めた姿に加えて、名前が orbit- で始まる animation を
-  途中で止めた姿も測る（番号の札は、回り込みが落ち着いてから出る）。
+  どれも一度きりで、5 秒以内に止まる（WCAG 2.2.2。着いたあとも続く動きは下の「動き続ける」）。
+  keyframes には出だしと途中の姿だけを書き、終わりの姿（to）を持たせない——止まった姿
+  （reduced-motion で animation: none になったとき）がそのまま完成形になる。
+  npm run check:contrast は止めた姿に加えて、名前が orbit- で始まる animation を途中で止めた
+  姿も測る。
 */
 @keyframes rise-in {
   from {
@@ -1787,7 +1628,7 @@ use.nebula__dust {
   animation: rise-in var(--dur-spring) var(--ease-spring) backwards;
 }
 
-/* 札 → 見出しの塊 → リード文 → 押し手。件数の帯は回り込みが始まってから */
+/* 札 → 見出しの塊 → リード文 → 押し手。件数の帯は軌道を引き終えてから */
 .hero h1 .phrase {
   animation-delay: calc((var(--i, 0) + 1) * var(--stagger));
 }
@@ -1801,7 +1642,7 @@ use.nebula__dust {
 }
 
 .tally__cell {
-  animation-delay: calc(var(--infall-delay) + var(--i, 0) * var(--stagger));
+  animation-delay: calc(var(--count-delay) + var(--i, 0) * var(--stagger));
 }
 
 @keyframes orbit-condense {
@@ -1811,16 +1652,27 @@ use.nebula__dust {
   }
 }
 
-/* 星空は星雲と同じ長さで灯る（広がる動きは持たない。画面いっぱいの層を動かさない） */
+/* 星空は着いてすぐ灯る（広がる動きは持たない。画面いっぱいの層を動かさない） */
 .hero > .cosmos {
-  animation: orbit-light var(--condense-dur) var(--ease) var(--condense-delay) backwards;
+  animation: orbit-light var(--sky-dur) var(--ease) backwards;
 }
 
 @keyframes orbit-ignite {
   from {
     opacity: 0;
-    scale: var(--ignite-scale);
-    filter: blur(var(--ignite-blur)) brightness(var(--ignite-glow));
+    scale: var(--ignite-spark);
+    filter: brightness(var(--ignite-glow)) blur(1px);
+  }
+
+  16% {
+    opacity: 1;
+    scale: calc(var(--ignite-spark) * 3);
+    filter: brightness(var(--ignite-glow)) blur(2px);
+  }
+
+  42% {
+    scale: var(--ignite-flare);
+    filter: brightness(calc(var(--ignite-glow) * 0.4)) blur(var(--ignite-blur));
   }
 }
 
@@ -1828,45 +1680,62 @@ use.nebula__dust {
   animation: orbit-ignite var(--ignite-dur) var(--ease) var(--ignite-delay) backwards;
 }
 
-@keyframes orbit-infall {
+@keyframes orbit-trace {
   from {
-    opacity: 0;
-    rotate: var(--infall-turn);
-    filter: blur(var(--infall-blur));
+    stroke-dashoffset: -100;
   }
 }
 
-.system__orbits,
-.system__motion,
-.system__bodies {
-  animation: orbit-infall var(--infall-dur) var(--ease) var(--infall-delay) backwards;
-}
-
-/* 番号の札は、回り込みが落ち着いてから番号の順に出る（8つ目より後はまとめて） */
-.system__label {
-  animation: orbit-light var(--dur) var(--ease)
-    calc(var(--label-delay) + min(var(--i, 0), 8) * var(--stagger)) backwards;
-}
-
 /*
-  出る前（透明のあいだ）でも、キーボードで選んだ札はすぐ見せる。待たせると、見えない
-  リンクに見えない輪が付く。動きの値を上書きできるのは !important だけ（animation の
-  付け外しでは、外した日に出が頭からやり直しになり、選び終えた札が一度消える）
+  奥の半分も手前の半分も、線の終わりから破線を送って引く——奥の半分は右の継ぎ目から上を回って
+  左へ、手前の半分は左から下を回って右へ描かれた線なので、終わりから引くと、左の継ぎ目から
+  上を通って右へ、そこから下を通って左へと、時計回りの1本につながる
 */
-.system__label:focus-within {
-  /* biome-ignore lint/complexity/noImportantStyles: 上のコメントのとおり、動きの値に勝つ必要がある */
-  opacity: 1 !important;
+.system__orbits--far .orbit {
+  animation: orbit-trace var(--trace-dur) linear
+    calc(var(--trace-delay) + var(--reach, 0) * var(--trace-stagger)) backwards;
+}
+
+.system__orbits--near .orbit {
+  animation: orbit-trace var(--trace-dur) linear
+    calc(var(--trace-delay) + var(--trace-dur) + var(--reach, 0) * var(--trace-stagger)) backwards;
+}
+
+.system__bands,
+.system__stardust {
+  animation: orbit-light var(--fill-dur) var(--ease) calc(var(--trace-delay) + var(--trace-dur))
+    backwards;
+}
+
+/* 天体が灯る（光の点から閃いて、大きさの揺れへ戻る）。重ねる宣言は「動き続ける」の中 */
+@keyframes orbit-birth {
+  from {
+    opacity: 0;
+    scale: 0;
+  }
+
+  45% {
+    opacity: 1;
+    scale: var(--birth-flare);
+  }
 }
 
 /* --- 動き続ける --- */
 
 /*
-  着いたあとも動き続けるもの（components.tsx の Motion・Dust・Hole）。入口と締めで同じ。
+  着いたあとも動き続けるもの（components.tsx の Motion・Stardust・Bodies・Dust・Hole）。入口と
+  締めで同じ。
 
-  - 軌道に沿って光が流れる（orbit-flow。軌道1周の path の破線を送る）
-  - 光の粒が渦を巻いてブラックホールへ吸い込まれ、黒い円の縁で光に溶ける（orbit-swirl で
-    1周回り、その中で orbit-fall が外から内へ寄せる。どちらも --fall-ease で、落ちるほど
-    速い）
+  - 星屑と天体が軌道ごと公転する（持ち主の「軌道の線を星と一緒に動かして」）。軌道の楕円の
+    枠の中で、星屑と天体の置き場所を1周回す（orbit-swirl を linear で。周期は軌道ごとの
+    --dur で、内側ほど速い）。天体の形はその中で回転を打ち消し（orbit-unswirl）、大きさは
+    手前へ回るほど大きい（orbit-sway。0 から 1 の keyframes を、軌道ごとの大きさの揺れを
+    書いた linear() で送る——量は keyframes ではなく timing が持つ）
+  - 軌道に沿って星が流れる。輝く星が、星屑と天体より速く、軌道の楕円の枠の中を回る（orbit-swirl
+    を 1/60 秒の刻みで。周期は軌道ごとの --dur）。形は回さない（orbit-unswirl）
+  - 光の粒が渦を巻いてブラックホールへ吸い込まれ、黒い円の縁で光に溶ける（orbit-grain-swirl で
+    1周回り、その中で orbit-grain-fall が外から内へ寄せる。落ちるほど速い曲線を keyframes の
+    10 の区間に焼き、区間ごとに 1/60 秒の刻みで進める）
   - ブラックホールの光が明るさを沈めては戻す（orbit-breathe。光の絵の不透明度だけを変え、
     下に敷いた影の黒い円は動かさない——絵の明るさを filter で落とすと、白い光が灰色に
     くすんだ）
@@ -1874,41 +1743,135 @@ use.nebula__dust {
     直さない）、星が瞬き（orbit-twinkle。明るさだけ。もとの明るさは星ごとの opacity 属性で、
     keyframes は真ん中の暗さだけを持つ）、流れ星が流れる（orbit-meteor）
 
-  天体は動かさない（公転しない）。天体はいつも番号の札と同じ止まった場所に居る——公転させて
-  いたころは、札と食い違う天体を重ねたときに札へ寄せていて、天体が跳ぶか軌道を外れて飛んだ
-  （持ち主が「シンプルに」と選んだ）。
-
   keyframes に var() を書かない（光の揺らぎの1つを除く）。var() を持つ keyframes は、
   動いている要素ごとに毎コマ解き直され、粒の多い入口では style の計算だけでコマの予算を
   食った（電話相当で 1 秒あたり 480ms。固定の値にして 75ms）。要素ごとに違う量——粒の向きと
-  落ちる幅——は動かない親の transform 属性が持ち、動く子は同じ形を回るだけ（1周・1 から 0 へ）
-  にする。
+  落ちる幅、軌道の楕円の形、天体の置き場所——は動かない親の transform 属性が持ち、動く子は
+  同じ形を回るだけ（1周・1 から 0 へ）にする。天体の大きさの揺れの量は timing（linear()）が
+  持つ（timing は一度だけ読まれ、毎コマ解き直されない）。
 
   - 止める手は置かない（持ち主の判断。5 秒を超えて続く動きの止め方は、動きを減らす設定
-    だけが受ける）。動きを減らす設定では、動く層を出さない——止まった天体と札が完成形
+    だけが受ける）。動きを減らす設定では、星屑と天体は回らず、流れる光と粒の層は出さない
+    ——止まった姿が完成形
 */
-@keyframes orbit-flow {
-  to {
-    stroke-dashoffset: -100;
-  }
-}
-
 @keyframes orbit-swirl {
   to {
     transform: rotate(1turn);
   }
 }
 
-/* 粒は止まった姿を持たない（動かないときは層ごと隠す）ので、出だしと終わりの両方を書く */
-@keyframes orbit-fall {
+@keyframes orbit-unswirl {
+  to {
+    transform: rotate(-1turn);
+  }
+}
+
+/*
+  天体の大きさの揺れ。0 から 1 へ送るだけで、どの向きでどれだけの大きさかは、部品が軌道
+  ごとに渡す linear()（--sway。orbits.ts の OrbitPath の sway）が決める
+*/
+@keyframes orbit-sway {
+  from {
+    scale: 0;
+  }
+
+  to {
+    scale: 1;
+  }
+}
+
+/*
+  吸い込まれる粒。落ちるほど速く回り、速く寄る曲線（cubic-bezier(0.5, 0, 0.85, 0.45)）を
+  10% ごとの区間に焼いてある——曲線を timing に置くと steps() と並べられず、粒の層を毎コマ
+  描き直すことになる（刻むのは「動き続ける」の .orbit-grain）。粒は止まった姿を持たない
+  （動かないときは層ごと隠す）ので、出だしと終わりの両方を書く
+*/
+@keyframes orbit-grain-swirl {
+  10% {
+    transform: rotate(2.2deg);
+  }
+
+  20% {
+    transform: rotate(9deg);
+  }
+
+  30% {
+    transform: rotate(20.9deg);
+  }
+
+  40% {
+    transform: rotate(38.5deg);
+  }
+
+  50% {
+    transform: rotate(62.6deg);
+  }
+
+  60% {
+    transform: rotate(94deg);
+  }
+
+  70% {
+    transform: rotate(134.6deg);
+  }
+
+  80% {
+    transform: rotate(187.2deg);
+  }
+
+  90% {
+    transform: rotate(257.4deg);
+  }
+
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes orbit-grain-fall {
   from {
     transform: translate(1px, 0px);
     opacity: 0;
   }
 
-  15%,
-  80% {
+  10% {
+    transform: translate(0.994px, 0px);
+    opacity: 0.34;
+  }
+
+  20% {
+    transform: translate(0.975px, 0px);
     opacity: 1;
+  }
+
+  30% {
+    transform: translate(0.942px, 0px);
+  }
+
+  40% {
+    transform: translate(0.893px, 0px);
+  }
+
+  50% {
+    transform: translate(0.826px, 0px);
+  }
+
+  60% {
+    transform: translate(0.739px, 0px);
+  }
+
+  70% {
+    transform: translate(0.626px, 0px);
+  }
+
+  80% {
+    transform: translate(0.48px, 0px);
+    opacity: 1;
+  }
+
+  90% {
+    transform: translate(0.285px, 0px);
+    opacity: 0.83;
   }
 
   to {
@@ -1958,22 +1921,25 @@ use.nebula__dust {
 }
 
 /*
-  軌道を流れる光。軌道の線の上に、細い頭の破線を1本と、その後ろに引く長く淡い尾
-  （components.tsx の Motion）。尾は頭と同じ所で終わるように、長さの差だけ遅れて回る
-  （「動き続ける」の .orbit-flow--tail）
+  軌道を流れる星（components.tsx の Motion）。輝く星——中心から外へ溶ける芯の光と、先へ消える
+  十字の光芒（入口の星空のいちばん明るい星と同じ形）——が、後ろに淡い尾を引いて軌道を回る。
+  尾は星の側が濃く、後ろへ消える坂（--flow-trail）。軌道の線の破線を送っていたころは、軌道の
+  上を移る線に見えた（持ち主の「移動する線をもっと星っぽく」）
 */
-.orbit-flow {
-  fill: none;
-  stroke: var(--ink);
-  stroke-width: var(--orbit-line);
-  stroke-linecap: round;
-  stroke-dasharray: var(--flow-len) calc(100 - var(--flow-len));
-  vector-effect: non-scaling-stroke;
+.orbit-flow__light {
+  stop-color: var(--ink);
 }
 
-.orbit-flow--tail {
-  stroke-dasharray: var(--flow-tail) calc(100 - var(--flow-tail));
-  opacity: var(--flow-tail-ink);
+.orbit-flow__fade {
+  stop-color: var(--ink);
+  stop-opacity: var(--flow-trail);
+}
+
+.orbit-flow__glint {
+  fill: none;
+  stroke-width: var(--orbit-line);
+  vector-effect: non-scaling-stroke;
+  opacity: var(--flow-glint);
 }
 
 .orbit-grain__dot {
@@ -2001,24 +1967,79 @@ use.nebula__dust {
     animation: orbit-meteor var(--dur) linear var(--delay) infinite;
   }
 
-  .orbit-flow {
-    animation: orbit-flow var(--dur) linear var(--delay) infinite;
+  /*
+    毎コマ動くもの（流れる星と吸い込まれる粒）も 1/60 秒の刻みで進める（orbits.ts の
+    MOTION_RATE）。60Hz の画面では毎コマ進み、144Hz の画面でも流れる星と粒の層を描き直すのは
+    1秒に 60 回まで——毎コマ描き直していたころは、144Hz の画面で GPU の仕事が1コマの枠を超えた
+  */
+  .orbit-flows :is(.orbit-spin, .orbit-unspin) {
+    animation-timing-function: steps(var(--ticks));
   }
 
-  /* 尾は頭より長いぶん（--flow-tail − --flow-len）だけ遅れて回り、頭と同じ所で終わる */
-  .orbit-flow--tail {
-    animation-delay: calc(var(--delay) + (var(--flow-tail) - var(--flow-len)) / 100 * var(--dur));
+  /*
+    星屑と天体の公転。天体は置き場所ごと回り（orbit-spin）、その中で回転を打ち消す
+    （orbit-unspin）。どちらも読み込んだ時から同じ秒数で回るので、打ち消しはずれない
+  */
+  .orbit-spin {
+    animation: orbit-swirl var(--dur) linear infinite;
+  }
+
+  .orbit-unspin {
+    animation: orbit-unswirl var(--dur) linear infinite;
+  }
+
+  /*
+    星屑は1周を --ticks 回に刻んで進める（1秒に十数回。1回に 1px も進まない）。進まない
+    あいだは星屑の層を描き直さない（「入口の軌道図」の .system__stardust）
+  */
+  .stardust .orbit-spin {
+    animation-timing-function: steps(var(--ticks));
+  }
+
+  /*
+    天体も1周を --ticks 回に刻んで進める（BODY_TICK ごと。回転と打ち消しは同じ刻みなので、
+    どの瞬間も打ち消し合う）。大きさの揺れは段の linear()（部品の stairs）
+  */
+  .orbit-bodies :is(.orbit-spin, .orbit-unspin) {
+    animation-timing-function: steps(var(--ticks));
+  }
+
+  /*
+    天体の大きさの揺れ。出だしの向きのぶんだけ先から始める（--delay）。linear() を知らない
+    ブラウザでは、この宣言ごと読めない（var() で入れた値が読めない宣言は、無いのと同じ）——
+    大きさは止まった姿のまま回る
+  */
+  .orbit-body {
+    animation: orbit-sway var(--dur) var(--sway) var(--delay) infinite;
+  }
+
+  /*
+    入口では、天体は乗る軌道を引き終えたところで光の点から閃いて灯る（「入口に着いたとき」の
+    orbit-birth）。大きさの揺れと同じ宣言に、あとに並べる——あとの animation が同じ scale を
+    上書きし、終わると揺れの大きさへ戻る（終わりの姿を持たない keyframes は、下の動きの値へ戻る）
+  */
+  .system .orbit-body {
+    animation:
+      orbit-sway var(--dur) var(--sway) var(--delay) infinite,
+      orbit-birth var(--birth-dur) var(--ease)
+      calc(var(--trace-delay) + var(--reach, 0) * var(--trace-stagger) + var(--trace-dur) * 2)
+      backwards;
+  }
+
+  /* 入口では、流れる星と吸い込まれる粒は軌道を引き終えてから灯る */
+  .system :is(.orbit-flows, .orbit-dust) {
+    animation: orbit-light var(--fill-dur) var(--ease) var(--count-delay) backwards;
   }
 
   .orbit-grain {
-    animation: orbit-swirl var(--dur) var(--fall-ease) var(--delay) infinite;
+    animation: orbit-grain-swirl var(--dur) steps(var(--ticks)) var(--delay) infinite;
   }
 
   .orbit-grain__dot {
-    animation: orbit-fall var(--dur) var(--fall-ease) var(--delay) infinite;
+    animation: orbit-grain-fall var(--dur) steps(var(--ticks)) var(--delay) infinite;
   }
 
-  .hole:not(.hole--still) > .hole__art {
+  .hole > .hole__art {
     animation: orbit-breathe var(--breathe-dur) var(--ease) infinite alternate;
   }
 
@@ -2036,8 +2057,12 @@ use.nebula__dust {
       orbit-drift var(--drift-dur) ease-in-out infinite alternate;
   }
 
+  /*
+    星の瞬きも刻んで変える（明暗の片道を --ticks 回に。orbits.ts の cosmosMap が周期と遅れを
+    TICK の格子に乗せる）。なめらかに変えると、画面いっぱいの星空の層を毎コマ描き直す
+  */
   .cosmos__twinkle {
-    animation: orbit-twinkle var(--dur) ease-in-out var(--delay) infinite;
+    animation: orbit-twinkle var(--dur) steps(var(--ticks)) var(--delay) infinite;
   }
 }
 
@@ -2346,6 +2371,17 @@ use.nebula__dust {
 }
 
 /*
+  Story の中身（components.tsx の StoryParts）。テンプレートより前に書いた本文（段落）と、
+  テンプレートの欄（小見出し .side-head と段落の組）を縦に並べる。組と組のあいだは
+  技術の塊（.skills）と同じ段。小見出しと段落のあいだは .side-head の下の余白
+*/
+.story-parts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+}
+
+/*
   作品の画像の帯（components.tsx の ItemShots。小節「Screenshots」）。説明の組から
   Story と同じだけ離す。
 
@@ -2516,97 +2552,6 @@ use.nebula__dust {
   text-align: center;
 }
 
-/* --- 作品の星図 --- */
-
-/*
-  作品の星図（components.tsx の OrbitChart）。画像の無い作品の絵で、作品のページ（文の列の
-  横。.detail--chart）と一覧の行（サムネイルの位置。.entry__chart）に置く。締めの星系を
-  縮めて背の低い横長の枠（--chart-ratio。orbits.ts の CHART_FRAME）に止めた姿で描き、その
-  作品が載っている軌道と天体だけを灯す。層の重ね方は締めと同じ（軌道の奥の半分・
-  ブラックホール・手前の半分と天体）。星雲は敷かない——一覧に行の数だけ並ぶ図で、灯した
-  天体を指すのが役目。
-
-  箱は枠と同じ縦横比から崩さない。層（SVG とブラックホール）は箱の % で重ねるので、比が
-  崩れるとブラックホールが軌道の焦点から外れる。幅は列いっぱいを上限に、高さが --shot-h
-  （作品の画像の枠の高さ）を超えない所まで——背の低い窓ほど小さく、画像のある作品より
-  高くならない。
-
-  面（--surface）は敷かない。画像の枠が面を持つのは、枠に収めた絵の外の地を枠として
-  見せるため。星図は地の上に直に描いた図で、公開ページは箱を並べない。
-*/
-.chart {
-  position: relative;
-  display: block;
-  width: min(100%, calc(var(--shot-h) * var(--chart-ratio)));
-  aspect-ratio: var(--chart-ratio);
-  min-height: 0;
-  container-type: inline-size;
-}
-
-.chart > svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-/*
-  ほかの軌道と天体は沈め、灯すもの（.chart__lit）だけを元の濃さで残す。灯す軌道の色は
-  部品が渡す坂（OrbitLines の lit。stroke 属性の url(#…-lit)）が持ち、濃さの両端をここで
-  敷く——入口の坂（.orbit-depth__*）と同じ向きで、濃さだけが上がる。奥と手前の半分が同じ
-  坂を読むので、灯した線も継ぎ目で跳ばない
-*/
-.chart :is(.orbit, .orbit-body):not(.chart__lit) {
-  opacity: var(--chart-dim);
-}
-
-.chart .orbit__glow:not(.chart__lit) {
-  opacity: calc(var(--orbit-glow) * var(--chart-dim));
-}
-
-.chart-depth__far {
-  stop-color: var(--accent);
-  stop-opacity: calc(var(--chart-lit) * var(--chart-lit-far));
-}
-
-.chart-depth__near {
-  stop-color: var(--accent);
-  stop-opacity: var(--chart-lit);
-}
-
-/*
-  灯した天体に重ねる輪。画面の px の径（--chart-ring）なので、枠が縮んでも潰れない。置き場所は
-  部品が天体の位置の % で渡す（--x / --y）。押せる行にマウスを重ねたとき・選んだときに少し
-  広がる（手触りの括りと、一覧の行のフォーカスの規則）
-*/
-.chart__ring {
-  position: absolute;
-  left: var(--x);
-  top: var(--y);
-  width: var(--chart-ring);
-  aspect-ratio: 1;
-  translate: -50% -50%;
-  border: var(--orbit-line) solid var(--ink);
-  border-radius: 50%;
-  transition: scale var(--dur-spring) var(--ease-spring);
-}
-
-/*
-  一覧の番号（作品のページの星図だけ。入口の軌道図の札・一覧の行の頭と同じ番号）。数字だけの
-  札なので等幅の小さな字。星図の左上に置く——軌道面は右が上がるように傾いていて、左上の
-  角には線が来ない
-*/
-.chart__number {
-  position: absolute;
-  left: 0;
-  top: 0;
-  color: var(--ink-mid);
-  font-family: var(--font-mono);
-  font-size: var(--fs-label);
-  letter-spacing: 0.14em;
-  line-height: 1;
-}
-
 /* --- 作品1件のページ --- */
 
 /*
@@ -2700,7 +2645,7 @@ use.nebula__dust {
   border-bottom: 1px solid var(--line);
 }
 
-/* 番号（01・02 …）。入口の軌道図の札と同じ番号で、飾りなので読み上げには流さない */
+/* 番号（01・02 …）。公開中の全件の並びでの番号（絞り込んでも同じ）で、飾りなので読み上げには流さない */
 .entry__index {
   grid-area: index;
   color: var(--ink-weak);
@@ -2810,14 +2755,6 @@ use.nebula__dust {
 }
 
 /*
-  キーボードで行を選んだときも、マウスを重ねたとき（手触りの括り）と同じく星図の輪が広がる。
-  :has は :is() の中に入れる（知らないブラウザが列ごと捨てないように）
-*/
-:is(.entry:has(.entry__link:focus-visible)) .chart__ring {
-  scale: var(--chart-ring-grow);
-}
-
-/*
   札（プラットフォームか業界・区分・年・担当）。600 未満は1行に並べ、600 以上は
   区画の中で縦に積む。英字だけの札（macOS）は等幅の小さな大文字、和文の札
   （金融系基幹システム・個人開発）は本文の書体で和文の最小の段。年は和文を含む
@@ -2863,9 +2800,11 @@ use.nebula__dust {
   手がかりで、以前（1画面に収めていたころ）は電話で畳んでいた——畳んだ電話では、
   一覧のどこにも作品の絵が無かった。
 
-  縦横比は :root の --thumb-ratio で固定し、絵は枠いっぱいに切り抜く（cover）。
-  切り抜く位置は上寄せ——画面のスクリーンショットは上に題や道具の帯があり、
-  そこがいちばんその作品らしい。全体は作品のページで見られる。
+  縦横比は :root の --thumb-ratio で固定し、絵は切らずに枠へ収める（contain）。
+  画面のスクリーンショット（16:10）は枠いっぱいに、ほかの比の絵は面（--surface）の
+  余白を残して収まる。切り抜くと、画面の部品や字が枠の縁で途中から切れる。
+
+  画像の無い行は、この区画に何も置かない（components.tsx の ItemRow）。
 
   min-height: 0 は必須。縦横比を持つ箱は、既定（auto）の最小の高さが「中身の
   高さ」になる。読み込んだ絵が自分の寸法で箱を押し広げ、縦横比が黙って外れる。
@@ -2883,17 +2822,7 @@ use.nebula__dust {
 .entry__thumb img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: center top;
-}
-
-/*
-  星図（画像の無い行。components.tsx の OrbitChart）。サムネイルと同じ区画・同じ幅の上限で、
-  高さは星図の縦横比から。どの幅でも出す（サムネイルと同じ理由）
-*/
-.entry__chart {
-  grid-area: thumb;
-  width: min(100%, var(--entry-thumb));
+  object-fit: contain;
 }
 
 /* 技術（components.tsx の Tags）。区画に名前を付けて置き場所を決める */
@@ -3146,7 +3075,8 @@ use.nebula__dust {
 }
 
 /*
-  技術の3つの塊の小見出し。<h2 class="side-head">（/all では h4）。
+  技術の塊の小見出しと、作品の Story のテンプレートの欄の小見出し（components.tsx の
+  SkillGroups と StoryParts）。<h3 class="side-head">（/all では h4）。
 
   font-weight を素に戻してあるのは、見出し要素に上げたぶんを見た目に
   出さないため（ブラウザの既定は h2 = 太字）。ここで欲しかったのは
@@ -3512,7 +3442,7 @@ use.nebula__dust {
   font-size: var(--fs-meta);
 }
 
-/* GitHub。入口の札と同じ、等幅の小さな大文字（英字だけの札） */
+/* GitHub。目次の英字の行き先と同じ、等幅の小さな大文字（英字だけの札） */
 .contact__sub {
   display: inline-flex;
   align-items: center;
@@ -3735,29 +3665,6 @@ use.nebula__dust {
     grid-column: 1;
     grid-row: 1;
   }
-
-  /*
-    画像の無い作品の星図も同じ並べ方（文の列を左・星図を右）。星図は縦横比を持つ図なので、
-    列の高さまで伸ばさず列の縦の真ん中に置く（伸ばすと比が崩れ、ブラックホールが軌道の
-    焦点から外れる）。幅は列いっぱい——横に並べると星図は文の列の高さと重なり、縦に積んだ
-    ときの --shot-h の上限（本文を押し下げないため）は要らない
-  */
-  .detail--chart {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: var(--sp-6);
-  }
-
-  .detail--chart > .chart {
-    grid-column: 2;
-    grid-row: 1;
-    align-self: center;
-    width: 100%;
-  }
-
-  .detail--chart > .detail__text {
-    grid-column: 1;
-    grid-row: 1;
-  }
 }
 
 /* ====================================================== 見た目のプリセット */
@@ -3901,11 +3808,6 @@ use.nebula__dust {
     text-decoration-color: currentColor;
   }
 
-  /* 画像の無い行は、星図の灯した天体の輪も広げる（キーボードで選んだときと同じ） */
-  :is(.entry:has(.entry__link)):hover .chart__ring {
-    scale: var(--chart-ring-grow);
-  }
-
   .member:hover {
     border-color: var(--line-strong);
     background: var(--surface-hover);
@@ -3918,53 +3820,6 @@ use.nebula__dust {
   .band:hover .band__arrow,
   .cta:hover .cta__arrow {
     translate: var(--sp-2) 0;
-  }
-
-  /*
-    入口の番号の札。マウスを重ねられる端末では、図に重ねたとき・図の中を選んだときに出す（絵を
-    静かに保つ。天体はいつも札の場所に居るので、何も動かさずに札だけが浮かぶ）。図の上を
-    マウスが通り過ぎただけでは出さない（--label-wait だけ待つ）。出すときは番号の順に1つずつ
-    （--stagger ずつ。8つ目より後はまとめて）。押せるようになるのも出てから（allow-discrete。
-    知らないブラウザではすぐ押せる）。離すと待たずに消える。
-
-    指の端末（重ねる手が無い。この括りの外）と動きを減らす設定では、札は初めから出ている
-  */
-  @media (prefers-reduced-motion: no-preference) {
-    .system__label {
-      opacity: 0;
-      transition: opacity var(--dur) var(--ease);
-    }
-
-    .system__labels {
-      pointer-events: none;
-      transition: pointer-events 0s linear allow-discrete;
-    }
-
-    .system:is(:hover, :focus-within) .system__label {
-      opacity: 1;
-      transition-delay: calc(var(--label-wait) + min(var(--i, 0), 8) * var(--stagger));
-    }
-
-    .system:is(:hover, :focus-within) > .system__labels {
-      pointer-events: auto;
-      transition-delay: var(--label-wait);
-    }
-  }
-
-  /* 札にマウスを重ねたら、名前の列を伸ばす（キーボードで選んだときと同じ。「名前」） */
-  .system__label a:hover {
-    grid-template-columns: auto minmax(1px, 1fr);
-    column-gap: var(--sp-3);
-    color: var(--ink);
-  }
-
-  /*
-    札の名前をマウスで出すのもここだけ。タッチで押した札は :hover が貼り付いたまま
-    残るので、指の端末では名前はキーボードで選んだとき（:focus-visible）と押した先の
-    ページだけが言う
-  */
-  .system__label a:hover .system__name {
-    opacity: 1;
   }
 
   .toc a:hover,
@@ -4087,7 +3942,7 @@ use.nebula__dust {
   はっきり見たいと言われたら、入口の軌道図は消す。
 
   軌道図は装飾で、forced-colors（Windows のハイコントラスト）では線と点がシステム色に
-  置き換わって札の地と見分けが付かなくなる。prefers-contrast: more も同じ意図の申告
+  置き換わって、ただの線の束になる。prefers-contrast: more も同じ意図の申告
   なので、まとめて受ける。消しても失われる情報は無い（作品の名前は「一覧で見る →」の
   先に全部あり、件数は件数の帯が字で言う）。締めの図（.orbits）も同じ。星空を消すので、
   字の後ろの暗がり（「入口の軌道図」）も要らない。
@@ -4095,16 +3950,10 @@ use.nebula__dust {
 @media (forced-colors: active), (prefers-contrast: more) {
   .system,
   .orbits,
-  .chart,
   .cosmos,
   .hero--orbit > .hero__copy::before,
   .orbital > .contact::before {
     display: none;
-  }
-
-  /* 作品のページの星図の列も畳む（残すと、900 以上で文の列の右半分が空く） */
-  .detail--chart {
-    grid-template-columns: minmax(0, 1fr);
   }
 
   /* 図の区画も畳む（下の「表紙を1列に畳む」） */
@@ -4385,8 +4234,8 @@ use.nebula__dust {
 
   /*
     紙の上ではリンクは押せない。サイトを通して刷るなら全体ページ（/all）を
-    刷ること。軌道図と作品の星図はインクを食うだけの装飾なので、ここで落とす（入口の
-    軌道図は /all には元から出ないが、入口のページを直接刷られたときのため）。
+    刷ること。軌道図はインクを食うだけの装飾なので、ここで落とす（入口の軌道図は
+    /all には元から出ないが、入口のページを直接刷られたときのため）。
   */
   .top,
   .filters,
@@ -4396,16 +4245,10 @@ use.nebula__dust {
   .cta,
   .system,
   .orbits,
-  .chart,
   .cosmos,
   .hero--orbit > .hero__copy::before,
   .orbital > .contact::before {
     display: none;
-  }
-
-  /* 星図を落とした作品のページは1列（横向きの紙で 900 を超えても、右半分を空けない） */
-  .detail--chart {
-    grid-template-columns: minmax(0, 1fr);
   }
 
   .entry {

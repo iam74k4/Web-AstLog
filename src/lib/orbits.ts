@@ -19,6 +19,10 @@
   散る光の粒）で描く——細い線だけのころは、同じ形の輪が並んだ図面に見えた（持ち主の
   「軌道がださい。もっと壮大に」）。
 
+  星屑と天体は軌道ごと公転する（持ち主の「軌道の線を星と一緒に動かして」）。写した楕円を
+  単位円に直した座標（OrbitPath の ellipse）で持ち、描く側がその中で回す——回しても楕円の
+  上から外れない。向きは吸い込まれる粒と同じで、内側ほど速い（OrbitPath の period）。
+
   ブラックホールは光の曲がりを計算して焼いた絵（components.tsx の BLACKHOLE_ART）を、影の
   半径が枠の hole になる大きさで置く。軌道は奥の半分がブラックホールの後ろを、手前の半分が
   前を通る（orbitHalves）。
@@ -40,12 +44,12 @@ export type OrbitFrame = {
   outer: number
   /*
     天体を置かない矩形（焦点からの半幅・半高）。ブラックホールの影と、上へ回り込む光の弧と
-    円盤の明るい芯が乗る。天体と番号の札はここに入れない
+    円盤の明るい芯が乗る。天体はここに入れない
   */
   clear: { x: number; y: number }
   /*
     ブラックホールの黒い影の半径（viewBox の単位）。入口と締めは焼いた絵（components.tsx の
-    BLACKHOLE_ART）をこの影の大きさで置き、作品の星図はロゴの O の黒い円をこの半径で描く
+    BLACKHOLE_ART）をこの影の大きさで置く
   */
   hole: number
 }
@@ -55,23 +59,49 @@ export type OrbitFrame = {
   向こうへ回る側と、こちらへ来る側）。奥の半分はブラックホールの後ろ、手前の半分は
   前に描く（components.tsx の OrbitSystem / ContactOrbits）。軌道は区分を持たない——
   区分は天体の形で分ける（業務は輪のある惑星）。業務の軌道を破線にしていたころは、
-  線が図面に見えた（持ち主の「線と点が図面っぽい」）
+  線が図面に見えた（持ち主の「線と点が図面っぽい」）。
+
+  - ellipse は写した楕円（枠の点。中心・横と縦の半径・回す角の度）。星屑と天体はこの楕円を
+    単位円に直した座標で持ち、描く側が translate(cx cy) rotate(angle) scale(rx ry) の中で
+    回す（components.tsx の Motion）
+  - period は公転の周期（秒。TICK の倍数）。星屑と天体はこの秒数で1周する
+  - ticks と bodyTicks は、星屑と天体が1周を何回に分けて進むか（TICK・BODY_TICK ごとに1回。
+    描く側が steps() に渡す）
+  - sway は、軌道の上の向き（写した楕円の媒介変数の角。右の端の 0° から、画面で時計回り＝
+    手前へ）を SWAY_STEPS 等分した点ごとの天体の大きさの倍率（0° と 360° の両端を含む）。
+    回る天体の大きさの揺れで、描く側が CSS の linear() に渡す——手前へ回ると大きく、奥へ
+    回ると小さい。止まった天体の大きさ（OrbitBody の scale）と同じ式。天体には点ごとの段の
+    まま渡し（数秒に1度だけ変わる。毎コマ変わると天体の層を毎コマ描き直す）、流れる星には
+    点のあいだをなめらかにつないで渡す
+  - stardust は星屑。明るさの段（STARDUST_CLASSES 段。0 がいちばん淡く小さい）ごとの path の d
+    （単位円に直した座標の、長さ0の線の並び。描く側が丸い線端で点にする）
 */
-export type OrbitPath = { d: string; far: string; near: string }
+export type OrbitPath = {
+  d: string
+  far: string
+  near: string
+  ellipse: { cx: number; cy: number; rx: number; ry: number; angle: number }
+  period: number
+  ticks: number
+  bodyTicks: number
+  sway: number[]
+  stardust: string[]
+}
 /*
-  天体。side は札を先に試す側——枠の右の端に近い天体は左から試す（右へ出すと
-  札が枠の外で切れる。placeLabels）。orbit は乗っている軌道（orbits の何番目か。作品が
-  軌道の本数より多いときは、内側から順に相乗りする）。depth は奥行き（線の濃さの坂の
-  奥の端で 0、手前の端で 1。OrbitMap の depth）、scale はそれを写した大きさの倍率
-  （BODY_FAR から 1 まで）——手前の天体ほど大きく、奥ほど小さい。描く側が点と輪の
-  大きさに掛ける
+  天体。x と y は止まった姿の置き場所（枠の点）。orbit は乗る軌道（OrbitMap の orbits の
+  何本目か）、u と v はその軌道の単位円に直した置き場所、turn はその向き（度。OrbitPath の
+  sway と同じ角）——回る天体はここから動き出す。depth は奥行き（線の濃さの坂の奥の端で 0、
+  手前の端で 1。OrbitMap の depth）、scale はそれを写した大きさの倍率（BODY_FAR から 1 まで）
+  ——手前の天体ほど大きく、奥ほど小さい。描く側が点と輪の大きさに掛ける
 */
 export type OrbitBody = {
   kind: ItemKind
   x: number
   y: number
-  side: 'left' | 'right'
   orbit: number
+  u: number
+  v: number
+  turn: number
   depth: number
   scale: number
 }
@@ -79,7 +109,8 @@ export type OrbitBody = {
   ブラックホールへ吸い込まれる光の粒（入口と締め。app.css の .orbit-dust）。軌道面の上の
   向き a（度）から1周回りながら、半径 r0 から r1 まで落ちる。1周して元の向きで落ち切る
   ので、r1 はその向きで、斜めから見て黒い円の縁に来る半径（手前と奥の向きほど長い）。
-  dur 秒で1回、delay（負）で散らす。o は明るさ、w は点の太さ（px）
+  dur 秒で1回、delay（負）で散らす。o は明るさ、w は点の太さ（px）。ticks は落ちる道のりの
+  10 等分の1区間を何回に分けて進むか（MOTION_RATE の格子。描く側が steps() に渡す）
 */
 export type OrbitDust = {
   a: number
@@ -87,6 +118,7 @@ export type OrbitDust = {
   r1: number
   dur: number
   delay: number
+  ticks: number
   o: number
   w: number
 }
@@ -98,10 +130,10 @@ export type OrbitMap = {
   // 軌道面を枠へ写す変換（焦点へ動かし、傾け、潰す。SVG の transform 属性）。粒はこの中の点
   plane: string
   dust: OrbitDust[]
-  // 軌道に沿って流れる光の1周の秒数（orbits と同じ並び）
+  // 軌道を流れる星の1周の秒数（orbits と同じ並び。公転より速く、星屑と天体を追い越す）
   flows: number[]
   /*
-    枠を、軌道面の奥の側と手前の側に分ける半面（path）。軌道を流れる光は同じ写しを
+    枠を、軌道面の奥の側と手前の側に分ける半面（path）。軌道を流れる星や天体は同じ写しを
     奥と手前の層に1つずつ置き、それぞれをこの半面で切る——ブラックホールの向こうを
     流れるあいだは後ろの層に、こちらへ来るあいだは前の層に見える
   */
@@ -124,12 +156,6 @@ export type OrbitMap = {
     side は奥と手前のどちらの層に描くか（区間の真ん中が焦点より上なら奥）
   */
   bands: OrbitBand[]
-  /*
-    軌道に沿って散る星屑（components.tsx の Stardust）。奥と手前の層ごとに、明るさの段
-    （STARDUST_CLASSES 段。0 がいちばん淡く小さい）ごとの path の d（長さ0の線の並び。
-    描く側が丸い線端で点にする）
-  */
-  stardust: { far: string[]; near: string[] }
 }
 
 export type OrbitBand = { d: string; w: number; o: number; side: 'far' | 'near' }
@@ -158,7 +184,7 @@ const PERIAPSIS = 270
   - 透視で見る（CAMERA）。手前は大きく広がり、奥はブラックホールの後ろで詰まる——広い円盤を
     手前から見渡す奥行きが出る。どの距離も同じ大きさで見る（正射影）ころは、同じ形の輪が
     等しく並び、的か図面に見えた（持ち主の「軌道がださい。もっと壮大に」）。距離は枠の
-    outer に比例させる（星図のように枠ごと縮めても、同じ形に見える）
+    outer に比例させる（枠ごと縮めても、同じ形に見える）
   - ELEVATION 26°。14° のころは、7本の楕円が縦に潰れて詰まり、レコード盤か土星の輪に
     見えた（持ち主の「平たく詰まって見える」）
   - TILT 0°（水平）。−8° のころは、狙った傾きではなく曲がって見えた（持ち主の「傾きが
@@ -179,7 +205,7 @@ const MARGIN = 14
 
   真ん中（焦点）にはブラックホールを置く（components.tsx の OrbitSystem）。名前は
   置かない——名乗りは足元と Profile が持つ。天体を置かない矩形（clear）は影と光の芯の
-  まわりの空き（番号の札もここを避ける）。
+  まわりの空き。
 
   - ブラックホールの影（半径 hole）は小さく、光（上へ回り込む弧と、影の前を横切る円盤）が
     星系の幅の 1/4 ほどに広がる。円盤の光はいちばん内側の軌道の内に収まる。影が 76 の
@@ -190,8 +216,8 @@ const MARGIN = 14
   - いちばん外側の軌道は、枠の幅いっぱい（左右に MARGIN）に収まる。透視で手前が広がるぶん
     星系を縮める（orbitMap の fitScale。幅で決まる）。軌道は外ほど間を広げる（orbitAt）
   - 焦点は枠の上寄り——軌道は焦点より手前（下）へ深く回り（近点が奥）、透視で手前ほど大きく
-    写るので、星系の上下の真ん中を枠の真ん中にそろえると焦点は上の 3 割ほどに来る。上と下の
-    残りは番号の札の場所
+    写るので、星系の上下の真ん中を枠の真ん中にそろえると焦点は上の 3 割ほどに来る。上と下には
+    空きが残る（締めの枠はこの空きを外したもの）
 */
 export const HERO_FRAME: OrbitFrame = {
   width: 1000,
@@ -205,8 +231,8 @@ export const HERO_FRAME: OrbitFrame = {
 
 /*
   締めの枠。入口と同じ星系（軌道・天体・ブラックホールの大きさは入口の枠のまま）を、背の
-  低い横長の枠に置く——番号の札を持たないので、上下の空きが要らない。高さは星系の上下の
-  広がりに MARGIN を足しただけ。星系は枠の幅いっぱいで、電話の幅でも入口と同じ大きさに
+  低い横長の枠に置く——入口の枠から上下の空きを外しただけで、高さは星系の上下の
+  広がりに MARGIN を足したもの。星系は枠の幅いっぱいで、電話の幅でも入口と同じ大きさに
   見える（持ち主の「星系を大きく」）。広い画面では枠の幅に上限を置く（app.css の --contact-w）
 */
 export const CONTACT_FRAME: OrbitFrame = {
@@ -216,40 +242,37 @@ export const CONTACT_FRAME: OrbitFrame = {
 }
 
 /*
-  作品の星図の枠（components.tsx の OrbitChart。画像の無い作品の、作品のページと一覧の
-  行の絵）。締めの星系をそのまま縮めて、一覧のサムネイルと同じ背の低い横長（--chart-ratio。
-  画像の枠の --thumb-ratio とほぼ同じ）に収める。軌道・ブラックホール・天体を置かない
-  矩形を同じ比で縮めるので、天体は入口と締めと同じ向きに並ぶ（同じ件数なら同じ絵）。
-  左右は余る
-*/
-const shrink = (frame: OrbitFrame, height: number): OrbitFrame => {
-  const s = (height - 2 * MARGIN) / (frame.height - 2 * MARGIN)
-  const k = (value: number) => Math.round(value * s * 100) / 100
-  return {
-    width: frame.width,
-    height,
-    focus: { x: frame.focus.x, y: MARGIN + k(frame.focus.y - MARGIN) },
-    inner: k(frame.inner),
-    outer: k(frame.outer),
-    clear: { x: k(frame.clear.x), y: k(frame.clear.y) },
-    hole: k(frame.hole),
-  }
-}
-export const CHART_FRAME: OrbitFrame = shrink(CONTACT_FRAME, 320)
-
-// 札を左へ出す境（枠の幅に対する割合）。これより右の天体は札を左へ
-const LABEL_FLIP = 0.7
-
-/*
-  軌道を流れる光の1周の長さのもと（秒）。いちばん内側の軌道の公転の周期で、外側ほど長い
-  （ケプラーの第3法則。周期は長半径の 1.5 乗に比例）。天体そのものは公転させない——
-  天体は番号の札と同じ止まった場所に居る（札と食い違う天体を、重ねたときに札へ寄せると、
-  跳ぶか軌道を外れて飛んだ）。動くのは光だけで、外側ほどゆっくり流れる
+  公転の周期のもと（秒）。いちばん内側の軌道の1周で、外側ほど長い（ケプラーの第3法則。周期は
+  長半径の 1.5 乗に比例。OrbitPath の period）。星屑と天体は軌道ごとこの周期で回り、外側ほど
+  ゆっくり回る——円盤が渦を巻いて見える。速くすると図そのものが回って見え、目が字から離れる
 */
 const INNER_PERIOD = 90
 
-// 軌道を流れる光は、公転の周期のこの割合で1周する
+// 軌道を流れる星は、公転の周期のこの割合で1周する（星屑と天体を追い越して流れる）
 const FLOW_SHARE = 0.2
+
+// 回る天体の大きさの揺れ（OrbitPath の sway）を、1周の何等分の点で渡すか
+const SWAY_STEPS = 36
+
+/*
+  ゆっくり動くものの刻み（ミリ秒）。星屑と星の瞬きは TICK ごと、天体は BODY_TICK ごとにだけ姿を
+  変え、そのあいだは描いた層を使い回す（描き直さない）。公転はゆっくりで（いちばん速い内側の
+  軌道の手前でも、机の幅で 1 秒に 10px ほど）、1回に進むのは 1px に満たないので、刻んでも
+  滑らかに見える。
+
+  どれも同じ格子に乗るよう、周期を TICK の倍数にそろえる（OrbitPath の period）——刻みが軌道
+  ごとにばらけると、層はほぼ毎コマ描き直しになる。動くものを毎コマ描き直していたころは、
+  144Hz の画面で GPU の仕事が1コマの枠（約 6.9ms）を超え、ブラウザごと重くなった
+*/
+export const TICK = 80
+export const BODY_TICK = 40
+
+/*
+  毎コマ動くもの（流れる星と吸い込まれる粒）を1秒に何回進めるか。どれも 1/MOTION_RATE 秒の
+  格子に乗せる（流れる星の周期は整数の秒、粒の周期は 0.5 秒・遅れは 0.05 秒の倍数）。60Hz の
+  画面では毎コマ進み、144Hz の画面でも層を描き直すのは1秒に MOTION_RATE 回まで
+*/
+export const MOTION_RATE = 60
 
 /*
   業務の天体の輪（OrbitMap の ring）。横の半径はいちばん内側の軌道の長半径に対する割合で、
@@ -272,7 +295,7 @@ const BAND_WIDTH = [4, 18] as const
 const BAND_OUTER = 0.6
 
 /*
-  星屑（OrbitMap の stardust）。いちばん外側の軌道に散らす粒の数（内側は長半径に比例して
+  星屑（OrbitPath の stardust）。いちばん外側の軌道に散らす粒の数（内側は長半径に比例して
   少ない）と、明るさの段の境（STARDUST_CLASSES 段。描く側が段ごとに太さと濃さを決める）
 */
 const STARDUST = 360
@@ -283,8 +306,9 @@ const STARDUST_STEPS = [0.18, 0.42, 0.75] as const
   天体を置く向きの刻み（度。画面の上の軌道の長さを1周 360° とみなした角）。黄金角と、同じ
   軌道に乗る次の天体までの角（orbitMap）。ROUND_TURN は1周（本数ぶん）進むごとに足す向きで、
   黄金角の列の続きを ROUND_SPREAD に直す。作品が本数より多いとき（本数は MAX_ORBITS）にだけ
-  効く。札が重ならないことは test/orbits.test.ts が 20 件まで確かめる（透視にしたとき、
-  196.5° のままでは 16〜18 件で札が重なった）
+  効く。186° は、前に天体の横に置いていた番号の札が重ならないように選んだ値（196.5° では
+  16〜18 件で札が重なった）。札を外したいまは、同じ軌道の天体をほぼ反対側へ散らすためだけに
+  効く。天体どうしの間は test/orbits.test.ts が 20 件まで確かめる
 */
 const GOLDEN = 137.508
 const ROUND_SPREAD = 186
@@ -305,6 +329,21 @@ const seeded = (seed: number) => {
 const rad = (degrees: number) => (degrees * Math.PI) / 180
 const round = (value: number) => Math.round(value * 10) / 10
 const round3 = (value: number) => Math.round(value * 1000) / 1000
+const round4 = (value: number) => Math.round(value * 10000) / 10000
+
+type Ellipse = OrbitPath['ellipse']
+
+/*
+  単位円に直した星屑の粒1つを、長さ0の線の path にする。3 桁で、頭の 0 を落とす（粒は
+  千を超えて、入口と締めの HTML に奥と手前の2回ずつ載る）。3 桁の丸めは、いちばん外側の
+  軌道でも枠の単位で 0.3 に収まる
+*/
+const unitDot = (u: number, v: number) => {
+  const text = (value: number) => String(round3(value)).replace(/^(-?)0\./, '$1.')
+  const x = text(u)
+  const y = text(v)
+  return `M${x}${y.startsWith('-') ? '' : ' '}${y}h0`
+}
 
 /*
   軌道面の点（焦点が原点。y は奥が負）を、透視で見た枠の点へ。カメラは焦点から
@@ -491,9 +530,9 @@ function fitScale(frame: OrbitFrame, n: number): number {
   j 番目の天体は (j mod 本数) 本目の軌道に乗り、画面の上の軌道の長さで黄金角ずつ回した
   所に置く（件数が増えても、天体が片側に固まらない。透視で詰まる奥には少ない）。作品が軌道の本数より多いと、
   同じ軌道に2つ目が乗る。黄金角の列の続きのままだと、本数 5 では1つ目からたった 32.5°
-  （5 × 137.5° の余り）の所に来て、番号の札が重なった。そこで1周ごとに向きを足し、
+  （5 × 137.5° の余り）の所に来て、同じ軌道の2つが寄った。そこで1周ごとに向きを足し、
   同じ軌道の次の天体を ROUND_SPREAD（186°。ほぼ反対側から少しずらす）先に置く。
-  ちょうど半周にすると、入れ子の軌道で別の軌道の天体と同じ向きに並び、札が重なった。
+  ちょうど半周にすると、入れ子の軌道で別の軌道の天体と同じ向きに一列に並んだ。
   置いた点がブラックホールのまわりの矩形（frame.clear）に入ったら、軌道の上を先へ
   送って矩形の外に出す。
 */
@@ -521,12 +560,15 @@ export function orbitMap(counts: KindCounts, frame: OrbitFrame): OrbitMap {
   const farEnd = seen(0, -deepest)
   const nearEnd = seen(0, deepest)
   // 枠の点の奥行き。坂の奥の端で 0、手前の端で 1（天体の大きさ。OrbitBody の depth）
-  const depthOf = (point: { x: number; y: number }) => {
+  const depthAt = (point: { x: number; y: number }) => {
     const dx = nearEnd.x - farEnd.x
     const dy = nearEnd.y - farEnd.y
     const t = ((point.x - farEnd.x) * dx + (point.y - farEnd.y) * dy) / (dx * dx + dy * dy)
-    return Math.round(Math.min(1, Math.max(0, t)) * 100) / 100
+    return Math.min(1, Math.max(0, t))
   }
+  const depthOf = (point: { x: number; y: number }) => Math.round(depthAt(point) * 100) / 100
+  // 天体の大きさの倍率。奥行きを BODY_FAR から 1 までに写す（止まった天体と回る天体で同じ式）
+  const sizeAt = (depth: number) => BODY_FAR + (1 - BODY_FAR) * depth
   // 奥（焦点より上）の層か
   const isFar = (point: { x: number; y: number }) =>
     (point.x - frame.focus.x) * Math.sin(rad(TILT)) -
@@ -534,8 +576,41 @@ export function orbitMap(counts: KindCounts, frame: OrbitFrame): OrbitMap {
     0
 
   /*
+    軌道ごとの写した楕円（OrbitPath の ellipse）。線の d と同じ丸めで持つ——星屑と天体は
+    この楕円の枠の中で回るので、線から外れない
+  */
+  const ellipses: Ellipse[] = orbits.map((orbit) => {
+    const { center, rx, ry, angle } = seenEllipse(frame, orbit, scale)
+    return {
+      cx: round(center.x),
+      cy: round(center.y),
+      rx: round(rx),
+      ry: round(ry),
+      angle: round((angle * 180) / Math.PI),
+    }
+  })
+  // 枠の点を、i 本目の軌道の単位円に直す（楕円の中心へ寄せ、回す角を戻し、半径で割る）
+  const unitOf = (i: number, point: { x: number; y: number }) => {
+    const { cx, cy, rx, ry, angle } = ellipses[i] as Ellipse
+    const cos = Math.cos(rad(angle))
+    const sin = Math.sin(rad(angle))
+    const dx = point.x - cx
+    const dy = point.y - cy
+    return { u: (dx * cos + dy * sin) / rx, v: (-dx * sin + dy * cos) / ry }
+  }
+  // i 本目の軌道の写した楕円の、向き theta（度）の点
+  const ellipseAt = (i: number, theta: number) => {
+    const { cx, cy, rx, ry, angle } = ellipses[i] as Ellipse
+    const cos = Math.cos(rad(angle))
+    const sin = Math.sin(rad(angle))
+    const u = rx * Math.cos(rad(theta))
+    const v = ry * Math.sin(rad(theta))
+    return { x: cx + u * cos - v * sin, y: cy + u * sin + v * cos }
+  }
+
+  /*
     軌道ごとの、画面の上の長さで測った置き場所の表（真近点角 1° ごとの、近点から測った長さの
-    割合）。透視で奥の半分は短く写るので、角で等しく刻むと天体が奥に詰まり、札が重なった
+    割合）。透視で奥の半分は短く写るので、角で等しく刻むと天体が奥に詰まった
   */
   const lengths = orbits.map((orbit) => {
     const marks = [0]
@@ -581,18 +656,37 @@ export function orbitMap(counts: KindCounts, frame: OrbitFrame): OrbitMap {
       const point = pointAt(orbit, nu)
       at = seen(point.x, point.y)
     }
+    const x = round(at.x)
+    const y = round(at.y)
+    // 回る天体の出だし。止まった置き場所を、乗る軌道の単位円に直す
+    const { u, v } = unitOf(j % n, { x, y })
     return {
       kind,
-      x: round(at.x),
-      y: round(at.y),
-      side: at.x > frame.width * LABEL_FLIP ? ('left' as const) : ('right' as const),
+      x,
+      y,
       orbit: j % n,
+      u: round4(u),
+      v: round4(v),
+      turn: round(((Math.atan2(v, u) * 180) / Math.PI + 360) % 360),
       depth: depthOf(at),
-      scale: Math.round((BODY_FAR + (1 - BODY_FAR) * depthOf(at)) * 100) / 100,
+      scale: Math.round(sizeAt(depthOf(at)) * 100) / 100,
     }
   })
 
   const aMin = orbits[0]?.a ?? 1
+  // 公転の周期（OrbitPath の period。秒）。刻みの格子に乗るよう TICK の倍数にそろえる
+  const periods = orbits.map(
+    (orbit) => (Math.round((INNER_PERIOD * (orbit.a / aMin) ** 1.5 * 1000) / TICK) * TICK) / 1000,
+  )
+  /*
+    回る天体の大きさの揺れ（OrbitPath の sway）。写した楕円を SWAY_STEPS 等分した向きごとの、
+    止まった天体と同じ式の倍率（奥行きの坂を写す）
+  */
+  const sways = orbits.map((_, i) =>
+    Array.from({ length: SWAY_STEPS + 1 }, (_, k) =>
+      round3(sizeAt(depthAt(ellipseAt(i, (k / SWAY_STEPS) * 360)))),
+    ),
+  )
   /*
     軌道面を枠へ写す変換（粒の層）。透視は SVG の変換で書けないので、焦点のまわりで透視に
     いちばん近い平行の写し（焦点での縮みと潰し）にする——粒はブラックホールへ落ちるので、
@@ -614,13 +708,15 @@ export function orbitMap(counts: KindCounts, frame: OrbitFrame): OrbitMap {
     const edge = frame.hole / (scale * Math.hypot(Math.cos(rad(a)), SQUASH * Math.sin(rad(a))))
     const r1 = round(edge * (1 + random() * 0.1))
     const from = Math.max(inner, r1 * 1.3)
-    const dur = round(6 + random() * 6)
+    // 周期と遅れは MOTION_RATE の格子に乗せる（10 等分の1区間が格子の倍数になるように）
+    const dur = Math.round((6 + random() * 6) * 2) / 2
     return {
       a,
       r0: round(from + random() * Math.max(0, outer - from)),
       r1,
       dur,
-      delay: -round(random() * dur),
+      delay: -Math.round(random() * dur * 20) / 20,
+      ticks: Math.round((dur * MOTION_RATE) / 10),
       o: Math.round((0.35 + random() * 0.55) * 100) / 100,
       w: round(1.2 + random() * 1.2),
     }
@@ -662,12 +758,11 @@ export function orbitMap(counts: KindCounts, frame: OrbitFrame): OrbitMap {
   /*
     星屑。軌道ごとに、長さ（長半径）に比例した数の粒を、軌道に沿って塊（濃い所）と疎らな所が
     できるように散らす。半径の向きにも少し散らす（帯の幅に収まる程度）。明るさは暗いものほど
-    多く、手前ほど明るい段に寄る。乱数の種は軌道の順で決まる——入口と締めで同じ星屑になる
+    多く、出だしで手前に居るものほど明るい段に寄る。乱数の種は軌道の順で決まる——入口と締めで
+    同じ星屑になる。置き場所はその軌道の単位円に直して持つ（回るのは描く側。塊ごと回るので、
+    軌道が回って見える）
   */
-  const stardust = {
-    far: Array.from({ length: STARDUST_CLASSES }, () => [] as string[]),
-    near: Array.from({ length: STARDUST_CLASSES }, () => [] as string[]),
-  }
+  const stardust = orbits.map(() => Array.from({ length: STARDUST_CLASSES }, () => [] as string[]))
   const aMax = orbits[orbits.length - 1]?.a ?? frame.outer
   orbits.forEach((orbit, i) => {
     const random = seeded(1009 + i * 7919)
@@ -685,7 +780,8 @@ export function orbitMap(counts: KindCounts, frame: OrbitFrame): OrbitMap {
       const score = random() ** 2.6 + 0.3 * depthOf(at)
       const step = STARDUST_STEPS.findIndex((edge) => score < edge)
       const level = step < 0 ? STARDUST_CLASSES - 1 : step
-      ;(isFar(at) ? stardust.far : stardust.near)[level]?.push(`M${round(at.x)} ${round(at.y)}h0`)
+      const { u, v } = unitOf(i, at)
+      stardust[i]?.[level]?.push(unitDot(u, v))
       made += 1
     }
   })
@@ -693,14 +789,21 @@ export function orbitMap(counts: KindCounts, frame: OrbitFrame): OrbitMap {
   return {
     width: frame.width,
     height: frame.height,
-    orbits: orbits.map((orbit) => ({
+    orbits: orbits.map((orbit, i) => ({
       d: orbitPath(frame, orbit, scale),
       ...orbitHalves(frame, orbit, scale),
+      ellipse: ellipses[i] as Ellipse,
+      period: periods[i] ?? INNER_PERIOD,
+      ticks: Math.round(((periods[i] ?? INNER_PERIOD) * 1000) / TICK),
+      bodyTicks: Math.round(((periods[i] ?? INNER_PERIOD) * 1000) / BODY_TICK),
+      sway: sways[i] ?? [],
+      stardust: (stardust[i] ?? []).map((dots) => dots.join('')),
     })),
     bodies,
     plane,
     dust,
-    flows: orbits.map((orbit) => round(INNER_PERIOD * (orbit.a / aMin) ** 1.5 * FLOW_SHARE)),
+    // 流れる星の周期は整数の秒（MOTION_RATE の格子に乗る）
+    flows: orbits.map((orbit) => Math.round(INNER_PERIOD * (orbit.a / aMin) ** 1.5 * FLOW_SHARE)),
     halves: { far: half(back), near: half({ x: -back.x, y: -back.y }) },
     depth: { x1: round(farEnd.x), y1: round(farEnd.y), x2: round(nearEnd.x), y2: round(nearEnd.y) },
     ring: {
@@ -709,10 +812,6 @@ export function orbitMap(counts: KindCounts, frame: OrbitFrame): OrbitMap {
       tilt: RING_TILT,
     },
     bands,
-    stardust: {
-      far: stardust.far.map((dots) => dots.join('')),
-      near: stardust.near.map((dots) => dots.join('')),
-    },
   }
 }
 
@@ -927,7 +1026,8 @@ export type CosmosStar = {
   y: number
   o: number
   w: number
-  twinkle: { dur: number; delay: number } | null
+  // 瞬き。dur と delay は TICK の格子に乗り、ticks は明暗の片道を何回に分けて変えるか
+  twinkle: { dur: number; delay: number; ticks: number } | null
   glint: boolean
 }
 export type CosmosMeteor = { x: number; y: number; angle: number; dur: number; delay: number }
@@ -944,13 +1044,22 @@ export function cosmosMap(): CosmosMap {
     const x = round(random() * COSMOS.width)
     const y = round(random() * COSMOS.height)
     const bright = random() ** 2.2
-    const dur = round(2.5 + random() * 4.5)
+    /*
+      瞬きの周期と遅れは TICK の格子に乗せる（明るさは TICK ごとにだけ変わり、そのあいだは星空の
+      層を描き直さない）。周期は明暗の往復なので、片道が TICK の倍数になるよう 2 TICK の倍数に
+    */
+    const half = Math.round(((2.5 + random() * 4.5) * 1000) / (2 * TICK))
+    const dur = (half * 2 * TICK) / 1000
+    const twinkle =
+      random() < COSMOS_TWINKLE
+        ? { dur, delay: -(Math.round(random() * half * 2) * TICK) / 1000, ticks: half }
+        : null
     return {
       x,
       y,
       o: Math.round((0.18 + bright * 0.72) * 100) / 100,
       w: round(0.6 + bright * 1.3),
-      twinkle: random() < COSMOS_TWINKLE ? { dur, delay: -round(random() * dur) } : null,
+      twinkle,
     }
   })
   // 光芒を付ける明るさの境（明るいほうから GLINTS 番目）
@@ -965,194 +1074,4 @@ export function cosmosMap(): CosmosMap {
       { x: 1460, y: 250, angle: 165, dur: 21, delay: -15 },
     ],
   }
-}
-
-/*
-  天体と作品を結ぶ。天体は区分ごとの件数から並ぶ（interleaveKinds）ので、区分 k の
-  j 番目の天体に、区分 k の作品の j 番目（一覧の並び）を載せる。載せる作品が足りない
-  天体は null（件数と作品の列を別々に引いたとき、数えたあとに1件減っていても落ちない）。
-*/
-export function bodyItems<T extends { type: ItemKind }>(
-  bodies: readonly { kind: ItemKind }[],
-  items: readonly T[],
-) {
-  const taken = Object.fromEntries(ITEM_KIND_KEYS.map((kind) => [kind, 0])) as KindCounts
-  return bodies.map((body) => {
-    const item = items.filter((one) => one.type === body.kind)[taken[body.kind]] ?? null
-    taken[body.kind] += 1
-    return item
-  })
-}
-
-/*
-  作品ごとに、載っている天体（orbitMap の bodies の何番目か）を引く表。結び方は bodyItems と
-  同じ1本で、天体の並びは件数だけから決まる（interleaveKinds。枠には依らない）。items は
-  公開中の全件を一覧の並びで——絞り込んだ一覧の行だけを渡すと、区分の中の順が変わって
-  別の天体を指す。
-
-  作品の星図（components.tsx の OrbitChart）が、入口の軌道図で同じ作品が載っている天体と
-  その軌道を灯すのに使う。載る天体の無い作品（件数を数えたあとに増えた行）は表に無い。
-*/
-export function bodyIndexOf<T extends { id: number; type: ItemKind }>(
-  counts: KindCounts,
-  items: readonly T[],
-): Map<number, number> {
-  const index = new Map<number, number>()
-  bodyItems(
-    interleaveKinds(counts).map((kind) => ({ kind })),
-    items,
-  ).forEach((item, j) => {
-    if (item) index.set(item.id, j)
-  })
-  return index
-}
-
-/*
-  入口の軌道図の札の置き場所（components.tsx の OrbitSystem）。
-
-  札は天体の右上・左上・右下・左下のどれかに出す（ne / nw / se / sw）。天体の横に
-  置くのは作品の番号（01・02 …）だけで、名前は札にマウスを重ねたときとキーボードで
-  選んだときに出る（app.css の .system__name）——名前まで並べると、どの幅でも札が
-  ブラックホールの光の縁に掛かった。置き場所は番号の札の大きさで選ぶ。
-
-  枠の中に収まり、ほかの札・ほかの天体・ブラックホールに重ならない向きを選ぶ。どれも
-  重なるなら、重なりのいちばん小さいもの。先に試す側は天体の side。重ならない向きが
-  いくつかあれば、名前を出したときに伸びる側（ne / se は右、nw / sw は左）の枠の端
-  までの空きが広いほう——狭い側では名前が省かれる（札の幅は labelRoom で止める）。
-
-  札の大きさは画面の px で決まり（字の段）、枠は画面に合わせて伸び縮みする。札を
-  出すのは枠が LABEL_MIN_WIDTH 以上のときだけ（app.css の @container）で、その
-  いちばん小さい枠で重ならなければ、枠が大きいほど札は相対的に小さくなるので
-  重ならない。だから札の箱は LABEL_MIN_WIDTH の枠の単位で測る。
-*/
-export type LabelSide = 'ne' | 'nw' | 'se' | 'sw'
-
-// 札を出す枠の幅の下限（px）。app.css の @container (min-width: …) と同じ数（test/theme.test.ts が見る）
-export const LABEL_MIN_WIDTH = 520
-// 天体から札の角までの離れ（px）と、名前を出したときの札の幅の上限（px。長い名前は末尾を省く）
-export const LABEL_GAP = { x: 10, y: 6 }
-export const LABEL_MAX_WIDTH = 180
-// 番号の札の大きさ（px。等幅の2字（--fs-label）と左右の余白、1行の高さ）
-export const LABEL_SIZE = { width: 28, height: 18 }
-// 札のまわりに空ける間（px）と、天体の点の半径（px。--orbit-body の上限の半分より大きめ）
-const LABEL_PAD = 3
-const BODY_RADIUS = 6
-/*
-  名前の伸びる空きが LABEL_MAX_WIDTH に足りない分の重さ（1 単位あたり）。重なりの
-  重さ（面積）よりずっと軽く、重ならない向きどうしの比べにだけ効く
-*/
-const ROOM_WEIGHT = 0.01
-
-/*
-  札の伸びる向きの、天体から枠の端までの空き（枠の幅に対する %）。名前を出すと札は
-  伸びる向きへ長くなる（ne / se は右へ、nw / sw は左へ）。app.css はこの空きから
-  --label-dx を引いた幅で札を止める（部品が cqi で渡す。札の箱の % は幅 0 の li に
-  対して解かれるので使えない）——止めないと、伸びた札が枠の overflow-x: clip に
-  番号ごと切られる
-*/
-export function labelRoom(frame: OrbitFrame, body: OrbitBody, side: LabelSide): number {
-  const room = side === 'ne' || side === 'se' ? frame.width - body.x : body.x
-  return Math.round((room / frame.width) * 10000) / 100
-}
-
-type Box = { x0: number; y0: number; x1: number; y1: number }
-
-const overlap = (a: Box, b: Box) =>
-  Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)) *
-  Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0))
-
-export function placeLabels(frame: OrbitFrame, bodies: OrbitBody[]): LabelSide[] {
-  // px → viewBox の単位（いちばん小さい枠で）
-  const unit = frame.width / LABEL_MIN_WIDTH
-  const boxOf = (i: number, side: LabelSide): Box => {
-    const body = bodies[i] as OrbitBody
-    const w = LABEL_SIZE.width * unit
-    const h = LABEL_SIZE.height * unit
-    const gx = LABEL_GAP.x * unit
-    const gy = LABEL_GAP.y * unit
-    const x0 = side === 'ne' || side === 'se' ? body.x + gx : body.x - gx - w
-    const y0 = side === 'ne' || side === 'nw' ? body.y - gy - h : body.y + gy
-    return { x0, y0, x1: x0 + w, y1: y0 + h }
-  }
-  const grow = (box: Box, by: number): Box => ({
-    x0: box.x0 - by,
-    y0: box.y0 - by,
-    x1: box.x1 + by,
-    y1: box.y1 + by,
-  })
-  const dots = bodies.map((body) => ({
-    x0: body.x - BODY_RADIUS * unit,
-    y0: body.y - BODY_RADIUS * unit,
-    x1: body.x + BODY_RADIUS * unit,
-    y1: body.y + BODY_RADIUS * unit,
-  }))
-  // ブラックホールの黒い円と光の縁（天体を置かない矩形。viewBox の単位のまま）
-  const hole: Box = {
-    x0: frame.focus.x - frame.clear.x,
-    y0: frame.focus.y - frame.clear.y,
-    x1: frame.focus.x + frame.clear.x,
-    y1: frame.focus.y + frame.clear.y,
-  }
-  const whole: Box = { x0: 0, y0: 0, x1: frame.width, y1: frame.height }
-  /*
-    札 i を side に置いたときの重さ。枠の外へ出る分は、どんな重なりより重い（切れた札は
-    読めない。ほかに向きが無いときだけ、はみ出しのいちばん小さい向きに置く）。
-    ブラックホールに重なる分がその次（光の縁の上に乗った札は絵を隠す）。ほかの天体と、
-    ほかの札（labels に向きが決まっているもの）に重なる分はそのまま数える。名前の
-    伸びる空きの足りなさは、いちばん軽い（ROOM_WEIGHT）
-  */
-  const costOf = (i: number, side: LabelSide, labels: (LabelSide | null)[]) => {
-    const box = boxOf(i, side)
-    const padded = grow(box, LABEL_PAD * unit)
-    const outside = (box.x1 - box.x0) * (box.y1 - box.y0) - overlap(box, whole)
-    const room = side === 'ne' || side === 'se' ? frame.width - box.x0 : box.x1
-    let cost =
-      outside * 1e6 +
-      overlap(padded, hole) * 2 +
-      Math.max(0, LABEL_MAX_WIDTH * unit - room) * ROOM_WEIGHT
-    dots.forEach((dot, j) => {
-      if (j !== i) cost += overlap(padded, dot)
-    })
-    labels.forEach((other, j) => {
-      if (j !== i && other) cost += overlap(padded, boxOf(j, other))
-    })
-    return cost
-  }
-  const orderOf = (i: number): LabelSide[] =>
-    bodies[i]?.side === 'right' ? ['ne', 'se', 'nw', 'sw'] : ['nw', 'sw', 'ne', 'se']
-  const best = (i: number, labels: (LabelSide | null)[]) => {
-    let chosen: { side: LabelSide; cost: number } | null = null
-    for (const side of orderOf(i)) {
-      const cost = costOf(i, side, labels)
-      if (!chosen || cost < chosen.cost) chosen = { side, cost }
-      if (cost === 0) break
-    }
-    // orderOf は4つの向きを返すので、必ず決まる
-    return chosen as { side: LabelSide; cost: number }
-  }
-
-  // 1. 天体の順に、先に置いた札を避けて1つずつ置く
-  const labels: (LabelSide | null)[] = bodies.map(() => null)
-  bodies.forEach((_, i) => {
-    labels[i] = best(i, labels).side
-  })
-  /*
-    2. 全部置いたあとで、1つずつ置き直す（ほかの札を全部見て、いまより軽い向きが
-    あれば移す）。先着順だけだと、先に置いた札が後の天体の唯一の逃げ場をふさいで
-    いることがある（枠の右の端の天体は左にしか出せない、など）。軽くなる限り回すが、
-    同じ入力なら同じ答え（向きを試す順も天体の順も決まっている）
-  */
-  for (let pass = 0; pass < 6; pass += 1) {
-    let moved = false
-    bodies.forEach((_, i) => {
-      const now = costOf(i, labels[i] as LabelSide, labels)
-      const next = best(i, labels)
-      if (next.cost < now) {
-        labels[i] = next.side
-        moved = true
-      }
-    })
-    if (!moved) break
-  }
-  return labels as LabelSide[]
 }

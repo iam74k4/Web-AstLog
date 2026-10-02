@@ -33,13 +33,9 @@
                           帯の下端より下に来る（app.css の scroll-padding-top と :root の
                           --top-clear）
     (8) 押す的             目次の行き先と管理画面への入口の高さが --tap 以上
-                          （指の姿では 44px）。入口の番号の札は、札の中心に重ねた透明の面
-                          （.system__label a::after）が縦横とも --tap 以上
+                          （指の姿では 44px）
     (9) 見出しの錨         同じ書体・寸法・姿の中で、節の見出しの上端の y が 1px 以内でそろう
-   (10) 入口の軌道図       ブラックホールが焦点に座り、番号の札が出ているときは、札どうしも
-                          札と光の縁も重ならず、どの札も枠の中に収まる（札の置き場所は
-                          src/lib/orbits.ts の placeLabels が番号の札の大きさの見積もり
-                          LABEL_SIZE で選ぶ。本物の書体で組んだ幅で確かめる）
+   (10) 入口の軌道図       ブラックホールが焦点に座り、光の絵が読めている
 
   ほかに、読み込み直して測るものが2つある（measureRun の後半）。
 
@@ -105,19 +101,14 @@ import { importTs } from './lib/ts-import.mjs'
 import { DESIGN_SIZES } from './lib/viewports.mjs'
 
 /*
-  入口の枠の焦点（ブラックホールの置き場所）と、そのまわりの天体と札を置かない矩形（clear。
-  ブラックホールの影と光が乗る）を、枠に対する割合で。src/lib/orbits.ts の HERO_FRAME を
-  そのまま読む——焦点は枠の真ん中より上にある（軌道は焦点より手前へ深く回るので、星系の上下の
-  真ん中を枠の真ん中にそろえる）。写すと、焦点を動かした日に検査だけが古い所を測る
+  入口の枠の焦点（ブラックホールの置き場所）を、枠に対する割合で。src/lib/orbits.ts の
+  HERO_FRAME をそのまま読む——焦点は枠の真ん中より上にある（軌道は焦点より手前へ深く回るので、
+  星系の上下の真ん中を枠の真ん中にそろえる）。写すと、焦点を動かした日に検査だけが古い所を測る
 */
 const { HERO_FRAME } = await importTs('src/lib/orbits.ts')
 const FOCUS = {
   x: HERO_FRAME.focus.x / HERO_FRAME.width,
   y: HERO_FRAME.focus.y / HERO_FRAME.height,
-}
-const CLEAR = {
-  x: HERO_FRAME.clear.x / HERO_FRAME.width,
-  y: HERO_FRAME.clear.y / HERO_FRAME.height,
 }
 
 // 設計サイズ（390 と 768 は指で測る）。一覧と理由は scripts/lib/viewports.mjs
@@ -214,7 +205,7 @@ const measure = ([typeface, cfg]) => {
   /*
     着いたときの動き（入口のブラックホールが大きく灯り、軌道が回って収まる）は
     終わらせてから測る。測るのは止まった版面で、動きの途中の箱の位置ではない
-    （途中の姿の読みやすさは check:contrast が測る）。終わらない動き（軌道を流れる光や
+    （途中の姿の読みやすさは check:contrast が測る）。終わらない動き（軌道を流れる星や
     ブラックホールの光の揺らぎ）は finish() できない（投げる）ので、外して止まった姿に戻す
   */
   for (const animation of document.getAnimations()) {
@@ -318,7 +309,7 @@ const measure = ([typeface, cfg]) => {
     /*
       SVG の中（ロゴの光・軌道図の線と点）は測らない。線の箱（getBoundingClientRect）は
       線の形の外接の箱で、SVG が枠で切る前の形のまま——ロゴの O の光は字の箱の外へ
-      出して見せ、軌道を流れる光の破線の箱は軌道1周ぶんある。SVG の箱そのものは、
+      出して見せ、軌道図の星屑の箱は半面で切る前の軌道1周ぶんある。SVG の箱そのものは、
       画面の中に居て、祖先に切られていないこと（下で測る）
     */
     const drawing = el.tagName.toLowerCase() === 'svg'
@@ -387,40 +378,14 @@ const measure = ([typeface, cfg]) => {
     }
   }
   /*
-    入口の番号の札は見た目が小さい（番号だけで 23×15px ほど）。押す的は、札の中心に
-    重ねた透明の面（.system__label a::after）。札が出ているときだけ測る
-  */
-  for (const hand of main.querySelectorAll('.system__label a')) {
-    if (hand.getBoundingClientRect().width === 0) continue
-    const face = getComputedStyle(hand, '::after')
-    const wide = Number.parseFloat(face.width)
-    const tall = Number.parseFloat(face.height)
-    if (!(wide >= tap - slack && tall >= tap - slack)) {
-      problems.push(
-        `入口の札の的「${hand.textContent.trim()}」が ${round(wide)}x${round(tall)}px（--tap は ${tap}px）`,
-      )
-    }
-  }
-
-  /*
     (10) 入口の軌道図。ブラックホールは焦点（入口の枠の HERO_FRAME の focus。cfg.focus は枠に
     対する割合）に座る——箱は回してあるが、回る中心が箱の真ん中なので、外接の箱の真ん中が
-    焦点。札が出ている
-    （枠が LABEL_MIN_WIDTH 以上）ときは、札どうしと、札とブラックホールのまわりの矩形（HERO_FRAME
-    の clear。影と光が乗る。cfg.clear は枠に対する割合）が重ならず、札が枠の中に収まる。札の箱は
-    字の箱（リンク）そのもの（名前は重ねたときだけ出るので、ふだんは番号）
+    焦点。天体に札は添えない（持ち主が「いらない」と外した）ので、測るのはブラックホールだけ
   */
   const system = document.querySelector('.system')
   if (system && getComputedStyle(system).display !== 'none') {
     const box = system.getBoundingClientRect()
     const hole = system.querySelector('.hole')?.getBoundingClientRect()
-    // ブラックホールのまわりの矩形。札が掛かってはいけない所
-    const core = {
-      left: box.left + box.width * (cfg.focus.x - cfg.clear.x),
-      right: box.left + box.width * (cfg.focus.x + cfg.clear.x),
-      top: box.top + box.height * (cfg.focus.y - cfg.clear.y),
-      bottom: box.top + box.height * (cfg.focus.y + cfg.clear.y),
-    }
     if (hole) {
       const dx = (hole.left + hole.right) / 2 - (box.left + box.width * cfg.focus.x)
       const dy = (hole.top + hole.bottom) / 2 - (box.top + box.height * cfg.focus.y)
@@ -433,31 +398,6 @@ const measure = ([typeface, cfg]) => {
       }
     } else {
       problems.push('入口の軌道図にブラックホール（.hole）が無い')
-    }
-    const labels = [...system.querySelectorAll('.system__label > *')]
-      .map((el) => ({ name: el.textContent.trim(), rect: el.getBoundingClientRect() }))
-      .filter((one) => one.rect.width > 0)
-    const overlap = (a, b) =>
-      Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) *
-      Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top))
-    for (const [i, one] of labels.entries()) {
-      const { rect } = one
-      if (
-        rect.left < box.left - slack ||
-        rect.right > box.right + slack ||
-        rect.top < box.top - slack ||
-        rect.bottom > box.bottom + slack
-      ) {
-        problems.push(`軌道図の札「${one.name}」が枠の外へ出ている`)
-      }
-      if (overlap(rect, core) > slack) {
-        problems.push(`軌道図の札「${one.name}」がブラックホールのまわりの矩形に重なる`)
-      }
-      for (const other of labels.slice(i + 1)) {
-        if (overlap(rect, other.rect) > slack) {
-          problems.push(`軌道図の札「${one.name}」と「${other.name}」が重なる`)
-        }
-      }
     }
   }
 
@@ -677,7 +617,7 @@ async function measureRun(browser, base, run, typefaces) {
         for (const typeface of typefaces) {
           const found = await page.evaluate(measure, [
             typeface,
-            { slack: SLACK, anchored: ANCHORED, focus: FOCUS, clear: CLEAR },
+            { slack: SLACK, anchored: ANCHORED, focus: FOCUS },
           ])
           checked += 1
           const label = `${typeface} ${where} ${path}`
@@ -821,7 +761,7 @@ async function main() {
     }
     console.log(
       `✓ ${result.run.label}: ${result.checked} 通り（${result.urls} URL × ${shape}${poses}）。` +
-        `横のはみ出し 0・切られた要素 0・h1 はどれも1つ・一番下まで送っても目次が見え、送った先は帯の下・軌道図の札は重ならない。` +
+        `横のはみ出し 0・切られた要素 0・h1 はどれも1つ・一番下まで送っても目次が見え、送った先は帯の下・ブラックホールは焦点に座る。` +
         `いちばん長いページ ${result.longest.tall}px（${result.longest.where}）。` +
         `見出しの錨のずれ 最大 ${result.drift}px。` +
         `目次の印 ${result.toc.checked} ページが帯の中（うち ${result.toc.scrolled} ページは送って開いた）。` +
@@ -835,7 +775,7 @@ async function main() {
         '\n送った先が帯の下に隠れたら、:root の --top-clear（帯の高さ）と html の scroll-padding-top を見る。' +
         '\n見出しの錨がずれたら、節の寄せ方（app.css の align-content: safe start）か、見出しより前に置いた子を疑う。' +
         '\n目次の印が帯の外なら app.css の scroll-initial-target と、帯がスクロール容器か（overflow-x: auto）を見る。' +
-        '\n目次の的が --tap に合わなければ .toc a の min-height（入口の札なら .system__label a::after）、軌道図の札が重なったり枠を出たりしたら src/lib/orbits.ts の placeLabels（札の大きさの見積もりは LABEL_SIZE）、' +
+        '\n目次の的が --tap に合わなければ .toc a の min-height、ブラックホールが焦点からずれたら src/lib/orbits.ts の HERO_FRAME と app.css の .hole、' +
         '/all が横に動いたら目次の折り返し（flex-wrap）を見る。',
     )
     process.exitCode = 1

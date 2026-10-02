@@ -42,8 +42,9 @@ memberRoutes.get('/members', async (c) => {
     <AdminLayout title="Members" active="members" account={c.get('account')} flash={flashFor(c)}>
       <div class="admin-head">
         <h1>Members</h1>
+        {/* 押す手の言葉は日本語（CLAUDE.md「文言」。空の一覧の「＋ 最初のメンバーを追加」と同じ言い方） */}
         <a class="btn btn--primary" href="/admin/members/new">
-          ＋ Add member
+          ＋ メンバーを追加
         </a>
       </div>
 
@@ -259,6 +260,7 @@ const MemberForm = (props: {
           <FormActions
             cancelHref="/admin/members"
             deleteHref={member ? `/admin/members/${member.id}/delete?from=edit` : undefined}
+            deleteLabel="このメンバーを削除…"
           />
         </div>
       </form>

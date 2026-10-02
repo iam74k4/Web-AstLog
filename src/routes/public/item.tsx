@@ -4,7 +4,6 @@ import { itemStory } from '../../blocks'
 import {
   findMovedItem,
   findPublishedItem,
-  listPublishedItemKeys,
   listPublishedMembers,
   loadTheme,
   publishedBlocks,
@@ -13,7 +12,6 @@ import * as schema from '../../db/schema'
 import { type ItemKind, type ItemView, itemImages, KIND_LABEL } from '../../domain'
 import type { AppEnv } from '../../env'
 import { IMAGE_FORMATS, imageTypeOfPath } from '../../lib/image'
-import { bodyIndexOf, CHART_FRAME, orbitMap } from '../../lib/orbits'
 import { tableOfContents } from '../../lib/sequence'
 import { SITE } from '../../site'
 import {
@@ -38,10 +36,11 @@ import { sitePageLinks, sitePages } from './site'
   作品のページの共有カードの画像（src/ui/Layout.tsx の OgImage）。その作品の顔の1枚
   （メインの画像。無ければほかの画像の1枚目。src/domain.ts の itemImages）。
 
-  使うのは、こちらが上げた画像（/images/items/…）で、種類が貼り先に読まれる
-  もの（AVIF 以外の4種類）だけ。種類は拡張子から（putImage が判定の結果から
-  付けたもの）、寸法は上げたときに読んだもの。どちらも分からなければ名乗らない。
-  使えなければ undefined を返し、サイトの1枚に戻る。
+  使うのは、こちらが上げた画像（/images/items/…）と同梱の素材（/assets/…。seed.sql が
+  指す AppMixer の画像）で、種類が貼り先に読まれるもの（AVIF 以外の4種類）だけ。種類は
+  拡張子から（putImage が判定の結果から付けたもの・同梱の素材の名前）、寸法は上げたときに
+  読んだもの。どちらも分からなければ名乗らない。使えなければ undefined を返し、サイトの
+  1枚に戻る。
 */
 const SHARE_TYPES = new Set(
   IMAGE_FORMATS.map((format) => format.type).filter((type) => type !== 'image/avif'),
@@ -49,7 +48,7 @@ const SHARE_TYPES = new Set(
 
 function itemOgImage(item: ItemView): OgImage | undefined {
   const cover = itemImages(item)[0]
-  if (!cover?.url.startsWith('/images/items/')) return undefined
+  if (!cover || !/^\/(images\/items|assets)\//.test(cover.url)) return undefined
   const type = imageTypeOfPath(cover.url)
   if (!type || !SHARE_TYPES.has(type)) return undefined
   return {
@@ -83,7 +82,7 @@ const itemFacts = (item: ItemView) =>
   日に、貼られた作品のリンクまで死んではいけない。出る条件は「作品が公開中」の
   1つだけ。
 
-  中身は一覧の行を開いたもの（ItemDetail。画像の無い作品は画像の位置に星図）と、画像が
+  中身は一覧の行を開いたもの（ItemDetail。画像の無い作品は文の列だけ）と、画像が
   2枚以上の作品の小節「Screenshots」（#screenshots。横に送る帯。ItemShots）と、本文の
   小節「Story」（#story。本文を書いた作品にだけ。ItemStory）。以前は本文を次の画面
   （…/story）に分け、作品同士を画面の底の左右の手でめくっていた。1ページにまとめたので、
@@ -130,32 +129,16 @@ export async function renderItem(
   }
   const href = itemHref(item)
   if (!href) return c.notFound()
-  // 本文の段落。1つも無ければ小節は無い（開く式は src/blocks.ts の itemStory）
-  const paragraphs = itemStory(item.body)
-  if (story) return movedTo(c, paragraphs.length ? `${href}#story` : href)
+  // 本文の塊（テンプレートの欄と前の本文）。1つも無ければ小節は無い（開く式は src/blocks.ts の itemStory）
+  const parts = itemStory(item)
+  if (story) return movedTo(c, parts.length ? `${href}#story` : href)
   if (item.type !== kind) return movedTo(c, href)
 
   const solo = soloMember(members)
   const images = itemImages(item)
-  /*
-    目次はサイトのページのまま。このページに絞り込みは無いので、素の並びを聞く。
-    画像の無い作品は、公開中の全件の並びも引く——星図（ItemDetail の chart）が灯す
-    天体と、星図の札の番号（一覧と同じ番号）を決める
-  */
-  const [{ pages, counted }, order] = await Promise.all([
-    sitePages(db, blocks, members, NO_FILTER),
-    images.length ? null : listPublishedItemKeys(db),
-  ])
+  // 目次はサイトのページのまま。このページに絞り込みは無いので、素の並びを聞く
+  const { pages } = await sitePages(db, blocks, members, NO_FILTER)
   const links = sitePageLinks(pages, NO_FILTER, solo)
-  const body = order ? bodyIndexOf(counted.counts, order).get(item.id) : undefined
-  const chart =
-    order && body !== undefined
-      ? {
-          map: orbitMap(counted.counts, CHART_FRAME),
-          body,
-          number: order.findIndex((key) => key.id === item.id) + 1,
-        }
-      : undefined
 
   /*
     「← 一覧に戻る」の行き先。一覧のこの作品の行（id は itemCardId）。一覧は全件を
@@ -204,9 +187,9 @@ export async function renderItem(
           transition={itemTransition(item)}
           icon={item.iconUrl}
         />
-        <ItemDetail item={item} links={destinations} chart={chart} />
+        <ItemDetail item={item} links={destinations} />
         <ItemShots images={images} />
-        <ItemStory paragraphs={paragraphs} />
+        <ItemStory parts={parts} />
       </Screen>
     ),
     /*

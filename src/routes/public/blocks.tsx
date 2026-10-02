@@ -3,7 +3,6 @@ import { blockLines, blockShown, blockTexts, blockType, itemStory, memberUnits }
 import type * as schema from '../../db/schema'
 import { KIND_LABEL } from '../../domain'
 import { yearFrom } from '../../lib/format'
-import { bodyIndexOf, CHART_FRAME, orbitMap } from '../../lib/orbits'
 import { SITE } from '../../site'
 import {
   Contact,
@@ -14,7 +13,6 @@ import {
   HiddenHeading,
   ItemRow,
   ItemStories,
-  itemHref,
   LinkList,
   MemberCardCompact,
   MemberCardWide,
@@ -32,7 +30,7 @@ import {
   Tally,
   Timeline,
 } from '../../ui/components'
-import { fullOrder, rowNumber, siteCountsOf, soloMember, type TopData } from './data'
+import { rowNumber, siteCountsOf, soloMember, type TopData } from './data'
 import {
   describe,
   excerpt,
@@ -152,8 +150,9 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
         大見出しの上の札は「職種 — 所在地」（採る側が最初に探すもの）。
 
         一覧への1本と件数の帯は、一覧（Projects）のページがあって作品があるときだけ
-        （data.ts の bandOf。0件の知らせだけのページへ送らない）。軌道図の札に載せる
-        作品は、このページのために引いた公開中の全件（site.ts の pageRows）。
+        （data.ts の bandOf。0件の知らせだけのページへ送らない）。件数の帯のいちばん古い年
+        （Since）は、このページのために引いた公開中の全件（site.ts の pageRows）から。軌道図は
+        件数だけから描く（天体に作品の札は添えない。作品へは「一覧で見る →」から）。
       */
       const statement = solo ? solo.headline || solo.name : SITE.tagline
       const eyebrow = solo ? [solo.role, solo.location].filter(Boolean) : []
@@ -180,15 +179,7 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
               </p>
               {band ? <Cta href={band.href}>一覧で見る</Cta> : null}
             </div>
-            <OrbitSystem
-              counts={data.counts}
-              items={projects.rows.map((item, order) => ({
-                type: item.type,
-                title: item.title,
-                href: itemHref(item),
-                number: rowNumber(projects, item, order),
-              }))}
-            />
+            <OrbitSystem counts={data.counts} />
             {band ? (
               <Tally counts={band.counts} since={years.length ? Math.min(...years) : null} />
             ) : null}
@@ -209,17 +200,6 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
       */
       // 公開中の項目がある区分が1つだけなら、その区分（見出しの添えになる）
       const soleKind = kinds.length === 1 ? kinds[0] : undefined
-      /*
-        画像の無い行の星図。絵の形は件数だけで決まるので、組むのは一覧に1度だけ。灯す
-        天体は、入口の軌道図でその作品が載っている天体（公開中の全件の並びで結ぶ。
-        絞り込んだ一覧でも、入口と同じ天体を指す）
-      */
-      const chartMap = orbitMap(data.counts, CHART_FRAME)
-      const onBody = bodyIndexOf(data.counts, fullOrder(projects))
-      const chartOf = (id: number) => {
-        const body = onBody.get(id)
-        return body === undefined ? undefined : { map: chartMap, body }
-      }
       return {
         id,
         slug: id,
@@ -228,7 +208,7 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
         title: 'Projects',
         /*
           件数と区分は、このページに出ている絞り込みそのもの。そのあとに、
-          行の名前を並べる。業務の行は実績値まで入れる（行の .metric に
+          行の名前を並べる。実績値のある行は実績値まで入れる（行の .metric に
           しか無い一文を、検索結果と共有カードにも出す）。
         */
         description: describe(
@@ -257,19 +237,26 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
                   count={projects.rows.length}
                   h1={!whole}
                 />
-                <FilterLinks
-                  base={`/${id}`}
-                  kinds={kinds}
-                  members={members.map((member) => ({ slug: member.slug, name: member.name }))}
-                  filter={filter}
-                />
+                {/*
+                  全体ページには絞り込みを置かない。中身を全部載せる場所で、絞り込みの手は
+                  Projects のページ（/projects?kind=…）へ移るリンクになり、「すべて」の印
+                  （aria-current）が別のページを「いまのページ」と名乗っていた
+                */}
+                {whole ? null : (
+                  <FilterLinks
+                    base={`/${id}`}
+                    kinds={kinds}
+                    members={members.map((member) => ({ slug: member.slug, name: member.name }))}
+                    filter={filter}
+                  />
+                )}
               </>
             }
           >
             {projects.rows.length ? (
               /*
-                番号付きの行を縦に並べる（索引）。番号は一覧での並び順で、入口の
-                軌道図の札と同じ番号。絞り込んでも絞り込む前の番号のまま（rowNumber）
+                番号付きの行を縦に並べる（索引）。番号は公開中の全件の並びでの位置で、
+                絞り込んでも絞り込む前の番号のまま（rowNumber。同じ作品がどの絞り込みでも同じ番号）
               */
               <div class="entries">
                 {projects.rows.map((item, order) => (
@@ -278,7 +265,6 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
                     item={item}
                     number={rowNumber(projects, item, order)}
                     showMember={showMember}
-                    chart={chartOf(item.id)}
                   />
                 ))}
               </div>
@@ -292,10 +278,8 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
             {whole ? (
               <ItemStories
                 stories={projects.rows.flatMap((item) => {
-                  const story = itemStory(item.body)
-                  return story.length
-                    ? [{ key: item.id, title: item.title, paragraphs: story }]
-                    : []
+                  const parts = itemStory(item)
+                  return parts.length ? [{ key: item.id, title: item.title, parts }] : []
                 })}
               />
             ) : null}
