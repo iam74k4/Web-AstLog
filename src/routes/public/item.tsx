@@ -38,10 +38,11 @@ import { sitePageLinks, sitePages } from './site'
   作品のページの共有カードの画像（src/ui/Layout.tsx の OgImage）。その作品の顔の1枚
   （メインの画像。無ければほかの画像の1枚目。src/domain.ts の itemImages）。
 
-  使うのは、こちらが上げた画像（/images/items/…）で、種類が貼り先に読まれる
-  もの（AVIF 以外の4種類）だけ。種類は拡張子から（putImage が判定の結果から
-  付けたもの）、寸法は上げたときに読んだもの。どちらも分からなければ名乗らない。
-  使えなければ undefined を返し、サイトの1枚に戻る。
+  使うのは、こちらが上げた画像（/images/items/…）と同梱の素材（/assets/…。seed.sql が
+  指す AppMixer の画像）で、種類が貼り先に読まれるもの（AVIF 以外の4種類）だけ。種類は
+  拡張子から（putImage が判定の結果から付けたもの・同梱の素材の名前）、寸法は上げたときに
+  読んだもの。どちらも分からなければ名乗らない。使えなければ undefined を返し、サイトの
+  1枚に戻る。
 */
 const SHARE_TYPES = new Set(
   IMAGE_FORMATS.map((format) => format.type).filter((type) => type !== 'image/avif'),
@@ -49,7 +50,7 @@ const SHARE_TYPES = new Set(
 
 function itemOgImage(item: ItemView): OgImage | undefined {
   const cover = itemImages(item)[0]
-  if (!cover?.url.startsWith('/images/items/')) return undefined
+  if (!cover || !/^\/(images\/items|assets)\//.test(cover.url)) return undefined
   const type = imageTypeOfPath(cover.url)
   if (!type || !SHARE_TYPES.has(type)) return undefined
   return {

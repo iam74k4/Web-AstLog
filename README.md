@@ -457,8 +457,9 @@ deploy が残した栞（その移行を流す**前**に取ったもの）まで
 `items.body`（作品の本文）・`items.image_url`（スクリーンショット）・`items.image_alt`
 （その代替テキスト）はマイグレーションで入り、既にある作品は本文と代替テキストが
 空、画像は無しのまま——作品のページに `figure` も本文の小節（Story）も無く、
-一覧にサムネイルも出ないだけ（どちらも画像の位置には星図が出る。`OrbitChart`）。`seed.sql` も書かない（本人の作品の中身を作り話で
-埋めない）。管理画面の作品のフォームから書く。本文を書いた作品は、作品のページの
+一覧にサムネイルも出ないだけ（どちらも画像の位置には星図が出る。`OrbitChart`）。`seed.sql` は本文を書かない（本人の作品の中身を作り話で
+埋めない）。画像は AppMixer だけで、Mac App Store の掲載と同じアイコンとスクリーンショットを同梱の素材
+（`public/assets/appmixer-*`）で指す（seed は SQL だけで入れるので KV に置けない）。ほかは管理画面の作品のフォームから書く。本文を書いた作品は、作品のページの
 説明の下に本文の小節（`#story`）を持つ（以前の本文の画面 `/apps/item/<slug>/story` は
 そこへ 301）。
 画像は KV の `items/` に置かれ、`/images/items/…` から出る。画像を公開するときは
@@ -616,7 +617,8 @@ public/
                      Organization の顔（astlog-avatar.png）——scripts/blackhole/render.py が焼く。
                      favicon（favicon.svg・favicon-32.png・apple-touch-icon.png）とページの外で使う
                      ワードマーク（astlog-wordmark.svg）——scripts/logo/export.mjs が src/ui/logo.ts と
-                     その絵から書く。共有カードの絵（avatar.png）
+                     その絵から書く。共有カードの絵（avatar.png）。AppMixer の画像（appmixer-*。
+                     Mac App Store の掲載と同じアイコンとスクリーンショット）——seed.sql が指す
                      ※ ここに robots.txt や sitemap.xml を置かないこと。
                        public/ は Worker より先に配られるので、置くと
                        Worker が組み立てているほうが静かに届かなくなる

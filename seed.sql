@@ -10,6 +10,7 @@
 
 DELETE FROM item_slug_redirects;
 DELETE FROM member_slug_redirects;
+DELETE FROM item_shots;
 DELETE FROM item_links;
 DELETE FROM item_tags;
 DELETE FROM items;
@@ -136,6 +137,28 @@ INSERT INTO item_links (item_id, label, url, sort_order) VALUES
   (6, 'Repository', 'https://github.com/iam74k4/Booking-Platform', 0),
   (7, 'Repository', 'https://github.com/iam74k4/EventPlayback', 0),
   (8, 'Repository', 'https://github.com/iam74k4/AgentDeck-StreamDeckPlus', 0);
+
+-- 画像 ------------------------------------------------------------------
+
+-- AppMixer（1）のアイコンとスクリーンショットは、Mac App Store の掲載（id6804171608）と同じもの。
+-- 管理画面から上げた画像は KV に置くが、seed は SQL だけで入れるので、同梱の素材
+-- （public/assets の appmixer-*）を指す。管理画面から差し替えれば KV の画像に替わる（同梱の
+-- 素材は消さない。src/routes/admin/images.ts の removeImage は /images/ だけを消す）。
+-- 寸法は帯（作品のページの横に送る帯）の幅のため。画像が5枚あるので、作品のページでは
+-- 全部を帯に並べる（メインの画像が先）
+UPDATE items SET
+  icon_url = '/assets/appmixer-icon.png',
+  image_url = '/assets/appmixer-01-per-app-volume.jpg',
+  image_alt = 'AppMixer のミキサー。Discord・Google Chrome・ミュージックの音量をアプリごとに変えている画面',
+  image_width = 1440,
+  image_height = 900
+WHERE id = 1;
+
+INSERT INTO item_shots (item_id, url, alt, width, height, sort_order) VALUES
+  (1, '/assets/appmixer-02-auto-ducking.jpg', 'FaceTime の通話が始まり、ほかのアプリの音量を自動で下げている画面', 1440, 900, 10),
+  (1, '/assets/appmixer-03-per-device-memory.jpg', 'AirPods Pro と MacBook Air のスピーカーで、同じアプリの音量を別々に覚えている画面', 1440, 900, 20),
+  (1, '/assets/appmixer-04-per-app-output.jpg', 'ミュージックの出力先をスピーカーに、FaceTime を AirPods Pro に振り分けている画面', 1440, 900, 30),
+  (1, '/assets/appmixer-05-features.jpg', 'AppMixer の機能の一覧。アプリ別の音量とミュート、レベルメーター、通話中の自動ダッキング、デバイスごとの音量の記憶、アプリ別の出力先、メニューバー常駐', 1440, 900, 40);
 
 -- 前の slug --------------------------------------------------------------
 
