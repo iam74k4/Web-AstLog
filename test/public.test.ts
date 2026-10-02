@@ -3,6 +3,7 @@ import wordmarkFile from 'virtual:asset:astlog-wordmark.svg'
 import faviconFile from 'virtual:asset:favicon.svg'
 import blackholeArt from 'virtual:asset-base64:blackhole.webp'
 import assetFiles from 'virtual:assets'
+import seedSql from 'virtual:repo:seed.sql'
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import css from '../public/app.css'
@@ -309,8 +310,19 @@ describe('名乗り', () => {
       // GitHub の Organization の顔（scripts/blackhole/render.py の avatar。黒い地の、横から見た姿）
       'astlog-avatar.png',
     ])
+    /*
+      seed.sql が指す同梱の素材（AppMixer の画像）。ページのコードは名指ししないが、seed の
+      行（D1）がページに出す。seed が指す名前も1字違えれば黙って欠けるので、在ることを見る
+    */
+    const seeded = new Set(
+      [...seedSql.replace(/--.*$/gm, '').matchAll(/\/assets\/([\w.-]+)/g)].map((found) => found[1]),
+    )
+    for (const file of seeded) expect(assetFiles, `seed.sql の ${file}`).toContain(file)
     for (const file of assetFiles) {
-      expect(read.has(file) || OUTSIDE.has(file), `${file} を読む所が無い`).toBe(true)
+      expect(
+        read.has(file) || seeded.has(file) || OUTSIDE.has(file),
+        `${file} を読む所が無い`,
+      ).toBe(true)
     }
     // favicon は画像ファイル（data URI の SVG はやめた。CSP の img-src は 'self' だけ）
     expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg"/>')
@@ -3081,6 +3093,23 @@ describe('共有カードとページごとの説明文', () => {
     expect(avifPage).toContain(
       `<meta property="og:image" content="${SITE.origin}/assets/avatar.png"/>`,
     )
+  })
+
+  it('同梱の素材（seed.sql の AppMixer の画像）も、その作品の共有カードになる', async () => {
+    await seedItem({
+      title: 'AppMixer',
+      slug: 'appmixer',
+      imageUrl: '/assets/appmixer-01-per-app-volume.jpg',
+      imageAlt: 'ミキサーの画面',
+      imageWidth: 1440,
+      imageHeight: 900,
+    })
+    const html = await okText('/apps/item/appmixer')
+    expect(html).toContain(
+      `<meta property="og:image" content="${SITE.origin}/assets/appmixer-01-per-app-volume.jpg"/>`,
+    )
+    expect(html).toContain('<meta property="og:image:type" content="image/jpeg"/>')
+    expect(html).toContain('<meta name="twitter:card" content="summary_large_image"/>')
   })
 
   it('画像の無い作品のページと、ほかのページはサイトの1枚のまま', async () => {

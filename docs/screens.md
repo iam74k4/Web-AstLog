@@ -549,7 +549,7 @@ Worker より先に配られる（`public/`）。
 | --- | --- |
 | `/app.css` | 全画面のスタイル。公開ページ・404 はこれだけを読む（`?v=` は中身の版。配り手は見ない） |
 | `/admin.css` | 管理画面だけの規則。管理画面は `/app.css` のあとにこれを読む |
-| `/assets/…` | favicon（`favicon.svg`・`favicon-32.png`・`apple-touch-icon.png`）、ブラックホールの光の絵（`blackhole.webp`。軌道図の真ん中とロゴの O。版つきの URL で1年 immutable）、ページの外で使う素材（ワードマーク `astlog-wordmark.svg`・GitHub の顔 `astlog-avatar.png`。顔は横から見たブラックホールの絵）、サイトの `og:image`（`avatar.png`。作品のページで画像がある作品は、その作品の画像） |
+| `/assets/…` | favicon（`favicon.svg`・`favicon-32.png`・`apple-touch-icon.png`）、ブラックホールの光の絵（`blackhole.webp`。軌道図の真ん中とロゴの O。版つきの URL で1年 immutable）、ページの外で使う素材（ワードマーク `astlog-wordmark.svg`・GitHub の顔 `astlog-avatar.png`。顔は横から見たブラックホールの絵）、サイトの `og:image`（`avatar.png`。作品のページで画像がある作品は、その作品の画像）、seed の AppMixer の画像（`appmixer-*`。アイコンとスクリーンショット。Mac App Store の掲載と同じ） |
 
 **ここに `robots.txt` や `sitemap.xml` を置かないこと。** どちらも Worker が
 公開ページと同じ式から組み立てていて、`public/` に同じ名前のファイルを置いた瞬間に
