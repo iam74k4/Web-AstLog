@@ -82,7 +82,7 @@ Playwright',
 -- 書くもので、ここで作り話を埋めると、それが本人の言葉として公開される。
 
 INSERT INTO items (id, type, member_id, platform_key, title, slug, year, summary, published, sort_order) VALUES
-  (1, 'app', 1, 'macos', 'AppMixer', 'appmixer', '2026', 'macOS 14.4 の Core Audio Process Tap でアプリ単位の音量と出力先を制御する常駐アプリ。署名と公証を通して配布している。', 1, 10),
+  (1, 'app', 1, 'macos', 'AppMixer', 'appmixer', '2026', 'macOS 14.4 の Core Audio Process Tap でアプリ単位の音量と出力先を制御する常駐アプリ。Mac App Store で配布している。', 1, 10),
   (2, 'app', 1, 'ios', 'AllTasks', 'alltasks', '2026', 'Apple リマインダー・Microsoft To Do・Google ToDo を1つの受信箱にまとめるタスクアプリ。3つのサービスを横断して1画面で扱えるようにしている。', 1, 20),
   (3, 'app', 1, 'cli', 'AI Agent Config', 'ai-agent-config', '2026', 'Cursor / Claude Code / Copilot でばらつくルールを1か所に集約し、1コマンドで各環境へ配る設定ツール。本業の AI 活用を自分の環境にも通すためにつくった。', 1, 30),
   (4, 'app', 1, 'server', 'Discord Bot', 'discord-bot', '2026', '機能追加がコマンド単位で完結する153ファイルのモジュール構成。VC 録音と SQLite 永続化を備え、Railway へ継続デプロイしている。', 1, 40),
@@ -126,10 +126,11 @@ INSERT INTO item_tags (item_id, tag, sort_order) VALUES
 
 -- AllTasks（2）のリポジトリは公開していない（URL が 404）ので、行き先を置かない。公開したら
 -- 管理画面から足す
+-- AppMixer（1）は Mac App Store で公開している。行き先はリポジトリではなく App Store（持ち主の
+-- 判断。手に入れる所はそこだけにする）
 
 INSERT INTO item_links (item_id, label, url, sort_order) VALUES
-  (1, 'Repository', 'https://github.com/iam74k4/AppMixer-Apple', 0),
-  (1, 'Release', 'https://github.com/iam74k4/AppMixer-Apple/releases/latest', 1),
+  (1, 'App Store', 'https://apps.apple.com/jp/app/appmixer/id6804171608', 0),
   (3, 'Repository', 'https://github.com/iam74k4/ai-agent-config', 0),
   (4, 'Repository', 'https://github.com/iam74k4/DiscordBot', 0),
   (6, 'Repository', 'https://github.com/iam74k4/Booking-Platform', 0),
