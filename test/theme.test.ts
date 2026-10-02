@@ -1117,6 +1117,13 @@ describe('部品の作法', () => {
     expect(bodyOf(sheet, '.strip img:not([width]) {')).toContain('aspect-ratio: var(--strip-ratio)')
     // 紙では送れないので、折り返して全部を刷る
     expect(bodyOf(blockAt(sheet, '@media print'), '.strip {')).toContain('flex-wrap: wrap')
+    /*
+      帯にフォーカスが来たときの輪郭は内側に描き、ぼかしを外す。mask は箱の外を描かないので、
+      外へ離す素の輪郭は消えていた（Tab で帯に止まっても、どこにいるか見えなかった）
+    */
+    const focused = bodyOf(sheet, '.strip:focus-visible {')
+    expect(focused).toContain('outline-offset: calc(var(--focus-ring) * -1)')
+    expect(focused).toContain('mask-image: none')
   })
 
   it('帯を送る手はマウスの端末だけ。::scroll-button は列に並べず、端まで送ると消える', () => {
