@@ -1141,15 +1141,31 @@ describe('部品の作法', () => {
     // 矢印の字と、読み上げの名前
     expect(bodyOf(hover, '.strip::scroll-button(left) {')).toMatch(/content: '←' \/ '[^']+'/)
     expect(bodyOf(hover, '.strip::scroll-button(right) {')).toMatch(/content: '→' \/ '[^']+'/)
-    // 押す的は指の的と同じ大きさ
-    expect(bodyOf(hover, '.strip::scroll-button(*) {')).toContain('width: var(--tap)')
+    // 押す的は指の的と同じ大きさ。地の濃さは :root の段
+    const button = bodyOf(hover, '.strip::scroll-button(*) {')
+    expect(button).toContain('width: var(--tap)')
+    expect(button).toContain('var(--strip-button-mix)')
+    expect(bodyOf(sheet, ':root {')).toContain('--strip-button-mix:')
+    // フォーカスはサイトの輪郭（素の :focus-visible は疑似要素に届かない）
+    expect(bodyOf(hover, '.strip::scroll-button(*):focus-visible {')).toContain(
+      'outline: var(--focus-ring) solid var(--accent)',
+    )
   })
 
   it('アイコンは題の行の高さを変えない（はみ出しは負の余白で受ける）。見出しの字の真ん中に置く', () => {
     expect(bodyOf(sheet, '.entry__icon {')).toContain(
       'margin-block: calc((var(--entry-title-lh) - var(--entry-icon)) / 2)',
     )
-    expect(bodyOf(sheet, '.head__icon {')).toContain('align-self: center')
+    /*
+      アイコンの隣に見出しと添えの塊（.head__text）を置き、塊を縮めて中で題を折り返す。
+      見出しと同じ列に並べていたころは、1行に入らない題が次の行へ落ち、アイコンだけが残った
+    */
+    const head = bodyOf(sheet, '.head--icon {')
+    expect(head).toContain('flex-wrap: nowrap')
+    expect(head).toContain('align-items: center')
+    const text = bodyOf(sheet, '.head__text {')
+    expect(text).toContain('min-width: 0')
+    expect(text).toContain('flex-wrap: wrap')
   })
 
   it('作品のページの列は grid。高さの足りない箱で flex の子のように潰れない', () => {

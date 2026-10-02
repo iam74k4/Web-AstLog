@@ -52,8 +52,8 @@ export function imageTypeOfPath(path: string): string | undefined {
 
 /*
   判定の結果。width / height は読めたときだけ（共有カードの og:image:width /
-  height と twitter:card の大きさを決めるのに使う）。読めないときは無しで
-  返し、呼ぶ側は寸法を名乗らない。
+  height と twitter:card の大きさ、作品のページの横の帯の幅を決めるのに使う）。
+  読めないときは無しで返し、呼ぶ側は寸法を名乗らない。
 */
 export type SniffedImage = ImageFormat & { width?: number; height?: number }
 

@@ -296,8 +296,11 @@ export type PublishTarget =
       imageAlt: string
       // 保存したあとに画像が残るか（新しく選んだ・いまの画像を外さずに残す）
       hasImage: boolean
-      // 保存したあとに残るほかの画像の代替テキスト（並び順。外す画像は入れない）
-      shotAlts: readonly string[]
+      /*
+        保存したあとに残るほかの画像の代替テキストと、フォームでの呼び名（「2 枚目」
+        「足す画像（1）」。止めるときにどの欄かをそのまま言うため）。外す画像は入れない
+      */
+      shots: readonly { alt: string; name: string }[]
     }
   | { kind: 'member'; headline: string }
 
@@ -365,9 +368,9 @@ function itemPublishErrors(target: Extract<PublishTarget, { kind: 'item' }>) {
   if (target.hasImage && !target.imageAlt) {
     errors.imageAlt = '画像を公開するときは、代替テキストが要ります'
   }
-  const unnamed = target.shotAlts.flatMap((alt, index) => (alt ? [] : [index + 1]))
+  const unnamed = target.shots.flatMap((shot) => (shot.alt ? [] : [shot.name]))
   if (unnamed.length) {
-    errors.shots = `ほかの画像を公開するときは、1枚ずつ代替テキストが要ります（${unnamed.join('・')} 枚目）`
+    errors.shots = `ほかの画像を公開するときは、1枚ずつ代替テキストが要ります（${unnamed.join('・')}）`
   }
   return errors
 }

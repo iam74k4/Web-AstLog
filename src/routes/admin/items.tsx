@@ -32,6 +32,7 @@ import { itemHref, Shot, StatusPill } from '../../ui/components'
 import { PencilIcon, TrashIcon } from '../../ui/icons'
 import {
   commitWithImage,
+  discardImages,
   imageNotKept,
   type PickedImage,
   pickImage,
@@ -334,7 +335,14 @@ const ShotFields = ({
           aria-label={`${index + 1} 枚目の並び順`}
         />
         <label class="check">
-          <input type="checkbox" name={`shotRemove-${shot.id}`} value="1" checked={shot.remove} />
+          {/* 行ごとに名前を変える（同じ「外す」が並ぶと、読み上げではどの画像のことか分からない） */}
+          <input
+            type="checkbox"
+            name={`shotRemove-${shot.id}`}
+            value="1"
+            checked={shot.remove}
+            aria-label={`${index + 1} 枚目を外す`}
+          />
           外す
         </label>
       </div>
@@ -542,8 +550,8 @@ const ItemForm = (props: ItemFormData) => {
           </label>
           {/*
             代替テキストは画像そのものと別の欄。作品のページではこの画像が作品の
-            見た目を伝える唯一の手段なので、画像を公開するなら空にできない
-            （公開の関門 publishErrors）。下書きでは空のまま保存できる
+            見た目を伝える手段（読み上げでは代替テキストがその代わり）なので、画像を
+            公開するなら空にできない（公開の関門 publishErrors）。下書きでは空のまま保存できる
           */}
           <Field
             label="画像の代替テキスト"
@@ -554,7 +562,11 @@ const ItemForm = (props: ItemFormData) => {
           />
           {item?.imageUrl ? (
             <div class="field field--wide">
-              <span class="field__label">いまの画像（作品のページと同じ枠）</span>
+              {/*
+                見本は説明の組の絵と同じ枠。ほかの画像があると作品のページでは横の帯の
+                先頭に出るので、どこに出るかは枠ではなく役目（作品の顔）で言う
+              */}
+              <span class="field__label">いまのメインの画像（一覧のサムネイル・共有カード）</span>
               {/* 見本。何が写っているかは上の欄が言うので、ここでは名前を持たせない */}
               <Shot src={item.imageUrl} alt="" />
               <label class="check">
@@ -970,17 +982,22 @@ async function readNewShots(form: FormData) {
       ? `${index + 1} 番目の欄: 代替テキストがあるのに画像が選ばれていません`
       : null
   }).filter((problem) => problem !== null)
+  // slot は足す欄の何番目か（フォームの「足す画像（N）」。止めるときの呼び名）
   const added = picks.flatMap((pick, index) =>
-    pick.image ? [{ image: pick.image, alt: alts[index] ?? '' }] : [],
+    pick.image ? [{ image: pick.image, alt: alts[index] ?? '', slot: index }] : [],
   )
   return { added, error: problems.length ? { newShot: problems.join('。') } : null }
 }
 
 /*
   保存したあとのほかの画像（残す分を並び順に、足す分をその後ろへ）。足す画像の並び順は
-  残す分のいちばん大きい数から 10 刻み。上限（MAX_SHOTS）を超えるなら止める
+  残す分のいちばん大きい数から 10 刻み。上限（MAX_SHOTS）を超えるなら止める。
+
+  公開の関門に渡す呼び名（gate）はフォームの呼び名のまま——いまある画像はフォームの行の
+  何枚目か（外す行も数える。行の読み上げの名前と同じ）、足す画像は何番目の欄か。保存した
+  あとの並びで数えると、並べ替えたり外したりした保存で、知らせの番号が行と食い違った
 */
-function shotPlan(edits: ShotEdit[], added: { image: PickedImage; alt: string }[]) {
+function shotPlan(edits: ShotEdit[], added: { image: PickedImage; alt: string; slot: number }[]) {
   const kept = edits
     .filter((edit) => !edit.remove)
     .sort((a, b) => a.sortOrder - b.sortOrder || a.shot.id - b.shot.id)
@@ -988,7 +1005,12 @@ function shotPlan(edits: ShotEdit[], added: { image: PickedImage; alt: string }[
   return {
     kept,
     orders: added.map((_, index) => base + 10 * (index + 1)),
-    alts: [...kept.map((edit) => edit.alt), ...added.map((shot) => shot.alt)],
+    gate: [
+      ...edits.flatMap((edit, index) =>
+        edit.remove ? [] : [{ alt: edit.alt, name: `${index + 1} 枚目` }],
+      ),
+      ...added.map((shot) => ({ alt: shot.alt, name: `足す画像（${shot.slot + 1}）` })),
+    ],
     error:
       kept.length + added.length > MAX_SHOTS
         ? {
@@ -1194,7 +1216,7 @@ itemRoutes.post('/items', async (c) => {
           summary: values.summary,
           imageAlt: values.imageAlt,
           hasImage: picked.image !== null,
-          shotAlts: plan.alts,
+          shots: plan.gate,
         })
       : null,
     await itemSlugTaken(database, values.slug, null),
@@ -1297,12 +1319,14 @@ async function saveItem(
   const read = readShotEdits(form, existingShots)
   const shots = await readNewShots(form)
   /*
-    追加のフォームの2度目の送信で画像を選んであれば、1度目が作ったほかの画像と入れ替える
-    （同じ画像を2度重ねない）。選んでいなければ1度目の画像をそのまま残す
+    追加のフォームの2度目の送信（again）では、行がもうほかの画像を持っていれば、選んだ画像は
+    足さない——1度目が作った画像を重ねないため。入れ替えもしない：追加のフォームは「戻る」で
+    開き直せるので、1度目のあとに編集画面で足した画像まで消してしまう。行がまだほかの画像を
+    持っていなければ、そのまま足す
   */
-  const edits =
-    again && shots.added.length ? read.edits.map((edit) => ({ ...edit, remove: true })) : read.edits
-  const plan = shotPlan(edits, shots.added)
+  const fresh = again && existingShots.length ? [] : shots.added
+  const edits = read.edits
+  const plan = shotPlan(edits, fresh)
   const links = readLinks(form)
   /*
     保存したあとの画像。新しく選んだならそれ（差し替え）、「画像を外す」なら
@@ -1327,7 +1351,7 @@ async function saveItem(
           summary: values.summary,
           imageAlt: values.imageAlt,
           hasImage: picked.image !== null || keeps,
-          shotAlts: plan.alts,
+          shots: plan.gate,
         })
       : null,
     await itemSlugTaken(database, values.slug, id),
@@ -1338,7 +1362,7 @@ async function saveItem(
   const placed = await placeImages(c.env.MEDIA, [
     ...(picked.image ? [{ image: picked.image, name: values.slug }] : []),
     ...(icon.image ? [{ image: icon.image, name: `${values.slug}-icon` }] : []),
-    ...shots.added.map((shot) => ({ image: shot.image, name: values.slug })),
+    ...fresh.map((shot) => ({ image: shot.image, name: values.slug })),
   ])
   // 置いた順（メインの画像 → アイコン → ほかの画像）に取り出す
   const imageUrl = picked.image ? (placed.shift() ?? null) : null
@@ -1350,7 +1374,7 @@ async function saveItem(
       ? {}
       : imageColumns(null, null)
   const iconColumn = iconUrl ? { iconUrl } : keepsIcon ? {} : { iconUrl: null }
-  const added = shots.added.map((shot, index) => ({
+  const added = fresh.map((shot, index) => ({
     url: shotUrls[index] ?? '',
     alt: shot.alt,
     width: shot.image.width ?? null,
@@ -1373,10 +1397,12 @@ async function saveItem(
     if (uniqueViolation(error, 'items.slug')) return back({ slug: SLUG_TAKEN })
     throw error
   }
-  // 差し替えた・外した画像は KV から消す（removeImage の注記）
-  if (imageUrl || !keeps) await removeImage(c.env.MEDIA, existing.imageUrl)
-  if (iconUrl || !keepsIcon) await removeImage(c.env.MEDIA, existing.iconUrl)
-  for (const edit of edits) if (edit.remove) await removeImage(c.env.MEDIA, edit.shot.url)
+  // 差し替えた・外した画像は KV から消す（removeImage の注記。消し損ねても保存は済んでいる）
+  await discardImages(c.env.MEDIA, [
+    imageUrl || !keeps ? existing.imageUrl : null,
+    iconUrl || !keepsIcon ? existing.iconUrl : null,
+    ...edits.filter((edit) => edit.remove).map((edit) => edit.shot.url),
+  ])
   /*
     前の URL が変わったか。slug を変えたときと、区分を変えたとき（1語目の
     apps / works が変わる。公開ページが前の区分の URL を 301 で寄せる）
@@ -1431,8 +1457,10 @@ itemRoutes.post('/items/:id/delete', async (c) => {
 
   // D1 → KV の順（ほかの画像の行は cascade で消える。URL は消す前に引いておく）
   await db(c).delete(schema.items).where(eq(schema.items.id, id))
-  for (const url of [item.imageUrl, item.iconUrl, ...item.shots.map((shot) => shot.url)]) {
-    await removeImage(c.env.MEDIA, url)
-  }
+  await discardImages(c.env.MEDIA, [
+    item.imageUrl,
+    item.iconUrl,
+    ...item.shots.map((shot) => shot.url),
+  ])
   return c.redirect(`/admin/items?type=${item.type}&deleted=1`, 303)
 })

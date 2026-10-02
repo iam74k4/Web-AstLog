@@ -440,7 +440,9 @@ function audit(blocks, members, items, shots) {
       summary: item.summary,
       imageAlt: item.image_alt,
       hasImage: Boolean(item.image_url),
-      shotAlts: shots.filter((shot) => shot.item_id === item.id).map((shot) => shot.alt),
+      shots: shots
+        .filter((shot) => shot.item_id === item.id)
+        .map((shot, index) => ({ alt: shot.alt, name: `${index + 1} 枚目` })),
     })
     if (errors) problems.push(`item ${item.slug}: ${JSON.stringify(errors)}`)
   }

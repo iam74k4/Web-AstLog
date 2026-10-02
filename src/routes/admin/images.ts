@@ -81,6 +81,15 @@ export async function removeImage(kv: KVNamespace, url: string | null | undefine
 }
 
 /*
+  D1 に書けたあとで、使われなくなった画像をまとめて消す（差し替え・外す・削除）。1枚ずつ
+  消し、消せなかった画像は記録だけ残して続ける——D1 はもう書けているので、片付けの失敗で
+  保存を 500 にしない。1枚の失敗で残りを消し損ねない（作品は1度の保存で何枚も外せる）
+*/
+export async function discardImages(kv: KVNamespace, urls: readonly (string | null | undefined)[]) {
+  for (const url of urls) await removeImage(kv, url).catch((error) => console.error(error))
+}
+
+/*
   KV と D1 は1つのトランザクションにできない。だから順序で守る。
 
   1. 新しい画像を KV に置く（putImage）
