@@ -142,7 +142,8 @@
   /*
     作品の画像の枠。どちらも「絵に合わせて伸び縮みさせない」ための段で、
     寸法の分からない画像でも、読み込む前から高さが決まっている（DB の寸法は
-    共有カードのためだけのもので、この列より前の画像には無い。枠には使わない）。
+    この列より前の画像には無いので、この2つの枠には使わない。使うのは共有カードと、
+    高さを決めて幅を絵の比から取る作品のページの帯 .strip）。
 
     --thumb-ratio は一覧のサムネイルの縦横比。横長に寄せてあるのは、一覧を
     画像で縦に伸ばさないため——一覧の主役は題と説明で、画像は作品のページで
@@ -166,6 +167,8 @@
   */
   --strip-h: clamp(180px, min(48vw, 46svh), 440px);
   --strip-ratio: 16 / 10;
+  /* 帯を送る手（::scroll-button。マウスの端末だけ）の地の濃さ。地の色をこれだけ混ぜる */
+  --strip-button-mix: 82%;
   --head-icon: clamp(44px, 5vw, 64px);
 
   /*
@@ -2154,14 +2157,29 @@ use.nebula__dust {
 }
 
 /*
-  作品のページの見出しの左のアイコン（components.tsx の SectionHead の icon）。見出しの
-  字の高さの真ん中に置く（並びの基準の字の下端に座らせると、大きな見出しの下へ沈む）
+  作品のページの見出しの左のアイコン（components.tsx の SectionHead の icon）。アイコンの
+  隣に見出しと添えの塊（.head__text）を置き、塊の中で見出しと添えを素の .head と同じく
+  並べる。塊は縮めて（min-width: 0）中で題を折り返す——同じ列に並べていたころは、1行に
+  入らない題が次の行へ落ち、アイコンだけが1行に残った。アイコンは塊の縦の真ん中
 */
+.head--icon {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
 .head__icon {
   flex: none;
-  align-self: center;
   width: var(--head-icon);
   height: var(--head-icon);
+}
+
+.head__text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2) var(--sp-5);
+  min-width: 0;
 }
 
 /*
@@ -3921,7 +3939,7 @@ use.nebula__dust {
     translate: 0 -50%;
     border: 1px solid var(--line-strong);
     border-radius: 50%;
-    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    background: color-mix(in srgb, var(--bg) var(--strip-button-mix), transparent);
     color: var(--ink);
     font-size: var(--fs-lg);
     cursor: pointer;
@@ -3931,6 +3949,12 @@ use.nebula__dust {
   .strip::scroll-button(*):disabled {
     opacity: 0;
     cursor: default;
+  }
+
+  /* 送る手のフォーカスもサイトの輪郭（素の :focus-visible は疑似要素に届かず、ブラウザの輪郭になる） */
+  .strip::scroll-button(*):focus-visible {
+    outline: var(--focus-ring) solid var(--accent);
+    outline-offset: var(--focus-offset);
   }
 
   /* biome-ignore lint/correctness/noUnknownTypeSelector: ::scroll-button の引数（left）は向きの語で、要素の型ではない（Biome の CSS の読み方がまだ知らない） */

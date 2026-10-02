@@ -13,7 +13,7 @@ import { Area, Confirm, Field, FormActions, FormKey, PublishToggle } from '../..
 import { AdminLayout } from '../../ui/AdminLayout'
 import { Avatar, StatusPill } from '../../ui/components'
 import { ExternalIcon, PencilIcon, TrashIcon } from '../../ui/icons'
-import { commitWithImage, imageNotKept, pickImage, putImage, removeImage } from './images'
+import { commitWithImage, discardImages, imageNotKept, pickImage, putImage } from './images'
 import {
   asValues,
   cameFromEdit,
@@ -498,7 +498,7 @@ async function saveMember(
     if (uniqueViolation(error, 'members.slug')) return back({ slug: SLUG_TAKEN })
     throw error
   }
-  if (avatarUrl) await removeImage(c.env.MEDIA, member.avatarUrl)
+  if (avatarUrl) await discardImages(c.env.MEDIA, [member.avatarUrl])
   const moved = member.slug !== values.slug ? '&moved=1' : ''
   return c.redirect(
     `/admin/members?saved=${savedParam(values.published)}${moved}${again ? '&again=1' : ''}`,
@@ -543,6 +543,6 @@ memberRoutes.post('/members/:id/delete', async (c) => {
   if (!member) return c.notFound()
 
   await db(c).delete(schema.members).where(eq(schema.members.id, id))
-  await removeImage(c.env.MEDIA, member.avatarUrl)
+  await discardImages(c.env.MEDIA, [member.avatarUrl])
   return c.redirect('/admin/members?deleted=1', 303)
 })

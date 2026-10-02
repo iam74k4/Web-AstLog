@@ -656,7 +656,8 @@ describe('Items — アイコンとほかの画像', () => {
     })
     expect(blocked.status).toBe(400)
     const html = await blocked.text()
-    expect(html).toContain('1枚ずつ代替テキストが要ります（2 枚目）')
+    // どの欄かはフォームの呼び名で言う（足す欄は「足す画像（N）」）
+    expect(html).toContain('1枚ずつ代替テキストが要ります（足す画像（2））')
     // ファイルの欄は描き直せない。打った代替テキストは残す
     expect(html).toContain('画像はまだ保存していません')
     expect(html).toContain('value="通話中の画面"')
@@ -831,7 +832,7 @@ describe('Items — アイコンとほかの画像', () => {
     expect(await db().select().from(schema.itemShots)).toHaveLength(0)
   })
 
-  it('追加のフォームを2度送っても、ほかの画像は重ならない（2度目の画像に入れ替える）', async () => {
+  it('追加のフォームを2度送っても、ほかの画像は重ならない（2度目の画像は足さない）', async () => {
     const signed = await signIn()
     const html = await (await signed('/admin/items/new?type=app')).text()
     const key = html.match(/name="formKey" value="([0-9a-f]{16})"/)?.[1] ?? ''
@@ -850,6 +851,130 @@ describe('Items — アイコンとほかの画像', () => {
     expect(shots.map((shot) => shot.alt)).toEqual(['通話中の画面'])
     // 1度目の画像は KV から消えている
     expect(await itemKeys()).toEqual([(shots[0]?.url ?? '').replace('/images/', '')])
+  })
+
+  it('追加のフォームを開き直して送っても、そのあと編集で足した画像は消えない', async () => {
+    /*
+      追加のフォームは「戻る」で開き直せ、同じ札のまま送れる。2度目の送信で1度目の画像を
+      入れ替えていたころは、そのあとで編集画面から足した画像まで消えた
+    */
+    const signed = await signIn()
+    const html = await (await signed('/admin/items/new?type=app')).text()
+    const key = html.match(/name="formKey" value="([0-9a-f]{16})"/)?.[1] ?? ''
+    const send = () =>
+      signed('/admin/items', {
+        method: 'POST',
+        body: withFiles(
+          {
+            type: 'app',
+            title: 'AppMixer',
+            slug: 'appmixer',
+            formKey: key,
+            newShotAlt: ['一枚目'],
+          },
+          [['newShot', pngFile('a.png')]],
+        ),
+      })
+    expect((await send()).status).toBe(303)
+    const [row] = await db().select().from(schema.items)
+    const id = row?.id ?? 0
+    const edited = await signed(`/admin/items/${id}`, {
+      method: 'POST',
+      body: withFiles(
+        { type: 'app', title: 'AppMixer', slug: 'appmixer', newShotAlt: ['二枚目'] },
+        [['newShot', pngFile('b.png')]],
+      ),
+    })
+    expect(edited.status).toBe(303)
+    const before = await shotsOf(id)
+    expect(before.map((shot) => shot.alt)).toEqual(['一枚目', '二枚目'])
+
+    expect((await send()).status).toBe(303)
+    expect((await shotsOf(id)).map((shot) => shot.url)).toEqual(before.map((shot) => shot.url))
+    expect(await itemKeys()).toEqual(before.map((shot) => shot.url.replace('/images/', '')).sort())
+  })
+
+  it('代替テキストの不足は、フォームの行の呼び名で言う（外した行と並べ替えに左右されない）', async () => {
+    const item = await seedItem({ slug: 'appmixer', summary: '説明。' })
+    await seedShots(item.id, [
+      { key: 'items/appmixer-aaaaaaaa.png', alt: '一枚目', sortOrder: 10 },
+      { key: 'items/appmixer-bbbbbbbb.png', alt: '二枚目', sortOrder: 20 },
+      { key: 'items/appmixer-cccccccc.png', alt: '三枚目', sortOrder: 30 },
+    ])
+    const [a, b, c] = await shotsOf(item.id)
+    const signed = await signIn()
+    const response = await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: form({
+        type: 'app',
+        title: 'AppMixer',
+        slug: 'appmixer',
+        summary: '説明。',
+        published: '1',
+        // 1枚目を外し、2枚目の代替テキストを消し、3枚目を先頭へ並べ替える
+        [`shotAlt-${a?.id}`]: '一枚目',
+        [`shotRemove-${a?.id}`]: '1',
+        [`shotAlt-${b?.id}`]: '',
+        [`shotOrder-${b?.id}`]: '20',
+        [`shotAlt-${c?.id}`]: '三枚目',
+        [`shotOrder-${c?.id}`]: '5',
+      }),
+    })
+    expect(response.status).toBe(400)
+    const html = await response.text()
+    // 行の読み上げの名前（「2 枚目の代替テキスト」）と同じ番号で言う
+    expect(html).toContain('1枚ずつ代替テキストが要ります（2 枚目）')
+    expect(html).toContain('aria-label="2 枚目の代替テキスト"')
+    // 外す印は行ごとに名前が違う
+    expect(html).toContain(`aria-label="1 枚目を外す"`)
+    // 何も書かない（1枚目も消えない）
+    expect((await shotsOf(item.id)).map((shot) => shot.alt)).toEqual(['一枚目', '二枚目', '三枚目'])
+    expect(await itemKeys()).toHaveLength(3)
+  })
+
+  it('編集で D1 が落ちたら、新しいアイコンとほかの画像は消え、前の画像と行はそのまま', async () => {
+    await env.MEDIA.put('items/appmixer-icon-aaaaaaaa.png', 'bytes')
+    const item = await seedItem({
+      slug: 'appmixer',
+      iconUrl: '/images/items/appmixer-icon-aaaaaaaa.png',
+    })
+    await seedShots(item.id, [
+      { key: 'items/appmixer-bbbbbbbb.png', alt: '一枚目', sortOrder: 10 },
+      { key: 'items/appmixer-cccccccc.png', alt: '二枚目', sortOrder: 20 },
+    ])
+    const [first] = await shotsOf(item.id)
+    const before = await itemKeys()
+    await env.DB.prepare(
+      "CREATE TRIGGER IF NOT EXISTS fail_items_update BEFORE UPDATE ON items BEGIN SELECT RAISE(ABORT, 'D1 を落とす'); END",
+    ).run()
+    try {
+      const signed = await signIn()
+      const response = await signed(`/admin/items/${item.id}`, {
+        method: 'POST',
+        body: withFiles(
+          {
+            type: 'app',
+            title: 'AppMixer',
+            slug: 'appmixer',
+            [`shotAlt-${first?.id}`]: '一枚目',
+            [`shotRemove-${first?.id}`]: '1',
+            newShotAlt: ['三枚目'],
+          },
+          [
+            ['icon', pngFile('new-icon.png')],
+            ['newShot', pngFile('c.png')],
+          ],
+        ),
+      })
+      expect(response.status).toBe(500)
+    } finally {
+      await env.DB.prepare('DROP TRIGGER IF EXISTS fail_items_update').run()
+    }
+    // 置いた新しい画像は消え、外すはずだった画像も行もそのまま（何も書かれていない）
+    expect(await itemKeys()).toEqual(before)
+    expect((await shotsOf(item.id)).map((shot) => shot.alt)).toEqual(['一枚目', '二枚目'])
+    const [row] = await db().select().from(schema.items)
+    expect(row?.iconUrl).toBe('/images/items/appmixer-icon-aaaaaaaa.png')
   })
 
   it('D1 が落ちたら、置いたアイコンとほかの画像は KV に残らない', async () => {

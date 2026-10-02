@@ -241,6 +241,9 @@ export const Avatar = ({
 
   icon は作品のページの見出しの左に置くアイコン（items.icon_url）。飾りなので alt は空
   （名前はすぐ隣の見出しが言う）。遅延読み込みにしない（開いた画面の頭にある）。
+  アイコンのある見出しは、見出しと添えを1つの塊（.head__text）にしてアイコンの隣に置く
+  ——見出しと同じ列に並べると、1行に入らない題（電話の 10 字を超える和文）が次の行へ
+  落ち、アイコンだけが1行に残った。塊の中で題が折り返す。
 */
 export const SectionHead = ({
   title,
@@ -261,21 +264,29 @@ export const SectionHead = ({
   // ページを移るときにつなぐ名前（作品のページの h1。itemTransition）
   transition?: string
   icon?: string | null
-}) => (
-  <div class={sub ? 'head head--sub' : chapter ? 'head head--chapter' : 'head'}>
-    {icon ? (
+}) => {
+  const text = (
+    <>
+      {h1 ? <h1 style={transition}>{title}</h1> : sub === 3 ? <h3>{title}</h3> : <h2>{title}</h2>}
+      {count === undefined ? null : (
+        <span class="head__count">
+          {twoDigits(count)}
+          <span class="sr-only"> 件</span>
+        </span>
+      )}
+      {note ? <span class="note">{note}</span> : null}
+    </>
+  )
+  const kind = sub ? 'head head--sub' : chapter ? 'head head--chapter' : 'head'
+  return icon ? (
+    <div class={`${kind} head--icon`}>
       <img class="head__icon" src={icon} alt="" width="64" height="64" decoding="async" />
-    ) : null}
-    {h1 ? <h1 style={transition}>{title}</h1> : sub === 3 ? <h3>{title}</h3> : <h2>{title}</h2>}
-    {count === undefined ? null : (
-      <span class="head__count">
-        {twoDigits(count)}
-        <span class="sr-only"> 件</span>
-      </span>
-    )}
-    {note ? <span class="note">{note}</span> : null}
-  </div>
-)
+      <div class="head__text">{text}</div>
+    </div>
+  ) : (
+    <div class={kind}>{text}</div>
+  )
+}
 
 /*
   読み上げのためだけに置く見出し（.sr-only）。目に見える見出しを持たないページが
@@ -1483,14 +1494,13 @@ export const LinkRow = ({ links }: { links: { label: string; url: string }[] }) 
 /*
   作品のスクリーンショット。作品1件のページの figure。
 
-  代替テキストは管理画面で書いたもの（items.image_alt）。空のまま公開させない
-  （src/blocks.ts の publishErrors。公開の関門）——このページではこの画像がその作品の
-  見た目を伝える唯一の手段で、一覧のサムネイル（飾り）とは役目が違う。
+  代替テキストは管理画面で書いたもの（items.image_alt か、ほかの画像の1枚目の alt）。
+  空のまま公開させない（src/blocks.ts の publishErrors。公開の関門）——このページでは
+  この画像がその作品の見た目を伝える手段で、一覧のサムネイル（飾り）とは役目が違う。
 
   枠の高さは CSS が決め（:root の --shot-h。900 以上では文の列と同じ高さ）、
-  絵はその中に object-fit: contain で縮めて収める（切らない）。寸法は共有カードの
-  ためにだけ持っていて（items.image_width / image_height。この列より前の画像には
-  無い）、枠には使わない。絵に合わせて枠を伸び縮みさせると、読み込んだ瞬間に下の
+  絵はその中に object-fit: contain で縮めて収める（切らない）。寸法（items.image_width /
+  image_height。この列より前の画像には無い）はこの枠には使わない。絵に合わせて枠を伸び縮みさせると、読み込んだ瞬間に下の
   文の列が押し下げられ（読み始めた字が動く）、縦長の絵が1枚でページの頭を
   何画面ぶんも食う。
 

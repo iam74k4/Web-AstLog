@@ -22,7 +22,9 @@
                           （行止め line-clamp・1行で末尾を省く ellipsis・読み上げ用の
                           1px の箱・SVG の中・星空 .cosmos の中は除く。SVG の箱そのもの
                           ——ロゴ・軌道図・アイコン——と星空の箱は測る）
-    (4) h1 がちょうど1つ   1ページ = 1ドキュメント（WCAG 1.3.1）
+    (4) h1 がちょうど1つ   1ページ = 1ドキュメント（WCAG 1.3.1）。見出しの左にアイコンの
+                          ある見出し（作品のページ）は、アイコンと見出しが同じ行に居る
+                          （1行に入らない題が次の行へ落ちて、アイコンだけが残らない）
     (5) 帯の場所           上の帯が本文の上、足元が本文の下
     (6) 帯の貼り付け       上の帯の position が sticky。本文の下に画面3つぶんの空きを
                           足して一番下まで送っても、帯といまの印が画面の中に見えて
@@ -251,6 +253,18 @@ const measure = ([typeface, cfg]) => {
   // (4) h1 はちょうど1つ
   const h1s = document.querySelectorAll('h1')
   if (h1s.length !== 1) problems.push(`h1 が ${h1s.length} 個（ちょうど1つのはず）`)
+  // アイコンのある見出しは、アイコンと見出しが縦に重なる（同じ行に居る）
+  for (const icon of main.querySelectorAll('.head__icon')) {
+    const heading = icon.closest('.head')?.querySelector('h1, h2, h3')
+    if (!heading) continue
+    const a = icon.getBoundingClientRect()
+    const b = heading.getBoundingClientRect()
+    if (a.bottom <= b.top + slack || a.top >= b.bottom - slack) {
+      problems.push(
+        `見出しのアイコンが見出しと別の行に居る（アイコン ${round(a.top)}〜${round(a.bottom)} / 見出し ${round(b.top)}〜${round(b.bottom)}）`,
+      )
+    }
+  }
 
   // (5) 帯の場所。上の帯が本文の上、足元が本文の下
   const topBox = top.getBoundingClientRect()
