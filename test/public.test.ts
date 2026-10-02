@@ -1048,6 +1048,7 @@ describe('締めのページ（Contact）', () => {
     )
     expect(main.match(/<svg class="orbits__still"/g)).toHaveLength(2)
     expect(main.match(/<svg class="orbits__stardust"/g)).toHaveLength(2)
+    expect(main.match(/<svg class="orbits__bodies"/g)).toHaveLength(2)
     /*
       入口と同じ件数の天体（個人開発は光る惑星、業務は輪のある惑星）。天体は軌道を回るので、
       奥と手前の層に1つずつ置いて半面で切る
@@ -1082,11 +1083,19 @@ describe('締めのページ（Contact）', () => {
       expect(
         spins.filter((style) => /^--dur:[\d.]+s;--ticks:\d+$/.test(style)),
         path,
-      ).toHaveLength(4)
-      expect(
-        spins.filter((style) => /^--dur:[\d.]+s;--sway:linear\([\d.,]+\)$/.test(style)),
-        path,
       ).toHaveLength(2 * 4)
+      /*
+        天体は刻んで回り（--ticks）、大きさの揺れは段の linear()（点ごとに「大きさ 始まり% 終わり%」）。
+        毎コマ変えると、天体の層を毎コマ描き直す
+      */
+      expect(
+        spins.filter((style) =>
+          /^--dur:[\d.]+s;--ticks:\d+;--sway:linear\([\d.]+ [\d.]+% [\d.]+%(,[\d.]+ [\d.]+% [\d.]+%)+\)$/.test(
+            style,
+          ),
+        ),
+        path,
+      ).toHaveLength(4)
       expect(main.match(/<g class="orbit-unspin">/g), path).toHaveLength(2 * 4)
       /*
         軌道を流れる星も奥と手前に。光芒のある星が淡い尾を引く（持ち主の「移動する線をもっと
@@ -1363,32 +1372,40 @@ describe('ページの URL', () => {
       層に1つずつ置いて半面で切る。絵の層は装飾なので読み上げに流さない
     */
     const system = home.slice(home.indexOf('<div class="system">'))
-    const layers = [
-      '<svg class="system__orbits system__orbits--far" viewBox="0 0 1000 560" aria-hidden="true" focusable="false">',
-      '<svg class="system__stardust system__stardust--far"',
-      '<svg class="system__motion system__motion--far"',
-      '<span class="hole" aria-hidden="true"',
-      '<svg class="system__orbits system__orbits--near"',
-      '<svg class="system__stardust system__stardust--near"',
-      '<svg class="system__motion system__motion--near"',
-    ].map((tag) => system.indexOf(tag))
+    /*
+      奥と手前の半分ごとに、同じ順で層を重ねる——ぼかした帯、軌道の線、刻んで回る星屑、毎コマ
+      動く流れる星と粒、刻んで回る天体。更新の頻度ごとに層を分け、変わらない層を描き直さない
+    */
+    const order = (side: 'far' | 'near') => [
+      `<svg class="system__bands system__bands--${side}"`,
+      `<svg class="system__orbits system__orbits--${side}"`,
+      `<svg class="system__stardust system__stardust--${side}"`,
+      `<svg class="system__motion system__motion--${side}"`,
+      `<svg class="system__bodies system__bodies--${side}"`,
+    ]
+    const layers = [...order('far'), '<span class="hole" aria-hidden="true"', ...order('near')].map(
+      (tag) => system.indexOf(tag),
+    )
+    expect(system).toContain(
+      '<svg class="system__bands system__bands--far" viewBox="0 0 1000 560" aria-hidden="true" focusable="false">',
+    )
     expect(layers[0]).toBeGreaterThan(-1)
     for (let i = 1; i < layers.length; i += 1) {
       expect(layers[i], `${i} 枚目`).toBeGreaterThan(layers[i - 1] ?? 0)
     }
-    const [far = 0, , farMotion = 0, hole = 0, near = 0, nearDust = 0, nearMotion = 0] = layers
+    const [, farLines = 0, farDust = 0, , farBodies = 0, hole = 0, , nearLines = 0, nearDust = 0] =
+      layers
     /*
       線は奥から手前へ続けて濃くなる坂を読む（層ごとに id を分けたグラデーション）
     */
-    expect(system.slice(far, hole)).toContain(
+    expect(system.slice(farLines, farDust)).toContain(
       '<linearGradient id="system-far-depth" gradientUnits="userSpaceOnUse"',
     )
-    expect(system.slice(far, hole)).toContain('stroke="url(#system-far-depth)"')
-    expect(system.slice(near, nearDust)).toContain('stroke="url(#system-near-depth)"')
-    // 天体は動く層にだけ居る（止まった天体だけの層は無い）
-    expect(system).not.toContain('system__bodies')
-    expect(system.slice(farMotion, hole)).toContain('class="orbit-body orbit-body--app"')
-    expect(system.slice(nearMotion)).toContain('class="orbit-body orbit-body--app"')
+    expect(system.slice(farLines, farDust)).toContain('stroke="url(#system-far-depth)"')
+    expect(system.slice(nearLines, nearDust)).toContain('stroke="url(#system-near-depth)"')
+    // 天体は天体の層にだけ居る（奥の層はブラックホールの後ろ、手前の層は前）
+    expect(system.slice(farBodies, hole)).toContain('class="orbit-body orbit-body--app"')
+    expect(system.slice(layers.at(-1) ?? 0)).toContain('class="orbit-body orbit-body--app"')
     // 地の色の縁取りは敷かない（光を締めたので線はそのまま見える。縁取りは光を黒い筋で切った）
     expect(system).not.toContain('orbit__casing')
     // レーダー（走査線・波紋・走査の時刻）はやめた

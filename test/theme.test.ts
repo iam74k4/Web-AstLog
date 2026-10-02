@@ -8,7 +8,7 @@ import { BLACKHOLE_ART, LOGO_COLORS } from '../src/ui/logo'
 import { db, form, get, okText, resetDb, seedItem, seedMember, signIn } from './helpers'
 
 // 着いたあとも動き続ける animation の名前（app.css の「動き続ける」）
-const LASTING = /orbit-(swirl|unswirl|sway|fall|breathe|drift|twinkle|meteor)\b/
+const LASTING = /orbit-(swirl|unswirl|sway|grain-swirl|grain-fall|breathe|drift|twinkle|meteor)\b/
 
 beforeEach(resetDb)
 
@@ -973,7 +973,10 @@ describe('部品の作法', () => {
       （.system）いっぱいに重ねる。viewBox と枠の比が同じなので、枠の割合で置いた
       ブラックホールがちょうど焦点に座る
     */
-    const layers = bodyOf(sheet, '.system__orbits,\n.system__stardust,\n.system__motion {')
+    const layers = bodyOf(
+      sheet,
+      '.system__bands,\n.system__orbits,\n.system__stardust,\n.system__motion,\n.system__bodies {',
+    )
     expect(layers).toContain('position: absolute')
     expect(layers).toContain('inset: 0')
     const hole = bodyOf(sheet, '.hole {')
@@ -1705,9 +1708,18 @@ describe('入口の軌道図', () => {
       天体、流れる星と粒が動くたびに描き直さない（動くものは別の SVG に分けてある）。星屑の層も
       自分の合成の層——星屑は1秒に数回だけ進むので、そのあいだは描いた層を使い回す
     */
-    expect(
-      bodyOf(sheet, ':is(.system__orbits, .orbits__still, .system__stardust, .orbits__stardust) {'),
-    ).toContain('will-change: transform')
+    const cached = ruleWith(sheet, 'will-change: transform').selector.replace(/\s+/g, ' ')
+    for (const layer of [
+      '.system__bands',
+      '.system__orbits',
+      '.orbits__still',
+      '.system__stardust',
+      '.orbits__stardust',
+      '.system__bodies',
+      '.orbits__bodies',
+    ]) {
+      expect(cached, layer).toContain(layer)
+    }
 
     // 着いたときの動きは繰り返さない（続くものは下の「動き続ける」）
     const moving = rulesOf(sheet).filter((rule) =>
@@ -1790,11 +1802,18 @@ describe('入口の軌道図', () => {
     /*
       軌道を流れる星は、光芒のある星が淡い尾を引く（持ち主の「移動する線をもっと星っぽく」）。
       軌道の線の破線を送る光（stroke-dashoffset）は、軌道の上を移る線に見えた。星は天体と同じく
-      回る枠の中を回り、大きさの揺れも天体と同じ orbit-sway
+      回る枠の中を回る（大きさはその軌道の平均で、毎コマは変えない）
     */
-    expect(bodyOf(breathing, '.orbit-flow__star {')).toContain(
-      'animation: orbit-sway var(--dur) var(--sway) var(--delay) infinite',
+    /*
+      毎コマ動くもの（流れる星と粒）も 1/60 秒の刻みで進める。144Hz の画面で毎コマ描き直すと、
+      GPU の仕事が1コマの枠を超えてブラウザごと重くなった（持ち主の「edge などで開くと異常に重い」）
+    */
+    expect(bodyOf(breathing, '.orbit-flows :is(.orbit-spin, .orbit-unspin) {')).toContain(
+      'animation-timing-function: steps(var(--ticks))',
     )
+    expect(bodyOf(breathing, '.orbit-grain {')).toContain('steps(var(--ticks))')
+    expect(bodyOf(breathing, '.orbit-grain__dot {')).toContain('steps(var(--ticks))')
+    expect(sheet).not.toMatch(/--fall-ease|@keyframes orbit-fall\b/)
     expect(bodyOf(sheet, '.orbit-flow__glint {')).toContain('opacity: var(--flow-glint)')
     expect(bodyOf(sheet, '.orbit-flow__fade {')).toContain('stop-opacity: var(--flow-trail)')
     expect(sheet).not.toMatch(/@keyframes orbit-flow\b|--flow-len|--flow-tail\b|\.orbit-flow\s*\{/)
@@ -1810,7 +1829,8 @@ describe('入口の軌道図', () => {
       'orbit-swirl',
       'orbit-unswirl',
       'orbit-sway',
-      'orbit-fall',
+      'orbit-grain-swirl',
+      'orbit-grain-fall',
       'orbit-drift',
       'orbit-twinkle',
       'orbit-meteor',

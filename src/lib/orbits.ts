@@ -64,12 +64,15 @@ export type OrbitFrame = {
   - ellipse は写した楕円（枠の点。中心・横と縦の半径・回す角の度）。星屑と天体はこの楕円を
     単位円に直した座標で持ち、描く側が translate(cx cy) rotate(angle) scale(rx ry) の中で
     回す（components.tsx の Motion）
-  - period は公転の周期（秒）。星屑と天体はこの秒数で1周する
-  - ticks は星屑が1周を何回に分けて進むか（STARDUST_TICKS。描く側が steps() に渡す）
+  - period は公転の周期（秒。TICK の倍数）。星屑と天体はこの秒数で1周する
+  - ticks と bodyTicks は、星屑と天体が1周を何回に分けて進むか（TICK・BODY_TICK ごとに1回。
+    描く側が steps() に渡す）
   - sway は、軌道の上の向き（写した楕円の媒介変数の角。右の端の 0° から、画面で時計回り＝
     手前へ）を SWAY_STEPS 等分した点ごとの天体の大きさの倍率（0° と 360° の両端を含む）。
     回る天体の大きさの揺れで、描く側が CSS の linear() に渡す——手前へ回ると大きく、奥へ
-    回ると小さい。止まった天体の大きさ（OrbitBody の scale）と同じ式
+    回ると小さい。止まった天体の大きさ（OrbitBody の scale）と同じ式。天体には点ごとの段の
+    まま渡し（数秒に1度だけ変わる。毎コマ変わると天体の層を毎コマ描き直す）、流れる星には
+    点のあいだをなめらかにつないで渡す
   - stardust は星屑。明るさの段（STARDUST_CLASSES 段。0 がいちばん淡く小さい）ごとの path の d
     （単位円に直した座標の、長さ0の線の並び。描く側が丸い線端で点にする）
 */
@@ -80,6 +83,7 @@ export type OrbitPath = {
   ellipse: { cx: number; cy: number; rx: number; ry: number; angle: number }
   period: number
   ticks: number
+  bodyTicks: number
   sway: number[]
   stardust: string[]
 }
@@ -105,7 +109,8 @@ export type OrbitBody = {
   ブラックホールへ吸い込まれる光の粒（入口と締め。app.css の .orbit-dust）。軌道面の上の
   向き a（度）から1周回りながら、半径 r0 から r1 まで落ちる。1周して元の向きで落ち切る
   ので、r1 はその向きで、斜めから見て黒い円の縁に来る半径（手前と奥の向きほど長い）。
-  dur 秒で1回、delay（負）で散らす。o は明るさ、w は点の太さ（px）
+  dur 秒で1回、delay（負）で散らす。o は明るさ、w は点の太さ（px）。ticks は落ちる道のりの
+  10 等分の1区間を何回に分けて進むか（MOTION_RATE の格子。描く側が steps() に渡す）
 */
 export type OrbitDust = {
   a: number
@@ -113,6 +118,7 @@ export type OrbitDust = {
   r1: number
   dur: number
   delay: number
+  ticks: number
   o: number
   w: number
 }
@@ -246,14 +252,27 @@ const INNER_PERIOD = 90
 const FLOW_SHARE = 0.2
 
 // 回る天体の大きさの揺れ（OrbitPath の sway）を、1周の何等分の点で渡すか
-const SWAY_STEPS = 24
+const SWAY_STEPS = 36
 
 /*
-  星屑を1秒に何回進めるか（OrbitPath の ticks）。星屑は千を超える粒で、毎コマ描き直すと
-  入口の描画の時間が3倍になった。公転はゆっくりで（いちばん速い内側の軌道の手前でも、机の
-  幅で 1 秒に 10px ほど）、1回に進むのは 1px に満たないので、刻んで進めても滑らかに見える
+  ゆっくり動くものの刻み（ミリ秒）。星屑と星の瞬きは TICK ごと、天体は BODY_TICK ごとにだけ姿を
+  変え、そのあいだは描いた層を使い回す（描き直さない）。公転はゆっくりで（いちばん速い内側の
+  軌道の手前でも、机の幅で 1 秒に 10px ほど）、1回に進むのは 1px に満たないので、刻んでも
+  滑らかに見える。
+
+  どれも同じ格子に乗るよう、周期を TICK の倍数にそろえる（OrbitPath の period）——刻みが軌道
+  ごとにばらけると、層はほぼ毎コマ描き直しになる。動くものを毎コマ描き直していたころは、
+  144Hz の画面で GPU の仕事が1コマの枠（約 6.9ms）を超え、ブラウザごと重くなった
 */
-const STARDUST_TICKS = 12
+export const TICK = 80
+export const BODY_TICK = 40
+
+/*
+  毎コマ動くもの（流れる星と吸い込まれる粒）を1秒に何回進めるか。どれも 1/MOTION_RATE 秒の
+  格子に乗せる（流れる星の周期は整数の秒、粒の周期は 0.5 秒・遅れは 0.05 秒の倍数）。60Hz の
+  画面では毎コマ進み、144Hz の画面でも層を描き直すのは1秒に MOTION_RATE 回まで
+*/
+export const MOTION_RATE = 60
 
 /*
   業務の天体の輪（OrbitMap の ring）。横の半径はいちばん内側の軌道の長半径に対する割合で、
@@ -655,8 +674,10 @@ export function orbitMap(counts: KindCounts, frame: OrbitFrame): OrbitMap {
   })
 
   const aMin = orbits[0]?.a ?? 1
-  // 公転の周期（OrbitPath の period）
-  const periods = orbits.map((orbit) => round(INNER_PERIOD * (orbit.a / aMin) ** 1.5))
+  // 公転の周期（OrbitPath の period。秒）。刻みの格子に乗るよう TICK の倍数にそろえる
+  const periods = orbits.map(
+    (orbit) => (Math.round((INNER_PERIOD * (orbit.a / aMin) ** 1.5 * 1000) / TICK) * TICK) / 1000,
+  )
   /*
     回る天体の大きさの揺れ（OrbitPath の sway）。写した楕円を SWAY_STEPS 等分した向きごとの、
     止まった天体と同じ式の倍率（奥行きの坂を写す）
@@ -687,13 +708,15 @@ export function orbitMap(counts: KindCounts, frame: OrbitFrame): OrbitMap {
     const edge = frame.hole / (scale * Math.hypot(Math.cos(rad(a)), SQUASH * Math.sin(rad(a))))
     const r1 = round(edge * (1 + random() * 0.1))
     const from = Math.max(inner, r1 * 1.3)
-    const dur = round(6 + random() * 6)
+    // 周期と遅れは MOTION_RATE の格子に乗せる（10 等分の1区間が格子の倍数になるように）
+    const dur = Math.round((6 + random() * 6) * 2) / 2
     return {
       a,
       r0: round(from + random() * Math.max(0, outer - from)),
       r1,
       dur,
-      delay: -round(random() * dur),
+      delay: -Math.round(random() * dur * 20) / 20,
+      ticks: Math.round((dur * MOTION_RATE) / 10),
       o: Math.round((0.35 + random() * 0.55) * 100) / 100,
       w: round(1.2 + random() * 1.2),
     }
@@ -771,14 +794,16 @@ export function orbitMap(counts: KindCounts, frame: OrbitFrame): OrbitMap {
       ...orbitHalves(frame, orbit, scale),
       ellipse: ellipses[i] as Ellipse,
       period: periods[i] ?? INNER_PERIOD,
-      ticks: Math.round((periods[i] ?? INNER_PERIOD) * STARDUST_TICKS),
+      ticks: Math.round(((periods[i] ?? INNER_PERIOD) * 1000) / TICK),
+      bodyTicks: Math.round(((periods[i] ?? INNER_PERIOD) * 1000) / BODY_TICK),
       sway: sways[i] ?? [],
       stardust: (stardust[i] ?? []).map((dots) => dots.join('')),
     })),
     bodies,
     plane,
     dust,
-    flows: orbits.map((orbit) => round(INNER_PERIOD * (orbit.a / aMin) ** 1.5 * FLOW_SHARE)),
+    // 流れる星の周期は整数の秒（MOTION_RATE の格子に乗る）
+    flows: orbits.map((orbit) => Math.round(INNER_PERIOD * (orbit.a / aMin) ** 1.5 * FLOW_SHARE)),
     halves: { far: half(back), near: half({ x: -back.x, y: -back.y }) },
     depth: { x1: round(farEnd.x), y1: round(farEnd.y), x2: round(nearEnd.x), y2: round(nearEnd.y) },
     ring: {
@@ -1001,7 +1026,8 @@ export type CosmosStar = {
   y: number
   o: number
   w: number
-  twinkle: { dur: number; delay: number } | null
+  // 瞬き。dur と delay は TICK の格子に乗り、ticks は明暗の片道を何回に分けて変えるか
+  twinkle: { dur: number; delay: number; ticks: number } | null
   glint: boolean
 }
 export type CosmosMeteor = { x: number; y: number; angle: number; dur: number; delay: number }
@@ -1018,13 +1044,22 @@ export function cosmosMap(): CosmosMap {
     const x = round(random() * COSMOS.width)
     const y = round(random() * COSMOS.height)
     const bright = random() ** 2.2
-    const dur = round(2.5 + random() * 4.5)
+    /*
+      瞬きの周期と遅れは TICK の格子に乗せる（明るさは TICK ごとにだけ変わり、そのあいだは星空の
+      層を描き直さない）。周期は明暗の往復なので、片道が TICK の倍数になるよう 2 TICK の倍数に
+    */
+    const half = Math.round(((2.5 + random() * 4.5) * 1000) / (2 * TICK))
+    const dur = (half * 2 * TICK) / 1000
+    const twinkle =
+      random() < COSMOS_TWINKLE
+        ? { dur, delay: -(Math.round(random() * half * 2) * TICK) / 1000, ticks: half }
+        : null
     return {
       x,
       y,
       o: Math.round((0.18 + bright * 0.72) * 100) / 100,
       w: round(0.6 + bright * 1.3),
-      twinkle: random() < COSMOS_TWINKLE ? { dur, delay: -round(random() * dur) } : null,
+      twinkle,
     }
   })
   // 光芒を付ける明るさの境（明るいほうから GLINTS 番目）

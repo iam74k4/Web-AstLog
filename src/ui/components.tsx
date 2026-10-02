@@ -22,6 +22,7 @@ import {
   type CosmosMap,
   cosmosMap,
   HERO_FRAME,
+  MOTION_RATE,
   type NebulaMap,
   nebulaMap,
   type OrbitFrame,
@@ -421,15 +422,19 @@ const unstretch = ({ rx, ry, angle }: OrbitMap['orbits'][number]['ellipse']) =>
   （形で分ける）。前は白い点と抜いた輪で、図面の記号に見えた。輪を水平のまま描いていた
   ころは、横長の楕円の真ん中に点が乗った姿が「目」の記号に見えた。
 
-  天体は軌道ごと公転する（持ち主の「軌道の線を星と一緒に動かして」。Motion）。軌道の楕円の
-  枠の中で、単位円の上の置き場所（OrbitBody の u, v）ごと星屑と同じ速さで回る
-  （orbit-spin）。天体の形は回さず潰さない——置き場所の中で回転を打ち消し（orbit-unspin）、
-  楕円の枠の伸びを戻す（unstretch）。手前ほど大きい（奥行きの倍率）——止まった姿は
-  OrbitBody の scale、回るあいだは軌道の大きさの揺れ（OrbitPath の sway）を linear() で
-  渡して orbit-sway が変える（app.css の「動き続ける」。keyframes は 0 から 1 の1本で、
-  軌道ごとの量は linear() が持つ）。
+  天体は軌道ごと公転する（持ち主の「軌道の線を星と一緒に動かして」）。軌道の楕円の枠の中で、
+  単位円の上の置き場所（OrbitBody の u, v）ごと星屑と同じ速さで回る（orbit-spin）。天体の形は
+  回さず潰さない——置き場所の中で回転を打ち消し（orbit-unspin）、楕円の枠の伸びを戻す
+  （unstretch）。手前ほど大きい（奥行きの倍率）——止まった姿は OrbitBody の scale、回るあいだは
+  軌道の大きさの揺れ（OrbitPath の sway）を段の linear() で渡して orbit-sway が変える
+  （app.css の「動き続ける」。keyframes は 0 から 1 の1本で、軌道ごとの量は linear() が持つ）。
 
-  id は光とにじみの坂の名前の頭（置く SVG ごとに変える）、clip は奥と手前の半面（Motion）。
+  天体だけの SVG に置き（.system__bodies / .orbits__bodies）、BODY_TICK ごとにだけ進める
+  （steps()。回転と打ち消しは同じ刻み）。流れる星や吸い込まれる粒と同じ層にあると、天体も
+  毎コマ描き直しになる。大きさの揺れも毎コマは変えない（stairs）。
+
+  side は奥と手前の半面（OrbitMap の halves）のどちらで切るか。id は半面と坂の名前の頭（置く
+  SVG ごとに変える）。
 */
 const HALO = 1.6
 /*
@@ -438,7 +443,19 @@ const HALO = 1.6
 */
 const CORE = 0.9
 
-const Bodies = ({ map, id, clip }: { map: OrbitMap; id: string; clip: string }) => {
+/*
+  大きさの揺れ（OrbitPath の sway）を段の linear() にする。点と点のあいだは両端の真ん中の
+  大きさのまま止め、次の点で変わる——天体の層は BODY_TICK ごとにしか描き直さないので、揺れも
+  毎コマは変えない（内側の軌道でも数秒に1度、ほんの少しだけ変わる）
+*/
+const stairs = (sway: number[]) => {
+  const steps = sway.length - 1
+  const at = (k: number) => `${Math.round((k / steps) * 100000) / 1000}%`
+  const level = (k: number) => Math.round((((sway[k] ?? 0) + (sway[k + 1] ?? 0)) / 2) * 1000) / 1000
+  return `linear(${Array.from({ length: steps }, (_, k) => `${level(k)} ${at(k)} ${at(k + 1)}`).join(',')})`
+}
+
+const Bodies = ({ map, side, id }: { map: OrbitMap; side: 'far' | 'near'; id: string }) => {
   const tenth = (value: number) => Math.round(value * 10) / 10
   // 天体が無ければ何も描かない（光とにじみの坂も置かない）
   if (!map.bodies.length) return null
@@ -451,6 +468,9 @@ const Bodies = ({ map, id, clip }: { map: OrbitMap; id: string; clip: string }) 
   return (
     <>
       <defs>
+        <clipPath id={`${id}-half`} clipPathUnits="userSpaceOnUse">
+          <path d={map.halves[side]} />
+        </clipPath>
         <radialGradient id={`${id}-core`}>
           <stop class="orbit-body__light" offset="0" stop-opacity="1" />
           <stop class="orbit-body__light" offset="0.25" stop-opacity="1" />
@@ -465,7 +485,7 @@ const Bodies = ({ map, id, clip }: { map: OrbitMap; id: string; clip: string }) 
           <stop class="orbit-body__glow" offset="1" stop-opacity="0" />
         </radialGradient>
       </defs>
-      <g class="orbit-bodies" clip-path={clip}>
+      <g class="orbit-bodies" clip-path={`url(#${id}-half)`}>
         {map.orbits.map((orbit, i) => {
           const riders = map.bodies.filter((body) => body.orbit === i)
           if (!riders.length) return null
@@ -475,7 +495,7 @@ const Bodies = ({ map, id, clip }: { map: OrbitMap; id: string; clip: string }) 
             <g key={orbit.d} transform={ellipseFrame(orbit.ellipse)} style={`--reach:${reach}`}>
               <g
                 class="orbit-spin"
-                style={`--dur:${orbit.period}s;--sway:linear(${orbit.sway.join(',')})`}
+                style={`--dur:${orbit.period}s;--ticks:${orbit.bodyTicks};--sway:${stairs(orbit.sway)}`}
               >
                 {riders.map((body) => (
                   <g key={`${body.u},${body.v}`} transform={`translate(${body.u} ${body.v})`}>
@@ -740,9 +760,15 @@ const Flows = ({ map, id, clip }: { map: OrbitMap; id: string; clip: string }) =
         const period = map.flows[i] ?? orbit.period
         // 出だしの向き（度。単位円の上の角）
         const turn = tenth(((i * 0.618) % 1) * 360)
+        // 星の大きさは、その軌道の上の大きさの揺れの平均（毎コマは変えない）
+        const size =
+          Math.round((orbit.sway.reduce((sum, v) => sum + v, 0) / orbit.sway.length) * 100) / 100
         return (
           <g key={orbit.d} transform={ellipseFrame(orbit.ellipse)}>
-            <g class="orbit-spin" style={`--dur:${period}s;--sway:linear(${orbit.sway.join(',')})`}>
+            <g
+              class="orbit-spin"
+              style={`--dur:${period}s;--ticks:${Math.round(period * MOTION_RATE)}`}
+            >
               <g transform={`rotate(${turn})`}>
                 <path
                   class="orbit-flow__trail"
@@ -752,10 +778,7 @@ const Flows = ({ map, id, clip }: { map: OrbitMap; id: string; clip: string }) =
                 <g transform="translate(1 0)">
                   <g class="orbit-unspin">
                     <g transform={`rotate(${-turn}) ${unstretch(orbit.ellipse)}`}>
-                      <g
-                        class="orbit-flow__star"
-                        style={`--delay:-${tenth((turn / 360) * period)}s`}
-                      >
+                      <g class="orbit-flow__star" style={`scale:${size}`}>
                         <circle class="orbit-flow__core" r={core} fill={`url(#${id}-core)`} />
                         <path
                           class="orbit-flow__glint"
@@ -779,7 +802,8 @@ const Flows = ({ map, id, clip }: { map: OrbitMap; id: string; clip: string }) =
   動くもの（入口と締め）。同じものを奥の層と手前の層に1つずつ置き、それぞれを軌道面の奥と
   手前の半面で切る（orbits.ts の OrbitMap の halves）——ブラックホールの向こうを回るあいだは
   後ろに、こちらへ来るあいだは前に見える。重ねる順は、流れる星 → 吸い込まれる粒（奥の層
-  だけ）→ 天体。星屑（Stardust）はこの下の自分の SVG。動かし方は app.css の「動き続ける」。
+  だけ）。毎コマ動くものだけを置く——星屑（Stardust）はこの下、天体（Bodies）はこの上の、
+  それぞれ刻んで進む自分の SVG。動かし方は app.css の「動き続ける」。
 
   - 星屑（Stardust）と天体（Bodies）は軌道ごと公転する（持ち主の「軌道の線を星と一緒に
     動かして」）。向きは吸い込まれる粒と同じ（画面で時計回り——奥は左から右へ、手前は右から
@@ -800,7 +824,6 @@ const Motion = ({ map, side, id }: { map: OrbitMap; side: 'far' | 'near'; id: st
       </defs>
       <Flows map={map} id={`${id}-flow`} clip={clip} />
       {side === 'far' ? <Dust map={map} /> : null}
-      <Bodies map={map} id={`${id}-body`} clip={clip} />
     </>
   )
 }
@@ -820,7 +843,10 @@ const Dust = ({ map }: { map: OrbitMap }) => (
   <g class="orbit-dust" transform={map.plane}>
     {map.dust.map((grain, i) => (
       <g key={i} transform={`rotate(${grain.a})`}>
-        <g class="orbit-grain" style={`--dur:${grain.dur}s;--delay:${grain.delay}s`}>
+        <g
+          class="orbit-grain"
+          style={`--dur:${grain.dur}s;--delay:${grain.delay}s;--ticks:${grain.ticks}`}
+        >
           <g
             transform={`translate(${grain.r1} 0) scale(${Math.round((grain.r0 - grain.r1) * 10) / 10})`}
             opacity={grain.o}
@@ -877,7 +903,7 @@ const Cosmos = ({ map, id, place }: { map: CosmosMap; id: string; place: 'hero' 
             opacity={star.o}
             style={
               star.twinkle
-                ? `stroke-width:${star.w}px;--dur:${star.twinkle.dur}s;--delay:${star.twinkle.delay}s`
+                ? `stroke-width:${star.w}px;--dur:${star.twinkle.dur}s;--delay:${star.twinkle.delay}s;--ticks:${star.twinkle.ticks}`
                 : `stroke-width:${star.w}px`
             }
           />
@@ -1138,59 +1164,60 @@ const Hole = ({ frame }: { frame: OrbitFrame }) => {
 export const OrbitSystem = ({ counts }: { counts: KindCounts }) => {
   const map = orbitMap(counts, HERO_FRAME)
   const view = `0 0 ${map.width} ${map.height}`
+  /*
+    奥の半分（ブラックホールの後ろ）と手前の半分（前）に、同じ順で層を重ねる——ぼかした光の帯、
+    軌道の線（入口で引かれる）、刻んで回る星屑、毎コマ動く流れる星と粒、刻んで回る天体。
+    帯を線と分けるのは、入口で線を引くあいだ、帯のぼかしを毎コマ掛け直さないため
+  */
+  const half = (side: 'far' | 'near') => (
+    <>
+      <svg
+        class={`system__bands system__bands--${side}`}
+        viewBox={view}
+        aria-hidden="true"
+        focusable="false"
+      >
+        <OrbitBands map={map} side={side} id={`system-${side}-bands`} />
+      </svg>
+      <svg
+        class={`system__orbits system__orbits--${side}`}
+        viewBox={view}
+        aria-hidden="true"
+        focusable="false"
+      >
+        <OrbitLines map={map} side={side} id={`system-${side}-depth`} />
+      </svg>
+      <svg
+        class={`system__stardust system__stardust--${side}`}
+        viewBox={view}
+        aria-hidden="true"
+        focusable="false"
+      >
+        <Stardust map={map} side={side} id={`system-${side}-stardust`} />
+      </svg>
+      <svg
+        class={`system__motion system__motion--${side}`}
+        viewBox={view}
+        aria-hidden="true"
+        focusable="false"
+      >
+        <Motion map={map} side={side} id={`system-${side}`} />
+      </svg>
+      <svg
+        class={`system__bodies system__bodies--${side}`}
+        viewBox={view}
+        aria-hidden="true"
+        focusable="false"
+      >
+        <Bodies map={map} side={side} id={`system-${side}-body`} />
+      </svg>
+    </>
+  )
   return (
     <div class="system">
-      <svg
-        class="system__orbits system__orbits--far"
-        viewBox={view}
-        aria-hidden="true"
-        focusable="false"
-      >
-        <OrbitBands map={map} side="far" id="system-far-bands" />
-        <OrbitLines map={map} side="far" id="system-far-depth" />
-      </svg>
-      <svg
-        class="system__stardust system__stardust--far"
-        viewBox={view}
-        aria-hidden="true"
-        focusable="false"
-      >
-        <Stardust map={map} side="far" id="system-far-stardust" />
-      </svg>
-      <svg
-        class="system__motion system__motion--far"
-        viewBox={view}
-        aria-hidden="true"
-        focusable="false"
-      >
-        <Motion map={map} side="far" id="system-far" />
-      </svg>
+      {half('far')}
       <Hole frame={HERO_FRAME} />
-      <svg
-        class="system__orbits system__orbits--near"
-        viewBox={view}
-        aria-hidden="true"
-        focusable="false"
-      >
-        <OrbitBands map={map} side="near" id="system-near-bands" />
-        <OrbitLines map={map} side="near" id="system-near-depth" />
-      </svg>
-      <svg
-        class="system__stardust system__stardust--near"
-        viewBox={view}
-        aria-hidden="true"
-        focusable="false"
-      >
-        <Stardust map={map} side="near" id="system-near-stardust" />
-      </svg>
-      <svg
-        class="system__motion system__motion--near"
-        viewBox={view}
-        aria-hidden="true"
-        focusable="false"
-      >
-        <Motion map={map} side="near" id="system-near" />
-      </svg>
+      {half('near')}
     </div>
   )
 }
@@ -1275,29 +1302,29 @@ export const Cta = ({ href, children }: { href: string; children: Child }) => (
 export const ContactOrbits = ({ counts }: { counts: KindCounts }) => {
   const map = orbitMap(counts, CONTACT_FRAME)
   const view = `0 0 ${map.width} ${map.height}`
+  // 奥の半分と手前の半分に、同じ順で層を重ねる（入口と同じ。帯と線は着いたときに動かないので1枚）
+  const half = (side: 'far' | 'near') => (
+    <>
+      <svg class="orbits__still" viewBox={view} aria-hidden="true" focusable="false">
+        <OrbitBands map={map} side={side} id={`contact-${side}-bands`} />
+        <OrbitLines map={map} side={side} id={`contact-${side}-depth`} />
+      </svg>
+      <svg class="orbits__stardust" viewBox={view} aria-hidden="true" focusable="false">
+        <Stardust map={map} side={side} id={`contact-${side}-stardust`} />
+      </svg>
+      <svg viewBox={view} aria-hidden="true" focusable="false">
+        <Motion map={map} side={side} id={`contact-${side}`} />
+      </svg>
+      <svg class="orbits__bodies" viewBox={view} aria-hidden="true" focusable="false">
+        <Bodies map={map} side={side} id={`contact-${side}-body`} />
+      </svg>
+    </>
+  )
   return (
     <div class="orbits">
-      <svg class="orbits__still" viewBox={view} aria-hidden="true" focusable="false">
-        <OrbitBands map={map} side="far" id="contact-far-bands" />
-        <OrbitLines map={map} side="far" id="contact-far-depth" />
-      </svg>
-      <svg class="orbits__stardust" viewBox={view} aria-hidden="true" focusable="false">
-        <Stardust map={map} side="far" id="contact-far-stardust" />
-      </svg>
-      <svg viewBox={view} aria-hidden="true" focusable="false">
-        <Motion map={map} side="far" id="contact-far" />
-      </svg>
+      {half('far')}
       <Hole frame={CONTACT_FRAME} />
-      <svg class="orbits__still" viewBox={view} aria-hidden="true" focusable="false">
-        <OrbitBands map={map} side="near" id="contact-near-bands" />
-        <OrbitLines map={map} side="near" id="contact-near-depth" />
-      </svg>
-      <svg class="orbits__stardust" viewBox={view} aria-hidden="true" focusable="false">
-        <Stardust map={map} side="near" id="contact-near-stardust" />
-      </svg>
-      <svg viewBox={view} aria-hidden="true" focusable="false">
-        <Motion map={map} side="near" id="contact-near" />
-      </svg>
+      {half('near')}
     </div>
   )
 }

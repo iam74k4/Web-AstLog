@@ -339,8 +339,8 @@
 
   /*
     着いたあとも動き続けるもの（「動き続ける」）。星屑と天体の公転と軌道を流れる星（1周の長さは
-    orbits.ts の INNER_PERIOD から。外側の軌道ほど長い）、吸い込まれる粒（落ち方の曲線
-    --fall-ease。落ちるほど速く回り、速く寄る）、ブラックホールの光の揺らぎ（明るさが
+    orbits.ts の INNER_PERIOD から。外側の軌道ほど長い）、吸い込まれる粒（落ちるほど速く回り、
+    速く寄る。曲線は keyframes の orbit-grain-*）、ブラックホールの光の揺らぎ（明るさが
     --breathe-low まで沈んで戻る。片道 --breathe-dur）、星雲の漂い（片道 --drift-dur）と星の
     瞬き（周期は星ごと。orbits.ts の nebulaMap）。止める手は置かない（持ち主の判断。動きを
     減らす設定では全部止まる）
@@ -348,7 +348,6 @@
   --drift-dur: 40s;
   --breathe-dur: 4s;
   --breathe-low: 0.82;
-  --fall-ease: cubic-bezier(0.5, 0, 0.85, 0.45);
   /*
     軌道を流れる星（components.tsx の Motion）。後ろに引く尾の、星の側の濃さ（--flow-trail。
     後ろへ消える）と、十字の光芒の濃さ（--flow-glint）
@@ -1106,9 +1105,11 @@ body[data-site] > main {
   isolation: isolate;
 }
 
+.system__bands,
 .system__orbits,
 .system__stardust,
-.system__motion {
+.system__motion,
+.system__bodies {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -1116,17 +1117,28 @@ body[data-site] > main {
 }
 
 /*
-  動かない層（軌道の線・光の帯。入口の .system__orbits と締めの .orbits__still）は、自分の
-  合成の層に描く——帯のぼかし（SVG のフィルタ）を一度だけ描いて使い回すため。同じ層に回る
-  星屑や天体、流れる光や粒が居ると、それが動くたびにぼかしまで描き直す（だから動くものは
-  .system__motion と締めの別の SVG に分けてある）。
+  動かない層と、刻んで動く層は、それぞれ自分の合成の層に描き、描いた層を使い回す。
 
-  星屑の層（.system__stardust / .orbits__stardust）も自分の合成の層に描く。星屑は1秒に数回
-  だけ進むので（「動き続ける」の .stardust .orbit-spin）、そのあいだは描いた層を使い回せる。
-  毎コマ動く光や粒と同じ層に置いていたころは、千を超える粒を毎コマ描き直し、入口の描画の
-  時間が3倍になった
+  - 動かない層（光の帯 .system__bands・軌道の線 .system__orbits、締めはまとめて .orbits__still）。
+    帯のぼかし（SVG のフィルタ）を一度だけ描いて使い回す。入口の帯は層ごと灯す（層の濃さは
+    描き直さずに変えられる）。線を引くあいだも、帯は別の層なので掛け直さない
+  - 刻んで動く層（星屑 .system__stardust / .orbits__stardust、天体 .system__bodies /
+    .orbits__bodies）。どれも同じ刻み（orbits.ts の TICK・BODY_TICK）でだけ姿を変える
+    （「動き続ける」の steps()）ので、そのあいだは描き直さない
+
+  毎コマ描き直すのは、流れる星と吸い込まれる粒の層（.system__motion と締めの名前の無い
+  SVG）だけ。動くものをまとめて毎コマ描き直していたころは、144Hz の画面で GPU の仕事が
+  1コマの枠を超え、ブラウザごと重くなった
 */
-:is(.system__orbits, .orbits__still, .system__stardust, .orbits__stardust) {
+:is(
+  .system__bands,
+  .system__orbits,
+  .orbits__still,
+  .system__stardust,
+  .orbits__stardust,
+  .system__bodies,
+  .orbits__bodies
+) {
   will-change: transform;
 }
 
@@ -1689,7 +1701,7 @@ use.nebula__dust {
     calc(var(--trace-delay) + var(--trace-dur) + var(--reach, 0) * var(--trace-stagger)) backwards;
 }
 
-.system .orbit-bands,
+.system__bands,
 .system__stardust {
   animation: orbit-light var(--fill-dur) var(--ease) calc(var(--trace-delay) + var(--trace-dur))
     backwards;
@@ -1720,11 +1732,10 @@ use.nebula__dust {
     手前へ回るほど大きい（orbit-sway。0 から 1 の keyframes を、軌道ごとの大きさの揺れを
     書いた linear() で送る——量は keyframes ではなく timing が持つ）
   - 軌道に沿って星が流れる。輝く星が、星屑と天体より速く、軌道の楕円の枠の中を回る（orbit-swirl
-    を linear で。周期は軌道ごとの --dur）。形は回さず（orbit-unswirl）、大きさは天体と同じく
-    手前ほど大きい（orbit-sway）
-  - 光の粒が渦を巻いてブラックホールへ吸い込まれ、黒い円の縁で光に溶ける（orbit-swirl で
-    1周回り、その中で orbit-fall が外から内へ寄せる。どちらも --fall-ease で、落ちるほど
-    速い）
+    を 1/60 秒の刻みで。周期は軌道ごとの --dur）。形は回さない（orbit-unswirl）
+  - 光の粒が渦を巻いてブラックホールへ吸い込まれ、黒い円の縁で光に溶ける（orbit-grain-swirl で
+    1周回り、その中で orbit-grain-fall が外から内へ寄せる。落ちるほど速い曲線を keyframes の
+    10 の区間に焼き、区間ごとに 1/60 秒の刻みで進める）
   - ブラックホールの光が明るさを沈めては戻す（orbit-breathe。光の絵の不透明度だけを変え、
     下に敷いた影の黒い円は動かさない——絵の明るさを filter で落とすと、白い光が灰色に
     くすんだ）
@@ -1769,16 +1780,98 @@ use.nebula__dust {
   }
 }
 
-/* 粒は止まった姿を持たない（動かないときは層ごと隠す）ので、出だしと終わりの両方を書く */
-@keyframes orbit-fall {
+/*
+  吸い込まれる粒。落ちるほど速く回り、速く寄る曲線（cubic-bezier(0.5, 0, 0.85, 0.45)）を
+  10% ごとの区間に焼いてある——曲線を timing に置くと steps() と並べられず、粒の層を毎コマ
+  描き直すことになる（刻むのは「動き続ける」の .orbit-grain）。粒は止まった姿を持たない
+  （動かないときは層ごと隠す）ので、出だしと終わりの両方を書く
+*/
+@keyframes orbit-grain-swirl {
+  10% {
+    transform: rotate(2.2deg);
+  }
+
+  20% {
+    transform: rotate(9deg);
+  }
+
+  30% {
+    transform: rotate(20.9deg);
+  }
+
+  40% {
+    transform: rotate(38.5deg);
+  }
+
+  50% {
+    transform: rotate(62.6deg);
+  }
+
+  60% {
+    transform: rotate(94deg);
+  }
+
+  70% {
+    transform: rotate(134.6deg);
+  }
+
+  80% {
+    transform: rotate(187.2deg);
+  }
+
+  90% {
+    transform: rotate(257.4deg);
+  }
+
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes orbit-grain-fall {
   from {
     transform: translate(1px, 0px);
     opacity: 0;
   }
 
-  15%,
-  80% {
+  10% {
+    transform: translate(0.994px, 0px);
+    opacity: 0.34;
+  }
+
+  20% {
+    transform: translate(0.975px, 0px);
     opacity: 1;
+  }
+
+  30% {
+    transform: translate(0.942px, 0px);
+  }
+
+  40% {
+    transform: translate(0.893px, 0px);
+  }
+
+  50% {
+    transform: translate(0.826px, 0px);
+  }
+
+  60% {
+    transform: translate(0.739px, 0px);
+  }
+
+  70% {
+    transform: translate(0.626px, 0px);
+  }
+
+  80% {
+    transform: translate(0.48px, 0px);
+    opacity: 1;
+  }
+
+  90% {
+    transform: translate(0.285px, 0px);
+    opacity: 0.83;
   }
 
   to {
@@ -1874,9 +1967,13 @@ use.nebula__dust {
     animation: orbit-meteor var(--dur) linear var(--delay) infinite;
   }
 
-  /* 流れる星の大きさの揺れ（天体と同じ orbit-sway。周期は星の1周、出だしの向きのぶん先から） */
-  .orbit-flow__star {
-    animation: orbit-sway var(--dur) var(--sway) var(--delay) infinite;
+  /*
+    毎コマ動くもの（流れる星と吸い込まれる粒）も 1/60 秒の刻みで進める（orbits.ts の
+    MOTION_RATE）。60Hz の画面では毎コマ進み、144Hz の画面でも流れる星と粒の層を描き直すのは
+    1秒に 60 回まで——毎コマ描き直していたころは、144Hz の画面で GPU の仕事が1コマの枠を超えた
+  */
+  .orbit-flows :is(.orbit-spin, .orbit-unspin) {
+    animation-timing-function: steps(var(--ticks));
   }
 
   /*
@@ -1896,6 +1993,14 @@ use.nebula__dust {
     あいだは星屑の層を描き直さない（「入口の軌道図」の .system__stardust）
   */
   .stardust .orbit-spin {
+    animation-timing-function: steps(var(--ticks));
+  }
+
+  /*
+    天体も1周を --ticks 回に刻んで進める（BODY_TICK ごと。回転と打ち消しは同じ刻みなので、
+    どの瞬間も打ち消し合う）。大きさの揺れは段の linear()（部品の stairs）
+  */
+  .orbit-bodies :is(.orbit-spin, .orbit-unspin) {
     animation-timing-function: steps(var(--ticks));
   }
 
@@ -1927,11 +2032,11 @@ use.nebula__dust {
   }
 
   .orbit-grain {
-    animation: orbit-swirl var(--dur) var(--fall-ease) var(--delay) infinite;
+    animation: orbit-grain-swirl var(--dur) steps(var(--ticks)) var(--delay) infinite;
   }
 
   .orbit-grain__dot {
-    animation: orbit-fall var(--dur) var(--fall-ease) var(--delay) infinite;
+    animation: orbit-grain-fall var(--dur) steps(var(--ticks)) var(--delay) infinite;
   }
 
   .hole > .hole__art {
@@ -1952,8 +2057,12 @@ use.nebula__dust {
       orbit-drift var(--drift-dur) ease-in-out infinite alternate;
   }
 
+  /*
+    星の瞬きも刻んで変える（明暗の片道を --ticks 回に。orbits.ts の cosmosMap が周期と遅れを
+    TICK の格子に乗せる）。なめらかに変えると、画面いっぱいの星空の層を毎コマ描き直す
+  */
   .cosmos__twinkle {
-    animation: orbit-twinkle var(--dur) ease-in-out var(--delay) infinite;
+    animation: orbit-twinkle var(--dur) steps(var(--ticks)) var(--delay) infinite;
   }
 }
 

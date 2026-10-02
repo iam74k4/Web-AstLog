@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  BODY_TICK,
   CAMERA,
   CONTACT_FRAME,
   COSMOS,
@@ -8,10 +9,12 @@ import {
   HERO_FRAME,
   interleaveKinds,
   MAX_ORBITS,
+  MOTION_RATE,
   NEBULA,
   nebulaMap,
   orbitMap,
   STARDUST_CLASSES,
+  TICK,
   TILT,
 } from '../src/lib/orbits'
 import { BLACKHOLE_ART } from '../src/ui/logo'
@@ -331,6 +334,7 @@ describe('入口の軌道図の形', () => {
     const map = orbitMap({ app: 3, work: 9 }, HERO_FRAME)
     for (const orbit of map.orbits) {
       expect(Object.keys(orbit).sort()).toEqual([
+        'bodyTicks',
         'd',
         'ellipse',
         'far',
@@ -630,6 +634,40 @@ describe('動き続けるもの', () => {
     if (!outer) throw new Error('軌道が無い')
     expect(onScreen(outer.ellipse, { u: 0, v: 1 }).y).toBeGreaterThan(HERO_FRAME.focus.y)
     expect(onScreen(outer.ellipse, { u: 0, v: -1 }).y).toBeLessThan(HERO_FRAME.focus.y)
+  })
+
+  /*
+    動くものはどれも決まった刻みの格子に乗る。層は刻みの瞬間にだけ姿を変え、そのあいだは描き
+    直さない——刻みが動くものごとにばらけると、層はほぼ毎コマ描き直しになる。毎コマ描き直して
+    いたころは、144Hz の画面で GPU の仕事が1コマの枠を超え、ブラウザごと重くなった（持ち主の
+    「edge などで開くと異常に重い」）
+  */
+  it('動くものは同じ刻みの格子に乗る（層を毎コマ描き直さない）', () => {
+    // ms の値が格子の倍数か（浮動小数のずれは千分の1まで許す）
+    const onGrid = (seconds: number, stepMs: number) =>
+      Math.abs((seconds * 1000) / stepMs - Math.round((seconds * 1000) / stepMs)) < 1e-3
+    for (const frame of [HERO_FRAME, CONTACT_FRAME]) {
+      const map = orbitMap({ app: 14, work: 6 }, frame)
+      map.orbits.forEach((orbit, i) => {
+        // 星屑は TICK ごと、天体は BODY_TICK ごとに1回進む
+        expect(onGrid(orbit.period, TICK), `${orbit.period}`).toBe(true)
+        expect(orbit.ticks).toBe(Math.round((orbit.period * 1000) / TICK))
+        expect(orbit.bodyTicks).toBe(Math.round((orbit.period * 1000) / BODY_TICK))
+        // 流れる星は整数の秒で、1/MOTION_RATE 秒ごとに進む
+        expect(Number.isInteger(map.flows[i])).toBe(true)
+      })
+      for (const grain of map.dust) {
+        // 粒は 10 の区間のどれも 1/MOTION_RATE 秒の倍数。遅れも格子の上
+        expect(grain.ticks).toBe((grain.dur * MOTION_RATE) / 10)
+        expect(onGrid(grain.delay, 1000 / MOTION_RATE)).toBe(true)
+      }
+    }
+    // 星の瞬きは明暗の片道が TICK の倍数。遅れも格子の上
+    for (const star of cosmosMap().stars) {
+      if (!star.twinkle) continue
+      expect(star.twinkle.ticks).toBe((star.twinkle.dur * 1000) / (2 * TICK))
+      expect(onGrid(star.twinkle.delay, TICK)).toBe(true)
+    }
   })
 
   it('回る天体は手前へ来るほど大きい。大きさの揺れは止まった天体と同じ式', () => {
