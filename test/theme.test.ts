@@ -1986,6 +1986,8 @@ describe('星空と星雲', () => {
     const decls = main.flatMap((rule) => rule.decls)
     expect(decls).toContainEqual(['position', 'relative'])
     expect(decls).toContainEqual(['isolation', 'isolate'])
+    // 横だけ切る（字の暗がりが画面の右端の先まで伸びても、ページを横に動かさない）
+    expect(decls).toContainEqual(['overflow-x', 'clip'])
     const cosmos = bodyOf(sheet, '.cosmos {')
     for (const decl of [
       'position: absolute',
@@ -1998,26 +2000,67 @@ describe('星空と星雲', () => {
     }
   })
 
-  it('字の後ろには何も出さない。図の下（900 以上の入口は字の列と件数の帯）で消える', () => {
+  it('字の後ろには何も出さない。字の塊が地の色の暗がりを敷き、星空は底で消える', () => {
     /*
       小さい字は地の黒で 4.5:1 ぎりぎりの所があり（職種と所在地の札・件数の見出し）、星
-      1つが字の行に掛かるだけで割る。画素で確かめるのは npm run check:contrast
+      1つが字の行に掛かるだけで割る。画素で確かめるのは npm run check:contrast。
+
+      暗がりは字の塊（入口の見出しの列・締めの字）の箱に付いてくる。図の場所から字の列を
+      見積もった覆いで星空ごと消していたころは、900 以上で左の列を丸ごと消し、星雲が画面の
+      右半分に寄っていた
     */
-    const base = bodyOf(sheet, '.cosmos--hero,\n.cosmos--contact {')
-    expect(base).toMatch(/mask-image: linear-gradient\(\s*to bottom/)
-    const wide = bodyOf(blockAt(sheet, '@media (min-width: 900px)'), '.cosmos--hero {')
-    expect(wide).toContain('mask-composite: intersect')
-    // 左の消え方は楕円（まっすぐな線で切ると、星雲が四角い板に見えた）
-    expect(wide).toMatch(/mask-image:\s*radial-gradient\(\s*ellipse/)
-    // はっきり見たい設定・背の低い窓・紙では出さない
+    const veil = '.hero--orbit > .hero__copy::before,\n.orbital > .contact::before {'
+    const base = bodyOf(sheet, veil)
+    for (const decl of [
+      'position: absolute',
+      'z-index: -1',
+      'background: var(--bg)',
+      'mask-image: var(--veil-y)',
+      'pointer-events: none',
+    ]) {
+      expect(base, decl).toContain(decl)
+    }
+    // 900 未満は字の塊が列いっぱい。暗がりは本文の端から端までの帯（坂を画面の端に掛けると、端で星雲が漏れた）
+    expect(base).toContain('inset: calc(-1 * var(--veil)) calc(-1 * var(--gutter))')
+    const holder = rulesOf(sheet).filter(
+      (rule) =>
+        rule.context.length === 0 &&
+        rule.selectors.includes('.hero--orbit > .hero__copy') &&
+        rule.selectors.includes('.orbital > .contact'),
+    )
+    expect(holder.flatMap((rule) => rule.decls)).toContainEqual(['position', 'relative'])
+
+    // 900 以上は塊を中身の幅に縮め、縦と横の坂を重ねる。右（入口では図の側）は長く溶かす
+    const wide = blockAt(sheet, '@media (min-width: 900px)')
+    for (const selector of ['.hero--orbit > .hero__copy {', '.orbital > .contact {']) {
+      expect(bodyOf(wide, selector), selector).toContain('justify-self: start')
+    }
+    const wideVeil = bodyOf(wide, '.hero--orbit > .hero__copy::before,')
+    expect(wideVeil).toContain('mask-image: var(--veil-y), var(--veil-x)')
+    expect(wideVeil).toContain('mask-composite: intersect')
+    expect(wideVeil).toContain('calc(-1 * var(--veil-side))')
+    expect(bodyOf(sheet, ':root {')).toMatch(/--veil-x: linear-gradient\(\s*to right/)
+
+    // 星空の覆いは底だけ（入口は件数の帯の上、締めは足元の罫線の手前）。左の列を消す覆いに戻さない
+    for (const selector of ['.cosmos--hero {', '.cosmos--contact {']) {
+      expect(bodyOf(sheet, selector), selector).toMatch(/mask-image: linear-gradient\(\s*to bottom/)
+    }
+    expect(bodyOf(wide, '.cosmos--hero {')).not.toContain('mask')
+
+    // はっきり見たい設定・背の低い窓・紙では、星空も暗がりも出さない
     for (const marker of [
       '@media (forced-colors: active), (prefers-contrast: more)',
       '@media (max-height: 400px)',
       '@media print',
     ]) {
-      expect(ruleWith(blockAt(sheet, marker), 'display: none').selector, marker).toContain(
+      const hidden = ruleWith(blockAt(sheet, marker), 'display: none').selector
+      for (const part of [
         '.cosmos',
-      )
+        '.hero--orbit > .hero__copy::before',
+        '.orbital > .contact::before',
+      ]) {
+        expect(hidden, `${marker} ${part}`).toContain(part)
+      }
     }
   })
 
@@ -2091,8 +2134,8 @@ describe('星空と星雲', () => {
   無い色の段があると、その色だけが紙に黒い地の色のまま残る（白い紙に白に近い字）。
 */
 describe('配色（黒基調と紙）', () => {
-  // 覆い（--fade-right）は不透明度の坂で、色の段ではない（地の色と関わらない）
-  const MASKS = new Set(['--fade-right'])
+  // 覆い（--fade-right と字の暗がりの --veil-y / --veil-x）は不透明度の坂で、色の段ではない（地の色と関わらない）
+  const MASKS = new Set(['--fade-right', '--veil-y', '--veil-x'])
   const colorTokens = (body: string) =>
     [...body.matchAll(/(--[\w-]+):\s*([^;]+);/g)]
       .filter(

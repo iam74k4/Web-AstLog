@@ -786,7 +786,7 @@ describe('星雲と星空', () => {
     }
   })
 
-  it('星雲はブラックホールのまわりに広がる。箱の真ん中を、いちばん大きい塊が包む', () => {
+  it('星雲はブラックホールのまわりに広がる。箱の真ん中を、芯を包む淡い光が包む', () => {
     // 描く側は箱の真ん中をブラックホールの位置に置く（app.css の .cosmos__nebula）
     const [haze] = nebulaMap().lobes
     const box = extentOf(haze ?? { cx: 0, cy: 0, rx: 0, ry: 0, rot: 0 })
@@ -794,6 +794,41 @@ describe('星雲と星空', () => {
     expect(box.x1).toBeGreaterThan(NEBULA.width / 2 + 400)
     expect(box.y0).toBeLessThan(NEBULA.height / 2 - 300)
     expect(box.y1).toBeGreaterThan(NEBULA.height / 2 + 300)
+  })
+
+  it('外の雲は箱の左・上・右の端の近くまで届く。左下（字の居る所）には光る塊を置かない', () => {
+    // 持ち主の「星雲をもっと画面広く」。900 以上の入口では、本文の左の端と画面の上と右の端に届く
+    const glow = nebulaMap().lobes.filter((lobe) => lobe.tone !== 'dust')
+    const boxes = glow.map(extentOf)
+    expect(Math.min(...boxes.map((box) => box.x0))).toBeLessThan(NEBULA.width * 0.1)
+    expect(Math.min(...boxes.map((box) => box.y0))).toBeLessThan(NEBULA.height * 0.15)
+    expect(Math.max(...boxes.map((box) => box.x1))).toBeGreaterThan(NEBULA.width * 0.9)
+    /*
+      左下は、900 以上の入口では見出しの列、締めと 900 未満では図の下の字が居る所。字の後ろは
+      字の暗がり（app.css）が消すが、明るい雲を置くと、暗がりの縁が雲を断ち切る線に見えた
+    */
+    for (const lobe of glow) {
+      if (lobe.cx < NEBULA.width * 0.375) {
+        expect(lobe.cy, JSON.stringify(lobe)).toBeLessThan(NEBULA.height / 2)
+      }
+    }
+  })
+
+  it('いちばん明るいのは芯。外の雲はブラックホールから離れるほど淡い', () => {
+    /*
+      外の雲を芯と同じ明るさで画面に敷き詰めていたころは、大理石の壁紙に見え、ブラックホールが
+      雲の真ん中に見えなかった。明るい塊（濃さ 0.5 以上）は芯の中、遠い塊は淡く
+    */
+    const center = { x: NEBULA.width / 2, y: NEBULA.height / 2 }
+    const away = (lobe: { cx: number; cy: number }) =>
+      Math.hypot(lobe.cx - center.x, lobe.cy - center.y)
+    const glow = nebulaMap().lobes.filter((lobe) => lobe.tone !== 'dust')
+    for (const lobe of glow.filter((one) => one.o >= 0.5)) {
+      expect(away(lobe), JSON.stringify(lobe)).toBeLessThan(600)
+    }
+    for (const lobe of glow.filter((one) => away(one) > 1200)) {
+      expect(lobe.o, JSON.stringify(lobe)).toBeLessThan(0.25)
+    }
   })
 
   it('星空は読み込むたびに同じ。視野の中に、暗い星ほど多く置く。光芒と瞬きは一部だけ', () => {

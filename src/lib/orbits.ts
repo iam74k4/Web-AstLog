@@ -23,7 +23,7 @@
   半径が枠の hole になる大きさで置く。軌道は奥の半分がブラックホールの後ろを、手前の半分が
   前を通る（orbitHalves）。
 
-  いちばん後ろには星雲を敷く（nebulaMap。件数には依らず、枠だけから決まる）。
+  いちばん後ろには、画面の端まで広がる星雲を敷く（nebulaMap。件数にも枠にも依らない1枚の箱）。
 
   ここは UI を読まない（層の向き。test/source.test.ts）。
 */
@@ -717,25 +717,36 @@ export function orbitMap(counts: KindCounts, frame: OrbitFrame): OrbitMap {
 }
 
 /*
-  星雲（入口と締めの星空の中、ブラックホールのまわり。描くのは components.tsx の Nebula）。
-  持ち主の「もっと星雲っぽさがほしい」——軌道図の枠の中だけに淡く敷いていたころは、
-  雲が小さく、星雲より霞に見えた。
+  星雲（入口と締めの星空の中、ブラックホールのまわりから画面の端まで。描くのは
+  components.tsx の Nebula）。持ち主の「もっと星雲っぽさがほしい」「星雲をもっと画面広く」
+  ——軌道図の枠の中だけに淡く敷いていたころは雲が小さく霞に見え、軌道図のまわりだけに
+  置いていたころは、900 以上の入口で星雲が画面の右半分に寄っていた。
 
   形は1枚の箱（NEBULA。ブラックホールが真ん中）の中で決め、描く側がブラックホールの
-  位置に、図の幅に比例した大きさで置く（app.css の .cosmos__nebula）。箱は図より大きく、
-  雲は軌道のまわりから画面の端の先まで広がる。字の後ろで消すのは星空の覆い（.cosmos）。
+  位置に、図の幅に比例した大きさで置く（app.css の .cosmos__nebula。箱は図の幅の 3.5 倍ほど）。
+  字の後ろで消すのは、字の塊が敷く暗がり（app.css の「字の暗がり」）。
+
+  芯（軌道のまわり）がいちばん明るく、外の雲は芯から曲がって細りながら伸びる腕
+  （NEBULA_ARMS）と、腕のあいだを埋める淡い広がりで、先ほど淡い。外の雲を芯と同じ明るさで
+  画面に敷き詰めていたころは、大理石の壁紙に見え、ブラックホールが雲の真ん中に見えなかった。
 
   雲は楕円の塊（lobes）を放射の坂で塗ったもので、質感（綿のような雲・渦に流れる筋・
   暗い塵の帯）は描く側の SVG のフィルタが乱数の模様で付ける。ここが決めるのは塊の
-  置き場所・大きさ・向き・濃さ・色の役だけ。
+  置き場所・大きさ・向き・濃さ・色の役だけ。模様の大きさは箱の単位で決まるので、外の雲も
+  芯と同じ肌理になり、筋は塊と一緒に先ほど淡くなる。
 
   - 色の役は4つ——a・b・c はプリセットごとの3色（app.css の --nebula-a / -b / -c）、ink は
     字の白（明るい芯）。dust は地の色の塊で、明るい雲の上に暗い塵の帯を刻む
   - 明るい塊は軌道の帯の外（上と右下と右）に寄せ、軌道の帯の真後ろは中くらいに抑える。
-    真後ろを明るくすると軌道の線が沈む（npm run check:contrast の「軌道の線と点」）
+    真後ろを明るくすると軌道の線が沈む（npm run check:contrast の「軌道の線と星屑」）
+  - 腕は画面の縦横に沿わせず、左上と右下へ S の字に流す（右上と右下へは短く淡く）。外の雲を
+    字の場所を避けて上の帯と右の列に並べていたころは、星雲が字の列の形に欠けた「Γ」の枠に
+    見え、帯は横縞に見えた。同じ長さの腕を四方へ開くと、広い画面でバツ印に見えた
+  - 左下は空ける——900 以上の入口では見出しの列、締めと 900 未満では図の下の字が居る所。
+    明るい雲を置くと、字の暗がりの縁が雲を断ち切る線に見える
   - どの塊も箱の中で消えきる（箱の縁で雲を断ち切らない。test/orbits.test.ts）
 */
-export const NEBULA = { width: 1600, height: 1000 } as const
+export const NEBULA = { width: 3600, height: 2000 } as const
 
 export type NebulaTone = 'a' | 'b' | 'c' | 'ink' | 'dust'
 export type NebulaLobe = {
@@ -751,24 +762,140 @@ export type NebulaLobe = {
 }
 export type NebulaMap = { width: number; height: number; lobes: NebulaLobe[] }
 
-// 塊（ブラックホールは箱の真ん中 800, 500）。光る塊を先に、塵の帯を最後に
+/*
+  外の雲の腕。根元・曲がり・先の3点（箱の座標）の2次のベジェに沿って、小さな塊を重ねて
+  並べる。塊は流れの向きに長く（間隔より長くして重ねる）、根元から先へ細く（width）淡く
+  （o）なり、決まった乱数（seed）で少しずつ横へずれて向きも揺れる。色の役は根元から先へ
+  tones の順。大きな楕円を数個並べていたころは、塊の形が玉に見えた
+*/
+type NebulaArm = {
+  path: readonly [readonly [number, number], readonly [number, number], readonly [number, number]]
+  count: number
+  width: readonly [number, number]
+  o: readonly [number, number]
+  tones: readonly NebulaTone[]
+  seed: number
+}
+
+const NEBULA_ARMS: NebulaArm[] = [
+  // 左上へ大きく、先で上へ反る。900 以上の入口では見出しの列の上を通り、画面の上の端へ抜ける
+  {
+    path: [
+      [1500, 700],
+      [900, 640],
+      [380, 300],
+    ],
+    count: 13,
+    width: [230, 110],
+    o: [0.36, 0.12],
+    tones: ['a', 'a', 'c', 'c'],
+    seed: 11,
+  },
+  // 右下へ下がってから右へ上がる、太い尾（左上の腕と S の字に流れる）
+  {
+    path: [
+      [2200, 1150],
+      [2850, 1480],
+      [3350, 1180],
+    ],
+    count: 13,
+    width: [260, 120],
+    o: [0.34, 0.12],
+    tones: ['b', 'b', 'a', 'c'],
+    seed: 37,
+  },
+  // 右上へ短く淡く
+  {
+    path: [
+      [2150, 760],
+      [2550, 600],
+      [2950, 620],
+    ],
+    count: 7,
+    width: [150, 70],
+    o: [0.24, 0.08],
+    tones: ['c', 'c', 'b'],
+    seed: 23,
+  },
+  // 右下へ淡く。締めの字の右（900 以上の入口では件数の帯の下に入り、見えない）
+  {
+    path: [
+      [2350, 1450],
+      [2600, 1720],
+      [3050, 1800],
+    ],
+    count: 7,
+    width: [150, 80],
+    o: [0.18, 0.06],
+    tones: ['b', 'c'],
+    seed: 41,
+  },
+]
+
+const armLobes = (arm: NebulaArm): NebulaLobe[] => {
+  const random = seeded(arm.seed)
+  const [p0, p1, p2] = arm.path
+  // 流れの上の点と、その向き
+  const at = (t: number) => {
+    const [a, b, c] = [(1 - t) ** 2, 2 * (1 - t) * t, t ** 2]
+    return [a * p0[0] + b * p1[0] + c * p2[0], a * p0[1] + b * p1[1] + c * p2[1]] as const
+  }
+  const along = (t: number) =>
+    [
+      2 * (1 - t) * (p1[0] - p0[0]) + 2 * t * (p2[0] - p1[0]),
+      2 * (1 - t) * (p1[1] - p0[1]) + 2 * t * (p2[1] - p1[1]),
+    ] as const
+  const lerp = ([from, to]: readonly [number, number], t: number) => from + (to - from) * t
+  let length = 0
+  for (let k = 1; k <= 32; k += 1) {
+    const [ax, ay] = at((k - 1) / 32)
+    const [bx, by] = at(k / 32)
+    length += Math.hypot(bx - ax, by - ay)
+  }
+  const step = length / (arm.count - 1)
+  return Array.from({ length: arm.count }, (_, i) => {
+    const t = i / (arm.count - 1)
+    const [x, y] = at(t)
+    const [dx, dy] = along(t)
+    const angle = Math.atan2(dy, dx)
+    const width = lerp(arm.width, t)
+    const drift = (random() - 0.5) * width * 1.2
+    const size = 0.6 + random() * 0.8
+    return {
+      cx: Math.round(x - Math.sin(angle) * drift),
+      cy: Math.round(y + Math.cos(angle) * drift),
+      rx: Math.round(step * (1.2 + random() * 0.6) * size),
+      ry: Math.round(width * size),
+      rot: Math.round((angle * 180) / Math.PI + (random() - 0.5) * 30),
+      o: Math.round(lerp(arm.o, t) * (0.8 + random() * 0.4) * 100) / 100,
+      tone: arm.tones[Math.min(arm.tones.length - 1, Math.floor(t * arm.tones.length))] ?? 'a',
+    }
+  })
+}
+
+// 塊（ブラックホールは箱の真ん中 1800, 1000）。光る塊を先に、塵の帯を最後に
 const NEBULA_LOBES: NebulaLobe[] = [
-  // 全体を包む淡い光
-  { cx: 760, cy: 470, rx: 700, ry: 400, rot: 14, o: 0.34, tone: 'a' },
-  // 左上の大きな塊と、その芯
-  { cx: 500, cy: 300, rx: 360, ry: 210, rot: 22, o: 0.62, tone: 'a' },
-  { cx: 560, cy: 330, rx: 170, ry: 95, rot: 18, o: 0.42, tone: 'ink' },
+  // 芯を包む淡い光
+  { cx: 1760, cy: 970, rx: 700, ry: 400, rot: 14, o: 0.34, tone: 'a' },
+  // 外の雲。腕のあいだを埋める淡い広がりと、腕
+  { cx: 1950, cy: 950, rx: 1250, ry: 650, rot: 6, o: 0.1, tone: 'a' },
+  ...NEBULA_ARMS.flatMap(armLobes),
+  // 芯。左上の大きな塊と、その芯
+  { cx: 1500, cy: 800, rx: 360, ry: 210, rot: 22, o: 0.62, tone: 'a' },
+  { cx: 1560, cy: 830, rx: 170, ry: 95, rot: 18, o: 0.42, tone: 'ink' },
   // 右下の塊
-  { cx: 1090, cy: 680, rx: 390, ry: 190, rot: 18, o: 0.62, tone: 'b' },
+  { cx: 2090, cy: 1180, rx: 390, ry: 190, rot: 18, o: 0.62, tone: 'b' },
   // 右上の塊
-  { cx: 1200, cy: 300, rx: 300, ry: 170, rot: -18, o: 0.5, tone: 'c' },
+  { cx: 2200, cy: 800, rx: 300, ry: 170, rot: -18, o: 0.5, tone: 'c' },
   // 左下の淡い塊
-  { cx: 420, cy: 700, rx: 260, ry: 140, rot: -10, o: 0.32, tone: 'c' },
+  { cx: 1420, cy: 1200, rx: 260, ry: 140, rot: -10, o: 0.32, tone: 'c' },
   // ブラックホールのすぐ後ろの明かり
-  { cx: 820, cy: 470, rx: 260, ry: 140, rot: 10, o: 0.34, tone: 'ink' },
-  // 暗い塵の帯（明るい塊を斜めに横切る）
-  { cx: 640, cy: 380, rx: 420, ry: 70, rot: -24, o: 0.7, tone: 'dust' },
-  { cx: 1080, cy: 600, rx: 360, ry: 60, rot: 12, o: 0.6, tone: 'dust' },
+  { cx: 1820, cy: 970, rx: 260, ry: 140, rot: 10, o: 0.34, tone: 'ink' },
+  // 暗い塵の帯（明るい塊と腕を斜めに横切る）
+  { cx: 1640, cy: 880, rx: 420, ry: 70, rot: -24, o: 0.7, tone: 'dust' },
+  { cx: 2080, cy: 1100, rx: 360, ry: 60, rot: 12, o: 0.6, tone: 'dust' },
+  { cx: 1000, cy: 560, rx: 360, ry: 36, rot: -12, o: 0.4, tone: 'dust' },
+  { cx: 2650, cy: 1350, rx: 320, ry: 34, rot: 8, o: 0.35, tone: 'dust' },
 ]
 
 export function nebulaMap(): NebulaMap {
@@ -783,7 +910,8 @@ export function nebulaMap(): NebulaMap {
   星は、画面の大きさに依らない1枚の視野（COSMOS）の中に、決まった乱数で置く。描く側が
   その視野を枠いっぱいに切り取って敷く（SVG の preserveAspectRatio slice）。点の太さは
   画面の px（描く側が non-scaling-stroke で保つ）なので、切り取る倍率が変わっても星は
-  細かいまま。字の後ろには星を出さない——それは描く側の覆い（app.css の .cosmos）が受ける。
+  細かいまま。字の後ろには星を出さない——それは字の塊が敷く暗がり（app.css の「字の暗がり」）が
+  受ける。
 
   - 暗い星ほど多い（明るさを累乗で偏らせる）。5つに1つほどが瞬く
   - いちばん明るい GLINTS 個には十字の光芒（glint）を付ける。望遠鏡で撮った星の印
