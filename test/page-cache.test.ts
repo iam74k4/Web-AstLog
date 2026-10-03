@@ -7,6 +7,7 @@ import * as schema from '../src/db/schema'
 import app from '../src/index'
 import { SESSION_COOKIE } from '../src/lib/auth'
 import { CACHE_STATE_HEADER, SITE_VERSION_KEY } from '../src/lib/page-cache'
+import { MOTION_CSP, MOTION_START } from '../src/ui/motion'
 import { db, form, get, resetDb, seedItem, signIn, touch, uncachedEnv, withCookie } from './helpers'
 
 beforeEach(resetDb)
@@ -56,6 +57,8 @@ describe('公開ページの写し', () => {
     await seedItem({ title: 'AppMixer', slug: 'appmixer' })
     const first = await get('/projects')
     expect(state(first)).toBe('miss')
+    expect(first.headers.get('content-security-policy')).toContain(`script-src '${MOTION_CSP}'`)
+    expect(first.headers.get('x-astlog-motion')).toBeNull()
     expect(await first.text()).toContain('AppMixer')
 
     await retitle('改名した題')
@@ -64,12 +67,14 @@ describe('公開ページの写し', () => {
     const html = await second.text()
     expect(html).toContain('AppMixer')
     expect(html).not.toContain('改名した題')
+    expect(html).toContain(`<script>${MOTION_START}</script>`)
     // 写しの印（版・置いた時刻・Cache API の期限）は訪問者に出さない
     expect(second.headers.get('cache-control')).toBeNull()
     expect(second.headers.get('x-astlog-version')).toBeNull()
     expect(second.headers.get('x-astlog-stored')).toBeNull()
     // ヘッダの1本（src/index.tsx）は写しにも同じものを付ける
-    expect(second.headers.get('content-security-policy')).toContain("script-src 'none'")
+    expect(second.headers.get('content-security-policy')).toContain(`script-src '${MOTION_CSP}'`)
+    expect(second.headers.get('x-astlog-motion')).toBeNull()
 
     // 版を上げると描き直す
     await touch()
@@ -143,10 +148,14 @@ describe('公開ページの写し', () => {
     const response = await run('/projects', broken)
     expect(response.status).toBe(200)
     expect(state(response)).toBe('stale')
+    expect(response.headers.get('content-security-policy')).toContain(`script-src '${MOTION_CSP}'`)
+    expect(response.headers.get('x-astlog-motion')).toBeNull()
     expect(await response.text()).toContain('AppMixer')
     const sitemap = await run('/sitemap.xml', broken)
     expect(sitemap.status).toBe(200)
     expect(state(sitemap)).toBe('stale')
+    expect(sitemap.headers.get('content-security-policy')).toContain("script-src 'none'")
+    expect(sitemap.headers.get('x-astlog-motion')).toBeNull()
 
     // 写しの無い URL は今までどおり 500
     expect((await run('/contact', broken)).status).toBe(500)
@@ -250,8 +259,14 @@ describe('公開ページの写し', () => {
   it('404 と 301 も持つ。管理画面・画像・robots.txt・「.」を含む URL は通らない', async () => {
     await seedItem({ title: 'AppMixer', slug: 'appmixer' })
     for (const path of ['/members/nobody', '/apps', '/sitemap.xml']) {
-      expect(state(await get(path)), path).toBe('miss')
-      expect(state(await get(path)), path).toBe('hit')
+      const miss = await get(path)
+      const hit = await get(path)
+      expect(state(miss), path).toBe('miss')
+      expect(state(hit), path).toBe('hit')
+      for (const response of [miss, hit]) {
+        expect(response.headers.get('content-security-policy'), path).toContain("script-src 'none'")
+        expect(response.headers.get('x-astlog-motion'), path).toBeNull()
+      }
     }
     for (const path of [
       '/admin/login',

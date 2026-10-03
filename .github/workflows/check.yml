@@ -4,7 +4,7 @@ on:
   push:
     branches: ['**']
   pull_request:
-  # deploy.yml が本番へ出す前に、これと同じ門（型・lint・テスト・写しの戻し・ビルド・fit・contrast）を
+  # deploy.yml が本番へ出す前に、これと同じ門（型・lint・テスト・写しの戻し・ビルド・fit・contrast・motion）を
   # そのまま呼ぶ。門を2か所に書き写すと、片方だけ弱くなる（以前の deploy は型とテストしか
   # 通していなかった）
   workflow_call:
@@ -57,9 +57,9 @@ jobs:
       - name: ビルド
         run: npx wrangler deploy --dry-run
 
-  # 実際に描いてみないと分からない2つを、ブラウザで測る。
+  # 実際に描いてみないと分からない3つを、ブラウザで測る。
   # 「公開ページのレイアウト（横にはみ出さない・切られない・目次が貼り付く）」と、
-  # 「入口と締めの軌道図のまわりで文字が読める」。
+  # 「入口と締めの軌道図のまわりで文字が読める」、装飾の開始と同期。
   #
   # 上の4つはどれも版面を見ない——vitest は workerd の上で動くので、
   # そもそも組むエンジンが居ない。
@@ -105,3 +105,6 @@ jobs:
       # job を分けないのは、ブラウザの用意と D1 の seed をそのまま使えるため。
       - name: 軌道図のまわりで文字が読めるか
         run: npm run check:contrast
+
+      - name: 装飾の開始順・同期・CSP・動きを減らす設定
+        run: npm run check:motion

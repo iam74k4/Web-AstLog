@@ -20,8 +20,8 @@
     (3) 切られた要素が無い  overflow が hidden / clip の祖先の外へ出ている要素も、
                           自分の中身（字）を hidden / clip で切っている箱も無い
                           （行止め line-clamp・1行で末尾を省く ellipsis・読み上げ用の
-                          1px の箱・SVG の中・星空 .cosmos の中は除く。SVG の箱そのもの
-                          ——ロゴ・軌道図・アイコン——と星空の箱は測る）
+                          1px の箱・SVG の中・星空 .cosmos と光の粒 .orbit-dust の中は除く。
+                          SVG の箱そのもの——ロゴ・軌道図・アイコン——と星空・粒の枠は測る）
     (4) h1 がちょうど1つ   1ページ = 1ドキュメント（WCAG 1.3.1）。見出しの左にアイコンの
                           ある見出し（作品のページ）は、アイコンと見出しが同じ行に居る
                           （1行に入らない題が次の行へ落ちて、アイコンだけが残らない）
@@ -317,10 +317,12 @@ const measure = ([typeface, cfg]) => {
     /*
       星空（入口と締めの .cosmos）の中も測らない。本文の幅いっぱいに敷く飾りの背景で、
       中の星雲は図より大きく置いて星空の箱で切り取るのが決まり（app.css の .cosmos__nebula）。
-      星空の箱そのものは、画面の中に居て祖先に切られていないことを測る（自分で中身を切って
+      光の粒（.orbit-dust）も同じ。無限の動きを外すと、円は枠の原点へ戻り、中心をそろえる負の
+      margin のぶんだけ枠から出る（opacity: 0）。装飾の内部の切り取りを、本文の切れと数えない。
+      どちらも箱そのものは、画面の中に居て祖先に切られていないことを測る（自分で中身を切って
       いるのは決まりどおりなので、下の「自分の中身を切っている箱」には数えない）
     */
-    const backdrop = el.classList.contains('cosmos')
+    const backdrop = el.matches('.cosmos, .orbit-dust')
     if (backdrop) skipped.add(el)
     if (rect.width === 0 || rect.height === 0 || style.visibility === 'hidden') continue
     if (rect.right > innerWidth + slack || rect.left < -slack) {

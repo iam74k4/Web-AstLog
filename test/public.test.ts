@@ -16,11 +16,12 @@ import css from '../public/app.css'
 import * as schema from '../src/db/schema'
 import { ITEM_KINDS } from '../src/domain'
 import { sniffImage } from '../src/lib/image'
-import { CONTACT_FRAME, cosmosMap, HERO_FRAME, NEBULA } from '../src/lib/orbits'
+import { CONTACT_FRAME, cosmosMap, HERO_FRAME, NEBULA, orbitMap } from '../src/lib/orbits'
 import { publicRoutes } from '../src/routes/public/routes'
 import { SITE } from '../src/site'
 import { itemHref, LinkList, LinkRow, splitPhrases } from '../src/ui/components'
 import { BLACKHOLE_ART, HOLE, holeArt, iconSvg, WORDMARK, wordmarkSvg } from '../src/ui/logo'
+import { MOTION_START } from '../src/ui/motion'
 import { db, form, get, okText, resetDb, seedItem, seedMember, signIn, touch } from './helpers'
 
 beforeEach(resetDb)
@@ -1004,11 +1005,11 @@ describe('星空と星雲', () => {
       const cosmos = main.slice(from, main.indexOf('</div>', meteors))
       // 静止星と光芒・瞬く星・星雲・流れ星の順
       expect(cosmos, path).toContain('<svg class="cosmos__stars cosmos__stars--still"')
-      expect(cosmos, path).toContain('<svg class="cosmos__stars cosmos__stars--twinkle"')
+      expect(cosmos, path).toContain('<div class="cosmos__stars cosmos__stars--twinkle"')
       expect(cosmos, path).toContain('class="cosmos__twinkle"')
       expect(cosmos, path).toContain('class="cosmos__glint"')
       expect(cosmos, path).toContain('<div class="cosmos__nebula" aria-hidden="true"></div>')
-      expect(cosmos, path).toContain('<svg class="cosmos__meteors"')
+      expect(cosmos, path).toContain('<div class="cosmos__meteors"')
       // 星雲は焼いた素材を CSS の背景で読む。画面いっぱいのフィルタをページに置かない
       expect(cosmos, path).not.toMatch(/<feTurbulence|<feDisplacementMap|<filter\b/)
       // HTML に外部の画像を持ち込まない。背景素材の実在と版は下で見る
@@ -1024,7 +1025,7 @@ describe('星空と星雲', () => {
     expect(mainOf(await okText('/all'))).not.toContain('class="cosmos')
   })
 
-  it('静止星と瞬く星は別の SVG に置き、星の位置・太さ・明るさ・光芒を保つ', async () => {
+  it('静止星は SVG、瞬く星と流星は HTML に置き、同じ視野・太さ・明るさ・動きを保つ', async () => {
     await seedMember()
     const map = cosmosMap()
     for (const [path, id] of [
@@ -1032,49 +1033,65 @@ describe('星空と星雲', () => {
       ['/contact', 'contact-cosmos'],
     ] as const) {
       const main = mainOf(await okText(path))
-      const layers = [
-        ...main.matchAll(
-          /<svg class="cosmos__stars cosmos__stars--(still|twinkle)"[^>]*>([\s\S]*?)<\/svg>/g,
+      const still = main.match(
+        /<svg class="cosmos__stars cosmos__stars--still"[^>]*>([\s\S]*?)<\/svg>/,
+      )
+      const twinkle = main.match(
+        /<div class="cosmos__stars cosmos__stars--twinkle"[^>]*>([\s\S]*?)<\/div>/,
+      )
+      expect(still?.[0], path).toContain(`viewBox="0 0 ${map.width} ${map.height}"`)
+      expect(still?.[0], path).toContain('preserveAspectRatio="xMidYMid slice"')
+      const dots = [...(still?.[1] ?? '').matchAll(/<path\b[^>]*>/g)]
+        .map((match) => match[0])
+        .filter((tag) => !tag.includes('class="cosmos__glint"'))
+      const stars = map.stars.filter((star) => !star.twinkle)
+      expect(
+        dots.map((tag) => tag.match(/\bd="([^"]+)"/)?.[1]),
+        path,
+      ).toEqual(stars.map((star) => `M${star.x} ${star.y}h0`))
+      dots.forEach((tag, index) => {
+        expect(tag, path).toContain(`opacity="${stars[index]?.o}"`)
+        expect(tag, path).toContain(`stroke-width:${stars[index]?.w}px`)
+      })
+      const moving = map.stars.filter((star) => star.twinkle)
+      const circles = [...(twinkle?.[1] ?? '').matchAll(/<span class="cosmos__twinkle"[^>]*>/g)]
+      expect(circles, path).toHaveLength(moving.length)
+      expect(circles.length + dots.length, path).toBe(map.stars.length)
+      const pct = (value: number) => `${(value * 100).toFixed(5)}%`
+      circles.forEach((found, index) => {
+        const star = moving[index]
+        expect(star, path).toBeDefined()
+        if (!star?.twinkle) return
+        const tag = found[0]
+        expect(tag, path).toContain(`left:${pct(star.x / map.width)}`)
+        expect(tag, path).toContain(`top:${pct(star.y / map.height)}`)
+        expect(tag, path).toContain(`width:${star.w}px;height:${star.w}px;opacity:${star.o}`)
+        expect(tag, path).toContain(`--dur:${star.twinkle.dur}s`)
+        expect(tag, path).toContain(`--delay:${star.twinkle.delay}s`)
+        expect(tag, path).toContain(`--ticks:${star.twinkle.ticks}`)
+      })
+      const meteors = main.match(/<div class="cosmos__meteors"[^>]*>([\s\S]*?)<\/div>/)
+      const trails = [
+        ...(meteors?.[1] ?? '').matchAll(
+          /<span class="cosmos__meteor-frame" style="([^"]+)"><span class="cosmos__meteor" style="([^"]+)">/g,
         ),
       ]
-      expect(
-        layers.map((layer) => layer[1]),
-        path,
-      ).toEqual(['still', 'twinkle'])
-      for (const layer of layers) {
-        expect(layer[0], path).toContain(`viewBox="0 0 ${map.width} ${map.height}"`)
-        expect(layer[0], path).toContain('preserveAspectRatio="xMidYMid slice"')
-        const moving = layer[1] === 'twinkle'
-        const stars = map.stars.filter((star) => !!star.twinkle === moving)
-        const dots = [...(layer[2] ?? '').matchAll(/<path\b[^>]*>/g)]
-          .map((match) => match[0])
-          .filter((tag) => !tag.includes('class="cosmos__glint"'))
-        expect(
-          dots.map((tag) => tag.match(/\bd="([^"]+)"/)?.[1]),
-          path,
-        ).toEqual(stars.map((star) => `M${star.x} ${star.y}h0`))
-        dots.forEach((tag, index) => {
-          const star = stars[index]
-          expect(tag, path).toContain(`opacity="${star?.o}"`)
-          expect(tag, path).toContain(`stroke-width:${star?.w}px`)
-          if (star?.twinkle) {
-            expect(tag, path).toContain('class="cosmos__twinkle"')
-            expect(tag, path).toContain(`--dur:${star.twinkle.dur}s`)
-            expect(tag, path).toContain(`--delay:${star.twinkle.delay}s`)
-            expect(tag, path).toContain(`--ticks:${star.twinkle.ticks}`)
-          } else {
-            expect(tag, path).not.toContain('cosmos__twinkle')
-          }
-        })
-      }
-      const still = layers[0]?.[2] ?? ''
-      const twinkle = layers[1]?.[2] ?? ''
-      expect(still.match(/class="cosmos__glint"/g), path).toHaveLength(
+      expect(trails, path).toHaveLength(map.meteors.length)
+      trails.forEach((found, index) => {
+        const meteor = map.meteors[index]
+        expect(meteor, path).toBeDefined()
+        if (!meteor) return
+        expect(found[1], path).toBe(
+          `left:${pct(meteor.x / map.width)};top:${pct(meteor.y / map.height)};width:${pct(90 / map.width)};transform:rotate(${meteor.angle}deg)`,
+        )
+        expect(found[2], path).toBe(`--dur:${meteor.dur}s;--delay:${meteor.delay}s`)
+      })
+      expect(still?.[1]?.match(/class="cosmos__glint"/g), path).toHaveLength(
         map.stars.filter((star) => star.glint).length,
       )
-      expect(twinkle, path).not.toContain('cosmos__glint')
+      expect(twinkle?.[1], path).not.toContain('cosmos__glint')
       expect(main.match(new RegExp(`id="${id}-glint"`, 'g')), path).toHaveLength(1)
-      expect(layers[1]?.index, path).toBeLessThan(main.indexOf('<div class="cosmos__nebula"'))
+      expect(twinkle?.index, path).toBeLessThan(main.indexOf('<div class="cosmos__nebula"'))
       expect(main.indexOf('<div class="cosmos__nebula"'), path).toBeLessThan(
         main.indexOf('class="cosmos__meteors"'),
       )
@@ -1151,7 +1168,9 @@ describe('締めのページ（Contact）', () => {
       `<div class="orbits"><svg class="orbits__still" viewBox="0 0 ${CONTACT_FRAME.width} ${CONTACT_FRAME.height}" aria-hidden="true"`,
     )
     expect(main.match(/<svg class="orbits__still"/g)).toHaveLength(2)
-    expect(main.match(/<svg class="orbits__stardust"/g)).toHaveLength(2)
+    expect(
+      main.match(/<svg class="orbits__stardust orbits__stardust--(?:far|near)"/g),
+    ).toHaveLength(2)
     expect(main.match(/<svg class="orbits__bodies"/g)).toHaveLength(2)
     /*
       入口と同じ件数の天体（個人開発は光る惑星、業務は輪のある惑星）。天体は軌道を回るので、
@@ -1166,7 +1185,7 @@ describe('締めのページ（Contact）', () => {
     expect(main.indexOf('class="orbits"')).toBeLessThan(main.indexOf('contact__lead'))
   })
 
-  it('入口と締めの図は動き続ける。止める手は置かない（JavaScript も置かない）', async () => {
+  it('入口と締めの図はCSSで動き続ける。止める手は置かず、本文にscriptを置かない', async () => {
     await seedMember()
     await seedItem({ type: 'app' })
     await seedItem({ type: 'work' })
@@ -1176,18 +1195,18 @@ describe('締めのページ（Contact）', () => {
       expect(main, path).not.toMatch(/motion-toggle|class="motion"|動きを止める/)
       /*
         星屑と天体は軌道ごと公転する（持ち主の「軌道の線を星と一緒に動かして」）。軌道ごとに
-        回る枠（orbit-spin）を、星屑・天体・流れる星の奥と手前の層に1つずつ。天体と流れる星は
+        回る枠（orbit-spin）を、星屑・天体の奥と手前の層に1つずつ。天体は
         回る枠の中で回転を打ち消し（orbit-unspin）、大きさの揺れを linear() で受け取る。星屑は
         刻んで進む（--ticks）
       */
       const spins = [...main.matchAll(/<g class="orbit-spin" style="([^"]+)"/g)].map(
         (found) => found[1] ?? '',
       )
-      expect(spins, path).toHaveLength(3 * 4)
+      expect(spins, path).toHaveLength(2 * 4)
       expect(
         spins.filter((style) => /^--dur:[\d.]+s;--ticks:\d+$/.test(style)),
         path,
-      ).toHaveLength(2 * 4)
+      ).toHaveLength(4)
       /*
         天体は刻んで回り（--ticks）、大きさの揺れは段の linear()（点ごとに「大きさ 始まり% 終わり%」）。
         毎コマ変えると、天体の層を毎コマ描き直す
@@ -1200,7 +1219,7 @@ describe('締めのページ（Contact）', () => {
         ),
         path,
       ).toHaveLength(4)
-      expect(main.match(/<g class="orbit-unspin">/g), path).toHaveLength(2 * 4)
+      expect(main.match(/<g class="orbit-unspin">/g), path).toHaveLength(4)
       /*
         軌道を流れる星も奥と手前に。光芒のある星が淡い尾を引く（持ち主の「移動する線をもっと
         星っぽく」。軌道の線の破線を送る光は、移る線に見えた）。吸い込まれる粒はブラックホールの
@@ -1209,23 +1228,50 @@ describe('締めのページ（Contact）', () => {
       expect(main.match(/class="orbit-flow__star"/g), path).toHaveLength(4)
       expect(main.match(/class="orbit-flow__glint"/g), path).toHaveLength(4)
       expect(main.match(/class="orbit-flow__trail"/g), path).toHaveLength(4)
-      expect(main, path).not.toMatch(/stroke-dasharray|class="orbit-flow"/)
-      expect(main.match(/<g class="orbit-dust"/g), path).toHaveLength(1)
+      expect(main, path).not.toContain('stroke-dasharray')
+      const flows = [...main.matchAll(/<div class="orbit-flows"[^>]*>([\s\S]*?)<\/div>/g)]
+      expect(flows, path).toHaveLength(2)
+      for (const flow of flows) {
+        const body = flow[1] ?? ''
+        expect(flow[0], path).toMatch(/style="clip-path:inset\([\d.% ]+\)"/)
+        expect(body.match(/<span class="orbit-flow"/g), path).toHaveLength(2)
+        expect(body.match(/<span class="orbit-flow__tail"/g), path).toHaveLength(2)
+        expect(body, path).toContain('@keyframes orbit-flow-move-')
+        expect(body, path).toContain('@keyframes orbit-flow-tail-')
+        expect(body, path).toContain('transform:translate(')
+        expect(body, path).toContain('transform:matrix(')
+        expect(body.match(/%\{transform:translate\(/g), path).toHaveLength(2 * 65)
+        expect(body.match(/%\{transform:matrix\(/g), path).toHaveLength(2 * 65)
+        expect(body.match(/<style>([\s\S]*?)<\/style>/)?.[1], path).not.toContain('var(')
+        expect(body, path).not.toContain('orbit-spin')
+        expect(body, path).not.toContain('transform=')
+      }
+      expect(main.match(/<div class="orbit-dust"/g), path).toHaveLength(1)
       expect(main, path).toContain('class="orbit-grain__dot"')
-      const dust = main.match(/<g class="orbit-dust"[^>]*>([\s\S]*?)<\/g>/)?.[1] ?? ''
-      expect(dust.match(/<path class="orbit-grain__dot"/g), path).toHaveLength(
+      const dust = main.match(/<div class="orbit-dust"[^>]*>([\s\S]*?)<\/div>/)?.[1] ?? ''
+      expect(dust.match(/<span class="orbit-grain__dot"/g), path).toHaveLength(
         Math.round(HERO_FRAME.outer / 8),
       )
-      expect(dust, path).toContain('offset-path:path(')
+      expect(dust, path).toContain('@keyframes orbit-grain-fall-')
+      expect(dust, path).toContain('transform:translate(')
+      expect(dust, path).toContain('cqi')
+      expect(dust, path).toContain(';opacity:0;')
+      expect(dust, path).toContain(';opacity:1;')
+      expect(dust, path).toMatch(/animation-timing-function:steps\(\d+\)/)
+      const opacity = [...dust.matchAll(/;opacity:([\d.]+);/g)].map((found) => Number(found[1]))
+      expect(opacity.length, path).toBeGreaterThan(59 * 65)
+      expect(
+        opacity.every((value) => value >= 0 && value <= 1),
+        path,
+      ).toBe(true)
+      expect(dust.match(/<style>([\s\S]*?)<\/style>/)?.[1], path).not.toContain('var(')
+      expect(dust, path).not.toContain('offset-path:')
       expect(dust, path).not.toContain('transform=')
       expect(dust, path).not.toContain('<g')
       // ブラックホールの光は揺らぐ（app.css）。縁を回る光の点は外した（焼いた絵に合わない）
       expect(main.match(/<img class="hole__art"/g), path).toHaveLength(1)
       expect(main, path).not.toContain('hole__spin')
-      expect(
-        main.match(/<clipPath id="[a-z]+-(far|near)" clipPathUnits="userSpaceOnUse">/g),
-        path,
-      ).toHaveLength(2)
+      expect(main, path).not.toMatch(/<clipPath id="[a-z]+-(far|near)" /)
       expect(main, path).not.toContain('<script')
     }
   })
@@ -1491,12 +1537,12 @@ describe('ページの URL', () => {
       `<svg class="system__bands system__bands--${side}"`,
       `<svg class="system__orbits system__orbits--${side}"`,
       `<svg class="system__stardust system__stardust--${side}"`,
-      `<svg class="system__motion system__motion--${side}"`,
+      `<div class="orbit-flows" aria-hidden="true" style="clip-path:`,
       `<svg class="system__bodies system__bodies--${side}"`,
     ]
-    const layers = [...order('far'), '<span class="hole" aria-hidden="true"', ...order('near')].map(
-      (tag) => system.indexOf(tag),
-    )
+    const tags = [...order('far'), '<span class="hole" aria-hidden="true"', ...order('near')]
+    const layers: number[] = []
+    for (const tag of tags) layers.push(system.indexOf(tag, (layers.at(-1) ?? -1) + 1))
     expect(system).toContain(
       '<svg class="system__bands system__bands--far" viewBox="0 0 1000 560" aria-hidden="true" focusable="false">',
     )
@@ -1564,6 +1610,37 @@ describe('ページの URL', () => {
     expect(await okText('/members/okazaki')).not.toContain('class="system"')
   })
 
+  it('星屑の濃さは外側SVGの奥・手前で決め、maskを持たず半面と公転を保つ', async () => {
+    await seedMember()
+    await seedItem({ type: 'app' })
+    await seedItem({ type: 'app' })
+    await seedItem({ type: 'work' })
+    for (const [path, frame, id] of [
+      ['/', HERO_FRAME, 'system'],
+      ['/contact', CONTACT_FRAME, 'contact'],
+    ] as const) {
+      const map = orbitMap({ app: 2, work: 1 }, frame)
+      const main = mainOf(await okText(path))
+      const layers = [
+        ...main.matchAll(
+          /<svg class="((?:system|orbits)__stardust[^"]*)"([^>]*)>([\s\S]*?)<\/svg>/g,
+        ),
+      ]
+      expect(layers, path).toHaveLength(2)
+      for (const [i, side] of ['far', 'near'].entries()) {
+        const layer = layers[i]
+        const prefix = id === 'system' ? 'system' : 'orbits'
+        expect(layer?.[1], path).toContain(`${prefix}__stardust--${side}`)
+        expect(layer?.[2], path).not.toMatch(/--stardust-|\smask=/)
+        expect(layer?.[3], path).toContain(
+          `<g class="stardust" clip-path="url(#${id}-${side}-stardust-half)">`,
+        )
+        expect(layer?.[3], path).not.toMatch(/<mask\b|<linearGradient\b|\smask=/)
+        expect(layer?.[3]?.match(/class="orbit-spin"/g), path).toHaveLength(map.orbits.length)
+      }
+    }
+  })
+
   it('作品が1件も無いサイトの入口は、軌道も天体も無くブラックホールだけ', async () => {
     await seedMember()
 
@@ -1599,7 +1676,7 @@ describe('ページの URL', () => {
 
 /*
   絞り込みはサーバーが持つ。絞り込みの手は URL へのリンクで、押した先は絞り込んだ一覧の
-  ページ。公開ページに JavaScript は無いので、絞り込みは URL の query で持つ。
+  ページ。装飾を始めるhelperだけを例外とし、絞り込みは URL の query で持つ。
 */
 describe('絞り込み', () => {
   it('区分で絞ると、その区分の項目だけになる', async () => {
@@ -1702,14 +1779,28 @@ describe('絞り込み', () => {
     expect(html).not.toContain('この人のアプリ')
   })
 
-  it('公開ページは JavaScript を1本も読み込まない', async () => {
+  it('公開ページのscriptはexact開始helperの1本とJSON-LDだけ。内容と移動はSSRで成立する', async () => {
     await seedMember()
     await seedItem({ platformKey: 'web' })
 
-    for (const path of ['/', '/projects', '/all']) {
+    for (const path of ['/', '/projects', '/contact', '/all']) {
       const html = await okText(path)
       expect(html).not.toContain('<script src')
       expect(html).not.toContain('filter.js')
+      const scripts = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/gi)]
+      const helper = scripts.filter(
+        (script) => !/type="application\/ld\+json"/i.test(script[1] ?? ''),
+      )
+      expect(helper, path).toHaveLength(1)
+      expect(helper[0]?.[1], path).toBe('')
+      expect(helper[0]?.[2], path).toBe(MOTION_START)
+      expect(html.indexOf(`<script>${MOTION_START}</script>`), path).toBeLessThan(
+        html.indexOf('</head>'),
+      )
+      expect(html, path).not.toMatch(
+        /<(?:html|span|div|g|img|svg)\b[^>]*\bdata-motion-(?:staged|ready)/,
+      )
+      expect(mainOf(html), path).not.toContain('<script')
     }
   })
 })

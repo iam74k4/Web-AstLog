@@ -6,6 +6,7 @@ import { publicRoutes } from './routes/public/routes'
 import { SITE } from './site'
 import { ColorSchemeMeta, FaviconLinks, HtmlDocument, Stylesheets } from './ui/components'
 import { HoleMark } from './ui/icons'
+import { MOTION_CSP } from './ui/motion'
 
 const app = new Hono<AppEnv>()
 
@@ -13,11 +14,12 @@ const app = new Hono<AppEnv>()
   応答のヘッダは、ここの1本が全部の応答に掛ける（公開・管理画面・404・500・
   リダイレクト）。個々のルートに書くと、足したルートだけが素のまま出る。
 
-  CSP は「公開ページに JavaScript を置かない」をブラウザに守らせる最後の壁。
+  CSP は、公開ページで許可する初期描画の補助を1本に絞る最後の壁。
   注入口（受け入れる前に上がった SVG・javascript: の href・本文の抜け）が
   1つ見つかっても、ここがあればスクリプトは走らない。
-  - script-src 'none'——JSON-LD（type="application/ld+json"）はデータの塊で
-    実行されないので、これで止まらない（ブラウザで確かめてある）
+  - 原則 script-src 'none'。公開 Layout の成功した HTML だけ、装飾の開始を分散する
+    MOTION_START の SHA-256 を許す。管理画面・エラー・転送では許さない。JSON-LD
+    （type="application/ld+json"）は実行されないデータなので、none でも止まらない
   - style-src に 'unsafe-inline'——軌道図の天体の大きさ（--scale）と軌道の濃さ（--reach）、
     件数の数え上げの値（--to）、ブラックホールの置き場所と大きさ（--hole-x …）、
     ページの切り替えの名前（view-transition-name）、アバターの寸法（--avatar-size）を
@@ -53,14 +55,27 @@ const PAGE_CSP = [
   "img-src 'self'",
   "style-src 'self' 'unsafe-inline'",
 ].join('; ')
+const MOTION_LAYOUT_HEADER = 'x-astlog-motion'
+const MOTION_PAGE_CSP = PAGE_CSP.replace("script-src 'none'", `script-src '${MOTION_CSP}'`)
 
 app.use(async (c, next) => {
   await next()
   const headers = c.res.headers
-  if (!headers.has('content-security-policy')) headers.set('content-security-policy', PAGE_CSP)
+  const admin = c.req.path === '/admin' || c.req.path.startsWith('/admin/')
+  // Layout を描く経路だけが付ける内部印。写しにも保存され、hit / stale で同じ許可になる。
+  // 失敗した描画にも印が残り得るので、成功した HTML だけを通し、印は外へ出さない。
+  const motion =
+    headers.get(MOTION_LAYOUT_HEADER) === 'staged' &&
+    c.res.status === 200 &&
+    /^text\/html(?:;|$)/i.test(headers.get('content-type') ?? '') &&
+    !admin
+  headers.delete(MOTION_LAYOUT_HEADER)
+  if (!headers.has('content-security-policy')) {
+    headers.set('content-security-policy', motion ? MOTION_PAGE_CSP : PAGE_CSP)
+  }
   headers.set('x-content-type-options', 'nosniff')
   headers.set('referrer-policy', 'strict-origin-when-cross-origin')
-  if (c.req.path === '/admin' || c.req.path.startsWith('/admin/')) {
+  if (admin) {
     headers.set('cache-control', 'no-store')
   }
 })

@@ -116,8 +116,8 @@ export type OrbitDust = {
   a: number
   r0: number
   r1: number
-  // 軌道面から枠へ写した、1周して落ちる螺旋（CSS offset-path）
-  d: string
+  // 枠へ写した螺旋の65時間サンプル（0%から100%）。描画側がCSSの移動へ焼く
+  path: { x: number; y: number }[]
   dur: number
   delay: number
   ticks: number
@@ -272,10 +272,10 @@ export const BODY_TICK = 100
 /*
   毎コマ動くもの（流れる星と吸い込まれる粒）を1秒に何回進めるか。どれも 1/MOTION_RATE 秒の
   格子に乗せる（流れる星の周期は整数の秒、粒は10区間のそれぞれを整数刻みとし、遅れも格子に
-  そろえる）。星屑・天体・瞬きの100msはこの格子の2刻みで、更新が別々のコマへ散らばらない。
+  そろえる）。星屑・天体・瞬きの100msはこの格子の6刻みで、更新が別々のコマへ散らばらない。
   アクセラレーションを切った Edge でも、層を描き直すのは1秒に MOTION_RATE 回まで
 */
-export const MOTION_RATE = 20
+export const MOTION_RATE = 60
 
 /*
   業務の天体の輪（OrbitMap の ring）。横の半径はいちばん内側の軌道の長半径に対する割合で、
@@ -299,9 +299,11 @@ const BAND_OUTER = 0.6
 
 /*
   星屑（OrbitPath の stardust）。いちばん外側の軌道に散らす粒の数（内側は長半径に比例して
-  少ない）と、明るさの段の境（STARDUST_CLASSES 段。描く側が段ごとに太さと濃さを決める）
+  少ない）。作品が増えても図全体は600粒までに抑え、software描画の負荷を増やさない。
+  明るさの段の境は STARDUST_CLASSES 段（描く側が段ごとに太さと濃さを決める）
 */
-const STARDUST = 360
+const STARDUST = 180
+const STARDUST_BUDGET = 600
 export const STARDUST_CLASSES = 4
 const STARDUST_STEPS = [0.18, 0.42, 0.75] as const
 
@@ -529,8 +531,8 @@ function fitScale(frame: OrbitFrame, n: number): number {
 
 /*
   粒の螺旋を枠の座標へ先に写す。回転・半径移動・面の潰しを SVG の親子で毎コマ計算せず、
-  1つの点がこの道を進む。角度と半径は以前の10%ごとの曲線で、64区間の折れ線に焼く。
-  offset-distance は弧長なので、進む速さは app.css の共通の段で近似する。
+  1つの点がこの道を進む。角度と半径は以前の10%ごとの曲線で、64区間の時間サンプルに焼く。
+  描画側が位置をliteral CSSへ写すので、弧長ではなく元の時間の加速で進める。
 */
 const dustPath = (
   grain: Pick<OrbitDust, 'a' | 'r0' | 'r1'>,
@@ -556,8 +558,11 @@ const dustPath = (
       span * ((radii[section] ?? 0) + ((radii[section + 1] ?? 0) - (radii[section] ?? 0)) * part)
     const x = sx * radius * Math.cos(angle)
     const y = sy * radius * Math.sin(angle)
-    return `${i ? 'L' : 'M'}${round(frame.focus.x + x * Math.cos(turn) - y * Math.sin(turn))} ${round(frame.focus.y + x * Math.sin(turn) + y * Math.cos(turn))}`
-  }).join('')
+    return {
+      x: round(frame.focus.x + x * Math.cos(turn) - y * Math.sin(turn)),
+      y: round(frame.focus.y + x * Math.sin(turn) + y * Math.cos(turn)),
+    }
+  })
 }
 
 /*
@@ -757,7 +762,7 @@ export function orbitMap(counts: KindCounts, frame: OrbitFrame): OrbitMap {
       o: Math.round((0.35 + random() * 0.55) * 100) / 100,
       w: round(1.2 + random() * 1.2),
     }
-    return { ...grain, d: dustPath(grain, frame, round3(scale), round3(scale * SQUASH)) }
+    return { ...grain, path: dustPath(grain, frame, round3(scale), round3(scale * SQUASH)) }
   })
 
   // 奥と手前の半面。焦点を通る交線（面の x 軸を斜めから見た向き）と、その奥の向き
@@ -802,10 +807,12 @@ export function orbitMap(counts: KindCounts, frame: OrbitFrame): OrbitMap {
   */
   const stardust = orbits.map(() => Array.from({ length: STARDUST_CLASSES }, () => [] as string[]))
   const aMax = orbits[orbits.length - 1]?.a ?? frame.outer
+  const weight = orbits.reduce((sum, orbit) => sum + orbit.a / aMax, 0)
+  const density = Math.min(STARDUST, STARDUST_BUDGET / Math.max(weight, 1))
   orbits.forEach((orbit, i) => {
     const random = seeded(1009 + i * 7919)
     const lumps = Array.from({ length: 3 }, () => ({ at: random() * 360, w: 40 + random() * 70 }))
-    const count = Math.round((STARDUST * orbit.a) / aMax)
+    const count = Math.floor((density * orbit.a) / aMax)
     for (let made = 0, tries = 0; made < count && tries < count * 20; tries += 1) {
       const nu = random() * 360
       const near = Math.max(

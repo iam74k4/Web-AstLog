@@ -249,8 +249,8 @@
   --body-halo: 0.55;
 
   /*
-    星雲（components.tsx の Nebula。形は orbits.ts の nebulaMap）。雲の4枚（光・雲・筋・塵）の
-    濃さ。色は見た目のプリセットごとの3色（--nebula-a / -b / -c。下の「見た目の
+    星雲（components.tsx の Nebula。形は orbits.ts の nebulaMap）。雲の4枚（光・雲・筋・塵）を
+    透過 WebP に焼くときの濃さ。色は見た目のプリセットごとの3色（--nebula-a / -b / -c。下の「見た目の
     プリセット」）で、モノクロのときも星雲だけは青紫と桃と空色にする（持ち主の「星雲だけ色を
     付ける」）。字は星雲の上に乗せない（星空の覆いが字の後ろで消す）。下限は
     npm run check:contrast が測る
@@ -308,35 +308,9 @@
     transparent
   );
 
-  /*
-    入口に着いたときの動き（「入口に着いたとき」）。星系が生まれる——星空が灯り（--sky-dur）、
-    ブラックホールが小さな光の点（--ignite-spark）から明るく霞んで --ignite-flare まで広がり、
-    明るさを落としながら縮んで締まる（--ignite-*）。内側の軌道から順に光の線が引かれ
-    （--trace-*。奥と手前の半分をそれぞれ --trace-dur で、外側の軌道ほど --trace-stagger まで
-    遅れる）、帯と星屑が線を追って灯り（--fill-dur）、引き終えた軌道の天体が光の点から閃いて
-    灯る（--birth-*）。星雲は広がった姿から凝って灯る（--condense-*）。件数は軌道を引き終えた
-    ところから（--count-delay）数え上がる。
-
-    いちばん遅い動きでも 5 秒以内に止まる（WCAG 2.2.2。test/theme.test.ts が足し算を見る）。
-  */
-  --sky-dur: 1400ms;
-  --ignite-delay: 150ms;
-  --ignite-dur: 2000ms;
-  --ignite-spark: 0.1;
-  --ignite-flare: 1.7;
-  --ignite-blur: 10px;
-  --ignite-glow: 8;
-  --condense-delay: 800ms;
-  --condense-dur: 3200ms;
-  --condense-scale: 1.12;
-  --trace-delay: 800ms;
-  --trace-dur: 500ms;
-  --trace-stagger: 800ms;
-  --fill-dur: 1400ms;
-  --birth-dur: 900ms;
-  --birth-flare: 2.4;
+  /* 入口の字が先に読める短い待ちから、件数だけを数え上げる。図は初めから完成形。 */
   --count-dur: 1200ms;
-  --count-delay: calc(var(--trace-delay) + var(--trace-stagger) + var(--trace-dur) * 2);
+  --count-delay: 600ms;
 
   /*
     着いたあとも動き続けるもの（「動き続ける」）。星屑と天体の公転と軌道を流れる星（1周の長さは
@@ -352,7 +326,7 @@
   --breathe-ticks: 40;
   --breathe-low: 0.82;
   /*
-    軌道を流れる星（components.tsx の Motion）。後ろに引く尾の、星の側の濃さ（--flow-trail。
+    軌道を流れる星（components.tsx の Flows）。後ろに引く尾の、星の側の濃さ（--flow-trail。
     後ろへ消える）と、十字の光芒の濃さ（--flow-glint）
   */
   --flow-trail: 0.5;
@@ -390,11 +364,10 @@
   --dot: 6px;
 
   /*
-    入口に着いたときの浮かび上がり。ぼかし（--enter-blur）と下からのずれ
-    （--enter-shift）を解きながら、句読点で切った塊を --stagger ずつ遅らせて
+    入口の字の浮かび上がり。不透明度と下からのずれ（--enter-shift）を解き、
+    句読点で切った塊を --stagger ずつ遅らせて
     出す。曲線はばねと同じ1本（--ease-spring）で、量だけをここで決める
   */
-  --enter-blur: 8px;
   --enter-shift: var(--sp-4);
   --stagger: 90ms;
 
@@ -1111,7 +1084,6 @@ body[data-site] > main {
 .system__bands,
 .system__orbits,
 .system__stardust,
-.system__motion,
 .system__bodies {
   position: absolute;
   inset: 0;
@@ -1123,14 +1095,13 @@ body[data-site] > main {
   動かない層と、刻んで動く層は、それぞれ自分の合成の層に描き、描いた層を使い回す。
 
   - 動かない層（光の帯 .system__bands・軌道の線 .system__orbits、締めはまとめて .orbits__still）。
-    帯のぼかし（SVG のフィルタ）を一度だけ描いて使い回す。入口の帯は層ごと灯す（層の濃さは
-    描き直さずに変えられる）。線を引くあいだも、帯は別の層なので掛け直さない
+    帯のぼかし（SVG のフィルタ）を一度だけ描いて使い回す。帯と線は完成形で表示する
   - 刻んで動く層（星屑 .system__stardust / .orbits__stardust、天体 .system__bodies /
     .orbits__bodies）。どれも同じ刻み（orbits.ts の TICK・BODY_TICK）でだけ姿を変える
     （「動き続ける」の steps()）ので、そのあいだは描き直さない
 
-  毎コマ描き直すのは、流れる星と吸い込まれる粒の層（.system__motion と締めの名前の無い
-  SVG）だけ。動くものをまとめて毎コマ描き直していたころは、144Hz の画面で GPU の仕事が
+  流れる星と吸い込まれる粒は、小さい HTML の箱だけを動かす。動くものをまとめて毎コマ
+  描き直していたころは、144Hz の画面で GPU の仕事が
   1コマの枠を超え、ブラウザごと重くなった
 */
 :is(
@@ -1156,8 +1127,8 @@ body[data-site] > main {
     暗がり」）。暗がりは塊の箱に付いてくるので、字の長さや画面の幅で塊が動いても外れない。
     図の場所から字の列を見積もった覆いで消していたころは、900 以上で左の列を丸ごと消すぶん、
     星雲が画面の右半分に寄っていた
-  - 星空は底で消える（覆い mask-image）。入口は件数の帯の上で、締めは本文の底で（足元の罫線で
-    雲を断ち切らない）
+  - 星空は底で消える（静止した地の色の覆い）。入口は件数の帯の上で、締めは本文の底で
+    （足元の罫線で雲を断ち切らない）
   位置の基準は本文（main。「骨格」）。npm run check:contrast が字の下を測る。
 */
 .cosmos {
@@ -1167,14 +1138,51 @@ body[data-site] > main {
   z-index: -1;
   overflow: hidden;
   pointer-events: none;
+  container-type: size;
 }
 
-.cosmos__stars,
-.cosmos__meteors {
+/*
+  底のフェードは、動く星空をまとめて抜く mask の代わりに、逆の濃さの地を重ねる。
+  同じ --bg の上では見え方は同じ。親の mask は星や雲が動くたびに画面大の中間面を合成し、
+  アクセラレーションを切った Edge で重くなった。覆いは底の帯だけの静止した1枚。
+  cosmos の子より上、外の軌道と文字より下（cosmos 自体の z-index は -1）に置く。
+*/
+.cosmos::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  top: auto;
+  height: var(--cosmos-fade-h);
+  z-index: 1;
+  background: var(--cosmos-fade);
+  pointer-events: none;
+}
+
+.cosmos__stars {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
+}
+
+/* HTML の星と流れ星も SVG と同じ1600×1000の視野を中央で slice する。 */
+.cosmos__stars--twinkle,
+.cosmos__meteors {
+  position: absolute;
+  inset: auto;
+  left: 50%;
+  top: 50%;
+  width: max(100cqw, 160cqh);
+  height: max(62.5cqw, 100cqh);
+  transform: translate(-50%, -50%);
+}
+
+.cosmos__twinkle {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--ink);
+  transform: translate(-50%, -50%);
+  will-change: opacity;
 }
 
 /*
@@ -1198,17 +1206,34 @@ body[data-site] > main {
   stop-color: var(--ink);
 }
 
-/* 流れ星。頭が明るく尾が消える筋（坂は部品が渡す）。ふだんは出さない（「動き続ける」） */
-.cosmos__meteor {
-  fill: none;
-  stroke-width: calc(var(--orbit-line) * 1.5);
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-  opacity: 0;
+/* 流れ星。90視野単位の筋を置いた向きのまま流す。太さは画面pxのまま。 */
+.cosmos__meteor-frame {
+  position: absolute;
+  transform-origin: 0 0;
 }
 
-.cosmos__trail {
-  stop-color: var(--ink);
+.cosmos__meteor {
+  position: absolute;
+  right: 100%;
+  top: calc(var(--orbit-line) * -0.75);
+  width: 100%;
+  height: calc(var(--orbit-line) * 1.5);
+  background: linear-gradient(to right, transparent, var(--ink));
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+/* 元の丸い線端と同じ、筋の先の半円。 */
+.cosmos__meteor::after {
+  content: '';
+  position: absolute;
+  left: 100%;
+  top: 0;
+  width: calc(var(--orbit-line) * 1.5);
+  height: 100%;
+  border-radius: 50%;
+  background: var(--ink);
+  transform: translateX(-50%);
 }
 
 /*
@@ -1222,11 +1247,8 @@ body[data-site] > main {
 .cosmos--hero {
   --cosmos-fig-w: min(100vw - 2 * var(--gutter), var(--w-page));
   --cosmos-fig: calc(var(--cosmos-fig-w) / (var(--system-ratio)));
-  mask-image: linear-gradient(
-    to bottom,
-    #000 calc(100% - var(--page-pad) - 220px),
-    transparent calc(100% - var(--page-pad) - 100px)
-  );
+  --cosmos-fade-h: calc(var(--page-pad) + 220px);
+  --cosmos-fade: linear-gradient(to bottom, transparent 0, var(--bg) 120px);
 }
 
 .cosmos--contact {
@@ -1237,7 +1259,8 @@ body[data-site] > main {
     (var(--contact-ratio))
   );
   --cosmos-fig: calc(var(--cosmos-fig-w) / (var(--contact-ratio)));
-  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--page-pad) * 2), transparent);
+  --cosmos-fade-h: calc(var(--page-pad) * 2);
+  --cosmos-fade: linear-gradient(to bottom, transparent, var(--bg));
 }
 
 /* 図の焦点の高さと、星雲の色の淡い広がり（星雲の芯のまわり） */
@@ -1368,12 +1391,6 @@ body[data-site] > main {
   vector-effect: non-scaling-stroke;
   stroke-width: var(--orbit-line);
   opacity: calc(1 - var(--reach, 0) * (1 - var(--orbit-outer)));
-  /*
-    線の長さは部品が pathLength 100 にそろえてあり、破線1本ぶん（100）で1周を覆う——止まった
-    姿は全部引いた線。入口に着いたときは、この破線を送って線を引く（「入口に着いたとき」の
-    orbit-trace）
-  */
-  stroke-dasharray: 100;
 }
 
 /*
@@ -1389,9 +1406,9 @@ body[data-site] > main {
 /*
   軌道に沿って散る星屑（components.tsx の Stardust）。明るさの段ごとの太さ（--stardust-w の
   倍）と濃さ。太さは画面の px（点を軌道の楕円の枠で潰さない）で、枠の幅に比例する（電話の
-  小さな枠で粒が帯を埋めない）。色は字の白で、濃さの奥から手前への坂（奥の端は
-  --stardust-far）は回らない覆い（.stardust-fade。濃さだけを読む）が掛ける——星屑は回るので、
-  点の色に坂を塗ると坂も一緒に回る
+  小さな枠で粒が帯を埋めない）。色は字の白で、外側 SVG の奥・手前に代表の濃さを掛ける。
+  --stardust-far から不透明へ続く坂の1/4・3/4の濃さにして、奥ほど淡い手がかりを保つ。
+  SVG 内・外側とも mask を掛けない（ソフトウェア描画では大きい層を描き直す）
 */
 .stardust path {
   fill: none;
@@ -1400,8 +1417,14 @@ body[data-site] > main {
   vector-effect: non-scaling-stroke;
 }
 
-.stardust-fade {
-  mask-type: alpha;
+.system__stardust--far,
+.orbits__stardust--far {
+  opacity: calc((1 + 3 * var(--stardust-far)) / 4);
+}
+
+.system__stardust--near,
+.orbits__stardust--near {
+  opacity: calc((3 + var(--stardust-far)) / 4);
 }
 
 .stardust__0 {
@@ -1422,16 +1445,6 @@ body[data-site] > main {
 .stardust__3 {
   stroke-width: calc(var(--stardust-w) * 2.8);
   opacity: var(--stardust-ink);
-}
-
-.stardust-depth__far {
-  stop-color: var(--ink);
-  stop-opacity: var(--stardust-far);
-}
-
-.stardust-depth__near {
-  stop-color: var(--ink);
-  stop-opacity: 1;
 }
 
 .orbit-depth__far {
@@ -1548,44 +1561,16 @@ body[data-site] > main {
 /* --- 入口に着いたとき --- */
 
 /*
-  入口に着いたときの一度だけの動き。星系が生まれる（持ち主が「初期表示をかっこよく」で選んだ
-  形）——暗い中で星空が灯り、ブラックホールが小さな光の点から閃いて灯り、内側の軌道から順に
-  光の線が引かれて外へ広がる。引き終えた軌道の天体が閃いて灯り、帯と星屑と星雲が満ちる。
-  見出しの列は着いてすぐ浮かび上がり（字を待たせない）、件数の帯は軌道を引き終えてから
-  数え上がる。全部が同時に浮かんで回り込んでいたころは、2 秒足らずで終わる平らな登場だった。
-
-  - 星空は灯るだけ（orbit-light。画面いっぱいの層を動かさない）。星雲は少し広がって見えない
-    姿から、縮みながら灯る（orbit-condense。量は --condense-*）。枠の横へ広がったぶんは枠が
-    切る（雲の縁はもともと透明）
-  - ブラックホールは、小さな光の点から明るく霞んで広がり、明るさを落としながら縮んで締まる
-    （orbit-ignite。量は --ignite-*）
-  - 軌道の線は、左の継ぎ目から時計回りに引かれる——奥の半分を引いてから手前の半分
-    （orbit-trace。線の長さは pathLength 100 にそろえてあり、破線1本ぶんで1周を覆う）。内側の
-    軌道から順に、外側ほど遅れる（部品が渡す --reach）。継ぎ目で速さが変わらないよう linear で
-    引く。大きさと向きは変えない（広げると枠の左右で断ち切られ、回すと引く向きと食い違う）
-  - 帯と星屑は線を追って灯る（orbit-light）。天体は乗る軌道を引き終えたところで、光の点から
-    閃いて灯る（orbit-birth。大きさの揺れの上に重ねる。「動き続ける」）。流れる星と吸い込まれる
-    粒は最後に灯る
-  - 曲線は --ease の1本（ばねは使わない。止まる向きを行き過ぎて、揺り戻して見える）。線を引く
-    速さだけは linear
-
-  どれも一度きりで、5 秒以内に止まる（WCAG 2.2.2。着いたあとも続く動きは下の「動き続ける」）。
-  keyframes には出だしと途中の姿だけを書き、終わりの姿（to）を持たせない——止まった姿
-  （reduced-motion で animation: none になったとき）がそのまま完成形になる。
-  npm run check:contrast は止めた姿に加えて、名前が orbit- で始まる animation を途中で止めた
-  姿も測る。
+  星系は完成形で初めから出す。大きい層の opacity・blur・scale や軌道の stroke-dashoffset を
+  動かす登場は、アクセラレーションを切った Edge で毎コマの描き直しになった。
+  文字・名札・件数だけが opacity と translate で浮かぶ（ぼかしを掛けない）。件数は600ms待って
+  数え上がる。どれも一度きりで5秒以内に止まる。続く動きは下の「動き続ける」。
+  終わりの姿（to）は書かず、動きを減らす設定で animation: none になった姿も完成形にする。
 */
 @keyframes rise-in {
   from {
     opacity: 0;
-    filter: blur(var(--enter-blur));
     translate: 0 var(--enter-shift);
-  }
-}
-
-@keyframes orbit-light {
-  from {
-    opacity: 0;
   }
 }
 
@@ -1596,7 +1581,7 @@ body[data-site] > main {
   animation: rise-in var(--dur-spring) var(--ease-spring) backwards;
 }
 
-/* 札 → 見出しの塊 → リード文 → 押し手。件数の帯は軌道を引き終えてから */
+/* 札 → 見出しの塊 → リード文 → 押し手。件数の帯は字を先に見せてから */
 .hero h1 .phrase {
   animation-delay: calc((var(--i, 0) + 1) * var(--stagger));
 }
@@ -1613,85 +1598,10 @@ body[data-site] > main {
   animation-delay: calc(var(--count-delay) + var(--i, 0) * var(--stagger));
 }
 
-@keyframes orbit-condense {
-  from {
-    opacity: 0;
-    scale: var(--condense-scale);
-  }
-}
-
-/* 星空は着いてすぐ灯る（広がる動きは持たない。画面いっぱいの層を動かさない） */
-.hero > .cosmos {
-  animation: orbit-light var(--sky-dur) var(--ease) backwards;
-}
-
-@keyframes orbit-ignite {
-  from {
-    opacity: 0;
-    scale: var(--ignite-spark);
-    filter: brightness(var(--ignite-glow)) blur(1px);
-  }
-
-  16% {
-    opacity: 1;
-    scale: calc(var(--ignite-spark) * 3);
-    filter: brightness(var(--ignite-glow)) blur(2px);
-  }
-
-  42% {
-    scale: var(--ignite-flare);
-    filter: brightness(calc(var(--ignite-glow) * 0.4)) blur(var(--ignite-blur));
-  }
-}
-
-.system > .hole {
-  animation: orbit-ignite var(--ignite-dur) var(--ease) var(--ignite-delay) backwards;
-}
-
-@keyframes orbit-trace {
-  from {
-    stroke-dashoffset: -100;
-  }
-}
-
-/*
-  奥の半分も手前の半分も、線の終わりから破線を送って引く——奥の半分は右の継ぎ目から上を回って
-  左へ、手前の半分は左から下を回って右へ描かれた線なので、終わりから引くと、左の継ぎ目から
-  上を通って右へ、そこから下を通って左へと、時計回りの1本につながる
-*/
-.system__orbits--far .orbit {
-  animation: orbit-trace var(--trace-dur) linear
-    calc(var(--trace-delay) + var(--reach, 0) * var(--trace-stagger)) backwards;
-}
-
-.system__orbits--near .orbit {
-  animation: orbit-trace var(--trace-dur) linear
-    calc(var(--trace-delay) + var(--trace-dur) + var(--reach, 0) * var(--trace-stagger)) backwards;
-}
-
-.system__bands,
-.system__stardust {
-  animation: orbit-light var(--fill-dur) var(--ease) calc(var(--trace-delay) + var(--trace-dur))
-    backwards;
-}
-
-/* 天体が灯る（光の点から閃いて、大きさの揺れへ戻る）。重ねる宣言は「動き続ける」の中 */
-@keyframes orbit-birth {
-  from {
-    opacity: 0;
-    scale: 0;
-  }
-
-  45% {
-    opacity: 1;
-    scale: var(--birth-flare);
-  }
-}
-
 /* --- 動き続ける --- */
 
 /*
-  着いたあとも動き続けるもの（components.tsx の Motion・Stardust・Bodies・Dust・Hole）。入口と
+  着いたあとも動き続けるもの（components.tsx の Flows・Stardust・Bodies・Dust・Hole）。入口と
   締めで同じ。
 
   - 星屑と天体が軌道ごと公転する（持ち主の「軌道の線を星と一緒に動かして」）。軌道の楕円の
@@ -1699,23 +1609,25 @@ body[data-site] > main {
     --dur で、内側ほど速い）。天体の形はその中で回転を打ち消し（orbit-unswirl）、大きさは
     手前へ回るほど大きい（orbit-sway。0 から 1 の keyframes を、軌道ごとの大きさの揺れを
     書いた linear() で送る——量は keyframes ではなく timing が持つ）
-  - 軌道に沿って星が流れる。輝く星が、星屑と天体より速く、軌道の楕円の枠の中を回る（orbit-swirl
-    を 1/20 秒の刻みで。周期は軌道ごとの --dur）。形は回さない（orbit-unswirl）
+  - 軌道に沿って星が流れる。輝く星が、星屑と天体より速く回る。65点の投影位置と尾の姿勢を
+    SSR で固定の CSS keyframes へ焼き、区間ごとの steps() を60Hzの格子にそろえる。
+    周期は軌道ごとの --dur。芯と光芒の小さい SVG は向きを保ち、尾の箱だけを matrix で回す
   - 光の粒が渦を巻いてブラックホールへ吸い込まれ、黒い円の縁で光に溶ける（orbit-grain-fall で
-    投影した螺旋の道を進む。落ちるほど速い曲線を keyframes の
-    10 の区間に焼き、区間ごとに 1/20 秒の刻みで進める）
+    投影した螺旋の道を進む）。落ちるほど速い10%ごとの曲線を65点へ写し、明滅の節点と一緒に
+    SSR で固定の CSS keyframes へ焼く。位置と opacity の両方を区間ごとの steps() で60Hzへそろえる
   - ブラックホールの光が明るさを沈めては戻す（orbit-breathe。光の絵の不透明度だけを変え、
     下に敷いた影の黒い円は動かさない——絵の明るさを filter で落とすと、白い光が灰色に
     くすんだ）
-  - 星雲がゆっくり漂い（orbit-drift。雲の SVG の箱ごと動かすので、中のフィルタは掛け
-    直さない）、星が瞬き（orbit-twinkle。明るさだけ。もとの明るさは星ごとの opacity 属性で、
+  - 星雲がゆっくり漂い（orbit-drift。透過 WebP を敷いた箱ごと動かし、生成時のフィルタを
+    ブラウザで掛け直さない）、星が瞬き（orbit-twinkle。小さい HTML の円の明るさだけ。
+    もとの明るさは星ごとの style の opacity で、
     keyframes は真ん中の暗さだけを持つ）、流れ星が流れる（orbit-meteor）
 
   keyframes に var() を書かない（光の揺らぎの1つを除く）。var() を持つ keyframes は、
   動いている要素ごとに毎コマ解き直され、粒の多い入口では style の計算だけでコマの予算を
-  食った（電話相当で 1 秒あたり 480ms。固定の値にして 75ms）。要素ごとに違う量——粒の向きと
-  落ちる幅、軌道の楕円の形、天体の置き場所——は動かない親の transform 属性が持ち、動く子は
-  同じ形を回るだけ（1周・1 から 0 へ）にする。天体の大きさの揺れの量は timing（linear()）が
+  食った（電話相当で 1 秒あたり 480ms。固定の値にして 75ms）。流れる星の位置と尾の姿勢、粒の
+  螺旋と明滅は、SSR が計算した固定の数値だけを keyframes に持つ。星屑と天体は楕円の形と
+  置き場所を動かない親の transform 属性が持ち、動く子が1周する。天体の大きさの揺れの量は timing（linear()）が
   持つ（timing は一度だけ読まれ、毎コマ解き直されない）。
 
   - 止める手は置かない（持ち主の判断。5 秒を超えて続く動きの止め方は、動きを減らす設定
@@ -1748,63 +1660,6 @@ body[data-site] > main {
   }
 }
 
-/*
-  吸い込まれる粒。投影した螺旋（orbits.ts の dustPath）の弧長を進む。以前の回転と半径の
-  曲線に近い加速を、10% ごとの共通の距離で近似する。steps() と同じ keyframes で明るさも
-  変え、動く要素は粒ごとに1つ。粒は止まった姿を持たないので、動かないときは層ごと隠す
-*/
-@keyframes orbit-grain-fall {
-  from {
-    offset-distance: 0%;
-    opacity: 0;
-  }
-
-  10% {
-    offset-distance: 1%;
-    opacity: 0.34;
-  }
-
-  20% {
-    offset-distance: 4%;
-    opacity: 1;
-  }
-
-  30% {
-    offset-distance: 9.2%;
-  }
-
-  40% {
-    offset-distance: 16.8%;
-  }
-
-  50% {
-    offset-distance: 26.6%;
-  }
-
-  60% {
-    offset-distance: 38.5%;
-  }
-
-  70% {
-    offset-distance: 52.4%;
-  }
-
-  80% {
-    offset-distance: 67.8%;
-    opacity: 1;
-  }
-
-  90% {
-    offset-distance: 84.4%;
-    opacity: 0.83;
-  }
-
-  to {
-    offset-distance: 100%;
-    opacity: 0;
-  }
-}
-
 @keyframes orbit-drift {
   to {
     translate: 0.7% -0.45%;
@@ -1818,8 +1673,8 @@ body[data-site] > main {
 }
 
 /*
-  流れ星。置いた向き（部品が親の transform 属性で渡す）のまま、周期の頭の 6% で 420 だけ
-  流れて消え、残りは消えたまま待つ。筋の長さと流れる幅は viewBox の単位
+  流れ星。置いた向きのまま、周期の頭の 6% で420視野単位だけ流れて消える。
+  自分の長さ90の 420/90 倍へ動かすので、slice の倍率が変わっても距離を保つ。
 */
 @keyframes orbit-meteor {
   from {
@@ -1833,7 +1688,7 @@ body[data-site] > main {
 
   6%,
   to {
-    transform: translate(420px, 0px);
+    transform: translate(466.666667%, 0px);
     opacity: 0;
   }
 }
@@ -1846,11 +1701,36 @@ body[data-site] > main {
 }
 
 /*
-  軌道を流れる星（components.tsx の Motion）。輝く星——中心から外へ溶ける芯の光と、先へ消える
+  軌道を流れる星（components.tsx の Flows）。輝く星——中心から外へ溶ける芯の光と、先へ消える
   十字の光芒（入口の星空のいちばん明るい星と同じ形）——が、後ろに淡い尾を引いて軌道を回る。
   尾は星の側が濃く、後ろへ消える坂（--flow-trail）。軌道の線の破線を送っていたころは、軌道の
   上を移る線に見えた（持ち主の「移動する線をもっと星っぽく」）
 */
+.orbit-flows {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  container-type: inline-size;
+  pointer-events: none;
+}
+
+.orbit-flow,
+.orbit-flow__tail {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.orbit-flow__star,
+.orbit-flow__tail-art {
+  position: absolute;
+  overflow: visible;
+}
+
 .orbit-flow__light {
   stop-color: var(--ink);
 }
@@ -1867,29 +1747,21 @@ body[data-site] > main {
   opacity: var(--flow-glint);
 }
 
-.orbit-grain__dot {
-  fill: none;
-  stroke: var(--ink);
-  stroke-width: var(--grain-w);
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-  offset-anchor: 0 0;
-  offset-rotate: 0deg;
-  opacity: 0;
+.orbit-dust {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  container-type: inline-size;
+  pointer-events: none;
 }
 
-/* 対応するブラウザでは図の縮尺を割り、非拡大の線による動く層の再描画を避ける。
-   型つきの除算を読めないブラウザも、上の画面pxの線端で粒と光芒を描ける。 */
-@supports (width: calc(1px * (1px / 1px))) {
-  .orbit-flow__glint {
-    stroke-width: calc(var(--orbit-line) * (var(--flow-frame-w) / 100cqi));
-    vector-effect: none;
-  }
-
-  .orbit-grain__dot {
-    stroke-width: calc(var(--grain-w) * (var(--grain-frame-w) / 100cqi));
-    vector-effect: none;
-  }
+.orbit-grain__dot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  opacity: 0;
+  will-change: transform, opacity;
 }
 
 :is(.orbit-flows, .orbit-dust, .cosmos__meteors) {
@@ -1897,6 +1769,29 @@ body[data-site] > main {
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  /* 初期化 helper が小さい装飾群を順に始める。印が無いJS無効時は通常のCSS動作。 */
+  html[data-motion-staged]
+  :is(
+    .orbit-flow,
+    .orbit-flow__tail,
+    .cosmos__twinkle,
+    .cosmos__meteor,
+    .orbit-grain__dot,
+    .orbit-spin,
+    .orbit-unspin,
+    .orbit-body,
+    .hole__art,
+    .cosmos__nebula
+  ):not([data-motion-ready]) {
+    /* biome-ignore lint/complexity/noImportantStyles: 下の通常animationを開始済みの印が付くまで止める */
+    animation: none !important;
+  }
+
+  /* 未開始の星は枠の原点に出さない。準備後は元の可視状態へ戻る。 */
+  html[data-motion-staged] .orbit-flow:not([data-motion-ready]) {
+    visibility: hidden;
+  }
+
   :is(.orbit-flows, .orbit-dust) {
     display: inline;
   }
@@ -1909,13 +1804,10 @@ body[data-site] > main {
     animation: orbit-meteor var(--dur) linear var(--delay) infinite;
   }
 
-  /*
-    流れる星と吸い込まれる粒は 1/20 秒の刻みで進める（orbits.ts の MOTION_RATE）。
-    星屑・天体・瞬きと、星雲の漂い・光の揺らぎはその2刻み。更新を同じ格子へそろえ、
-    アクセラレーションを切ったブラウザでも小さな動きのために毎コマ描き直さない
-  */
-  .orbit-flows :is(.orbit-spin, .orbit-unspin) {
-    animation-timing-function: steps(var(--ticks));
+  /* SSR が投影した65点の固定 CSS を小さい箱だけに掛ける。区間の steps() は60Hzの格子 */
+  .orbit-flow,
+  .orbit-flow__tail {
+    animation: var(--motion) var(--dur) linear infinite;
   }
 
   /*
@@ -1955,49 +1847,22 @@ body[data-site] > main {
     animation: orbit-sway var(--dur) var(--sway) var(--delay) infinite;
   }
 
-  /*
-    入口では、天体は乗る軌道を引き終えたところで光の点から閃いて灯る（「入口に着いたとき」の
-    orbit-birth）。大きさの揺れと同じ宣言に、あとに並べる——あとの animation が同じ scale を
-    上書きし、終わると揺れの大きさへ戻る（終わりの姿を持たない keyframes は、下の動きの値へ戻る）
-  */
-  .system .orbit-body {
-    animation:
-      orbit-sway var(--dur) var(--sway) var(--delay) infinite,
-      orbit-birth var(--birth-dur) var(--ease)
-      calc(var(--trace-delay) + var(--reach, 0) * var(--trace-stagger) + var(--trace-dur) * 2)
-      backwards;
-  }
-
-  /* 入口では、流れる星と吸い込まれる粒は軌道を引き終えてから灯る */
-  .system :is(.orbit-flows, .orbit-dust) {
-    animation: orbit-light var(--fill-dur) var(--ease) var(--count-delay) backwards;
-  }
-
   .orbit-grain__dot {
-    animation: orbit-grain-fall var(--dur) steps(var(--ticks)) var(--delay) infinite;
+    animation: var(--motion) var(--dur) linear var(--delay) infinite;
   }
 
   .hole > .hole__art {
     animation: orbit-breathe var(--breathe-dur) steps(var(--breathe-ticks)) infinite alternate;
   }
 
-  /*
-    星雲は漂う。入口では、着いたときに凝って灯る動き（orbit-condense）と同じ宣言に並べる
-    （animation は1つの宣言しか効かない。分けて書くと、後ろの宣言が前の動きを消す）
-  */
+  /* 星雲は完成形の背景の箱ごと漂う。入口も締めも同じ動き。 */
   .cosmos__nebula {
     animation: orbit-drift var(--drift-dur) steps(var(--drift-ticks)) infinite alternate;
   }
 
-  .hero .cosmos__nebula {
-    animation:
-      orbit-condense var(--condense-dur) var(--ease) var(--condense-delay) backwards,
-      orbit-drift var(--drift-dur) steps(var(--drift-ticks)) infinite alternate;
-  }
-
   /*
     星の瞬きも刻んで変える（明暗の片道を --ticks 回に。orbits.ts の cosmosMap が周期と遅れを
-    TICK の格子に乗せる）。なめらかに変えると、画面いっぱいの星空の層を毎コマ描き直す
+    TICK の格子に乗せる）。静止星とは分けた小さい HTML の円の opacity だけを変える
   */
   .cosmos__twinkle {
     animation: orbit-twinkle var(--dur) steps(var(--ticks)) var(--delay) infinite;
@@ -2458,7 +2323,7 @@ body[data-site] > main {
 
 /*
   絞り込みは字の手（タブ）。ボタンではなくリンクで、押した先は絞り込んだ一覧の
-  URL になる（絞り込みはサーバーが持っていて、公開ページは JavaScript を持たない）。
+  URL になる（絞り込みはサーバーが持ち、JavaScript に依存しない）。
   リンクは inline なので、当たり判定の高さ（--tap）を効かせるために inline-flex にする。
 */
 .filters a {
@@ -2647,8 +2512,8 @@ body[data-site] > main {
   した行（.entry）いっぱいに被せる。
 
   行そのものを <a> にはできない——中に外へのリンク（.links a）と担当者名
-  （.entry__member）があり、<a> は入れ子にできない。公開ページに JavaScript も
-  置かない。だから押せる面だけを広げて、リンクは題の1本のままにする。読み上げで
+  （.entry__member）があり、<a> は入れ子にできない。移動はリンクだけで成立させる。
+  押せる面だけを広げて、リンクは題の1本のままにする。読み上げで
   リンクの名前が作品名なのも、Tab で止まるのが1回なのも変わらない。
 
   カーソルは書かない。::after は <a> の一部なので、リンクの指差しのカーソルが
@@ -4062,7 +3927,7 @@ body[data-site] > main {
   }
 
   /*
-    いまのページの行き先を、帯の見えている幅の中で開く。JavaScript が無いので、
+    いまのページの行き先を、帯の見えている幅の中で開く。CSS だけで組む帯は、
     帯は何もしなければいつも左端（scrollLeft 0）で開き、並びの後ろの節
     （Links・Contact）に着くと印が帯の右の外に押し出されていた。
 
