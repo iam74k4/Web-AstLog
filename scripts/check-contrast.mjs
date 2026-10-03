@@ -347,6 +347,13 @@ const settled = () =>
   Promise.all([
     document.fonts.ready,
     ...[...document.images].map((image) => image.decode().catch(() => undefined)),
+    ...[...document.querySelectorAll('.cosmos__nebula')].map(async (node) => {
+      const src = getComputedStyle(node).backgroundImage.match(/^url\(["']?(.+?)["']?\)$/)?.[1]
+      if (!src) throw new Error('星雲の背景画像がありません')
+      const image = new Image()
+      image.src = src
+      await image.decode()
+    }),
   ])
     .then(
       () =>
@@ -484,6 +491,7 @@ async function main() {
   const sweep = async (page, where, screen) => {
     for (const accent of accents) {
       const targets = await page.evaluate(collect, [accent, screen])
+      await page.evaluate(settled)
       if (!targets) {
         failures.push(
           `${accent} ${where} — ${screen.name}のパネル（${screen.panel}）が見つからない`,
@@ -608,7 +616,7 @@ async function main() {
           nebula: {
             label: '星雲',
             drawn: await drawnWithout('.cosmos__nebula'),
-            why: '星雲（.cosmos__nebula の SVG）が描かれていない',
+            why: '星雲（.cosmos__nebula の背景画像）が描かれていない',
             minDelta: NEBULA_MIN_DELTA,
           },
           stars: {

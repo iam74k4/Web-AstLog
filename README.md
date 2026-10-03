@@ -618,10 +618,12 @@ public/
                      公開ページは読まない（:root は持たず、app.css の段を読む）
   _headers           静的なファイルに付けるヘッダ（Worker を通らないので、ここで付ける）
                      Workers Static Assets が読む規則で、ファイルとしては配られない
-                     2枚の CSS とブラックホールの絵は 1年・immutable（HTML が中身の版つきの URL
-                     /app.css?v=… で読むので、変えてデプロイすれば URL が変わる）
+                     2枚の CSS とブラックホール・星雲の絵は 1年・immutable（中身の版つきの URL
+                     /app.css?v=… などで読むので、変えてデプロイすれば URL が変わる）
   assets/            ブラックホールの光の絵（blackhole.webp。軌道図の真ん中とロゴの O）と GitHub の
                      Organization の顔（astlog-avatar.png）——scripts/blackhole/render.py が焼く。
+                     星雲の透過 WebP（nebula-{iris,violet,ember,mint,sky,rose}.webp。1800×1000）——
+                     scripts/nebula/render.mjs が焼く。mono と iris は同じ1枚を使う。
                      favicon（favicon.svg・favicon-32.png・apple-touch-icon.png）とページの外で使う
                      ワードマーク（astlog-wordmark.svg）——scripts/logo/export.mjs が src/ui/logo.ts と
                      その絵から書く。共有カードの絵（avatar.png）。AppMixer の画像（appmixer-*。
@@ -644,6 +646,8 @@ scripts/
   logo/              export.mjs。ロゴの素材（SVG と favicon・iPhone のホーム画面の PNG）を src/ui/logo.ts
                      から書く（node scripts/logo/export.mjs。SVG は O の絵を小さくして data URI で
                      抱える。PNG は Playwright の Chromium で撮る）
+  nebula/            render.mjs。nebulaMap と app.css の色・4層の濃さから星雲6枚を焼き、
+                     SHA-256 の頭8桁を使った CSS の素材 URL（?v=…）も更新する
   moon/              前の入口の月（記録として残す。いまのサイトでは使っていない）。
                      render.py が Blender で焼き、pack.py が配信用に詰めていた（docs/moon.md）
   lib/               check-fit と check-contrast の共通部分。dev サーバの立て方と使い捨ての D1（dev-server.mjs）、
@@ -661,3 +665,16 @@ seed.sql             移行前の index.html の内容（全部消してから�
 ```
 
 書き方の約束は `CLAUDE.md` に置いてある。
+
+星雲の形（`src/lib/orbits.ts` の `NEBULA_LOBES`）、色（`app.css` の `--nebula-a` / `-b` / `-c`・
+`--ink`・`--bg`）、4層の濃さ（`--nebula-light` / `-cloud` / `-veil` / `-dust`）を変えたら、
+`node scripts/nebula/render.mjs` で素材と URL の版をそろえて更新する。生成には Playwright の
+Chromium が要る（初回は上の `npx playwright install chromium`）。元の3600×2000の形と模様を
+1800×1000の透過 WebP へ焼き、ページでは箱ごと登場・漂いの動きを付ける。形・色・濃さの正は
+既存の TS / CSS に置き、配信ページでは大きなノイズのフィルタを計算しない。
+
+続く動きは50msの格子にそろえ、粒と流れる星は20回/秒（`MOTION_RATE`）、星屑・天体・瞬きは
+100ms刻み（`TICK` / `BODY_TICK`）。星雲の漂いは片道40秒を400段、ブラックホールの光は片道4秒を40段に
+分ける。動きを減らす設定では止まった完成形になり、印刷では星系と星空を出さない。
+再生成後は `npm test` と `npm run check:fit`・`npm run check:contrast` を通し、通常表示の Edge でも
+動きと見た目を確かめる（アクセラレーションを切った環境も含む）。

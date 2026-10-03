@@ -180,19 +180,24 @@ describe('応答のヘッダ', () => {
     URL に付け（src/ui/components.tsx の Stylesheets）、_headers が1年・immutable で配る。
     長く持たせてよいのは版つきの URL で読まれるものだけ——版の無い素材（ロゴの素材・GitHub の顔）を
     immutable にすると、差し替えた絵が1年届かない。ブラックホールの絵も版つき（上の帯のロゴの O が
-    どのページでも読む。版は src/ui/logo.ts の BLACKHOLE_ART で、test/public.test.ts が中身と突き合わせる）
+    どのページでも読む。版は src/ui/logo.ts の BLACKHOLE_ART で、test/public.test.ts が中身と突き合わせる）。
+    星雲の絵も CSS が中身の版つきで読み、同じテストで実ファイルと突き合わせる
   */
   it('スタイルシートは版つきの URL で読み、1年・immutable で配る', async () => {
     const rules = headerRules()
-    for (const path of ['/app.css', '/admin.css', '/assets/blackhole.webp']) {
+    const cached = [
+      '/app.css',
+      '/admin.css',
+      '/assets/blackhole.webp',
+      ...['iris', 'violet', 'ember', 'mint', 'sky', 'rose'].map(
+        (name) => `/assets/nebula-${name}.webp`,
+      ),
+    ]
+    for (const path of cached) {
       expect(rules.get(path)?.['cache-control'], path).toBe('public, max-age=31536000, immutable')
     }
     const long = [...rules].filter(([, values]) => values['cache-control']?.includes('immutable'))
-    expect(long.map(([path]) => path).sort()).toEqual([
-      '/admin.css',
-      '/app.css',
-      '/assets/blackhole.webp',
-    ])
+    expect(long.map(([path]) => path).sort()).toEqual([...cached].sort())
 
     const version = /^\/(app|admin)\.css\?v=[0-9a-z]+$/
     const sheets = (html: string) =>

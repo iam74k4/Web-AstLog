@@ -80,12 +80,11 @@
 手触り → 入力手段）。どの外枠が何を読むかは `Stylesheets` 1本（`test/headers.test.ts` の
 「スタイルシート」、`test/theme.test.ts` の「スタイルシートの分け方」）。
 
-**CSS は版つきの URL で、1年・immutable で配る。** `Stylesheets` が中身から版を作り
-（`/app.css?v=…`）、`public/_headers` が2枚に `immutable` を付ける。**`<link rel="stylesheet">`
-を直に書かない**（版の無い URL は古い写しを1年掴む）。版を持たない素材（ロゴの素材・アバター）に長い
-`Cache-Control` を付けない。版は Worker に同梱した CSS の文字列から作る（`wrangler.toml` の
-`[[rules]]`、テストでは `vitest.config.ts` の `cssTextPlugin`）。ブラックホールの絵も版つき（ロゴの O が
-どのページでも読む。`BLACKHOLE_ART` の `?v=` は中身の SHA-256 の頭）。
+**CSS と焼いた装飾の絵は版つきの URL で、1年・immutable で配る。** `public/_headers` が配信を決める。
+CSS の版は `Stylesheets` が Worker に同梱した文字列から作る（`wrangler.toml` の `[[rules]]`、
+テストでは `vitest.config.ts` の `cssTextPlugin`）。**`<link rel="stylesheet">` を直に書かない**。
+ブラックホールと星雲の `?v=` はファイルの SHA-256 の頭8桁（`BLACKHOLE_ART`・`--nebula-art`）。
+版の無い素材（ロゴの素材・アバター）に長い `Cache-Control` を付けない（古い写しが1年残る）。
 
 ### JavaScript とリンク
 
@@ -170,16 +169,16 @@ SVG と HEIC は理由を添えて 400。**画像の URL はフォームから�
 （広げると枠の左右で断ち切れる）。量は `:root` の `--ignite-*` / `--trace-*` / `--birth-*` ほか。曲線は
 `--ease`（ばねは行き過ぎて揺り戻す）。keyframes に終わりの姿（`to`）を書かず、止まった姿を完成形にする。
 
-**そのあとは入口も締めも動き続ける**（持ち主が「もっと動きを」と選んだ。`Motion`・`Stardust`・`Hole`）。
-**星屑と天体は軌道ごと公転する**（持ち主の「軌道の線を星と一緒に動かして」。写した楕円を単位円に直して
-`orbit-spin` で回し、天体は `orbit-unspin` で形を保つ）。軌道を流れる星（`Flows`。光芒のある星が淡い尾を引く。破線の光は移る線に見えた）・
+**そのあとは入口も締めも動き続ける**（持ち主が「もっと動きを」と選んだ）。
+**星屑と天体は軌道ごと公転する**（持ち主の「軌道の線を星と一緒に動かして」）。単位円に直した楕円を
+`orbit-spin` で回し、天体は `orbit-unspin` で形を保つ。光芒のある星が淡い尾を引く（`Flows`）・
 吸い込まれる粒（`orbit-grain-*`）・ブラックホールの光の揺らぎ・星雲の漂い・星の瞬き・流れ星。
-**動くものは刻みの格子に乗せ、更新の頻度ごとに層を分ける**（`TICK`・`BODY_TICK`・`MOTION_RATE` と
-`steps()`。毎コマ描き直すと 144Hz の画面で GPU が1コマの枠を超え、持ち主の Edge ごと重くなった）。
-**止める手は置かない**（持ち主が外した。5 秒を超える動きの止め方は、動きを減らす設定だけ）。**keyframes に `var()` を書かない**
-（要素ごとに毎コマ解き直され、style の計算だけでコマの予算を食った）——要素ごとに違う量は
-動かない親の transform 属性か、timing（天体の大きさの揺れは軌道ごとの `linear()`）に置く。途中の姿は
-`check:contrast` が測る（名前が `orbit-` で始まる animation を止めて送る）。
+**続く動きは50msの格子に乗せ、更新頻度ごとに層を分ける**（`steps()`）。粒・流れる星は
+`MOTION_RATE` の20回/秒、星屑・天体・瞬きは `TICK` / `BODY_TICK` の100ms、星雲と光も100ms刻み。
+毎コマの描き直しは速い画面やアクセラレーションを切った Edge で重くなる。
+**止める手は置かない**（持ち主が外した。動きを減らす設定だけが止める）。**keyframes に `var()` を書かない**
+（要素ごとの毎コマの style 計算を避ける）。要素ごとの量は動かない親の transform 属性か timing
+（天体の揺れは `linear()`）へ。途中の姿は `check:contrast` が `orbit-` の animation を止めて送る。
 
 **ページを移るときの切り替えも CSS だけ**（`@view-transition`。前と次の両方が宣言したときだけ
 切り替わる）。上の帯は `view-transition-name: top` で本文の入れ替わりから外し、一覧の行の題と
@@ -350,9 +349,10 @@ Team に戻る。人数は数えて告知しない。
 
 **入口と締めは、まわりを本文の幅いっぱいの星空にし、星雲を画面の端まで広げる**（持ち主の
 「もっと壮大に」「画面広く」。`Cosmos`・`nebulaMap`）。**字の後ろには何も出さない**
-（字の塊が地の色を敷く。星1つで小さい字の 4.5:1 を割る）。星雲の色はプリセットごとの3色で、**モノクロでも星雲だけは
-色を持つ**（持ち主が選んだ）。明るい塊は軌道の帯の外へ（真後ろだと線が沈む）。雲は SVG の箱ごと漂わせ、
-星は別の SVG で瞬かせる（中を描き直すとフィルタを毎コマ掛け直す）。
+（字の塊が地の色を敷く。星1つで小さい字の 4.5:1 を割る）。**モノクロでも星雲だけは色を持つ**。
+星雲はプリセットごとの3色と4層の濃さを CSS から読み、透過 WebP の6枚へ焼く（mono と iris は共用）。
+明るい塊は軌道の帯の外へ。雲は背景の箱ごと漂わせ、星は別の SVG で瞬かせる。
+模様のフィルタは生成時だけ使う（ページで掛けると、アクセラレーションを切った Edge で重くなる）。
 
 **締めの Contact は、入口と同じ星系を札なしで置く。** 枠（`CONTACT_FRAME`）は入口の枠を背の低い
 横長にしただけで、星系の大きさは入口と同じ（`ContactOrbits`。幅は `--contact-w` と `--contact-h` で
@@ -475,9 +475,10 @@ URL を動かすなら前の URL は転送で残す（貼られたリンクを�
 `owner_claims` の行。コードは触らない（手順は README の「管理画面に入る」）。
 
 **入口の軌道図の形を変える** → `src/lib/orbits.ts`（`MAX_ORBITS`・`inner` / `outer`・離心率と近点・
-`ELEVATION`・`CAMERA`・`TILT`・`hole`・帯と星屑の数・星雲の `NEBULA_LOBES`）。枠の縦横比と傾きは `app.css` の
-`--system-ratio` / `--contact-ratio` / `--system-tilt` と同じ数に。そのあと `npm test`
-（`test/orbits.test.ts`）と `npm run check:fit`・`npm run check:contrast`。
+`ELEVATION`・`CAMERA`・`TILT`・`hole`・帯と星屑の数）。枠の縦横比と傾きは `app.css` の
+`--system-ratio` / `--contact-ratio` / `--system-tilt` とそろえ、`npm test`・`check:fit`・`check:contrast`。
+星雲の `NEBULA_LOBES`・CSS の色・4層の濃さを変えたら、`scripts/nebula/render.mjs` で素材と版も更新する
+（手順は README）。
 
 **ロゴの形や色を変える** → `src/ui/logo.ts`（素材に焼く色 `LOGO_COLORS` は `:root` の段と同じ値。
 `test/theme.test.ts` が突き合わせる）→ `node scripts/logo/export.mjs` で素材を書き直す → `npm test`。

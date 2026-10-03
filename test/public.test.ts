@@ -2,6 +2,12 @@ import { env } from 'cloudflare:test'
 import wordmarkFile from 'virtual:asset:astlog-wordmark.svg'
 import faviconFile from 'virtual:asset:favicon.svg'
 import blackholeArt from 'virtual:asset-base64:blackhole.webp'
+import nebulaEmber from 'virtual:asset-base64:nebula-ember.webp'
+import nebulaIris from 'virtual:asset-base64:nebula-iris.webp'
+import nebulaMint from 'virtual:asset-base64:nebula-mint.webp'
+import nebulaRose from 'virtual:asset-base64:nebula-rose.webp'
+import nebulaSky from 'virtual:asset-base64:nebula-sky.webp'
+import nebulaViolet from 'virtual:asset-base64:nebula-violet.webp'
 import assetFiles from 'virtual:assets'
 import seedSql from 'virtual:repo:seed.sql'
 import { eq } from 'drizzle-orm'
@@ -10,7 +16,7 @@ import css from '../public/app.css'
 import * as schema from '../src/db/schema'
 import { ITEM_KINDS } from '../src/domain'
 import { sniffImage } from '../src/lib/image'
-import { CONTACT_FRAME, HERO_FRAME } from '../src/lib/orbits'
+import { CONTACT_FRAME, cosmosMap, HERO_FRAME, NEBULA } from '../src/lib/orbits'
 import { publicRoutes } from '../src/routes/public/routes'
 import { SITE } from '../src/site'
 import { itemHref, LinkList, LinkRow, splitPhrases } from '../src/ui/components'
@@ -993,18 +999,19 @@ describe('星空と星雲', () => {
       ['/contact', contact],
     ] as const) {
       const from = main.indexOf('<div class="cosmos')
-      const cosmos = main.slice(from, main.indexOf('</div>', from))
-      // 星（瞬く星と光芒）・星雲・流れ星の3枚
-      expect(cosmos, path).toContain('<svg class="cosmos__stars"')
+      // 星雲の背景にも div を使うので、最後の流れ星のあとで外の箱を閉じる
+      const meteors = main.indexOf('class="cosmos__meteors"', from)
+      const cosmos = main.slice(from, main.indexOf('</div>', meteors))
+      // 静止星と光芒・瞬く星・星雲・流れ星の順
+      expect(cosmos, path).toContain('<svg class="cosmos__stars cosmos__stars--still"')
+      expect(cosmos, path).toContain('<svg class="cosmos__stars cosmos__stars--twinkle"')
       expect(cosmos, path).toContain('class="cosmos__twinkle"')
       expect(cosmos, path).toContain('class="cosmos__glint"')
-      expect(cosmos, path).toContain('<svg class="cosmos__nebula"')
+      expect(cosmos, path).toContain('<div class="cosmos__nebula" aria-hidden="true"></div>')
       expect(cosmos, path).toContain('<svg class="cosmos__meteors"')
-      // 雲は光・雲・筋・塵の4枚。模様のフィルタは雲と筋と塵にだけ掛ける
-      expect(cosmos.match(/<use class="nebula__(light|cloud|veil|dust)"/g), path).toHaveLength(4)
-      expect(cosmos.match(/<filter id="[a-z-]+-f-(cloud|veil|dust)"/g), path).toHaveLength(3)
-      expect(cosmos, path).toContain('<feTurbulence')
-      // 外の素材を読まない（焼いた絵を持たない。CSP の img-src 'self' の外へも出ない）
+      // 星雲は焼いた素材を CSS の背景で読む。画面いっぱいのフィルタをページに置かない
+      expect(cosmos, path).not.toMatch(/<feTurbulence|<feDisplacementMap|<filter\b/)
+      // HTML に外部の画像を持ち込まない。背景素材の実在と版は下で見る
       expect(cosmos, path).not.toMatch(/<image|url\((?!#)/)
     }
     // ブラックホールの絵は入口と締めのまわりの星空の真ん中
@@ -1015,6 +1022,103 @@ describe('星空と星雲', () => {
     expect(mainOf(await okText('/works/item/w'))).not.toContain('class="cosmos')
     // 全体ページ（印刷・Ctrl-F の宛先）にも敷かない
     expect(mainOf(await okText('/all'))).not.toContain('class="cosmos')
+  })
+
+  it('静止星と瞬く星は別の SVG に置き、星の位置・太さ・明るさ・光芒を保つ', async () => {
+    await seedMember()
+    const map = cosmosMap()
+    for (const [path, id] of [
+      ['/', 'hero-cosmos'],
+      ['/contact', 'contact-cosmos'],
+    ] as const) {
+      const main = mainOf(await okText(path))
+      const layers = [
+        ...main.matchAll(
+          /<svg class="cosmos__stars cosmos__stars--(still|twinkle)"[^>]*>([\s\S]*?)<\/svg>/g,
+        ),
+      ]
+      expect(
+        layers.map((layer) => layer[1]),
+        path,
+      ).toEqual(['still', 'twinkle'])
+      for (const layer of layers) {
+        expect(layer[0], path).toContain(`viewBox="0 0 ${map.width} ${map.height}"`)
+        expect(layer[0], path).toContain('preserveAspectRatio="xMidYMid slice"')
+        const moving = layer[1] === 'twinkle'
+        const stars = map.stars.filter((star) => !!star.twinkle === moving)
+        const dots = [...(layer[2] ?? '').matchAll(/<path\b[^>]*>/g)]
+          .map((match) => match[0])
+          .filter((tag) => !tag.includes('class="cosmos__glint"'))
+        expect(
+          dots.map((tag) => tag.match(/\bd="([^"]+)"/)?.[1]),
+          path,
+        ).toEqual(stars.map((star) => `M${star.x} ${star.y}h0`))
+        dots.forEach((tag, index) => {
+          const star = stars[index]
+          expect(tag, path).toContain(`opacity="${star?.o}"`)
+          expect(tag, path).toContain(`stroke-width:${star?.w}px`)
+          if (star?.twinkle) {
+            expect(tag, path).toContain('class="cosmos__twinkle"')
+            expect(tag, path).toContain(`--dur:${star.twinkle.dur}s`)
+            expect(tag, path).toContain(`--delay:${star.twinkle.delay}s`)
+            expect(tag, path).toContain(`--ticks:${star.twinkle.ticks}`)
+          } else {
+            expect(tag, path).not.toContain('cosmos__twinkle')
+          }
+        })
+      }
+      const still = layers[0]?.[2] ?? ''
+      const twinkle = layers[1]?.[2] ?? ''
+      expect(still.match(/class="cosmos__glint"/g), path).toHaveLength(
+        map.stars.filter((star) => star.glint).length,
+      )
+      expect(twinkle, path).not.toContain('cosmos__glint')
+      expect(main.match(new RegExp(`id="${id}-glint"`, 'g')), path).toHaveLength(1)
+      expect(layers[1]?.index, path).toBeLessThan(main.indexOf('<div class="cosmos__nebula"'))
+      expect(main.indexOf('<div class="cosmos__nebula"'), path).toBeLessThan(
+        main.indexOf('class="cosmos__meteors"'),
+      )
+    }
+  })
+
+  it('星雲の6枚は同じ縦横比の WebP。CSS の素材 URL は中身の版を持つ', async () => {
+    /*
+      public/ は workerd から配られないので、既存の assetPlugin で実ファイルを読む。
+      元の箱は 3600×2000、配る絵は半分の 1800×1000。mono と iris は同じ色の1枚を使う。
+      版を変え忘れると、immutable で持つ前の絵が1年残る。
+    */
+    const files = {
+      iris: nebulaIris,
+      violet: nebulaViolet,
+      ember: nebulaEmber,
+      mint: nebulaMint,
+      sky: nebulaSky,
+      rose: nebulaRose,
+    }
+    const rules = css.replace(/\/\*[\s\S]*?\*\//g, '')
+    const urls = [...rules.matchAll(/\/assets\/nebula-[\w-]+\.webp(?:\?[^)'"\s]*)?/g)].map(
+      (found) => found[0],
+    )
+    const paths = Object.keys(files).map((name) => `/assets/nebula-${name}.webp`)
+    expect(new Set(urls.map((url) => url.split('?')[0]))).toEqual(new Set(paths))
+    const hashes = new Set<string>()
+    for (const [name, file] of Object.entries(files)) {
+      const bytes = Uint8Array.from(atob(file), (char) => char.charCodeAt(0))
+      const sniffed = sniffImage(bytes)
+      expect(sniffed?.type, name).toBe('image/webp')
+      expect(sniffed?.width, name).toBe(NEBULA.width / 2)
+      expect(sniffed?.height, name).toBe(NEBULA.height / 2)
+      expect(bytes.length, name).toBeGreaterThan(1000)
+      const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
+      const hash = [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+      const path = `/assets/nebula-${name}.webp`
+      const uses = urls.filter((url) => url.split('?')[0] === path)
+      expect(uses.length, name).toBeGreaterThan(0)
+      expect(new Set(uses), name).toEqual(new Set([`${path}?v=${hash.slice(0, 8)}`]))
+      hashes.add(hash)
+    }
+    // 色を変えた6枚。すべて同じ素材をコピーしてしまっても寸法だけでは気付けない
+    expect(hashes.size).toBe(Object.keys(files).length)
   })
 
   it('ページの中の id は重ならない（グラデーションとフィルタの名前が重なると、片方が消える）', async () => {
@@ -1108,6 +1212,13 @@ describe('締めのページ（Contact）', () => {
       expect(main, path).not.toMatch(/stroke-dasharray|class="orbit-flow"/)
       expect(main.match(/<g class="orbit-dust"/g), path).toHaveLength(1)
       expect(main, path).toContain('class="orbit-grain__dot"')
+      const dust = main.match(/<g class="orbit-dust"[^>]*>([\s\S]*?)<\/g>/)?.[1] ?? ''
+      expect(dust.match(/<path class="orbit-grain__dot"/g), path).toHaveLength(
+        Math.round(HERO_FRAME.outer / 8),
+      )
+      expect(dust, path).toContain('offset-path:path(')
+      expect(dust, path).not.toContain('transform=')
+      expect(dust, path).not.toContain('<g')
       // ブラックホールの光は揺らぐ（app.css）。縁を回る光の点は外した（焼いた絵に合わない）
       expect(main.match(/<img class="hole__art"/g), path).toHaveLength(1)
       expect(main, path).not.toContain('hole__spin')

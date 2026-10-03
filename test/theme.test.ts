@@ -1579,14 +1579,25 @@ describe('入口の軌道図', () => {
       '\n.orbit {',
       '.orbit-body__ring {',
       '.stardust path {',
-      '.orbit-flow__glint {',
-      '.orbit-grain__dot {',
       '.cosmos__stars path {',
       '.cosmos__meteor {',
     ]) {
       expect(bodyOf(sheet, selector), selector).toContain('vector-effect: non-scaling-stroke')
     }
     expect(root()).toMatch(/--orbit-line:\s*\d+px;/)
+    // 流れる星は逆の伸縮で形を保つ。画面の太さは枠とコンテナの比で補い、
+    // non-scaling-stroke による回転中の再描画を避ける。
+    const glint = bodyOf(sheet, '.orbit-flow__glint {')
+    expect(glint).toContain('vector-effect: non-scaling-stroke')
+    const scaled = blockAt(sheet, '@supports (width: calc(1px * (1px / 1px)))')
+    expect(bodyOf(scaled, '.orbit-flow__glint {')).toContain('var(--flow-frame-w) / 100cqi')
+    expect(bodyOf(scaled, '.orbit-flow__glint {')).toContain('vector-effect: none')
+    const grain = bodyOf(sheet, '.orbit-grain__dot {')
+    expect(grain).toContain('stroke-width: var(--grain-w)')
+    expect(grain).toContain('offset-rotate: 0deg')
+    expect(grain).toContain('vector-effect: non-scaling-stroke')
+    expect(bodyOf(scaled, '.orbit-grain__dot {')).toContain('var(--grain-frame-w) / 100cqi')
+    expect(bodyOf(scaled, '.orbit-grain__dot {')).toContain('vector-effect: none')
     /*
       天体は枠の単位で描く（光とにじみは放射の坂で塗った円、輪の線だけが画面の px）。回る
       天体の大きさは部品が scale で変えるので、画面の px で持つと奥行きに付いてこない。縁の
@@ -1811,7 +1822,6 @@ describe('入口の軌道図', () => {
     expect(bodyOf(breathing, '.orbit-flows :is(.orbit-spin, .orbit-unspin) {')).toContain(
       'animation-timing-function: steps(var(--ticks))',
     )
-    expect(bodyOf(breathing, '.orbit-grain {')).toContain('steps(var(--ticks))')
     expect(bodyOf(breathing, '.orbit-grain__dot {')).toContain('steps(var(--ticks))')
     expect(sheet).not.toMatch(/--fall-ease|@keyframes orbit-fall\b/)
     expect(bodyOf(sheet, '.orbit-flow__glint {')).toContain('opacity: var(--flow-glint)')
@@ -1829,7 +1839,6 @@ describe('入口の軌道図', () => {
       'orbit-swirl',
       'orbit-unswirl',
       'orbit-sway',
-      'orbit-grain-swirl',
       'orbit-grain-fall',
       'orbit-drift',
       'orbit-twinkle',
@@ -1838,7 +1847,7 @@ describe('入口の軌道図', () => {
       expect(blockAt(sheet, `@keyframes ${name}`), name).not.toContain('var(')
     }
     /*
-      星雲が漂うのは雲の SVG の箱ごと（中を描き直さない。雲のフィルタを毎コマ掛け直さない）。
+      星雲が漂うのは素材を背景に置いた箱ごと（雲の模様を毎コマ描き直さない）。
       星の瞬きは明るさだけで、もとの明るさは星ごとの opacity 属性——keyframes は真ん中の
       暗さだけを持つ（from / to を書くと、星ごとの明るさが消える）
     */
@@ -2019,11 +2028,11 @@ describe('星空と星雲', () => {
   })
 
   it('色は使う場所で敷く。3色はプリセットごと（モノクロでも青紫と桃と空色）、芯は字の白、塵は地', () => {
-    expect(bodyOf(sheet, '.nebula__a {')).toContain('stop-color: var(--nebula-a)')
-    expect(bodyOf(sheet, '.nebula__b {')).toContain('stop-color: var(--nebula-b)')
-    expect(bodyOf(sheet, '.nebula__c {')).toContain('stop-color: var(--nebula-c)')
-    expect(bodyOf(sheet, '.nebula__ink {')).toContain('stop-color: var(--ink)')
-    expect(bodyOf(sheet, 'stop.nebula__dust {')).toContain('stop-color: var(--bg)')
+    // 素材はプリセットごとの背景。ページの SVG に模様のフィルタを残さない
+    expect(bodyOf(sheet, '.cosmos__nebula {')).toMatch(
+      /background(?:-image)?:[^;]*var\(--nebula-art\)/,
+    )
+    expect(sheet).not.toMatch(/\bnebula__(?:a|b|c|ink|dust|light|cloud|veil)\b/)
     /*
       3色はパレットの色から選ぶ（生の色を書かない。色相を回して作ると、エンバーの相方が
       黄緑になった）。どのアクセントも3色を持つ——足し忘れると、:root の色のまま残る
@@ -2031,15 +2040,30 @@ describe('星空と星雲', () => {
     const value = (body: string, name: string) =>
       body.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1]
     const names = ['--nebula-a', '--nebula-b', '--nebula-c']
+    const palettes = {
+      mono: { art: 'iris', tones: ['iris', 'rose', 'sky'] },
+      iris: { art: 'iris', tones: ['iris', 'rose', 'sky'] },
+      violet: { art: 'violet', tones: ['violet', 'rose', 'iris'] },
+      ember: { art: 'ember', tones: ['ember', 'rose', 'violet'] },
+      mint: { art: 'mint', tones: ['mint', 'sky', 'iris'] },
+      sky: { art: 'sky', tones: ['sky', 'violet', 'mint'] },
+      rose: { art: 'rose', tones: ['rose', 'violet', 'ember'] },
+    }
     const root = bodyOf(sheet, ':root {')
     for (const accent of ACCENTS) {
       const preset = bodyOf(sheet, `[data-accent='${accent.key}'] {`)
-      for (const name of names) {
-        expect(value(preset, name), `${accent.key} ${name}`).toMatch(/^var\(--[a-z]+\)$/)
-      }
+      const palette = palettes[accent.key]
+      expect(
+        names.map((name) => value(preset, name)),
+        accent.key,
+      ).toEqual(palette.tones.map((tone) => `var(--${tone})`))
+      expect(value(preset, '--nebula-art'), accent.key).toMatch(
+        new RegExp(`^url\\(['"]?/assets/nebula-${palette.art}\\.webp\\?v=[0-9a-f]{8}['"]?\\)$`),
+      )
     }
     // 何も選んでいない姿はモノクロと同じ。モノクロでも星雲だけは色を持つ（持ち主の判断）
     const mono = bodyOf(sheet, "[data-accent='mono'] {")
+    expect(value(root, '--nebula-art')).toBe(value(mono, '--nebula-art'))
     for (const name of names) {
       expect(value(root, name), name).toBe(value(mono, name))
       expect(value(mono, name), name).not.toBe('var(--mono)')
@@ -2047,13 +2071,8 @@ describe('星空と星雲', () => {
   })
 
   it('雲の4枚の濃さは :root の段。星と流れ星は字の白で、太さは画面の px', () => {
-    for (const [selector, token] of [
-      ['.nebula__light {', '--nebula-light'],
-      ['.nebula__cloud {', '--nebula-cloud'],
-      ['.nebula__veil {', '--nebula-veil'],
-      ['use.nebula__dust {', '--nebula-dust'],
-    ] as const) {
-      expect(bodyOf(sheet, selector), selector).toContain(`opacity: var(${token})`)
+    // 焼くときも CSS の段から読む。素材化で濃さの入力を消さない
+    for (const token of ['--nebula-light', '--nebula-cloud', '--nebula-veil', '--nebula-dust']) {
       expect(bodyOf(sheet, ':root {'), token).toMatch(new RegExp(`${token}:\\s*0?\\.\\d+;`))
     }
     const stars = bodyOf(sheet, '.cosmos__stars path {')
