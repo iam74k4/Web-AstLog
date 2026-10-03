@@ -30,6 +30,8 @@ const TARGETS = [
   '.orbit-grain__dot',
 ].join(',')
 const OPTIONS = { viewport: { width: 1440, height: 900 }, reducedMotion: 'no-preference' }
+// Blink の snap と ms/seconds の double 往復で変わり得る端数だけを吸収する。1nsで、ms差は許さない。
+const CLOCK_EPSILON = 1e-6
 
 const perpetualCount = () =>
   document.getAnimations().filter((animation) => {
@@ -90,68 +92,154 @@ async function readable(page, screen) {
   return { heading: content.heading, links: content.links }
 }
 
-async function pairs(page) {
-  return page.evaluate(() => {
-    const need = (condition, reason) => {
-      if (!condition) throw new Error(reason)
-    }
-    const animations = (element) =>
-      element
-        .getAnimations()
-        .filter((animation) => animation.effect.getTiming().iterations === Infinity)
-    const compare = (first, second, label) => {
-      const a = animations(first)[0]
-      const b = animations(second)[0]
-      need(a && b, `${label}: animation がない`)
-      need(a.startTime === b.startTime && a.currentTime === b.currentTime, `${label}: 時計が違う`)
-      need(a.effect.getTiming().duration === b.effect.getTiming().duration, `${label}: 周期が違う`)
-    }
-    let checked = 0
-    for (const selector of ['.orbit-flows', '.stardust', '.orbit-bodies']) {
-      const layers = [...document.querySelectorAll(selector)]
-      need(layers.length === 2, `${selector}: 奥/手前の2層でない`)
-      const child = selector === '.orbit-flows' ? '.orbit-flow' : '.orbit-spin'
-      const far = [...layers[0].querySelectorAll(child)]
-      const near = [...layers[1].querySelectorAll(child)]
-      need(far.length > 0 && far.length === near.length, `${selector}: 奥/手前の要素数が違う`)
-      far.forEach((element, index) => {
-        compare(element, near[index], `${selector} ${index}`)
-        need(
-          getComputedStyle(element).transform === getComputedStyle(near[index]).transform,
-          `${selector} ${index}: 奥/手前の位置が違う`,
-        )
-        checked += 1
-        if (selector === '.orbit-flows') {
-          const tail = element.querySelector('.orbit-flow__tail')
-          const other = near[index].querySelector('.orbit-flow__tail')
-          need(tail && other, 'Flow: 尾がない')
-          compare(element, tail, 'Flow: 星/尾')
-          compare(tail, other, 'Flow: 奥/手前の尾')
-          need(
-            getComputedStyle(tail).transform === getComputedStyle(other).transform,
-            'Flow: 奥/手前の尾の姿勢が違う',
+async function pairs(page, exactClock = true) {
+  return page.evaluate(
+    ({ exactClock, clockEpsilon }) => {
+      const need = (condition, reason) => {
+        if (!condition) throw new Error(reason)
+      }
+      const animations = (element) =>
+        element
+          .getAnimations()
+          .filter(
+            (animation) =>
+              animation instanceof CSSAnimation &&
+              animation.effect.getTiming().iterations === Infinity,
           )
+      /*
+      通常の共通時計は motion.ts が保証する（CLAUDE.md「JavaScript とリンク」）。JS 無効時は
+      通常の CSS 動作へ戻る。CSS Animations §2 は、style と keyframes が共に解決された時点で
+      開始すると定め、別の DOM 要素へ同じ開始時刻を保証しない。
+      https://www.w3.org/TR/css-animations-1/#animations
+
+      fallback は自然の開始差を記録して周期・delay・easing を検査する。幾何だけは検査ページで
+      3つの共通時刻へ送る。製品の同期補助ではない。最後に元の時計と playing 状態へ戻す。
+    */
+      const saved = exactClock
+        ? []
+        : document
+            .getAnimations()
+            .filter((animation) => {
+              const target = animation.effect?.target
+              return (
+                animation instanceof CSSAnimation &&
+                animation.effect.getTiming().iterations === Infinity &&
+                target instanceof Element &&
+                target.closest('.system, .orbits, .cosmos')
+              )
+            })
+            .map((animation) => ({
+              animation,
+              startTime: animation.startTime,
+              currentTime: animation.currentTime,
+              playState: animation.playState,
+            }))
+      const natural = new Map(saved.map((entry) => [entry.animation, entry]))
+      let maxStartSkew = 0
+      const compare = (first, second, label) => {
+        const a = animations(first)[0]
+        const b = animations(second)[0]
+        need(a && b, `${label}: animation がない`)
+        if (exactClock)
+          need(
+            Number.isFinite(a.startTime) &&
+              Number.isFinite(b.startTime) &&
+              Number.isFinite(a.currentTime) &&
+              Number.isFinite(b.currentTime) &&
+              Math.abs(a.startTime - b.startTime) <= clockEpsilon &&
+              Math.abs(a.currentTime - b.currentTime) <= clockEpsilon,
+            `${label}: 時計が違う（start ${a.startTime}/${b.startTime}, current ${a.currentTime}/${b.currentTime}）`,
+          )
+        else
+          maxStartSkew = Math.max(
+            maxStartSkew,
+            Math.abs(natural.get(a).startTime - natural.get(b).startTime),
+          )
+        const one = a.effect.getTiming()
+        const two = b.effect.getTiming()
+        for (const name of [
+          'duration',
+          'delay',
+          'endDelay',
+          'easing',
+          'iterations',
+          'iterationStart',
+          'direction',
+          'fill',
+        ])
+          need(one[name] === two[name], `${label}: ${name} が違う`)
+        const intervals = (animation) =>
+          JSON.stringify(
+            animation.effect.getKeyframes().map(({ offset, easing }) => [offset, easing]),
+          )
+        need(intervals(a) === intervals(b), `${label}: keyframe の区間/easing が違う`)
+      }
+      let checked = 0
+      try {
+        for (const at of exactClock ? [null] : [0, 4275, 15325]) {
+          if (at !== null)
+            for (const { animation } of saved) {
+              animation.pause()
+              animation.currentTime = at
+            }
+          for (const selector of ['.orbit-flows', '.stardust', '.orbit-bodies']) {
+            const layers = [...document.querySelectorAll(selector)]
+            need(layers.length === 2, `${selector}: 奥/手前の2層でない`)
+            const child = selector === '.orbit-flows' ? '.orbit-flow' : '.orbit-spin'
+            const far = [...layers[0].querySelectorAll(child)]
+            const near = [...layers[1].querySelectorAll(child)]
+            need(far.length > 0 && far.length === near.length, `${selector}: 奥/手前の要素数が違う`)
+            far.forEach((element, index) => {
+              compare(element, near[index], `${selector} ${index}`)
+              need(
+                getComputedStyle(element).transform === getComputedStyle(near[index]).transform,
+                `${selector} ${index}: 奥/手前の位置が違う`,
+              )
+              checked += 1
+              if (selector === '.orbit-flows') {
+                const tail = element.querySelector('.orbit-flow__tail')
+                const other = near[index].querySelector('.orbit-flow__tail')
+                need(tail && other, 'Flow: 尾がない')
+                compare(element, tail, 'Flow: 星/尾')
+                compare(tail, other, 'Flow: 奥/手前の尾')
+                need(
+                  getComputedStyle(tail).transform === getComputedStyle(other).transform,
+                  'Flow: 奥/手前の尾の姿勢が違う',
+                )
+              }
+            })
+          }
+          for (const unspin of document.querySelectorAll('.orbit-bodies .orbit-unspin')) {
+            const spin = unspin.closest('.orbit-spin')
+            need(spin, '天体: 回転の親がない')
+            compare(spin, unspin, '天体: 回転/打ち消し')
+            const product = new DOMMatrix(getComputedStyle(spin).transform).multiply(
+              new DOMMatrix(getComputedStyle(unspin).transform),
+            )
+            need(
+              Math.abs(product.a - 1) < 0.00002 &&
+                Math.abs(product.d - 1) < 0.00002 &&
+                Math.abs(product.b) < 0.00002 &&
+                Math.abs(product.c) < 0.00002,
+              '天体: 回転が打ち消されていない',
+            )
+            checked += 1
+          }
         }
-      })
-    }
-    for (const unspin of document.querySelectorAll('.orbit-bodies .orbit-unspin')) {
-      const spin = unspin.closest('.orbit-spin')
-      need(spin, '天体: 回転の親がない')
-      compare(spin, unspin, '天体: 回転/打ち消し')
-      const product = new DOMMatrix(getComputedStyle(spin).transform).multiply(
-        new DOMMatrix(getComputedStyle(unspin).transform),
-      )
-      need(
-        Math.abs(product.a - 1) < 0.00002 &&
-          Math.abs(product.d - 1) < 0.00002 &&
-          Math.abs(product.b) < 0.00002 &&
-          Math.abs(product.c) < 0.00002,
-        '天体: 回転が打ち消されていない',
-      )
-      checked += 1
-    }
-    return checked
-  })
+        return exactClock ? checked : { checked, maxStartSkew }
+      } finally {
+        for (const { animation, startTime, currentTime, playState } of saved) {
+          if (playState === 'running') {
+            animation.play()
+            animation.startTime = startTime
+          } else {
+            animation.currentTime = currentTime
+          }
+        }
+      }
+    },
+    { exactClock, clockEpsilon: CLOCK_EPSILON },
+  )
 }
 
 async function blockedInline(page, name) {
@@ -210,25 +298,34 @@ async function normal(browser, base, screen) {
     const content = await readable(page, screen)
     const animations = await page.evaluate(perpetualCount)
     assert.ok(animations > 0, `${screen.name}: 図の継続 animation がない`)
-    const clock = await page.evaluate((targets) => {
-      const nodes = [...document.querySelectorAll(targets)]
-      const starts = []
-      for (const node of nodes) {
-        const animations = node
-          .getAnimations()
-          .filter(
-            (animation) =>
-              animation instanceof CSSAnimation &&
-              animation.effect.getTiming().iterations === Infinity,
+    const clock = await page.evaluate(
+      ({ targets, clockEpsilon }) => {
+        const nodes = [...document.querySelectorAll(targets)]
+        const starts = []
+        for (const node of nodes) {
+          const animations = node
+            .getAnimations()
+            .filter(
+              (animation) =>
+                animation instanceof CSSAnimation &&
+                animation.effect.getTiming().iterations === Infinity,
+            )
+          if (!animations.length)
+            throw new Error(`${node.className.baseVal ?? node.className}: 開始済みの動きがない`)
+          starts.push(...animations.map((animation) => animation.startTime))
+        }
+        if (
+          starts.some(
+            (start) => !Number.isFinite(start) || Math.abs(start - starts[0]) > clockEpsilon,
           )
-        if (!animations.length)
-          throw new Error(`${node.className.baseVal ?? node.className}: 開始済みの動きがない`)
-        starts.push(...animations.map((animation) => animation.startTime))
-      }
-      if (starts.some((start) => !Number.isFinite(start) || start !== starts[0]))
-        throw new Error('継続 animation の startTime がそろっていない')
-      return { start: starts[0], count: starts.length, ready: nodes.length }
-    }, TARGETS)
+        )
+          throw new Error(
+            `継続 animation の startTime がそろっていない: ${JSON.stringify([...new Set(starts)])}`,
+          )
+        return { start: starts[0], count: starts.length, ready: nodes.length }
+      },
+      { targets: TARGETS, clockEpsilon: CLOCK_EPSILON },
+    )
     const paired = await pairs(page)
     await page.evaluate(() => {
       window.__motionSnapshot = new Map(
@@ -252,7 +349,7 @@ async function normal(browser, base, screen) {
       window.__motionAt = document.timeline.currentTime
     })
     await page.waitForTimeout(2_000)
-    await page.evaluate(() => {
+    await page.evaluate((clockEpsilon) => {
       window.__motionObserver.disconnect()
       if (window.__motionReadyChanges !== 0)
         throw new Error('完了後も ready 属性を更新し続けている')
@@ -264,12 +361,22 @@ async function normal(browser, base, screen) {
       const elapsed = document.timeline.currentTime - window.__motionAt
       for (const animation of current) {
         const old = window.__motionSnapshot.get(animation)
-        if (!old || old.start !== animation.startTime)
+        if (
+          !old ||
+          !Number.isFinite(old.start) ||
+          !Number.isFinite(animation.startTime) ||
+          Math.abs(old.start - animation.startTime) > clockEpsilon
+        )
           throw new Error('完了後に animation が再作成された/時計が変わった')
-        if (Math.abs(animation.currentTime - old.at - elapsed) > 1)
+        if (
+          !Number.isFinite(old.at) ||
+          !Number.isFinite(animation.currentTime) ||
+          !Number.isFinite(elapsed) ||
+          Math.abs(animation.currentTime - old.at - elapsed) > 1
+        )
           throw new Error('完了後に animation の時計が進んでいない')
       }
-    })
+    }, CLOCK_EPSILON)
     assert.deepEqual(errors, [], `${screen.name}: helper の実行時エラー`)
     await blockedInline(page, screen.name)
     console.log(
@@ -326,7 +433,32 @@ async function fallback(browser, base, screen, content, reduced) {
             .map((node) => String(node.className.baseVal ?? node.className)),
         )
       assert.deepEqual(inactive, [], `${screen.name}: JS 無効で開始していない装飾がある`)
-      await pairs(page)
+      const invalid = await page.locator(TARGETS).evaluateAll((nodes) =>
+        nodes.flatMap((node) =>
+          node
+            .getAnimations()
+            .filter(
+              (animation) =>
+                animation instanceof CSSAnimation &&
+                animation.effect.getTiming().iterations === Infinity &&
+                (animation.playState !== 'running' ||
+                  animation.playbackRate !== 1 ||
+                  !Number.isFinite(animation.startTime) ||
+                  !Number.isFinite(animation.currentTime)),
+            )
+            .map((animation) => ({
+              name: animation.animationName,
+              state: animation.playState,
+              start: animation.startTime,
+              current: animation.currentTime,
+            })),
+        ),
+      )
+      assert.deepEqual(invalid, [], `${screen.name}: JS 無効で動作の時計が無効/止まっている`)
+      const paired = await pairs(page, false)
+      console.log(
+        `  ${screen.name}/JS 無効: CSS 周期・delay・easing、検査用3時刻の幾何${paired.checked}対。自然の開始差最大${paired.maxStartSkew.toFixed(3)}ms`,
+      )
     }
     await page.emulateMedia({ media: 'print' })
     assert.equal(
