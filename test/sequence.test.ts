@@ -25,7 +25,7 @@ const PAGES: Page[] = [
 ]
 
 describe('目次', () => {
-  it('名前のあるページを並びの順に1行ずつ。名前の無いページ（Hero・ひとこと）は出さない', () => {
+  it('名前のあるページを並びの順に1行ずつ。ロゴで戻れる入口は出さない', () => {
     expect(tableOfContents(PAGES, null).map((link) => [link.label, link.href])).toEqual([
       ['Projects', '/projects'],
       ['Profile', '/members/okazaki'],

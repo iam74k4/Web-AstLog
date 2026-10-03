@@ -92,7 +92,15 @@ export function parseLines(text: string): string[][] {
 const CONTROL = /[\u0000-\u001f\u007f]/
 
 export function isSafeUrl(url: string | undefined | null): url is string {
-  return !!url && /^(https?:\/\/|mailto:|\/(?![/\\]))/.test(url) && !CONTROL.test(url)
+  if (!url || !/^(https?:\/\/|mailto:|\/(?![/\\]))/.test(url) || CONTROL.test(url)) return false
+  if (url.startsWith('/')) return true
+  // 作品の欄は相対 URL も受けるため type=text。https:// だけのような、行き先の無い入力もここで止める。
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'mailto:' || parsed.hostname !== ''
+  } catch {
+    return false
+  }
 }
 
 /*

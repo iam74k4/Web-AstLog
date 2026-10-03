@@ -3,6 +3,7 @@ import {
   type Db,
   listPublishedItemKeys,
   listPublishedItems,
+  oldestPublishedItemYear,
 } from '../../db/queries'
 import type * as schema from '../../db/schema'
 import { type ItemFilter, type KindCounts, totalOf } from '../../domain'
@@ -31,8 +32,8 @@ import { pageTitle, siteTitle } from './meta'
 */
 
 /*
-  ブロック1つのページ。目次に載らないページ（Hero・ひとこと）も並びには入る
-  （URL を持ち、sitemap に載る）。
+  ブロック1つのページ。独立ページは見出しの有無に関わらず目次に載せる。
+  先頭の Hero への行き先はロゴが持つ。
 */
 export type BlockPage = {
   kind: 'block'
@@ -100,7 +101,7 @@ const pageQuery = (slug: string, filter: ItemFilter): string =>
 
 /*
   いま出すページの行を引く。一覧（Projects）は絞り込みを効かせて、入口は件数の帯の
-  いちばん古い年（Since）のために公開中の全件を（入口に絞り込みは効かない）。ほかの
+  いちばん古い年（Since）だけを集約する（入口に絞り込みは効かない）。ほかの
   ページでは1件も引かない——そのページに作品は出ない。
 
   絞り込んだ一覧は、行の番号のために公開中の並び（id）も引く。番号は絞り込む前の並びでの
@@ -111,8 +112,8 @@ export async function pageRows(
   page: BlockPage,
   filter: ItemFilter,
   memberId: number | null,
-): Promise<Pick<ItemListData, 'rows' | 'numbers'>> {
-  if (page.block.type === 'hero') return { rows: await listPublishedItems(db) }
+): Promise<Pick<ItemListData, 'rows' | 'numbers' | 'since'>> {
+  if (page.block.type === 'hero') return { rows: [], since: await oldestPublishedItemYear(db) }
   if (!filterApplies(page.block.type)) return { rows: [] }
   const scope = scopeOf(filter, memberId)
   if (!scope.kind && !scope.memberId) return { rows: await listPublishedItems(db) }
@@ -188,8 +189,8 @@ export const sitePageLinks = (
     const query = pageQuery(page.slug, filter)
     return {
       key: page.slug,
-      // 目次に並べない節（見出しを空けたメモ）は名前を持っていても目次に出さない
-      nav: page.toc ? page.nav : null,
+      // 全体ページの見出し一覧（toc）とは別に、すべての独立ページへ案内する
+      nav: position === 0 && page.block.type === 'hero' ? null : page.nav,
       href: position === 0 ? `/${query}` : `/${page.slug}${query}`,
       canonical: position === 0 ? '/' : `/${page.slug}`,
       title: page.title === null ? siteTitle(solo) : pageTitle(page.title),

@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:test'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { publishedItemsQuery } from '../src/db/queries'
+import { oldestPublishedItemYear, publishedItemsQuery } from '../src/db/queries'
+import * as schema from '../src/db/schema'
 import { db, resetDb, seedMember } from './helpers'
 
 beforeEach(resetDb)
@@ -56,6 +57,43 @@ async function explain(query: ReturnType<typeof publishedItemsQuery>) {
     .all<Plan>()
   return { plan: plan.results.map((row) => row.detail) }
 }
+
+describe('入口の年', () => {
+  it('0件と、公開中の作品の年が全部分からないときは null', async () => {
+    expect(await oldestPublishedItemYear(db())).toBeNull()
+    await db()
+      .insert(schema.items)
+      .values([
+        { type: 'app', title: '年なし', year: '', published: 1 },
+        { type: 'work', title: '和暦', year: '令和6', published: 1 },
+        { type: 'app', title: '全角のままの年', year: '２０２０', published: 1 },
+        { type: 'work', title: '下書き', year: '1990', published: 0 },
+      ])
+    expect(await oldestPublishedItemYear(db())).toBeNull()
+  })
+
+  it('区分をまたいだ公開中の最小年を返し、下書きと不明な年は除く', async () => {
+    await db()
+      .insert(schema.items)
+      .values([
+        { type: 'app', title: '新しい', year: '2026', published: 1 },
+        { type: 'work', title: '古い', year: '2010 — 現在', published: 1 },
+        { type: 'app', title: '年なし', year: '', published: 1 },
+        { type: 'work', title: '下書き', year: '1990', published: 0 },
+      ])
+    expect(await oldestPublishedItemYear(db())).toBe(2010)
+  })
+
+  it('年の先頭が 0000 なら 0 を保つ（null に倒さない）', async () => {
+    await db()
+      .insert(schema.items)
+      .values([
+        { type: 'app', title: '年0', year: '0000', published: 1 },
+        { type: 'work', title: '新しい', year: '2026', published: 1 },
+      ])
+    expect(await oldestPublishedItemYear(db())).toBe(0)
+  })
+})
 
 describe('索引', () => {
   it('Projects の一覧は、並べ直さずに索引の順で読む。子も作品ごとに索引で引く', async () => {

@@ -24,7 +24,7 @@
 */
 export type Page = {
   key: string
-  // 目次に出す名前。null なら目次に出さない（Hero・ひとこと・見出しを空けたメモ）
+  // 目次に出す名前。null はロゴで戻れる先頭の Hero
   nav: string | null
   // このページの URL。絞り込み（?kind= / ?member=）はここに含める
   href: string

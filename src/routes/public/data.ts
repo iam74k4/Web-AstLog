@@ -74,8 +74,8 @@ export const bandOf = (blocks: schema.Block[], counts: KindCounts, query = ''): 
 
   total は絞り込みを外したときの件数で、節を出すかどうかを決める
   （src/blocks.ts の blockShown）。行は絞り込んだあとの全件（Projects のページと
-  全体ページ）と、入口では件数の帯のいちばん古い年（Since）のための公開中の全件。ほかの
-  ページを描くときは空——作品の行は、それを描くページでだけ引く（site.ts の pageRows）。
+  全体ページ）。ほかのページを描くときは空——作品の行は、それを描くページでだけ引く
+  （site.ts の pageRows）。入口は公開中の作品のいちばん古い年（Since）だけを集約する。
 
   numbers は絞り込んだ一覧の行の番号（作品の id → 絞り込む前の並びでの位置。1 から）。
   番号は作品ごとに1つで、業務だけに絞っても 03 の作品は 03（絞り込みで番号が入れ替わると、
@@ -86,6 +86,7 @@ export type ItemListData = {
   total: number
   rows: ItemView[]
   numbers?: ReadonlyMap<number, number>
+  since?: number | null
 }
 
 // 一覧の行の番号（1 から）。絞り込んだ一覧では、絞り込む前の並びでの位置
@@ -131,7 +132,7 @@ export const siteCountsOf = (data: TopData): SiteCounts => ({
   区分もメンバーもそこに効く（scopeOf）。
 
   目次の行き先に絞り込みを付けるか（site.ts の pageQuery）、DB から絞り込んだ行を
-  引くか（pageRows。入口だけは件数の帯の Since のために絞り込まずに全件を引く）は、どちらも
+  引くか（pageRows。入口だけは件数の帯の Since のために絞り込まずに年を集約する）は、どちらも
   この1本に聞く。効かないページに付けると、中身は1文字も変わらないのに URL だけが
   増える（/contact?member=… のたぐい）。
 */
