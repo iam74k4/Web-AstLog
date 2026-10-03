@@ -27,14 +27,16 @@ import { spawn } from 'node:child_process'
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { ROOT } from './lib/dev-server.mjs'
+import { ROOT, WRANGLER, WRANGLER_ARGS } from './lib/dev-server.mjs'
 import { fixture } from './lib/fit-fixture.mjs'
-
-const WRANGLER = `${ROOT}node_modules/.bin/wrangler`
 
 const run = (args, cwd) =>
   new Promise((resolve, reject) => {
-    const child = spawn(WRANGLER, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(WRANGLER, [...WRANGLER_ARGS, ...args], {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    child.once('error', reject)
     const out = []
     const err = []
     child.stdout.on('data', (chunk) => out.push(String(chunk)))
@@ -155,6 +157,6 @@ try {
     )
   }
 } finally {
-  await rm(source, { recursive: true, force: true })
-  await rm(target, { recursive: true, force: true })
+  await rm(source, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 })
+  await rm(target, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 })
 }

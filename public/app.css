@@ -255,6 +255,7 @@
     付ける」）。字は星雲の上に乗せない（星空の覆いが字の後ろで消す）。下限は
     npm run check:contrast が測る
   */
+  --nebula-art: url('/assets/nebula-iris.webp?v=c5b0f3ae');
   --nebula-light: 0.3;
   --nebula-cloud: 0.95;
   --nebula-veil: 0.85;
@@ -346,7 +347,9 @@
     減らす設定では全部止まる）
   */
   --drift-dur: 40s;
+  --drift-ticks: 400;
   --breathe-dur: 4s;
+  --breathe-ticks: 40;
   --breathe-low: 0.82;
   /*
     軌道を流れる星（components.tsx の Motion）。後ろに引く尾の、星の側の濃さ（--flow-trail。
@@ -1290,9 +1293,9 @@ body[data-site] > main {
   NEBULA と同じ（test/theme.test.ts が突き合わせる）。はみ出したぶんは星空（.cosmos）が切る。
   位置は余白（margin）で引く——translate は漂う動きが使う（「動き続ける」）。
 
-  色は塊の役ごとに使う場所で敷く（:root で混ぜない。[data-accent] が効かなくなる）——
-  3色は --nebula-a / -b / -c（見た目のプリセットごと）、明るい芯は字の白、塵は地の色。
-  4枚の濃さは :root の --nebula-*。
+  4層の模様は生成時にだけフィルタを掛けて透過 WebP に焼く（scripts/nebula/render.mjs）。
+  色と濃さは :root の --nebula-* が生成入力。配色は [data-accent] が版つきの
+  --nebula-art を選ぶ。瞬く星と同じ描画に、大きなノイズのフィルタを持たせない。
 */
 .cosmos__nebula {
   --nebula-w: calc(var(--cosmos-fig-w) * 3.53);
@@ -1303,43 +1306,8 @@ body[data-site] > main {
   aspect-ratio: 3600 / 2000;
   margin-left: calc(var(--nebula-w) / -2);
   margin-top: calc(var(--nebula-w) / -3.6);
-}
-
-.nebula__a {
-  stop-color: var(--nebula-a);
-}
-
-.nebula__b {
-  stop-color: var(--nebula-b);
-}
-
-.nebula__c {
-  stop-color: var(--nebula-c);
-}
-
-.nebula__ink {
-  stop-color: var(--ink);
-}
-
-stop.nebula__dust {
-  stop-color: var(--bg);
-}
-
-.nebula__light {
-  opacity: var(--nebula-light);
-}
-
-.nebula__cloud {
-  opacity: var(--nebula-cloud);
-}
-
-.nebula__veil {
-  opacity: var(--nebula-veil);
-}
-
-/* 塵の帯（use の要素）。坂の色（stop の .nebula__dust）とは要素で分ける */
-use.nebula__dust {
-  opacity: var(--nebula-dust);
+  background-image: var(--nebula-art);
+  background-size: 100% 100%;
 }
 
 /*
@@ -1732,10 +1700,10 @@ use.nebula__dust {
     手前へ回るほど大きい（orbit-sway。0 から 1 の keyframes を、軌道ごとの大きさの揺れを
     書いた linear() で送る——量は keyframes ではなく timing が持つ）
   - 軌道に沿って星が流れる。輝く星が、星屑と天体より速く、軌道の楕円の枠の中を回る（orbit-swirl
-    を 1/60 秒の刻みで。周期は軌道ごとの --dur）。形は回さない（orbit-unswirl）
-  - 光の粒が渦を巻いてブラックホールへ吸い込まれ、黒い円の縁で光に溶ける（orbit-grain-swirl で
-    1周回り、その中で orbit-grain-fall が外から内へ寄せる。落ちるほど速い曲線を keyframes の
-    10 の区間に焼き、区間ごとに 1/60 秒の刻みで進める）
+    を 1/20 秒の刻みで。周期は軌道ごとの --dur）。形は回さない（orbit-unswirl）
+  - 光の粒が渦を巻いてブラックホールへ吸い込まれ、黒い円の縁で光に溶ける（orbit-grain-fall で
+    投影した螺旋の道を進む。落ちるほど速い曲線を keyframes の
+    10 の区間に焼き、区間ごとに 1/20 秒の刻みで進める）
   - ブラックホールの光が明るさを沈めては戻す（orbit-breathe。光の絵の不透明度だけを変え、
     下に敷いた影の黒い円は動かさない——絵の明るさを filter で落とすと、白い光が灰色に
     くすんだ）
@@ -1781,101 +1749,58 @@ use.nebula__dust {
 }
 
 /*
-  吸い込まれる粒。落ちるほど速く回り、速く寄る曲線（cubic-bezier(0.5, 0, 0.85, 0.45)）を
-  10% ごとの区間に焼いてある——曲線を timing に置くと steps() と並べられず、粒の層を毎コマ
-  描き直すことになる（刻むのは「動き続ける」の .orbit-grain）。粒は止まった姿を持たない
-  （動かないときは層ごと隠す）ので、出だしと終わりの両方を書く
+  吸い込まれる粒。投影した螺旋（orbits.ts の dustPath）の弧長を進む。以前の回転と半径の
+  曲線に近い加速を、10% ごとの共通の距離で近似する。steps() と同じ keyframes で明るさも
+  変え、動く要素は粒ごとに1つ。粒は止まった姿を持たないので、動かないときは層ごと隠す
 */
-@keyframes orbit-grain-swirl {
-  10% {
-    transform: rotate(2.2deg);
-  }
-
-  20% {
-    transform: rotate(9deg);
-  }
-
-  30% {
-    transform: rotate(20.9deg);
-  }
-
-  40% {
-    transform: rotate(38.5deg);
-  }
-
-  50% {
-    transform: rotate(62.6deg);
-  }
-
-  60% {
-    transform: rotate(94deg);
-  }
-
-  70% {
-    transform: rotate(134.6deg);
-  }
-
-  80% {
-    transform: rotate(187.2deg);
-  }
-
-  90% {
-    transform: rotate(257.4deg);
-  }
-
-  to {
-    transform: rotate(1turn);
-  }
-}
-
 @keyframes orbit-grain-fall {
   from {
-    transform: translate(1px, 0px);
+    offset-distance: 0%;
     opacity: 0;
   }
 
   10% {
-    transform: translate(0.994px, 0px);
+    offset-distance: 1%;
     opacity: 0.34;
   }
 
   20% {
-    transform: translate(0.975px, 0px);
+    offset-distance: 4%;
     opacity: 1;
   }
 
   30% {
-    transform: translate(0.942px, 0px);
+    offset-distance: 9.2%;
   }
 
   40% {
-    transform: translate(0.893px, 0px);
+    offset-distance: 16.8%;
   }
 
   50% {
-    transform: translate(0.826px, 0px);
+    offset-distance: 26.6%;
   }
 
   60% {
-    transform: translate(0.739px, 0px);
+    offset-distance: 38.5%;
   }
 
   70% {
-    transform: translate(0.626px, 0px);
+    offset-distance: 52.4%;
   }
 
   80% {
-    transform: translate(0.48px, 0px);
+    offset-distance: 67.8%;
     opacity: 1;
   }
 
   90% {
-    transform: translate(0.285px, 0px);
+    offset-distance: 84.4%;
     opacity: 0.83;
   }
 
   to {
-    transform: translate(0px, 0px);
+    offset-distance: 100%;
     opacity: 0;
   }
 }
@@ -1945,9 +1870,26 @@ use.nebula__dust {
 .orbit-grain__dot {
   fill: none;
   stroke: var(--ink);
+  stroke-width: var(--grain-w);
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
+  offset-anchor: 0 0;
+  offset-rotate: 0deg;
   opacity: 0;
+}
+
+/* 対応するブラウザでは図の縮尺を割り、非拡大の線による動く層の再描画を避ける。
+   型つきの除算を読めないブラウザも、上の画面pxの線端で粒と光芒を描ける。 */
+@supports (width: calc(1px * (1px / 1px))) {
+  .orbit-flow__glint {
+    stroke-width: calc(var(--orbit-line) * (var(--flow-frame-w) / 100cqi));
+    vector-effect: none;
+  }
+
+  .orbit-grain__dot {
+    stroke-width: calc(var(--grain-w) * (var(--grain-frame-w) / 100cqi));
+    vector-effect: none;
+  }
 }
 
 :is(.orbit-flows, .orbit-dust, .cosmos__meteors) {
@@ -1968,9 +1910,9 @@ use.nebula__dust {
   }
 
   /*
-    毎コマ動くもの（流れる星と吸い込まれる粒）も 1/60 秒の刻みで進める（orbits.ts の
-    MOTION_RATE）。60Hz の画面では毎コマ進み、144Hz の画面でも流れる星と粒の層を描き直すのは
-    1秒に 60 回まで——毎コマ描き直していたころは、144Hz の画面で GPU の仕事が1コマの枠を超えた
+    流れる星と吸い込まれる粒は 1/20 秒の刻みで進める（orbits.ts の MOTION_RATE）。
+    星屑・天体・瞬きと、星雲の漂い・光の揺らぎはその2刻み。更新を同じ格子へそろえ、
+    アクセラレーションを切ったブラウザでも小さな動きのために毎コマ描き直さない
   */
   .orbit-flows :is(.orbit-spin, .orbit-unspin) {
     animation-timing-function: steps(var(--ticks));
@@ -1989,7 +1931,7 @@ use.nebula__dust {
   }
 
   /*
-    星屑は1周を --ticks 回に刻んで進める（1秒に十数回。1回に 1px も進まない）。進まない
+    星屑は1周を --ticks 回に刻んで進める（1秒に10回。ゆっくりした公転）。進まない
     あいだは星屑の層を描き直さない（「入口の軌道図」の .system__stardust）
   */
   .stardust .orbit-spin {
@@ -2031,16 +1973,12 @@ use.nebula__dust {
     animation: orbit-light var(--fill-dur) var(--ease) var(--count-delay) backwards;
   }
 
-  .orbit-grain {
-    animation: orbit-grain-swirl var(--dur) steps(var(--ticks)) var(--delay) infinite;
-  }
-
   .orbit-grain__dot {
     animation: orbit-grain-fall var(--dur) steps(var(--ticks)) var(--delay) infinite;
   }
 
   .hole > .hole__art {
-    animation: orbit-breathe var(--breathe-dur) var(--ease) infinite alternate;
+    animation: orbit-breathe var(--breathe-dur) steps(var(--breathe-ticks)) infinite alternate;
   }
 
   /*
@@ -2048,13 +1986,13 @@ use.nebula__dust {
     （animation は1つの宣言しか効かない。分けて書くと、後ろの宣言が前の動きを消す）
   */
   .cosmos__nebula {
-    animation: orbit-drift var(--drift-dur) ease-in-out infinite alternate;
+    animation: orbit-drift var(--drift-dur) steps(var(--drift-ticks)) infinite alternate;
   }
 
   .hero .cosmos__nebula {
     animation:
       orbit-condense var(--condense-dur) var(--ease) var(--condense-delay) backwards,
-      orbit-drift var(--drift-dur) ease-in-out infinite alternate;
+      orbit-drift var(--drift-dur) steps(var(--drift-ticks)) infinite alternate;
   }
 
   /*
@@ -3688,6 +3626,7 @@ use.nebula__dust {
   モノクロでも星雲だけは青紫と桃と空色（持ち主の「星雲だけ色を付ける」）。
 */
 [data-accent='mono'] {
+  --nebula-art: url('/assets/nebula-iris.webp?v=c5b0f3ae');
   --accent: var(--mono);
   --accent-soft: var(--mono-soft);
   --nebula-a: var(--iris);
@@ -3696,6 +3635,7 @@ use.nebula__dust {
 }
 
 [data-accent='iris'] {
+  --nebula-art: url('/assets/nebula-iris.webp?v=c5b0f3ae');
   --accent: var(--iris);
   --accent-soft: var(--iris-soft);
   --nebula-a: var(--iris);
@@ -3704,6 +3644,7 @@ use.nebula__dust {
 }
 
 [data-accent='violet'] {
+  --nebula-art: url('/assets/nebula-violet.webp?v=65fc83e2');
   --accent: var(--violet);
   --accent-soft: var(--violet-soft);
   --nebula-a: var(--violet);
@@ -3712,6 +3653,7 @@ use.nebula__dust {
 }
 
 [data-accent='ember'] {
+  --nebula-art: url('/assets/nebula-ember.webp?v=33228880');
   --accent: var(--ember);
   --accent-soft: var(--ember-soft);
   --nebula-a: var(--ember);
@@ -3720,6 +3662,7 @@ use.nebula__dust {
 }
 
 [data-accent='mint'] {
+  --nebula-art: url('/assets/nebula-mint.webp?v=96d31dea');
   --accent: var(--mint);
   --accent-soft: var(--mint-soft);
   --nebula-a: var(--mint);
@@ -3728,6 +3671,7 @@ use.nebula__dust {
 }
 
 [data-accent='sky'] {
+  --nebula-art: url('/assets/nebula-sky.webp?v=f1c8c8b2');
   --accent: var(--sky);
   --accent-soft: var(--sky-soft);
   --nebula-a: var(--sky);
@@ -3736,6 +3680,7 @@ use.nebula__dust {
 }
 
 [data-accent='rose'] {
+  --nebula-art: url('/assets/nebula-rose.webp?v=afc4da75');
   --accent: var(--rose);
   --accent-soft: var(--rose-soft);
   --nebula-a: var(--rose);

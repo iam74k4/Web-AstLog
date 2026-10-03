@@ -572,6 +572,27 @@ describe('動き続けるもの', () => {
       expect(grain.r0).toBeGreaterThan(grain.r1)
       expect(grain.delay).toBeLessThanOrEqual(0)
       expect(Math.abs(grain.delay)).toBeLessThanOrEqual(grain.dur)
+      // 描画側へ渡す道は64区間。始まり・半周の節点・落ち切る所が以前の写しと一致する
+      const points = [...grain.d.matchAll(/[ML](-?[\d.]+) (-?[\d.]+)/g)].map((match) => ({
+        x: Number(match[1]),
+        y: Number(match[2]),
+      }))
+      expect(points).toHaveLength(65)
+      expect(grain.d.length).toBeLessThan(2048)
+      expect(grain.d).not.toContain('Z')
+      const start = apply(`${map.plane} rotate(${grain.a})`, { x: grain.r0, y: 0 })
+      const middle = apply(`${map.plane} rotate(${grain.a + 62.6})`, {
+        x: grain.r1 + (Math.round((grain.r0 - grain.r1) * 10) / 10) * 0.826,
+        y: 0,
+      })
+      for (const [i, expected] of [
+        [0, start],
+        [32, middle],
+        [64, end],
+      ] as const) {
+        expect(points[i]?.x).toBeCloseTo(expected.x, 1)
+        expect(points[i]?.y).toBeCloseTo(expected.y, 1)
+      }
     }
     /*
       面の潰しと傾きは軌道と同じ（粒は軌道と同じ面を落ちる）。透視は SVG の変換で書けないので、
@@ -658,7 +679,7 @@ describe('動き続けるもの', () => {
       })
       for (const grain of map.dust) {
         // 粒は 10 の区間のどれも 1/MOTION_RATE 秒の倍数。遅れも格子の上
-        expect(grain.ticks).toBe((grain.dur * MOTION_RATE) / 10)
+        expect(grain.ticks).toBeCloseTo((grain.dur * MOTION_RATE) / 10, 10)
         expect(onGrid(grain.delay, 1000 / MOTION_RATE)).toBe(true)
       }
     }

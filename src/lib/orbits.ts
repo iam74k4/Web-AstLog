@@ -116,6 +116,8 @@ export type OrbitDust = {
   a: number
   r0: number
   r1: number
+  // 軌道面から枠へ写した、1周して落ちる螺旋（CSS offset-path）
+  d: string
   dur: number
   delay: number
   ticks: number
@@ -127,7 +129,7 @@ export type OrbitMap = {
   height: number
   orbits: OrbitPath[]
   bodies: OrbitBody[]
-  // 軌道面を枠へ写す変換（焦点へ動かし、傾け、潰す。SVG の transform 属性）。粒はこの中の点
+  // 軌道面を枠へ写す変換（焦点へ動かし、傾け、潰す）。粒の道もこの写しを先に掛ける
   plane: string
   dust: OrbitDust[]
   // 軌道を流れる星の1周の秒数（orbits と同じ並び。公転より速く、星屑と天体を追い越す）
@@ -264,15 +266,16 @@ const SWAY_STEPS = 36
   ごとにばらけると、層はほぼ毎コマ描き直しになる。動くものを毎コマ描き直していたころは、
   144Hz の画面で GPU の仕事が1コマの枠（約 6.9ms）を超え、ブラウザごと重くなった
 */
-export const TICK = 80
-export const BODY_TICK = 40
+export const TICK = 100
+export const BODY_TICK = 100
 
 /*
   毎コマ動くもの（流れる星と吸い込まれる粒）を1秒に何回進めるか。どれも 1/MOTION_RATE 秒の
-  格子に乗せる（流れる星の周期は整数の秒、粒の周期は 0.5 秒・遅れは 0.05 秒の倍数）。60Hz の
-  画面では毎コマ進み、144Hz の画面でも層を描き直すのは1秒に MOTION_RATE 回まで
+  格子に乗せる（流れる星の周期は整数の秒、粒は10区間のそれぞれを整数刻みとし、遅れも格子に
+  そろえる）。星屑・天体・瞬きの100msはこの格子の2刻みで、更新が別々のコマへ散らばらない。
+  アクセラレーションを切った Edge でも、層を描き直すのは1秒に MOTION_RATE 回まで
 */
-export const MOTION_RATE = 60
+export const MOTION_RATE = 20
 
 /*
   業務の天体の輪（OrbitMap の ring）。横の半径はいちばん内側の軌道の長半径に対する割合で、
@@ -525,6 +528,39 @@ function fitScale(frame: OrbitFrame, n: number): number {
 }
 
 /*
+  粒の螺旋を枠の座標へ先に写す。回転・半径移動・面の潰しを SVG の親子で毎コマ計算せず、
+  1つの点がこの道を進む。角度と半径は以前の10%ごとの曲線で、64区間の折れ線に焼く。
+  offset-distance は弧長なので、進む速さは app.css の共通の段で近似する。
+*/
+const dustPath = (
+  grain: Pick<OrbitDust, 'a' | 'r0' | 'r1'>,
+  frame: OrbitFrame,
+  sx: number,
+  sy: number,
+) => {
+  const angles = [0, 2.2, 9, 20.9, 38.5, 62.6, 94, 134.6, 187.2, 257.4, 360]
+  const radii = [1, 0.994, 0.975, 0.942, 0.893, 0.826, 0.739, 0.626, 0.48, 0.285, 0]
+  const span = round(grain.r0 - grain.r1)
+  const turn = rad(TILT)
+  return Array.from({ length: 65 }, (_, i) => {
+    const progress = (i / 64) * 10
+    const section = Math.min(9, Math.floor(progress))
+    const part = progress - section
+    const angle = rad(
+      grain.a +
+        (angles[section] ?? 0) +
+        ((angles[section + 1] ?? 0) - (angles[section] ?? 0)) * part,
+    )
+    const radius =
+      grain.r1 +
+      span * ((radii[section] ?? 0) + ((radii[section + 1] ?? 0) - (radii[section] ?? 0)) * part)
+    const x = sx * radius * Math.cos(angle)
+    const y = sy * radius * Math.sin(angle)
+    return `${i ? 'L' : 'M'}${round(frame.focus.x + x * Math.cos(turn) - y * Math.sin(turn))} ${round(frame.focus.y + x * Math.sin(turn) + y * Math.cos(turn))}`
+  }).join('')
+}
+
+/*
   件数から軌道図を組む。作品が0件なら軌道も天体も無い（ブラックホールだけが残る）。
 
   j 番目の天体は (j mod 本数) 本目の軌道に乗り、画面の上の軌道の長さで黄金角ずつ回した
@@ -709,17 +745,19 @@ export function orbitMap(counts: KindCounts, frame: OrbitFrame): OrbitMap {
     const r1 = round(edge * (1 + random() * 0.1))
     const from = Math.max(inner, r1 * 1.3)
     // 周期と遅れは MOTION_RATE の格子に乗せる（10 等分の1区間が格子の倍数になるように）
-    const dur = Math.round((6 + random() * 6) * 2) / 2
-    return {
+    const ticks = Math.round(((6 + random() * 6) * MOTION_RATE) / 10)
+    const dur = (ticks * 10) / MOTION_RATE
+    const grain = {
       a,
       r0: round(from + random() * Math.max(0, outer - from)),
       r1,
       dur,
-      delay: -Math.round(random() * dur * 20) / 20,
-      ticks: Math.round((dur * MOTION_RATE) / 10),
+      delay: -Math.round(random() * dur * MOTION_RATE) / MOTION_RATE,
+      ticks,
       o: Math.round((0.35 + random() * 0.55) * 100) / 100,
       w: round(1.2 + random() * 1.2),
     }
+    return { ...grain, d: dustPath(grain, frame, round3(scale), round3(scale * SQUASH)) }
   })
 
   // 奥と手前の半面。焦点を通る交線（面の x 軸を斜めから見た向き）と、その奥の向き
@@ -830,7 +868,8 @@ export function orbitMap(counts: KindCounts, frame: OrbitFrame): OrbitMap {
   画面に敷き詰めていたころは、大理石の壁紙に見え、ブラックホールが雲の真ん中に見えなかった。
 
   雲は楕円の塊（lobes）を放射の坂で塗ったもので、質感（綿のような雲・渦に流れる筋・
-  暗い塵の帯）は描く側の SVG のフィルタが乱数の模様で付ける。ここが決めるのは塊の
+  暗い塵の帯）は scripts/nebula/render.mjs の SVG フィルタで付け、透過 WebP に焼く。
+  ブラウザは模様を計算せず、版つきの絵を箱ごと漂わせる。ここが決めるのは塊の
   置き場所・大きさ・向き・濃さ・色の役だけ。模様の大きさは箱の単位で決まるので、外の雲も
   芯と同じ肌理になり、筋は塊と一緒に先ほど淡くなる。
 

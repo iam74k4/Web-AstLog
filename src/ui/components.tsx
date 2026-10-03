@@ -23,8 +23,6 @@ import {
   cosmosMap,
   HERO_FRAME,
   MOTION_RATE,
-  type NebulaMap,
-  nebulaMap,
   type OrbitFrame,
   type OrbitMap,
   orbitMap,
@@ -731,7 +729,7 @@ const Flows = ({ map, id, clip }: { map: OrbitMap; id: string; clip: string }) =
   const core = tenth(map.ring.rx * FLOW_CORE)
   const arm = tenth(map.ring.rx * FLOW_GLINT)
   return (
-    <g class="orbit-flows" clip-path={clip}>
+    <g class="orbit-flows" clip-path={clip} style={`--flow-frame-w:${map.width}px`}>
       <defs>
         <linearGradient
           id={`${id}-trail`}
@@ -829,32 +827,23 @@ const Motion = ({ map, side, id }: { map: OrbitMap; side: 'far' | 'near'; id: st
 }
 
 /*
-  ブラックホールへ吸い込まれる光の粒（入口と締め。orbits.ts の OrbitDust）。軌道面
-  （plane）の上で、粒ごとの向き（a）に回した所から1周渦を巻いて落ちる。
-
-  動くのは粒ごとに2つ——回る子（orbit-grain。1周）と、その中で外から内へ寄る点
-  （orbit-grain__dot。明るさの出入りも）。落ちる幅は動かない親の transform（r1 へ寄せて
-  r0 − r1 倍に伸ばす）が持ち、点は keyframes の中で 1 から 0 へ動くだけ。
+  ブラックホールへ吸い込まれる光の粒（入口と締め。orbits.ts の OrbitDust）。枠の座標へ
+  写した螺旋を offset-path に渡し、小さい点1つの位置と明るさを一緒に動かす。
+  親子の回転・移動・潰しを持たず、太さは図の幅で補正する（古いブラウザは非拡大の線端）。
 
   奥と手前に分けず、ブラックホールの後ろの層にだけ置く（Motion の side が far のとき）——
   黒い円の上を横切る粒は、ロゴと同じ円を汚す。光の縁に掛かる所で、粒は光に溶けて見えなくなる
 */
 const Dust = ({ map }: { map: OrbitMap }) => (
-  <g class="orbit-dust" transform={map.plane}>
+  <g class="orbit-dust" style={`--grain-frame-w:${map.width}px`}>
     {map.dust.map((grain, i) => (
-      <g key={i} transform={`rotate(${grain.a})`}>
-        <g
-          class="orbit-grain"
-          style={`--dur:${grain.dur}s;--delay:${grain.delay}s;--ticks:${grain.ticks}`}
-        >
-          <g
-            transform={`translate(${grain.r1} 0) scale(${Math.round((grain.r0 - grain.r1) * 10) / 10})`}
-            opacity={grain.o}
-          >
-            <path class="orbit-grain__dot" d="M0 0h0" style={`stroke-width:${grain.w}px`} />
-          </g>
-        </g>
-      </g>
+      <path
+        key={i}
+        class="orbit-grain__dot"
+        d="M0 0h0"
+        stroke-opacity={grain.o}
+        style={`offset-path:path('${grain.d}');--grain-w:${grain.w}px;--dur:${grain.dur}s;--delay:${grain.delay}s;--ticks:${grain.ticks}`}
+      />
     ))}
   </g>
 )
@@ -864,8 +853,9 @@ const Dust = ({ map }: { map: OrbitMap }) => (
   入口と締めのページの本文（main）の幅いっぱいに広がる（app.css の .cosmos。main を
   位置の基準にして inset: 0）。持ち主の「もっと壮大に」——軌道図だけが枠の中の絵に見えた。
 
-  - 星（cosmos__stars）。1枚の視野を枠いっぱいに切り取る（preserveAspectRatio slice）。
-    瞬く星は明るさだけが動く。いちばん明るい星には十字の光芒（cosmos__glint。長さは
+  - 星（cosmos__stars）。同じ視野を静止星と瞬く星の2枚に分け、枠いっぱいに切り取る
+    （preserveAspectRatio slice）。瞬きの更新で静止星と光芒を描き直さないため。瞬く星は
+    明るさだけが動く。いちばん明るい星には十字の光芒（cosmos__glint。長さは
     viewBox の単位で、切り取る倍率と一緒に伸び縮みする）。光芒は真ん中から先へ消える坂
     （-glint。十字の箱に合わせた放射の坂）——同じ明るさの細い十字だったころは、照準か
     カーソルの印に見えた
@@ -886,28 +876,29 @@ const Cosmos = ({ map, id, place }: { map: CosmosMap; id: string; place: 'hero' 
   // 図の中の焦点（ブラックホール）の高さ（枠の高さに対する割合）。星雲をそこに置く（app.css）
   const frame = place === 'hero' ? HERO_FRAME : CONTACT_FRAME
   const focus = Math.round((frame.focus.y / frame.height) * 1000) / 1000
+  const dot = (star: CosmosMap['stars'][number]) => (
+    <path
+      key={`${star.x},${star.y}`}
+      class={star.twinkle ? 'cosmos__twinkle' : undefined}
+      d={`M${star.x} ${star.y}h0`}
+      opacity={star.o}
+      style={
+        star.twinkle
+          ? `stroke-width:${star.w}px;--dur:${star.twinkle.dur}s;--delay:${star.twinkle.delay}s;--ticks:${star.twinkle.ticks}`
+          : `stroke-width:${star.w}px`
+      }
+    />
+  )
   return (
     <div class={`cosmos cosmos--${place}`} aria-hidden="true" style={`--cosmos-focus:${focus}`}>
       <svg
-        class="cosmos__stars"
+        class="cosmos__stars cosmos__stars--still"
         viewBox={view}
         preserveAspectRatio="xMidYMid slice"
         aria-hidden="true"
         focusable="false"
       >
-        {map.stars.map((star) => (
-          <path
-            key={`${star.x},${star.y}`}
-            class={star.twinkle ? 'cosmos__twinkle' : undefined}
-            d={`M${star.x} ${star.y}h0`}
-            opacity={star.o}
-            style={
-              star.twinkle
-                ? `stroke-width:${star.w}px;--dur:${star.twinkle.dur}s;--delay:${star.twinkle.delay}s;--ticks:${star.twinkle.ticks}`
-                : `stroke-width:${star.w}px`
-            }
-          />
-        ))}
+        {map.stars.filter((star) => !star.twinkle).map(dot)}
         <defs>
           <radialGradient id={`${id}-glint`}>
             <stop class="cosmos__spark" offset="0" stop-opacity="1" />
@@ -925,7 +916,16 @@ const Cosmos = ({ map, id, place }: { map: CosmosMap; id: string; place: 'hero' 
             />
           ))}
       </svg>
-      <Nebula map={nebulaMap()} id={`${id}-nebula`} />
+      <svg
+        class="cosmos__stars cosmos__stars--twinkle"
+        viewBox={view}
+        preserveAspectRatio="xMidYMid slice"
+        aria-hidden="true"
+        focusable="false"
+      >
+        {map.stars.filter((star) => star.twinkle).map(dot)}
+      </svg>
+      <Nebula />
       <svg
         class="cosmos__meteors"
         viewBox={view}
@@ -958,144 +958,12 @@ const Cosmos = ({ map, id, place }: { map: CosmosMap; id: string; place: 'hero' 
 }
 
 /*
-  星雲（星空 Cosmos の中、ブラックホールのまわり。形は orbits.ts の nebulaMap）。
-
-  雲の塊（楕円を放射の坂で塗ったもの）を4枚重ねる。光る塊の束（defs の glow）を use で
-  3回呼び、2枚目と3枚目にだけ乱数の模様のフィルタを掛ける。4枚目は塵の帯——
-    1. 光（nebula__light）。坂のまま。雲の芯がぼんやり光る
-    2. 雲（nebula__cloud）。fractalNoise で綿のような塊に抜く
-    3. 筋（nebula__veil）。turbulence の尾根（模様が 0 に近い所）を細い筋として残し、低い
-       周波数の模様で押し流して渦にする（feDisplacementMap）
-    4. 塵（nebula__dust）。地の色の塊を、まだらの模様で抜いて明るい雲の上に重ねる——暗い
-       塵の帯が雲を横切る
-  模様の大きさは viewBox の単位で決まるので、どの大きさで置いても同じ雲に見える。乱数の
-  種は決まっていて、読み込むたびに同じ雲になる（写しの HTML も毎回同じ）。
-
-  色は塊ごとの役（tone）で、app.css が敷く——a・b・c は見た目のプリセットごとの3色
-  （--nebula-a / -b / -c。モノクロでも星雲だけは色を持つ）、ink は字の白（明るい芯）、dust は
-  地の色。層ごとの濃さも app.css（--nebula-*）。
-
-  雲は SVG ごと漂う（app.css の「動き続ける」。箱ごと動かすので、中は描き直さない——
-  フィルタを毎コマ掛け直さない）。瞬く星は別の SVG（cosmos__stars）に置く。同じ SVG に
-  置くと、瞬きのたびに雲のフィルタまで掛け直す。
-
-  id はページの中で星雲ごとに変える。坂（-a・-dust …）・塊の束（-lobes-*）・フィルタ（-f-*）は
-  名前の形を分ける——同じ名前が2つあると、url(#…) が先にある別の要素を指して黙って消える
-  （塵の坂と塵の束とフィルタが同じ -dust だったころ、塵の帯は1本も描かれていなかった）。
-  飾りなので読み上げには出さない。
+  星雲。形と4層の模様を scripts/nebula/render.mjs で透過 WebP に焼く。
+  配色は app.css の --nebula-art が選び、登場と漂いはこの箱に掛ける。
+  ブラウザでノイズの SVG フィルタを処理しないので、アクセラレーションを切っても
+  周囲の動きで雲を計算し直さない。飾りなので読み上げには出さない。
 */
-const NEBULA_TONES = ['a', 'b', 'c', 'ink', 'dust'] as const
-
-const Nebula = ({ map, id }: { map: NebulaMap; id: string }) => {
-  const view = `0 0 ${map.width} ${map.height}`
-  // フィルタの範囲は箱そのもの（はみ出す模様を作らない）
-  const region = {
-    x: 0,
-    y: 0,
-    width: map.width,
-    height: map.height,
-    filterUnits: 'userSpaceOnUse',
-    'color-interpolation-filters': 'sRGB',
-  }
-  const ellipse = (lobe: NebulaMap['lobes'][number]) => (
-    <ellipse
-      key={`${lobe.cx},${lobe.cy}`}
-      cx={lobe.cx}
-      cy={lobe.cy}
-      rx={lobe.rx}
-      ry={lobe.ry}
-      transform={`rotate(${lobe.rot} ${lobe.cx} ${lobe.cy})`}
-      fill={`url(#${id}-${lobe.tone})`}
-      opacity={lobe.o}
-    />
-  )
-  return (
-    <svg class="cosmos__nebula" viewBox={view} aria-hidden="true" focusable="false">
-      <defs>
-        {NEBULA_TONES.map((tone) => (
-          <radialGradient key={tone} id={`${id}-${tone}`}>
-            <stop class={`nebula__${tone}`} offset="0" stop-opacity="1" />
-            <stop class={`nebula__${tone}`} offset="0.45" stop-opacity="0.5" />
-            <stop class={`nebula__${tone}`} offset="1" stop-opacity="0" />
-          </radialGradient>
-        ))}
-        <g id={`${id}-lobes-glow`}>
-          {map.lobes.filter((lobe) => lobe.tone !== 'dust').map(ellipse)}
-        </g>
-        <g id={`${id}-lobes-dust`}>
-          {map.lobes.filter((lobe) => lobe.tone === 'dust').map(ellipse)}
-        </g>
-        <filter id={`${id}-f-cloud`} {...region}>
-          <feTurbulence
-            type="fractalNoise"
-            baseFrequency="0.0042 0.0075"
-            numOctaves="5"
-            seed="4"
-            result="noise"
-          />
-          <feColorMatrix
-            in="noise"
-            type="matrix"
-            values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2.1 0 0 0 -0.62"
-            result="mask"
-          />
-          <feComposite in="SourceGraphic" in2="mask" operator="in" />
-        </filter>
-        <filter id={`${id}-f-veil`} {...region}>
-          <feTurbulence
-            type="turbulence"
-            baseFrequency="0.006 0.01"
-            numOctaves="4"
-            seed="9"
-            result="ridge"
-          />
-          <feTurbulence
-            type="fractalNoise"
-            baseFrequency="0.003"
-            numOctaves="2"
-            seed="21"
-            result="warp"
-          />
-          <feDisplacementMap
-            in="ridge"
-            in2="warp"
-            scale="90"
-            xChannelSelector="R"
-            yChannelSelector="G"
-            result="bent"
-          />
-          <feColorMatrix
-            in="bent"
-            type="matrix"
-            values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -4.6 0 0 0 1.05"
-            result="mask"
-          />
-          <feComposite in="SourceGraphic" in2="mask" operator="in" />
-        </filter>
-        <filter id={`${id}-f-dust`} {...region}>
-          <feTurbulence
-            type="fractalNoise"
-            baseFrequency="0.008 0.016"
-            numOctaves="4"
-            seed="33"
-            result="noise"
-          />
-          <feColorMatrix
-            in="noise"
-            type="matrix"
-            values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2.6 0 0 0 -0.9"
-            result="mask"
-          />
-          <feComposite in="SourceGraphic" in2="mask" operator="in" />
-        </filter>
-      </defs>
-      <use class="nebula__light" href={`#${id}-lobes-glow`} />
-      <use class="nebula__cloud" href={`#${id}-lobes-glow`} filter={`url(#${id}-f-cloud)`} />
-      <use class="nebula__veil" href={`#${id}-lobes-glow`} filter={`url(#${id}-f-veil)`} />
-      <use class="nebula__dust" href={`#${id}-lobes-dust`} filter={`url(#${id}-f-dust)`} />
-    </svg>
-  )
-}
+const Nebula = () => <div class="cosmos__nebula" aria-hidden="true"></div>
 
 // 2桁にそろえた番号（01・02 …）。一覧の行の番号と件数の帯で同じ書き方
 const twoDigits = (value: number) => String(value).padStart(2, '0')

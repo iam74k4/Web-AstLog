@@ -202,6 +202,11 @@ Contact はページに出ている誘いの1文（`src/site.ts` の `contactLea
 上の4つは1つずつしか置けない。下の6つはいくつでも置ける。打ち込むブロックの見出しは
 10 字まで（目次の1行の名前。ひとことを除く）。
 
+入口と締めの星雲は、模様を透過 WebP に焼き、ページでは背景の箱ごと動かす。色は6種類
+（mono と iris は共用）。続く動きは50msの格子にそろえ、粒と流れる星は20回/秒、星屑・天体・
+瞬き・星雲の漂い・ブラックホールの光は100ms刻み。動きを減らす設定では完成形のまま止まり、
+印刷では星系と星空を出さない。
+
 目次は、実際に出た節だけを、出た順に1行ずつ載せる（組むのは `src/lib/sequence.ts` の
 `tableOfContents`。先頭の Hero へはロゴで戻る。1人のサイトのプロフィールは「Profile」の1行）。**番号（01〜）は
 振らない**——目次の番号はブロックの並び順でしかない。いま見ているページの行に印
@@ -553,6 +558,7 @@ Worker より先に配られる（`public/`）。
 | --- | --- |
 | `/app.css` | 全画面のスタイル。公開ページ・404 はこれだけを読む（`?v=` は中身の版。配り手は見ない） |
 | `/admin.css` | 管理画面だけの規則。管理画面は `/app.css` のあとにこれを読む |
+| `/assets/nebula-*.webp` | 星雲の透過素材6枚（iris・violet・ember・mint・sky・rose、1800×1000。mono は iris と共用）。`scripts/nebula/render.mjs` が形・色・4層の濃さから焼き、CSS が SHA-256 の頭8桁の版つき URL で読む。1年 immutable |
 | `/assets/…` | favicon（`favicon.svg`・`favicon-32.png`・`apple-touch-icon.png`）、ブラックホールの光の絵（`blackhole.webp`。軌道図の真ん中とロゴの O。版つきの URL で1年 immutable）、ページの外で使う素材（ワードマーク `astlog-wordmark.svg`・GitHub の顔 `astlog-avatar.png`。顔は横から見たブラックホールの絵）、サイトの `og:image`（`avatar.png`。作品のページで画像がある作品は、その作品の画像）、seed の AppMixer の画像（`appmixer-*`。アイコンとスクリーンショット。Mac App Store の掲載と同じ） |
 
 **ここに `robots.txt` や `sitemap.xml` を置かないこと。** どちらも Worker が

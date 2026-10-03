@@ -31,3 +31,23 @@
 # 毎回確かめると、ページを移るたびに O の光が1往復ぶん消えてから灯る。
 /assets/blackhole.webp
   Cache-Control: public, max-age=31536000, immutable
+
+# 星雲の絵は CSS のプリセットが中身の SHA-256 の頭8桁を版として付けて読む。
+# mono と iris は同じ1枚。版の無い素材へ広げず、この6枚だけ長く持たせる。
+/assets/nebula-iris.webp
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/nebula-violet.webp
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/nebula-ember.webp
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/nebula-mint.webp
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/nebula-sky.webp
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/nebula-rose.webp
+  Cache-Control: public, max-age=31536000, immutable

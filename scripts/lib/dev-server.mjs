@@ -20,6 +20,12 @@ import { fileURLToPath } from 'node:url'
 
 export const ROOT = fileURLToPath(new URL('../..', import.meta.url))
 
+// Windows の .bin/wrangler は shell 用の入口なので、Node で CLI 本体を起動する。
+export const WRANGLER =
+  process.platform === 'win32' ? process.execPath : `${ROOT}node_modules/.bin/wrangler`
+export const WRANGLER_ARGS =
+  process.platform === 'win32' ? [`${ROOT}node_modules/wrangler/wrangler-dist/cli.js`] : []
+
 // dev サーバが返事をするまで待つ。起動は初回だけ数秒かかる。
 // gaveUp() が true を返したら（子が先に終わった）、待つのをやめる
 async function waitForServer(base, gaveUp, limitMs = 120_000) {
@@ -47,7 +53,7 @@ async function waitForServer(base, gaveUp, limitMs = 120_000) {
 function spawnServer(port, persistTo) {
   const args = ['dev', '--port', String(port)]
   if (persistTo) args.push('--persist-to', persistTo)
-  const server = spawn(`${ROOT}node_modules/.bin/wrangler`, args, {
+  const server = spawn(WRANGLER, [...WRANGLER_ARGS, ...args], {
     cwd: ROOT,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
@@ -168,10 +174,13 @@ export async function devServer(given, port, persistTo) {
 */
 export async function scratchState(label, sqlTexts) {
   const dir = await mkdtemp(join(tmpdir(), `astlog-${label}-`))
-  const wrangler = `${ROOT}node_modules/.bin/wrangler`
   const run = (args) =>
     new Promise((resolve, reject) => {
-      const child = spawn(wrangler, args, { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] })
+      const child = spawn(WRANGLER, [...WRANGLER_ARGS, ...args], {
+        cwd: ROOT,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+      child.once('error', reject)
       const log = []
       child.stdout.on('data', (chunk) => log.push(String(chunk)))
       child.stderr.on('data', (chunk) => log.push(String(chunk)))
@@ -194,8 +203,12 @@ export async function scratchState(label, sqlTexts) {
       await run(['d1', 'execute', 'astlog', '--local', '--persist-to', dir, `--file=${file}`])
     }
   } catch (error) {
-    await rm(dir, { recursive: true, force: true })
+    await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 })
     throw error
   }
-  return { dir, cleanup: () => rm(dir, { recursive: true, force: true }) }
+  // Windows は dev 終了直後も観測ログのハンドルが閉じるまで少し掛かる。
+  return {
+    dir,
+    cleanup: () => rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 }),
+  }
 }
