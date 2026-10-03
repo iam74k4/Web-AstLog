@@ -720,13 +720,17 @@ const ItemForm = (props: ItemFormData) => {
                     name="linkLabel"
                     value={link.label}
                     placeholder="Repository"
+                    aria-label={`リンク ${index + 1} のラベル`}
                   />
+                  {/* type=url は / で始まるサイト内 URL を送信前に弾く。許可する URL は readLinks が見る */}
                   <input
                     class={bad ? 'input input--error' : 'input'}
-                    type="url"
+                    type="text"
+                    inputmode="url"
                     name="linkUrl"
                     value={link.url}
                     placeholder="https://"
+                    aria-label={`リンク ${index + 1} の URL`}
                   />
                 </div>
               )
@@ -751,6 +755,7 @@ const ItemForm = (props: ItemFormData) => {
                 name="metricValue"
                 value={d.metricValue}
                 placeholder={METRIC_EXAMPLE[props.type].value}
+                aria-label="実績値の値"
               />
               <input
                 class="input"
@@ -758,6 +763,7 @@ const ItemForm = (props: ItemFormData) => {
                 name="metricUnit"
                 value={d.metricUnit}
                 placeholder={METRIC_EXAMPLE[props.type].unit}
+                aria-label="実績値の単位"
               />
               <input
                 class="input"
@@ -765,6 +771,7 @@ const ItemForm = (props: ItemFormData) => {
                 name="metricNote"
                 value={d.metricNote}
                 placeholder={METRIC_EXAMPLE[props.type].note}
+                aria-label="実績値の添え"
               />
             </div>
             {/* 添えは値のあとに続けて読まれる（METRIC_NOTE_HINT を見ること） */}

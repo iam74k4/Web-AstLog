@@ -3600,7 +3600,7 @@ describe('サイトの全ページ', () => {
     }
   })
 
-  it('見出しを空けたメモは、種類の名前（メモ）を読み上げの h1・region の名前に使う。目次には並べない', async () => {
+  it('見出しを空けたメモは、種類の名前（メモ）を読み上げの h1・region と独立ページの目次に使う', async () => {
     await seedEverything()
     const note = await db().query.blocks.findFirst({
       where: (t, { and, eq }) => and(eq(t.type, 'note'), eq(t.title, '')),
@@ -3608,7 +3608,8 @@ describe('サイトの全ページ', () => {
     const html = await okText(`/block-${note?.id}`)
     expect(mainOf(html)).toContain('<h1 class="sr-only">メモ</h1>')
     expect(mainOf(html)).toContain('aria-label="メモ"')
-    expect(tocOf(html)).not.toContain('メモ')
+    expect(tocOf(html)).toContain(`href="/block-${note?.id}" aria-current="page">メモ</a>`)
+    expect(tocOf(await okText('/all'))).not.toContain(`href="#block-${note?.id}"`)
     // 見出しのあるメモは今までどおり目に見える h1 で、目次にも並ぶ
     const titled = await db().query.blocks.findFirst({
       where: (t, { eq }) => eq(t.title, 'あとがき'),

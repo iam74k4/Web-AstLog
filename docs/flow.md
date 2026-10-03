@@ -44,7 +44,7 @@ flowchart LR
     Admin["管理画面（そのページを直す場所）"]
 
     Top -->|"上の帯の目次"| Screen
-    Screen -->|"上の帯の目次（Hero は載らない）"| Screen
+    Screen -->|"上の帯の目次（先頭の Hero へはロゴ）"| Screen
     Screen -->|"上の帯のロゴ"| Top
     Top -->|"一覧で見る →（件数の帯の上）"| Screen
     OldPage -->|"301（同じページへ。query は付けたまま）"| Screen
@@ -92,7 +92,8 @@ flowchart LR
 目次には番号を振らない。目次は `src/lib/sequence.ts` の `tableOfContents` が、サイトの
 ページの並び（`src/routes/public/site.ts` の `sitePageLinks`）から1本で組み、トップも個人
 ページも作品のページも同じところを通る。いまのページの行に印が付く（作品のページは
-Projects、個人ページは Profile か Team）。
+Projects、個人ページは Profile か Team）。先頭の Hero へはロゴで戻り、ほかは見出しの有無に
+関わらず目次から開ける（ひとこと・見出しのないメモも含む）。`/all` は見出しの一覧を目次にする。
 
 絞り込み（区分・メンバー）は**ページを移る**。絞り込みの手はリンクで、押すと絞り込んだ一覧の
 ページへ遷移する。絞り込みは目次の Projects の行き先にも同じ query が付いて、目次から

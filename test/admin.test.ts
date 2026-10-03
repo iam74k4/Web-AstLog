@@ -545,6 +545,37 @@ describe('Items — 本文と画像', () => {
     // 外す画像が無い作品には「画像を外す」を出さない
     expect(html).not.toContain('画像を外す')
   })
+
+  it('リンク欄はサイト内 URL も入力でき、リンクと実績値の各欄の目的が読み上げで分かる', async () => {
+    const signed = await signIn()
+    for (const type of ['app', 'work']) {
+      const html = await (await signed(`/admin/items/new?type=${type}`)).text()
+      const inputs = [...html.matchAll(/<input\b[^>]*>/g)].map((match) => match[0])
+      for (const [name, purpose] of [
+        ['linkLabel', 'のラベル'],
+        ['linkUrl', 'の URL'],
+      ]) {
+        const links = inputs.filter((input) => input.includes(`name="${name}"`))
+        expect(links, type).toHaveLength(3)
+        links.forEach((input, index) => {
+          expect(input, type).toContain(`aria-label="リンク ${index + 1} ${purpose}"`)
+          // type=url では /projects を入れてもブラウザが送信を止める。
+          if (name === 'linkUrl') {
+            expect(input, type).toContain('type="text"')
+            expect(input, type).toContain('inputmode="url"')
+          }
+        })
+      }
+      for (const [name, purpose] of [
+        ['metricValue', '値'],
+        ['metricUnit', '単位'],
+        ['metricNote', '添え'],
+      ]) {
+        const input = inputs.find((input) => input.includes(`name="${name}"`))
+        expect(input, type).toContain(`aria-label="実績値の${purpose}"`)
+      }
+    }
+  })
 })
 
 /*
@@ -1491,6 +1522,7 @@ describe('URL の検査（保存）', () => {
           ['Repository', 'https://example.test/r'],
           ['', ''],
           ['Mail', 'mailto:a@example.test'],
+          ['一覧', '/projects'],
         ]),
       }),
     })
@@ -1499,6 +1531,7 @@ describe('URL の検査（保存）', () => {
     expect(rows.map((row) => [row.label, row.url, row.sortOrder])).toEqual([
       ['Repository', 'https://example.test/r', 0],
       ['Mail', 'mailto:a@example.test', 1],
+      ['一覧', '/projects', 2],
     ])
   })
 

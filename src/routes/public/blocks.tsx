@@ -2,7 +2,6 @@ import type { Child } from 'hono/jsx'
 import { blockLines, blockShown, blockTexts, blockType, itemStory, memberUnits } from '../../blocks'
 import type * as schema from '../../db/schema'
 import { KIND_LABEL } from '../../domain'
-import { yearFrom } from '../../lib/format'
 import { SITE } from '../../site'
 import {
   Contact,
@@ -55,12 +54,11 @@ import {
 export type Rendered = {
   id: string
   slug: string
-  // 節の名前。目次にもこの名前で並ぶ（toc が false なら並ばない）
+  // 独立ページの目次に出す名前。入口だけはロゴがその役目を持つ
   nav: string | null
   /*
-    目次に行を持つか。見出しを空けたメモは、名前を種類の名前（メモ）で持つが、
-    目次には並べない——目次は目に見える見出しの一覧で、ページに「メモ」とは
-    書いていない（上の帯の幅も取らない）
+    全体ページの目次に行を持つか。1つの文書では目に見える見出しだけを並べる。
+    独立ページの目次は、見出しの有無に関わらず行き先を持つ
   */
   toc: boolean
   /*
@@ -151,18 +149,15 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
 
         一覧への1本と件数の帯は、一覧（Projects）のページがあって作品があるときだけ
         （data.ts の bandOf。0件の知らせだけのページへ送らない）。件数の帯のいちばん古い年
-        （Since）は、このページのために引いた公開中の全件（site.ts の pageRows）から。軌道図は
+        （Since）は、公開中の作品の年を DB で集約した値（site.ts の pageRows）から。軌道図は
         件数だけから描く（天体に作品の札は添えない。作品へは「一覧で見る →」から）。
       */
       const statement = solo ? solo.headline || solo.name : SITE.tagline
       const eyebrow = solo ? [solo.role, solo.location].filter(Boolean) : []
-      const years = projects.rows
-        .map((item) => yearFrom(item.year))
-        .filter((year): year is number => year !== null)
       return {
         id,
         slug: id,
-        nav: null,
+        nav: type.label,
         toc: false,
         title: null,
         // 入口はサイトそのもののページ。名乗りと同じ文をそのまま出す
@@ -180,9 +175,7 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
               {band ? <Cta href={band.href}>一覧で見る</Cta> : null}
             </div>
             <OrbitSystem counts={data.counts} />
-            {band ? (
-              <Tally counts={band.counts} since={years.length ? Math.min(...years) : null} />
-            ) : null}
+            {band ? <Tally counts={band.counts} since={projects.since ?? null} /> : null}
           </Hero>
         ),
       }
@@ -363,13 +356,13 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
         ),
       }
 
-    // ここから打ち込むもの。目次に載せるのは見出しを持つものだけ
+    // 打ち込むもの。独立ページには必ず目次の行き先を持たせる
 
     case 'statement':
       return {
         id,
         slug: id,
-        nav: null,
+        nav: type.label,
         toc: false,
         // 名前を持たないページ。題はその一文の頭（入口と同じ題にしない）
         title: excerpt(block.title),
@@ -422,7 +415,7 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
       見出しを空けても、名前は種類の名前（title の控え。「メモ」）で持ち、
       読み上げの h1（HiddenHeading）と region の名前に使う（ページは h1 を
       ちょうど1つ持つ）。目に見える見出しは置かない（書いた人が空けた）ので、
-      目次にも並べない（toc）。<title> は最初の段落の頭（「メモ」だと、見出しの
+      全体ページの目次には並べない（toc）。<title> は最初の段落の頭（「メモ」だと、見出しの
       無いメモどうしが同じ題になる）。
     */
     case 'note': {

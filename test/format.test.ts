@@ -90,8 +90,25 @@ describe('parseLines', () => {
 describe('isSafeUrl', () => {
   it('http(s)・mailto・同じサイトの経路は通す', () => {
     expect(isSafeUrl('https://example.com')).toBe(true)
+    expect(isSafeUrl('http://example.com/path?q=1#part')).toBe(true)
     expect(isSafeUrl('mailto:a@example.com')).toBe(true)
+    expect(isSafeUrl('mailto:a@example.com?subject=Hello&body=Hi')).toBe(true)
+    expect(isSafeUrl('mailto:?subject=Hello')).toBe(true)
+    expect(isSafeUrl('/')).toBe(true)
     expect(isSafeUrl('/members/okazaki')).toBe(true)
+    expect(isSafeUrl('/projects?kind=app#item-appmixer')).toBe(true)
+  })
+
+  it('許可した接頭辞でも、ホストが無い・URL として読めない絶対 URL は通さない', () => {
+    for (const url of [
+      'https://',
+      'https://?q',
+      'http://#part',
+      'https://:443',
+      'https://exa mple.test',
+    ]) {
+      expect(isSafeUrl(url), url).toBe(false)
+    }
   })
 
   it('それ以外は通さない', () => {

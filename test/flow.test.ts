@@ -21,6 +21,66 @@ const bandOf = (html: string) => {
   return from < 0 ? '' : html.slice(from, html.indexOf('</a>', from))
 }
 
+const tocOf = (html: string) => html.split('<nav class="toc"')[1]?.split('</nav>')[0] ?? ''
+
+describe('独立ページの目次', () => {
+  it('ひとことと見出しのないメモにも、どの公開ページからでも行ける', async () => {
+    const member = await seedMember()
+    await seedItem({ memberId: member.id, slug: 'appmixer' })
+    const [statement, note] = await db()
+      .insert(schema.blocks)
+      .values([
+        { type: 'statement', title: 'つくり続ける', published: 1, sortOrder: 20 },
+        { type: 'note', body: '見出しを置かない文章です。', published: 1, sortOrder: 30 },
+      ])
+      .returning()
+    if (!statement || !note) throw new Error('書くブロックが無い')
+    await db()
+      .insert(schema.blocks)
+      .values([
+        { type: 'hero', published: 1, sortOrder: 10 },
+        { type: 'projects', published: 1, sortOrder: 40 },
+        { type: 'contact', published: 1, sortOrder: 50 },
+      ])
+
+    const targets = [
+      { href: `/block-${statement.id}`, label: 'ひとこと' },
+      { href: `/block-${note.id}`, label: 'メモ' },
+    ]
+    for (const path of [
+      '/',
+      ...targets.map(({ href }) => href),
+      '/projects',
+      '/contact',
+      '/apps/item/appmixer',
+      '/members/okazaki',
+    ]) {
+      const toc = tocOf(await okText(path))
+      for (const { href, label } of targets) {
+        expect(toc, path).toContain(`href="${href}"`)
+        expect(toc, path).toContain(`>${label}</a>`)
+      }
+      if (targets.some(({ href }) => href === path)) {
+        expect(toc).toContain(`href="${path}" aria-current="page"`)
+      }
+      // 先頭の Hero へは、どのページからもロゴで戻れる
+      expect(toc).not.toContain('href="/hero"')
+    }
+    const wholeToc = tocOf(await okText('/all'))
+    for (const { href } of targets) expect(wholeToc).not.toContain(`href="#${href.slice(1)}"`)
+  })
+
+  it('先頭以外の Hero は、ほかの独立ページと同じく目次から開ける', async () => {
+    await seedItem()
+    await place(['projects', 'hero', 'contact'])
+    expect(tocOf(await okText('/'))).toContain('href="/hero" lang="en">Hero</a>')
+    expect(tocOf(await okText('/hero'))).toContain(
+      'href="/hero" aria-current="page" lang="en">Hero</a>',
+    )
+    expect(tocOf(await okText('/contact'))).toContain('href="/hero" lang="en">Hero</a>')
+  })
+})
+
 describe('個人ページ → 一覧', () => {
   it('構成で Projects を外したら、一覧へは案内しない', async () => {
     const member = await seedMember()

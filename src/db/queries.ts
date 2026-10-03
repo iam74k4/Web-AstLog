@@ -1,4 +1,4 @@
-import { and, asc, count, eq, sql } from 'drizzle-orm'
+import { and, asc, count, eq, min, sql } from 'drizzle-orm'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import { blockType, DEFAULT_BLOCKS, LEGACY_BLOCK_KEYS } from '../blocks'
 import { ITEM_KIND_KEYS, type ItemKind, type ItemView, type KindCounts } from '../domain'
@@ -201,6 +201,20 @@ export function listPublishedItemKeys(db: Db) {
 export async function countPublishedItems(db: Db, scope: ItemScope = {}) {
   const [row] = await db.select({ n: count() }).from(schema.items).where(itemsWhere(scope))
   return row?.n ?? 0
+}
+
+/*
+  入口の Since に使う、公開中の作品のいちばん古い年。年の分からない行は min が
+  除き、読める年が無ければ null。区分や担当の絞り込みは入口には効かせない。
+
+  年だけを集約する——入口に出さない本文やタグ・リンク・画像を全件引かない。
+*/
+export async function oldestPublishedItemYear(db: Db): Promise<number | null> {
+  const [row] = await db
+    .select({ since: min(schema.items.yearFrom) })
+    .from(schema.items)
+    .where(itemsWhere({}))
+  return row?.since ?? null
 }
 
 /*
