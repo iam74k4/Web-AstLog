@@ -112,6 +112,7 @@ export async function screenPage(
     image?: OgImage
   },
 ) {
+  c.header('x-astlog-motion', 'staged')
   return c.html(
     <Layout
       title={page.title}

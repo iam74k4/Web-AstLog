@@ -17,12 +17,12 @@ import {
   totalOf,
 } from '../domain'
 import { initials, isHttpsUrl, isSafeUrl, type SkillGroup, skillRows } from '../lib/format'
+import { motionFrames, orbitFlows, orbitHalfClip } from '../lib/orbit-motion'
 import {
   CONTACT_FRAME,
   type CosmosMap,
   cosmosMap,
   HERO_FRAME,
-  MOTION_RATE,
   type OrbitFrame,
   type OrbitMap,
   orbitMap,
@@ -487,10 +487,8 @@ const Bodies = ({ map, side, id }: { map: OrbitMap; side: 'far' | 'near'; id: st
         {map.orbits.map((orbit, i) => {
           const riders = map.bodies.filter((body) => body.orbit === i)
           if (!riders.length) return null
-          // 内側の 0 から外側の 1 まで（入口で天体が灯る順。軌道の線と同じ）
-          const reach = Math.round((i / Math.max(1, map.orbits.length - 1)) * 100) / 100
           return (
-            <g key={orbit.d} transform={ellipseFrame(orbit.ellipse)} style={`--reach:${reach}`}>
+            <g key={orbit.d} transform={ellipseFrame(orbit.ellipse)}>
               <g
                 class="orbit-spin"
                 style={`--dur:${orbit.period}s;--ticks:${orbit.bodyTicks};--sway:${stairs(orbit.sway)}`}
@@ -620,15 +618,15 @@ const OrbitBands = ({ map, side, id }: { map: OrbitMap; side: 'far' | 'near'; id
     回るので、軌道が回って見える。点の太さは画面の px（non-scaling-stroke）なので、楕円の枠で
     潰れない
   - 天体と同じく奥の層と手前の層に1つずつ置き、軌道面の奥と手前の半面（side）で切る
-  - 星屑だけの SVG に置く（.system__stardust / .orbits__stardust）。粒は千を超え、流れる星や
-    天体と同じ層にあると毎コマ全部を描き直す。星屑はゆっくり回るので、1秒に数回だけ
+  - 星屑だけの SVG に置く（.system__stardust / .orbits__stardust）。粒は図全体で600まで。流れる星や
+    天体と同じ層にあると毎コマ全部を描き直す。星屑はゆっくり回るので、1秒に10回だけ
     進めて（OrbitPath の ticks）、そのあいだは描いた層を使い回す
-  - 濃さは線と同じ奥から手前への坂（奥ほど淡い）。坂は回らない覆い（mask）で掛ける——点の色に
-    坂を塗ると、坂も点と一緒に回る
+  - 濃さは回らない外側 SVG の奥・手前ごとに決める（奥ほど淡い）。mask で連続した坂を掛けると、
+    アクセラレーションを切った Edge で粒を進めるたびに大きい層を描き直す
   - ぼかし（にじみ）は掛けない。回る層のぼかしは進めるたびに掛け直しになる。にじみのぶんの
     明るさは段の太さと濃さが持つ
 
-  id は半面と坂と覆いの名前の頭
+  id は半面の名前の頭
 */
 const Stardust = ({ map, side, id }: { map: OrbitMap; side: 'far' | 'near'; id: string }) => {
   if (!map.orbits.some((orbit) => orbit.stardust.some(Boolean))) return null
@@ -638,30 +636,8 @@ const Stardust = ({ map, side, id }: { map: OrbitMap; side: 'far' | 'near'; id: 
         <clipPath id={`${id}-half`} clipPathUnits="userSpaceOnUse">
           <path d={map.halves[side]} />
         </clipPath>
-        <linearGradient
-          id={`${id}-depth`}
-          gradientUnits="userSpaceOnUse"
-          x1={map.depth.x1}
-          y1={map.depth.y1}
-          x2={map.depth.x2}
-          y2={map.depth.y2}
-        >
-          <stop class="stardust-depth__far" offset="0" />
-          <stop class="stardust-depth__near" offset="1" />
-        </linearGradient>
-        <mask
-          id={`${id}-fade`}
-          class="stardust-fade"
-          maskUnits="userSpaceOnUse"
-          x="0"
-          y="0"
-          width={map.width}
-          height={map.height}
-        >
-          <rect width={map.width} height={map.height} fill={`url(#${id}-depth)`} />
-        </mask>
       </defs>
-      <g class="stardust" clip-path={`url(#${id}-half)`} mask={`url(#${id}-fade)`}>
+      <g class="stardust" clip-path={`url(#${id}-half)`}>
         {map.orbits.map((orbit) => (
           <g key={orbit.d} transform={ellipseFrame(orbit.ellipse)}>
             <g class="orbit-spin" style={`--dur:${orbit.period}s;--ticks:${orbit.ticks}`}>
@@ -677,185 +653,188 @@ const Stardust = ({ map, side, id }: { map: OrbitMap; side: 'far' | 'near'; id: 
 }
 
 /*
-  軌道を流れる星（入口と締め）。軌道1本に1つ、輝く星——中心から外へ溶ける芯の光
-  （orbit-flow__core）と、先へ消える十字の光芒（__glint。入口の星空のいちばん明るい星と同じ
-  形）——が、後ろに淡い尾（__trail）を引いて回る。軌道の線の破線を送っていたころは、軌道の
-  上を移る線に見えた（持ち主の「移動する線をもっと星っぽく」）。
+  軌道を流れる星（入口と締め）。1本の軌道に1つ、芯と十字の光芒を持つ星が短い尾を引く。
+  位置と尾の姿勢は orbit-motion.ts が枠の座標へ写し、literal CSS へ焼く。小さい HTML の箱を
+  動かすので、静止した芯と尾の SVG を図全体と一緒に毎コマ描き直さない。
 
-  - 星屑と天体と同じく、軌道の楕円の枠（ellipseFrame）の中の単位円の上を回る（orbit-spin。
-    周期は orbits.ts の OrbitMap の flows で、公転より速く星屑と天体を追い越す）
-  - 尾は単位円に沿って星から FLOW_TRAIL だけ後ろへ細る短い楔。星と一緒に回るので、坂（星の
-    側が濃く後ろへ消える）も回る枠の中で決める。長い尾は、また軌道の上を移る線に見える
-  - 星の形は天体と同じく回さず潰さない（orbit-unspin と unstretch）。大きさは手前ほど大きい
-    （orbit-sway）
-  - 出だしの向きは軌道ごとに黄金比でずらす（同じ所から一斉に出ない）
-
-  id は坂の名前の頭、clip は奥と手前の半面（Motion）。動きを減らす設定では出さない（app.css の
-  .orbit-flows）
+  星は向きと大きさ（軌道の sway の平均）を保つ。尾は楕円の面に沿って細る16度の楔で、
+  星を原点とする箱だけを matrix で回す。奥と手前には同じ動きを置き、動かない半面で切る。
+  この2層のあいだに Hole を挟む。動きを減らす設定では出さない（app.css）。
 */
-/*
-  尾の長さ（度。単位円の上の角）と、星の側の太さ（半分。枠の単位で、軌道の横の端での太さ）。
-  芯の光の半径と光芒の腕の長さは、輪の半径に対する倍率
-*/
-const FLOW_TRAIL = 16
-const FLOW_TRAIL_W = 2.4
-const FLOW_CORE = 0.45
-const FLOW_GLINT = 1.2
-
-const Flows = ({ map, id, clip }: { map: OrbitMap; id: string; clip: string }) => {
-  if (!map.orbits.length) return null
-  const four = (value: number) => Math.round(value * 10000) / 10000
-  const tenth = (value: number) => Math.round(value * 10) / 10
-  // 尾の先。星は単位円の (1, 0) に居て、尾はそこから後ろ（向きの小さいほう）へ
-  const tail = {
-    x: four(Math.cos((-FLOW_TRAIL * Math.PI) / 180)),
-    y: four(Math.sin((-FLOW_TRAIL * Math.PI) / 180)),
-  }
-  /*
-    尾の形。星の側が太く、先で細る楔を、単位円の内と外の縁で囲んで塗る（線で引くより描くのが
-    軽い）。太さは楕円の枠と一緒に伸びる——軌道面に寝た光の帯なので、横の端で太く、奥と手前で
-    細い。rx はその軌道の横の半径（太さを枠の単位にそろえる）
-  */
-  const wedge = (rx: number) => {
-    const steps = 8
-    const edge = (side: 1 | -1) =>
-      Array.from({ length: steps + 1 }, (_, k) => {
-        const angle = ((-FLOW_TRAIL * k) / steps) * (Math.PI / 180)
-        const r = 1 + side * (FLOW_TRAIL_W / rx) * (1 - k / steps)
-        return `${four(r * Math.cos(angle))} ${four(r * Math.sin(angle))}`
+const Flows = ({ map, side, id }: { map: OrbitMap; side: 'far' | 'near'; id: string }) => {
+  const flows = orbitFlows(map)
+  if (!flows.length) return null
+  const cqi = (value: number) => Math.round((value / map.width) * 10000000) / 100000
+  const five = (value: number) => Math.round(value * 100000) / 100000
+  const six = (value: number) => Math.round(value * 1000000) / 1000000
+  const motion = flows
+    .map((flow, i) => {
+      const frames = motionFrames(flow.frames.length, flow.period).map(({ at, steps }) => {
+        const sample = at * (flow.frames.length - 1)
+        const from = flow.frames[Math.floor(sample)]
+        const to = flow.frames[Math.min(Math.floor(sample) + 1, flow.frames.length - 1)]
+        if (!from || !to) throw new Error('Missing flow path point')
+        const part = sample - Math.floor(sample)
+        const mix = (start: number, end: number) => start + (end - start) * part
+        return {
+          at: at * 100,
+          x: mix(from.x, to.x),
+          y: mix(from.y, to.y),
+          matrix: {
+            a: mix(from.matrix.a, to.matrix.a),
+            b: mix(from.matrix.b, to.matrix.b),
+            c: mix(from.matrix.c, to.matrix.c),
+            d: mix(from.matrix.d, to.matrix.d),
+          },
+          timing: steps ? `animation-timing-function:steps(${steps});` : '',
+        }
       })
-    return `M${edge(1).join('L')}L${edge(-1).slice(0, -1).reverse().join('L')}Z`
-  }
-  const core = tenth(map.ring.rx * FLOW_CORE)
-  const arm = tenth(map.ring.rx * FLOW_GLINT)
+      const move = frames
+        .map(
+          ({ at, x, y, timing }) =>
+            `${at}%{transform:translate(${five(x)}cqi,${five(y)}cqi);${timing}}`,
+        )
+        .join('')
+      const tail = frames
+        .map(
+          ({ at, matrix: { a, b, c, d }, timing }) =>
+            `${at}%{transform:matrix(${six(a)},${six(b)},${six(c)},${six(d)},0,0);${timing}}`,
+        )
+        .join('')
+      return `@keyframes orbit-flow-move-${id}-${i}{${move}}@keyframes orbit-flow-tail-${id}-${i}{${tail}}`
+    })
+    .join('')
   return (
-    <g class="orbit-flows" clip-path={clip} style={`--flow-frame-w:${map.width}px`}>
-      <defs>
-        <linearGradient
-          id={`${id}-trail`}
-          gradientUnits="userSpaceOnUse"
-          x1={tail.x}
-          y1={tail.y}
-          x2="1"
-          y2="0"
-        >
-          <stop class="orbit-flow__light" offset="0" stop-opacity="0" />
-          <stop class="orbit-flow__fade" offset="1" />
-        </linearGradient>
-        <radialGradient id={`${id}-core`}>
-          <stop class="orbit-flow__light" offset="0" stop-opacity="1" />
-          <stop class="orbit-flow__light" offset="0.2" stop-opacity="1" />
-          <stop class="orbit-flow__light" offset="0.45" stop-opacity="0.55" />
-          <stop class="orbit-flow__light" offset="0.75" stop-opacity="0.15" />
-          <stop class="orbit-flow__light" offset="1" stop-opacity="0" />
-        </radialGradient>
-        <radialGradient id={`${id}-glint`}>
-          <stop class="orbit-flow__light" offset="0" stop-opacity="1" />
-          <stop class="orbit-flow__light" offset="1" stop-opacity="0" />
-        </radialGradient>
-      </defs>
-      {map.orbits.map((orbit, i) => {
-        const period = map.flows[i] ?? orbit.period
-        // 出だしの向き（度。単位円の上の角）
-        const turn = tenth(((i * 0.618) % 1) * 360)
-        // 星の大きさは、その軌道の上の大きさの揺れの平均（毎コマは変えない）
-        const size =
-          Math.round((orbit.sway.reduce((sum, v) => sum + v, 0) / orbit.sway.length) * 100) / 100
+    <div class="orbit-flows" aria-hidden="true" style={`clip-path:${orbitHalfClip(map, side)}`}>
+      <style>{raw(motion)}</style>
+      {flows.map((flow, i) => {
+        const name = `${id}-${i}`
+        // 星だけが sway の平均の大きさ。光芒の線は静止 SVG の画面pxのまま
+        const arm = flow.arm * flow.size
+        const core = flow.core * flow.size
+        const { box, gradient } = flow.tail
         return (
-          <g key={orbit.d} transform={ellipseFrame(orbit.ellipse)}>
-            <g
-              class="orbit-spin"
-              style={`--dur:${period}s;--ticks:${Math.round(period * MOTION_RATE)}`}
+          <span
+            key={i}
+            class="orbit-flow"
+            style={`--motion:orbit-flow-move-${name};--dur:${flow.period}s`}
+          >
+            <span class="orbit-flow__tail" style={`--motion:orbit-flow-tail-${name}`}>
+              <svg
+                class="orbit-flow__tail-art"
+                viewBox={flow.tail.viewBox}
+                style={`left:${cqi(box.x)}cqi;top:${cqi(box.y)}cqi;width:${cqi(box.width)}cqi;height:${cqi(box.height)}cqi`}
+                aria-hidden="true"
+                focusable="false"
+              >
+                <defs>
+                  <linearGradient
+                    id={`${name}-trail`}
+                    gradientUnits="userSpaceOnUse"
+                    x1={gradient.x1}
+                    y1={gradient.y1}
+                    x2={gradient.x2}
+                    y2={gradient.y2}
+                  >
+                    <stop class="orbit-flow__light" offset="0" stop-opacity="0" />
+                    <stop class="orbit-flow__fade" offset="1" />
+                  </linearGradient>
+                </defs>
+                <path class="orbit-flow__trail" d={flow.tail.d} fill={`url(#${name}-trail)`} />
+              </svg>
+            </span>
+            <svg
+              class="orbit-flow__star"
+              viewBox={`${-arm} ${-arm} ${arm * 2} ${arm * 2}`}
+              style={`left:${cqi(-arm)}cqi;top:${cqi(-arm)}cqi;width:${cqi(arm * 2)}cqi;height:${cqi(arm * 2)}cqi`}
+              aria-hidden="true"
+              focusable="false"
             >
-              <g transform={`rotate(${turn})`}>
-                <path
-                  class="orbit-flow__trail"
-                  d={wedge(orbit.ellipse.rx)}
-                  fill={`url(#${id}-trail)`}
-                />
-                <g transform="translate(1 0)">
-                  <g class="orbit-unspin">
-                    <g transform={`rotate(${-turn}) ${unstretch(orbit.ellipse)}`}>
-                      <g class="orbit-flow__star" style={`scale:${size}`}>
-                        <circle class="orbit-flow__core" r={core} fill={`url(#${id}-core)`} />
-                        <path
-                          class="orbit-flow__glint"
-                          d={`M${-arm} 0h${arm * 2}M0 ${-arm}v${arm * 2}`}
-                          stroke={`url(#${id}-glint)`}
-                        />
-                      </g>
-                    </g>
-                  </g>
-                </g>
-              </g>
-            </g>
-          </g>
+              <defs>
+                <radialGradient id={`${name}-core`}>
+                  <stop class="orbit-flow__light" offset="0" stop-opacity="1" />
+                  <stop class="orbit-flow__light" offset="0.2" stop-opacity="1" />
+                  <stop class="orbit-flow__light" offset="0.45" stop-opacity="0.55" />
+                  <stop class="orbit-flow__light" offset="0.75" stop-opacity="0.15" />
+                  <stop class="orbit-flow__light" offset="1" stop-opacity="0" />
+                </radialGradient>
+                <radialGradient id={`${name}-glint`}>
+                  <stop class="orbit-flow__light" offset="0" stop-opacity="1" />
+                  <stop class="orbit-flow__light" offset="1" stop-opacity="0" />
+                </radialGradient>
+              </defs>
+              <circle class="orbit-flow__core" r={core} fill={`url(#${name}-core)`} />
+              <path
+                class="orbit-flow__glint"
+                d={`M${-arm} 0h${arm * 2}M0 ${-arm}v${arm * 2}`}
+                stroke={`url(#${name}-glint)`}
+              />
+            </svg>
+          </span>
         )
       })}
-    </g>
-  )
-}
-
-/*
-  動くもの（入口と締め）。同じものを奥の層と手前の層に1つずつ置き、それぞれを軌道面の奥と
-  手前の半面で切る（orbits.ts の OrbitMap の halves）——ブラックホールの向こうを回るあいだは
-  後ろに、こちらへ来るあいだは前に見える。重ねる順は、流れる星 → 吸い込まれる粒（奥の層
-  だけ）。毎コマ動くものだけを置く——星屑（Stardust）はこの下、天体（Bodies）はこの上の、
-  それぞれ刻んで進む自分の SVG。動かし方は app.css の「動き続ける」。
-
-  - 星屑（Stardust）と天体（Bodies）は軌道ごと公転する（持ち主の「軌道の線を星と一緒に
-    動かして」）。向きは吸い込まれる粒と同じ（画面で時計回り——奥は左から右へ、手前は右から
-    左へ）で、内側ほど速い（orbits.ts の OrbitPath の period）。動きを減らす設定では回らず、
-    止まった姿がそのまま完成形
-  - 軌道を流れる星（Flows）は公転より速く回って星屑と天体を追い越す。動きを減らす設定では
-    出さない
-  - 吸い込まれる粒（Dust）は奥の層にだけ置く
-*/
-const Motion = ({ map, side, id }: { map: OrbitMap; side: 'far' | 'near'; id: string }) => {
-  const clip = `url(#${id})`
-  return (
-    <>
-      <defs>
-        <clipPath id={id} clipPathUnits="userSpaceOnUse">
-          <path d={map.halves[side]} />
-        </clipPath>
-      </defs>
-      <Flows map={map} id={`${id}-flow`} clip={clip} />
-      {side === 'far' ? <Dust map={map} /> : null}
-    </>
+    </div>
   )
 }
 
 /*
   ブラックホールへ吸い込まれる光の粒（入口と締め。orbits.ts の OrbitDust）。枠の座標へ
-  写した螺旋を offset-path に渡し、小さい点1つの位置と明るさを一緒に動かす。
-  親子の回転・移動・潰しを持たず、太さは図の幅で補正する（古いブラウザは非拡大の線端）。
+  写した螺旋をliteral CSSへ焼き、小さい HTML の円の位置と明るさを一緒に動かす。
+  移動は幅を基準にしたcqi、点の太さは画面px。SVGの道と線を毎コマ描き直さない。
 
-  奥と手前に分けず、ブラックホールの後ろの層にだけ置く（Motion の side が far のとき）——
+  奥と手前に分けず、ブラックホールの後ろの層にだけ置く——
   黒い円の上を横切る粒は、ロゴと同じ円を汚す。光の縁に掛かる所で、粒は光に溶けて見えなくなる
 */
-const Dust = ({ map }: { map: OrbitMap }) => (
-  <g class="orbit-dust" style={`--grain-frame-w:${map.width}px`}>
-    {map.dust.map((grain, i) => (
-      <path
-        key={i}
-        class="orbit-grain__dot"
-        d="M0 0h0"
-        stroke-opacity={grain.o}
-        style={`offset-path:path('${grain.d}');--grain-w:${grain.w}px;--dur:${grain.dur}s;--delay:${grain.delay}s;--ticks:${grain.ticks}`}
-      />
-    ))}
-  </g>
-)
+const Dust = ({ map, id }: { map: OrbitMap; id: string }) => {
+  const cqi = (value: number) => Math.round((value / map.width) * 10000000) / 100000
+  const fade = (t: number) => {
+    if (t <= 0.1) return t * 3.4
+    if (t <= 0.2) return 0.34 + (t - 0.1) * 6.6
+    if (t <= 0.8) return 1
+    if (t <= 0.9) return 1 - (t - 0.8) * 1.7
+    return (1 - t) * 8.3
+  }
+  const motion = map.dust
+    .map((grain, i) => {
+      // 各区間の長さも段数も整数コマにそろえる。65点で道を保ち、画面が280Hzでも60Hzで進む。
+      const steps = motionFrames(grain.path.length, grain.dur, [0.1, 0.2, 0.8, 0.9])
+        .map(({ at: t, steps }) => {
+          const at = t * (grain.path.length - 1)
+          const from = grain.path[Math.floor(at)]
+          const to = grain.path[Math.min(Math.floor(at) + 1, grain.path.length - 1)]
+          if (!from || !to) throw new Error('Missing dust path point')
+          const part = at - Math.floor(at)
+          const x = from.x + (to.x - from.x) * part
+          const y = from.y + (to.y - from.y) * part
+          const timing = steps ? `animation-timing-function:steps(${steps});` : ''
+          return `${t * 100}%{transform:translate(${cqi(x)}cqi,${cqi(y)}cqi);opacity:${Math.round(fade(t) * 100000) / 100000};${timing}}`
+        })
+        .join('')
+      return `@keyframes orbit-grain-fall-${id}-${i}{${steps}}`
+    })
+    .join('')
+  return (
+    <div class="orbit-dust" aria-hidden="true">
+      <style>{raw(motion)}</style>
+      {map.dust.map((grain, i) => (
+        <span
+          key={i}
+          class="orbit-grain__dot"
+          style={`--motion:orbit-grain-fall-${id}-${i};--dur:${grain.dur}s;--delay:${grain.delay}s;width:${grain.w}px;height:${grain.w}px;margin-left:${-grain.w / 2}px;margin-top:${-grain.w / 2}px;background:color-mix(in srgb,var(--ink) ${Math.round(grain.o * 100)}%,transparent)`}
+        ></span>
+      ))}
+    </div>
+  )
+}
 
 /*
   宇宙（入口と締め。形は orbits.ts の cosmosMap）。軌道図のまわりの画面いっぱいに敷く星空で、
   入口と締めのページの本文（main）の幅いっぱいに広がる（app.css の .cosmos。main を
   位置の基準にして inset: 0）。持ち主の「もっと壮大に」——軌道図だけが枠の中の絵に見えた。
 
-  - 星（cosmos__stars）。同じ視野を静止星と瞬く星の2枚に分け、枠いっぱいに切り取る
-    （preserveAspectRatio slice）。瞬きの更新で静止星と光芒を描き直さないため。瞬く星は
-    明るさだけが動く。いちばん明るい星には十字の光芒（cosmos__glint。長さは
+  - 星（cosmos__stars）。静止星と光芒は SVG、瞬く星は小さい HTML の円に分ける。
+    同じ視野を枠いっぱいに切り取り（slice）、瞬きは明るさだけを動かす。いちばん
+    明るい星には十字の光芒（cosmos__glint。長さは
     viewBox の単位で、切り取る倍率と一緒に伸び縮みする）。光芒は真ん中から先へ消える坂
     （-glint。十字の箱に合わせた放射の坂）——同じ明るさの細い十字だったころは、照準か
     カーソルの印に見えた
@@ -871,6 +850,7 @@ const Dust = ({ map }: { map: OrbitMap }) => (
 */
 const Cosmos = ({ map, id, place }: { map: CosmosMap; id: string; place: 'hero' | 'contact' }) => {
   const view = `0 0 ${map.width} ${map.height}`
+  const pct = (value: number) => `${(value * 100).toFixed(5)}%`
   // 光芒の腕の長さ（viewBox の単位。先は坂で消えるので、見える長さはこれより短い）
   const arm = (star: { w: number }) => Math.round(star.w * 6 * 10) / 10
   // 図の中の焦点（ブラックホール）の高さ（枠の高さに対する割合）。星雲をそこに置く（app.css）
@@ -879,14 +859,9 @@ const Cosmos = ({ map, id, place }: { map: CosmosMap; id: string; place: 'hero' 
   const dot = (star: CosmosMap['stars'][number]) => (
     <path
       key={`${star.x},${star.y}`}
-      class={star.twinkle ? 'cosmos__twinkle' : undefined}
       d={`M${star.x} ${star.y}h0`}
       opacity={star.o}
-      style={
-        star.twinkle
-          ? `stroke-width:${star.w}px;--dur:${star.twinkle.dur}s;--delay:${star.twinkle.delay}s;--ticks:${star.twinkle.ticks}`
-          : `stroke-width:${star.w}px`
-      }
+      style={`stroke-width:${star.w}px`}
     />
   )
   return (
@@ -916,50 +891,39 @@ const Cosmos = ({ map, id, place }: { map: CosmosMap; id: string; place: 'hero' 
             />
           ))}
       </svg>
-      <svg
-        class="cosmos__stars cosmos__stars--twinkle"
-        viewBox={view}
-        preserveAspectRatio="xMidYMid slice"
-        aria-hidden="true"
-        focusable="false"
-      >
-        {map.stars.filter((star) => star.twinkle).map(dot)}
-      </svg>
+      <div class="cosmos__stars cosmos__stars--twinkle" aria-hidden="true">
+        {map.stars.map((star) =>
+          star.twinkle ? (
+            <span
+              key={`${star.x},${star.y}`}
+              class="cosmos__twinkle"
+              style={`left:${pct(star.x / map.width)};top:${pct(star.y / map.height)};width:${star.w}px;height:${star.w}px;opacity:${star.o};--dur:${star.twinkle.dur}s;--delay:${star.twinkle.delay}s;--ticks:${star.twinkle.ticks}`}
+            ></span>
+          ) : null,
+        )}
+      </div>
       <Nebula />
-      <svg
-        class="cosmos__meteors"
-        viewBox={view}
-        preserveAspectRatio="xMidYMid slice"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <defs>
-          <linearGradient id={`${id}-meteor`} x1="-90" x2="0" gradientUnits="userSpaceOnUse">
-            <stop class="cosmos__trail" offset="0" stop-opacity="0" />
-            <stop class="cosmos__trail" offset="1" stop-opacity="1" />
-          </linearGradient>
-        </defs>
+      <div class="cosmos__meteors" aria-hidden="true">
         {map.meteors.map((meteor) => (
-          <g
+          <span
             key={`${meteor.x},${meteor.y}`}
-            transform={`translate(${meteor.x} ${meteor.y}) rotate(${meteor.angle})`}
+            class="cosmos__meteor-frame"
+            style={`left:${pct(meteor.x / map.width)};top:${pct(meteor.y / map.height)};width:${pct(90 / map.width)};transform:rotate(${meteor.angle}deg)`}
           >
-            <path
+            <span
               class="cosmos__meteor"
-              d="M-90 0h90"
-              stroke={`url(#${id}-meteor)`}
               style={`--dur:${meteor.dur}s;--delay:${meteor.delay}s`}
-            />
-          </g>
+            ></span>
+          </span>
         ))}
-      </svg>
+      </div>
     </div>
   )
 }
 
 /*
   星雲。形と4層の模様を scripts/nebula/render.mjs で透過 WebP に焼く。
-  配色は app.css の --nebula-art が選び、登場と漂いはこの箱に掛ける。
+  配色は app.css の --nebula-art が選び、漂いはこの箱に掛ける。
   ブラウザでノイズの SVG フィルタを処理しないので、アクセラレーションを切っても
   周囲の動きで雲を計算し直さない。飾りなので読み上げには出さない。
 */
@@ -1012,19 +976,16 @@ const Hole = ({ frame }: { frame: OrbitFrame }) => {
     SVG を分け、そのあいだに Hole を挟む）。どの軌道も同じ形の入れ子で交わらず、外ほど間が
     広い。細い線（OrbitLines。奥ほど薄く、外の軌道ほど淡い）に、光の帯（OrbitBands。手前ほど
     太く明るい）と星屑（Stardust）を重ねる。帯と線は動かない SVG（.system__orbits）、星屑は
-    自分の SVG（.system__stardust。1秒に数回だけ進める）、天体と流れる星と粒は動く SVG
-    （.system__motion）——帯のぼかしと千を超える星屑を、毎コマ描き直さないため
+    自分の SVG（.system__stardust。1秒に数回だけ進める）、天体は別の SVG、流れる星と粒は小さい HTML の箱——帯のぼかしと千を超える星屑を、毎コマ描き直さないため
   - 天体は光る惑星で、業務は輪のある惑星（区分の呼び名は KIND_LABEL）。手前ほど大きい（Bodies）
   - 天体は、ブラックホールのまわりの矩形（HERO_FRAME の clear）の外から回り出す
   - 線と点の色は app.css が --accent と --ink から敷く（見た目のプリセットで変わる）。
     ブラックホールの絵は字の白だけ（BLACKHOLE_ART）
   - 図は全部 aria-hidden の飾り。天体に作品の番号の札（作品のページへのリンク）は添えない
     （持ち主が「いらない」と外した）。作品へはすぐ下の「一覧で見る →」から行く
-  - 着いたときに一度だけ、星系が生まれる——ブラックホールが光の点から閃いて灯り、内側の
-    軌道から順に光の線が引かれ（線の長さは pathLength 100。OrbitLines）、引き終えた軌道の天体が
-    灯る（app.css の「入口に着いたとき」）。そのあとも動き続ける——星屑と天体が軌道ごと
+  - 大きな背景と図は完成形で表示する。文字の登場中も、星屑と天体が軌道ごと
     公転し、軌道を星が流れ、光の粒が渦を巻いて吸い込まれ、ブラックホールの光が揺らぎ、星雲が
-    漂い、星が瞬く（Motion・Hole・Nebula）。止まった姿がそのまま完成形
+    漂い、星が瞬く（Flows・Dust・Hole・Nebula）。止まった姿がそのまま完成形
 
   呼ぶのは renderBlock の case 'hero' だけで、全体ページ（/all）には置かない
   （印刷・Ctrl-F・翻訳の宛先）。
@@ -1034,8 +995,8 @@ export const OrbitSystem = ({ counts }: { counts: KindCounts }) => {
   const view = `0 0 ${map.width} ${map.height}`
   /*
     奥の半分（ブラックホールの後ろ）と手前の半分（前）に、同じ順で層を重ねる——ぼかした光の帯、
-    軌道の線（入口で引かれる）、刻んで回る星屑、毎コマ動く流れる星と粒、刻んで回る天体。
-    帯を線と分けるのは、入口で線を引くあいだ、帯のぼかしを毎コマ掛け直さないため
+    軌道の線、刻んで回る星屑、毎コマ動く流れる星と粒、刻んで回る天体。
+    動く光を別の層に分け、帯と線を描き直さない
   */
   const half = (side: 'far' | 'near') => (
     <>
@@ -1063,14 +1024,8 @@ export const OrbitSystem = ({ counts }: { counts: KindCounts }) => {
       >
         <Stardust map={map} side={side} id={`system-${side}-stardust`} />
       </svg>
-      <svg
-        class={`system__motion system__motion--${side}`}
-        viewBox={view}
-        aria-hidden="true"
-        focusable="false"
-      >
-        <Motion map={map} side={side} id={`system-${side}`} />
-      </svg>
+      {side === 'far' ? <Dust map={map} id="system" /> : null}
+      <Flows map={map} side={side} id={`system-${side}-flow`} />
       <svg
         class={`system__bodies system__bodies--${side}`}
         viewBox={view}
@@ -1162,27 +1117,30 @@ export const Cta = ({ href, children }: { href: string; children: Child }) => (
   （枠は orbits.ts の CONTACT_FRAME）。入口と同じく、天体に作品の札は添えない。
 
   入口と同じく、軌道の奥の半分はブラックホールの後ろ、手前の半分は前に描く。帯と線は
-  動かない SVG（.orbits__still）、星屑は自分の SVG（.orbits__stardust）、天体と流れる星と
-  粒は別の SVG に分ける（入口と同じ理由）。まわりの星空と星雲は Contact が敷く（Cosmos）。動き続けるものも入口と同じ
-  （Motion・Hole・Cosmos）——星屑と天体は軌道ごと公転する。着いたときの一度きりの動きは
-  持たない——入口で一度動けば足りる。
+  動かない SVG（.orbits__still）、星屑は自分の SVG（.orbits__stardust）、天体は別の SVG、流れる星と
+  粒は小さい HTML の箱に分ける（入口と同じ理由）。まわりの星空と星雲は Contact が敷く（Cosmos）。動き続けるものも入口と同じ
+  （Flows・Dust・Hole・Cosmos）——星屑と天体は軌道ごと公転する。
 */
 export const ContactOrbits = ({ counts }: { counts: KindCounts }) => {
   const map = orbitMap(counts, CONTACT_FRAME)
   const view = `0 0 ${map.width} ${map.height}`
-  // 奥の半分と手前の半分に、同じ順で層を重ねる（入口と同じ。帯と線は着いたときに動かないので1枚）
+  // 奥の半分と手前の半分に、同じ順で層を重ねる（入口と同じ。帯と線は動かないので1枚）
   const half = (side: 'far' | 'near') => (
     <>
       <svg class="orbits__still" viewBox={view} aria-hidden="true" focusable="false">
         <OrbitBands map={map} side={side} id={`contact-${side}-bands`} />
         <OrbitLines map={map} side={side} id={`contact-${side}-depth`} />
       </svg>
-      <svg class="orbits__stardust" viewBox={view} aria-hidden="true" focusable="false">
+      <svg
+        class={`orbits__stardust orbits__stardust--${side}`}
+        viewBox={view}
+        aria-hidden="true"
+        focusable="false"
+      >
         <Stardust map={map} side={side} id={`contact-${side}-stardust`} />
       </svg>
-      <svg viewBox={view} aria-hidden="true" focusable="false">
-        <Motion map={map} side={side} id={`contact-${side}`} />
-      </svg>
+      {side === 'far' ? <Dust map={map} id="contact" /> : null}
+      <Flows map={map} side={side} id={`contact-${side}-flow`} />
       <svg class="orbits__bodies" viewBox={view} aria-hidden="true" focusable="false">
         <Bodies map={map} side={side} id={`contact-${side}-body`} />
       </svg>

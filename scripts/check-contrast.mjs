@@ -25,12 +25,10 @@
   隠すと、実際と違う地で測ることになる。
 
   動きは止めて測る（reducedMotion）。入口の字は浮かび上がって出てくるので、
-  止めないと、動いている途中の姿を測ることがある。そのうえで軌道図の動き（入口に着いた
-  とき、ブラックホールが光の点から閃いて大きく明るく広がってから締まり、軌道の線が内側から
-  引かれて天体が灯る。
-  そのあとも入口と締めで天体が回り、粒が落ち、星が流れる。名前が orbit- で始まる
-  animation）だけは、途中の姿を最後に別に測る——止めて測るだけでは、大きく広がった光や
-  灯る天体が字の後ろに掛かる瞬間が見えない。途中の姿では、まだ出ていない字
+  止めないと、動いている途中の姿を測ることがある。そのうえで軌道図の継続する動き
+  （天体が回り、粒が落ち、星が流れ、ブラックホールの光が揺らぐ。名前が orbit- で始まる
+  animation）だけは、途中の姿を最後に別に測る——止めて測るだけでは、変わる光や
+  粒・星が字の後ろに掛かる瞬間が見えない。途中の姿では、まだ出ていない字
   （透明・薄くなっている数）は測らない。
 
   画素は、撮った PNG を別の空のページ（about:blank）へ戻して canvas から読む。Node 側に
@@ -77,7 +75,7 @@ const pageOptions = ({ width, height, touch }) => ({
 
   minPixels は、軌道図が「出ている」と言える画素数の下限（lines は軌道の線の芯と星屑、bodies は
   天体の光、art はブラックホール、nebula は星雲、stars は星空の星。下の ORBIT_MIN_DELTA）。motion は動きの途中の
-  姿を測るか——入口は着いたときの動きと動き続けるもの、締めは動き続けるもの（星屑と天体が
+  姿を測るか——入口も締めも動き続けるもの（星屑と天体が
   軌道ごと回り、粒が落ち、星が流れ、ブラックホールの光が揺らぎ、星雲が漂い、星が瞬く）。
 */
 /*
@@ -177,35 +175,56 @@ const NEBULA_MIN_DELTA = 4
 const STARS_MIN_DELTA = 4
 
 /*
-  入口の動き（public/app.css の「入口に着いたとき」。orbit-ignite / orbit-trace /
-  orbit-birth / orbit-light / orbit-count …）のどこで止めて測るか。:root の段（--ignite-* /
-  --trace-*）から時刻を組む（motionFrames）。ブラックホールが光の点から閃く頭と、いちばん
-  大きく明るく広がった所（ignite の 42%。keyframes の途中の姿）と、軌道の線を引いている途中
-  （内側の軌道を引き終えて天体が灯り始める所）を3コマで挟む。at はその動きの長さの何倍か
-  （trace は半分ずつ引くので 2 で1本ぶん）。
+  継続する動き（public/app.css の「動き続ける」）のどこで止めて測るか。呼吸の10%と42%、
+  最初の流れ星の3%（頭が見え、尾が流れている所）の3コマ。実際の CSS の周期と遅れから時刻を
+  組む（motionFrames）。粒・Flow・星の瞬きも同じ時刻へ送り、変わる地の上で字を読む。
+  at は周期の割合。selector の無い周期は :root、指定のある周期はその要素から読む。
 */
 const MOTION_FRAMES = [
-  { of: 'ignite', at: 0.1 },
-  { of: 'ignite', at: 0.42 },
-  { of: 'trace', at: 2 },
+  { of: 'breathe', at: 0.1 },
+  { of: 'breathe', at: 0.42 },
+  { of: 'meteor', selector: '.cosmos__meteor', at: 0.03 },
 ]
 
-// MOTION_FRAMES を、ページの :root の段から時刻（ms）に開く
+// MOTION_FRAMES を、ページの CSS の実周期から時刻（ms）に開く
 const motionFrames = (frames) => {
   const root = getComputedStyle(document.documentElement)
-  const ms = (name) => {
-    const value = root.getPropertyValue(name).trim()
-    return value.endsWith('ms') ? Number.parseFloat(value) : Number.parseFloat(value) * 1000
+  const ms = (style, name) => {
+    const value = style.getPropertyValue(name).trim()
+    if (!/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:ms|s)$/.test(value)) {
+      throw new Error(`動きの時刻を読めない: ${name} が「${value}」（ms または s が必要）`)
+    }
+    const time = Number.parseFloat(value) * (value.endsWith('ms') ? 1 : 1000)
+    if (!Number.isFinite(time)) throw new Error(`動きの時刻が非有限: ${name} が「${value}」`)
+    return time
   }
-  return frames.map(({ of, at }) => Math.round(ms(`--${of}-delay`) + ms(`--${of}-dur`) * at))
+  return frames.map(({ of, at, selector }) => {
+    if (!Number.isFinite(at) || at <= 0 || at >= 1) {
+      throw new Error(`動きの途中の割合が不正: ${of} の ${at}`)
+    }
+    const element = selector ? document.querySelector(selector) : document.documentElement
+    if (!element) throw new Error(`動きの周期を持つ要素が無い: ${selector}`)
+    const style = selector ? getComputedStyle(element) : root
+    const duration = ms(style, selector ? '--dur' : `--${of}-dur`)
+    if (duration <= 0) throw new Error(`動きの周期は正の値が必要: ${of} の ${duration}ms`)
+    const delay = selector ? ms(style, '--delay') : 0
+    // 負の遅れで途中から始まる流れ星は、指定した位相へ来る次の正の時刻を選ぶ
+    const cycle = Math.max(0, Math.ceil(-delay / duration))
+    const time = Math.round(delay + duration * (cycle + at))
+    if (!Number.isFinite(time) || time <= 0) {
+      throw new Error(`動きの途中の時刻が不正: ${of} の ${time}ms`)
+    }
+    return time
+  })
 }
 
 // 軌道図の animation を頭から止め、ほかの動き（字の浮かび上がり）は終わらせる。止まる時刻を返す
 const holdOrbits = () => {
+  // 初期化の待ちを外し、全装飾を同じ時刻へ送る。補助のキューもこの印が消えたら終了する。
+  document.documentElement.removeAttribute('data-motion-staged')
   /*
-    まず掛け直す。読み込みが遅いと、ここへ来る前に軌道図の出が終わっていて、
-    終わった animation は getAnimations() に出てこない（CI の遅い日にだけ
-    「見つからない」で落ちる）。いったん外して戻せば頭から始まる。
+    まず掛け直す。有限の件数の動きは、読み込みが遅いとここへ来る前に終わり、
+    getAnimations() に出てこないことがある。いったん外して戻せば頭から送れる。
     getAnimations() はスタイルを確定させるので、外した姿と戻した姿を1回ずつ通る
   */
   const off = document.createElement('style')
@@ -237,6 +256,7 @@ const holdOrbits = () => {
 }
 
 const seekOrbits = (at) => {
+  if (!Number.isFinite(at) || at <= 0) throw new Error(`動きを送る時刻が不正: ${at}ms`)
   for (const animation of document.getAnimations()) {
     if (animation.animationName?.startsWith('orbit-')) animation.currentTime = at
   }
@@ -578,9 +598,11 @@ async function main() {
         const png = (buffer) => `data:image/png;base64,${buffer.toString('base64')}`
         const shown = png(await page.screenshot({ type: 'png' }))
         // selector の要素だけを消して撮り、消す前と比べる。札まで消すと、中央値が図の明るさを言わなくなる
-        const drawnWithout = async (selector) => {
+        const drawnWithout = async (selector, transparent = '') => {
           const hide = await page.addStyleTag({
-            content: `${selector} { visibility: hidden !important }`,
+            content:
+              `${selector} { visibility: hidden !important }` +
+              (transparent ? `${transparent} { opacity: 0 !important }` : ''),
           })
           const hidden = png(await page.screenshot({ type: 'png' }))
           await page.evaluate((node) => node.remove(), hide)
@@ -621,8 +643,13 @@ async function main() {
           },
           stars: {
             label: '星空の星',
-            drawn: await drawnWithout('.cosmos__stars'),
-            why: '星空の星（.cosmos__stars の SVG）が描かれていない',
+            /*
+              HTML の点は透明にして合成の層を残す。visibility で消すと、Chromium は星と
+              無関係な背景にも 2〜3/255 の丸め差を出し、星の面積と明るさへ混ぜてしまう。
+              静止 SVG だけは従来どおり消す。点そのものの画素を比べ、下限は変えない。
+            */
+            drawn: await drawnWithout('.cosmos__stars--still', '.cosmos__twinkle'),
+            why: '星空の星（.cosmos__stars）が描かれていない',
             minDelta: STARS_MIN_DELTA,
           },
         }
@@ -657,29 +684,30 @@ async function main() {
         /*
         動きの途中の姿も測る。
 
-        上の一巡りは動きを止めて測っている（reducedMotion）。入口は着いたときに
-        一度だけ、ブラックホールが光の点から閃いて大きく明るく広がってから締まり、軌道の線が
-        内側から引かれて天体が灯る（public/app.css の「入口に着いたとき」）。そのあとは入口も締めも、軌道を星が
-        流れ、ブラックホールの光が揺らぐ（「動き続ける」）。広がった光・引かれていく線・流れる星は
-        止まった姿には無いので、字の後ろに掛かる瞬間は上では見えない。
+        上の一巡りは動きを止めて測っている（reducedMotion）。入口も締めも、軌道を星が
+        流れ、粒が落ち、ブラックホールの光が揺らぎ、星が瞬く（public/app.css の「動き続ける」）。
+        変わる光・粒・星は止まった姿には無いので、字の後ろに掛かる瞬間は上では見えない。
 
         動きを止めずに開き、名前が orbit- で始まる animation だけを止めて途中の時刻へ
         送る。字の浮かび上がりは先に終わらせる——行ボックスを止まった位置で読むため。
       */
-        const moving = await browser.newPage(pageOptions(viewport))
+        const moving = await browser.newPage({
+          ...pageOptions(viewport),
+          reducedMotion: 'no-preference',
+        })
         await moving.goto(base + screen.path, { waitUntil: 'load' })
         await moving.evaluate(settled)
         const end = await moving.evaluate(holdOrbits)
-        if (end === 0) {
+        if (Number.isNaN(end) || end <= 0) {
           failures.push(
-            `${where} — 動きの animation（名前が orbit- で始まるもの）が見つからない。途中の姿を1つも測れていない（動かすのをやめたなら、その画面の motion を外すこと）`,
+            `${where} — 有効な周期を持つ animation（名前が orbit- で始まるもの）が見つからない。途中の姿を1つも測れていない。app.css の「動き続ける」と animation の名前・周期を確認すること`,
           )
         }
         const frames = await moving.evaluate(motionFrames, MOTION_FRAMES)
         for (const at of end > 0 ? frames : []) {
-          if (!(at > 0 && at < end)) {
+          if (!Number.isFinite(at) || !(at > 0 && at < end)) {
             failures.push(
-              `${where} — 動きの途中のコマ ${at}ms が動きの長さ（${Math.round(end)}ms）の外。:root の --ignite-* / --trace-* を読めているか`,
+              `${where} — 動きの途中のコマ ${at}ms が動きの長さ（${Math.round(end)}ms）の外。:root の --breathe-dur と流れ星の --dur / --delay を読めているか`,
             )
             continue
           }
@@ -698,7 +726,7 @@ async function main() {
     console.error(`\n✗ ${failures.length} 件（${checked} 通り中）`)
     for (const line of failures) console.error(`  ${line}`)
     console.error(
-      '\n軌道を薄くするより先に、置き場所を疑う。字の後ろの暗がりは app.css の「入口の軌道図」、線の濃さは public/app.css の --orbit-ink、着いたときの光の広がりは --ignite-flare / --ignite-glow。',
+      '\n軌道を薄くするより先に、置き場所を疑う。字の後ろの暗がりは app.css の「字の暗がり」、線の濃さは --orbit-ink、継続する光は --hole-light / --breathe-low、粒と星の動きは「動き続ける」。',
     )
     process.exitCode = 1
     return

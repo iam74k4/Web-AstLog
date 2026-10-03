@@ -11,6 +11,7 @@ import {
   langOf,
   Stylesheets,
 } from './components'
+import { MOTION_START } from './motion'
 
 export type NavItem = { href: string; label: string; active?: boolean }
 
@@ -90,9 +91,9 @@ const ShareImage = ({ image }: { image: OgImage }) => (
   サイトか・連絡先・全体ページへの1本）。見た目のプリセットで変わるのは色と
   見出しの書体だけで、並べ方は変えない（src/theme.ts）。
 
-  公開ページは JavaScript を持たない。絞り込みもページの移動もサーバーが決め、
-  リンクをたどるだけで動く。ここに <script> を1つ足すと、切られた環境で
-  何が落ちるかを毎回考えることになる。ページを移るときの切り替え（app.css の
+  内容・絞り込み・ページの移動はサーバーが決め、JavaScript 無効でもリンクをたどれる。
+  装飾の初期化だけ MOTION_START が分散させる。CSP はこの固定文字列の SHA-256 だけを
+  許可し、無効時は通常の CSS 動作へ戻る。ページを移るときの切り替え（app.css の
   @view-transition）も CSS だけで、知らないブラウザではふつうに移るだけ。
 */
 export const Layout = (props: {
@@ -139,6 +140,7 @@ export const Layout = (props: {
       <ShareImage image={props.image ?? SITE_IMAGE} />
 
       <FaviconLinks />
+      <script dangerouslySetInnerHTML={{ __html: MOTION_START }} />
       <Stylesheets />
       {props.jsonLd ? (
         <script

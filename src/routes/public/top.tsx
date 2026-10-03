@@ -84,6 +84,7 @@ export async function renderWholePage(c: Context<AppEnv>) {
 
   const solo = soloMember(members)
 
+  c.header('x-astlog-motion', 'staged')
   return c.html(
     <Layout
       // 入口と同じ題にしない（履歴と検索結果で、全体版を選び直せるように）
@@ -181,6 +182,7 @@ export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
   */
   if (!pages.length) {
     if (slug) return c.notFound()
+    c.header('x-astlog-motion', 'staged')
     return c.html(
       <Layout
         title={siteTitle(solo)}

@@ -2,13 +2,14 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import adminCss from '../public/admin.css'
 import css from '../public/app.css'
 import * as schema from '../src/db/schema'
-import { CONTACT_FRAME, HERO_FRAME, NEBULA, TILT } from '../src/lib/orbits'
+import { CONTACT_FRAME, COSMOS, HERO_FRAME, MOTION_RATE, NEBULA, TILT } from '../src/lib/orbits'
 import { ACCENTS, THEME_KEYS, TYPEFACES } from '../src/theme'
 import { BLACKHOLE_ART, LOGO_COLORS } from '../src/ui/logo'
+import { MOTION_START } from '../src/ui/motion'
 import { db, form, get, okText, resetDb, seedItem, seedMember, signIn } from './helpers'
 
-// 着いたあとも動き続ける animation の名前（app.css の「動き続ける」）
-const LASTING = /orbit-(swirl|unswirl|sway|grain-swirl|grain-fall|breathe|drift|twinkle|meteor)\b/
+// 着いたあとも動き続ける animation の名前。粒と流れる星の固定名は部品が --motion で渡す。
+const LASTING = /orbit-(swirl|unswirl|sway|breathe|drift|twinkle|meteor)\b|var\(--motion\)/
 
 beforeEach(resetDb)
 
@@ -733,7 +734,7 @@ describe('部品の作法', () => {
   it('一覧の行は面ごと押せる。題のリンクの覆いを行に被せ、ほかのリンクはその上に出す', () => {
     /*
       題の字だけがリンクだと、押せる合図は行全体に出ているのに、説明を押しても
-      何も起きない。入れ子の <a> は作れず、JavaScript も置かないので、題のリンクの
+      何も起きない。入れ子の <a> は作れず、移動はリンクだけで成立させるので、題のリンクの
       ::after を行いっぱいに広げる
     */
     const cover = bodyOf(sheet, '.entry__link::after {')
@@ -902,10 +903,9 @@ describe('部品の作法', () => {
     )
   })
 
-  it('着いたときの動きは入口の軌道図の中だけ。締めで動くのは入口と同じ動き続けるものだけ', () => {
+  it('入口と締めの星系は同じ継続動作だけ。層全体を動かす登場は持たない', () => {
     /*
-      着いたときの動き（ブラックホールが灯り、軌道の線が引かれて天体が灯る）は入口で一度だけ。
-      締めで続くのは、入口と同じ動き続けるもの（星屑と天体の公転・流れる星・吸い込まれる粒・
+      入口と締めで続くのは、同じ動き続けるもの（星屑と天体の公転・流れる星・吸い込まれる粒・
       ブラックホールの光の揺らぎ・星雲の漂い・星の瞬き・流れ星）だけ。どちらの画面も
       npm run check:contrast が動きの途中の姿を測る
     */
@@ -916,14 +916,22 @@ describe('部品の作法', () => {
     for (const rule of moving) {
       const [, value] = rule.decls.find(([name]) => name === 'animation') ?? ['', '']
       if (lasting.test(value)) continue
+      if (
+        /^none\s*!important$/.test(value) &&
+        rule.selectors.some((selector) => selector.startsWith('html[data-motion-staged]'))
+      ) {
+        expect(
+          rule.selectors.every((selector) => selector.startsWith('html[data-motion-staged]')),
+        ).toBe(true)
+        continue
+      }
       for (const selector of rule.selectors) {
         if (!/orbit/.test(selector)) continue
-        // 入口の図の層（.system__…）か、その中のもの（.system …）。締めの図（.orbits）は動かない
-        expect(selector, `${selector} が動く`).toMatch(/^\.system(__|\s)/)
+        throw new Error(`${selector} が継続動作以外で動く`)
       }
-      // ブラックホールは入口と締めで同じ部品。灯るのは入口の枠の中のものだけ
+      // 光が揺らぐ動き以外は、ブラックホールの層も変えない
       for (const selector of rule.selectors) {
-        if (/\.hole\b/.test(selector)) expect(selector).toBe('.system > .hole')
+        expect(selector).not.toMatch(/\.hole\b/)
       }
     }
     // 締めの外へ抜ける道（脱出軌道と探査機）は持ち主が外した
@@ -975,7 +983,7 @@ describe('部品の作法', () => {
     */
     const layers = bodyOf(
       sheet,
-      '.system__bands,\n.system__orbits,\n.system__stardust,\n.system__motion,\n.system__bodies {',
+      '.system__bands,\n.system__orbits,\n.system__stardust,\n.system__bodies {',
     )
     expect(layers).toContain('position: absolute')
     expect(layers).toContain('inset: 0')
@@ -1213,7 +1221,7 @@ describe('部品の作法', () => {
 
   it('目次のいまのページは、帯の見えている幅の中で開く（貼り付く帯のときだけ）', () => {
     /*
-      JavaScript が無いので、帯は何もしなければいつも左端で開き、並びの後ろの
+      CSS だけで組む帯は、何もしなければいつも左端で開き、並びの後ろの
       節に着くと印が帯の外に出ていた。全体ページの目次は折り返すので要らない
     */
     const frame = blockAt(sheet, '@media screen')
@@ -1580,24 +1588,57 @@ describe('入口の軌道図', () => {
       '.orbit-body__ring {',
       '.stardust path {',
       '.cosmos__stars path {',
-      '.cosmos__meteor {',
     ]) {
       expect(bodyOf(sheet, selector), selector).toContain('vector-effect: non-scaling-stroke')
     }
     expect(root()).toMatch(/--orbit-line:\s*\d+px;/)
-    // 流れる星は逆の伸縮で形を保つ。画面の太さは枠とコンテナの比で補い、
-    // non-scaling-stroke による回転中の再描画を避ける。
+    // 流れる星の光芒は小さい静止 SVG。動かすのは HTML の親だけで、太さは画面pxのまま。
     const glint = bodyOf(sheet, '.orbit-flow__glint {')
     expect(glint).toContain('vector-effect: non-scaling-stroke')
-    const scaled = blockAt(sheet, '@supports (width: calc(1px * (1px / 1px)))')
-    expect(bodyOf(scaled, '.orbit-flow__glint {')).toContain('var(--flow-frame-w) / 100cqi')
-    expect(bodyOf(scaled, '.orbit-flow__glint {')).toContain('vector-effect: none')
+    expect(glint).toContain('stroke-width: var(--orbit-line)')
+    expect(sheet).not.toContain('--flow-frame-w')
+    const flows = bodyOf(sheet, '.orbit-flows {')
+    for (const decl of [
+      'position: absolute',
+      'inset: 0',
+      'overflow: clip',
+      'container-type: inline-size',
+      'pointer-events: none',
+    ]) {
+      expect(flows, decl).toContain(decl)
+    }
+    // 尾の matrix は星の中心が原点。光芒の SVG には回転や拡大を掛けない。
+    const flow = bodyOf(sheet, '.orbit-flow,\n.orbit-flow__tail {')
+    for (const decl of [
+      'position: absolute',
+      'left: 0',
+      'top: 0',
+      'width: 0',
+      'height: 0',
+      'transform-origin: 0 0',
+      'will-change: transform',
+    ]) {
+      expect(flow, decl).toContain(decl)
+    }
+    expect(bodyOf(sheet, '.orbit-flow__star,\n.orbit-flow__tail-art {')).toContain(
+      'overflow: visible',
+    )
+    // 吸い込まれる粒は画面pxの小さい HTML 円。座標だけを図の幅の cqi で動かす。
+    const dust = bodyOf(sheet, '.orbit-dust {')
+    for (const decl of ['position: absolute', 'inset: 0', 'container-type: inline-size']) {
+      expect(dust, decl).toContain(decl)
+    }
     const grain = bodyOf(sheet, '.orbit-grain__dot {')
-    expect(grain).toContain('stroke-width: var(--grain-w)')
-    expect(grain).toContain('offset-rotate: 0deg')
-    expect(grain).toContain('vector-effect: non-scaling-stroke')
-    expect(bodyOf(scaled, '.orbit-grain__dot {')).toContain('var(--grain-frame-w) / 100cqi')
-    expect(bodyOf(scaled, '.orbit-grain__dot {')).toContain('vector-effect: none')
+    for (const decl of [
+      'position: absolute',
+      'left: 0',
+      'top: 0',
+      'border-radius: 50%',
+      'will-change: transform, opacity',
+    ]) {
+      expect(grain, decl).toContain(decl)
+    }
+    expect(grain).not.toMatch(/stroke|offset-path|offset-distance|vector-effect/)
     /*
       天体は枠の単位で描く（光とにじみは放射の坂で塗った円、輪の線だけが画面の px）。回る
       天体の大きさは部品が scale で変えるので、画面の px で持つと奥行きに付いてこない。縁の
@@ -1671,53 +1712,45 @@ describe('入口の軌道図', () => {
     expect(html.indexOf(opening)).toBeLessThan(html.indexOf('system__orbits--near'))
   })
 
-  it('動くのは着いたときの一度だけ。止まった姿がそのまま完成形で、5 秒以内に止まる', () => {
-    /*
-      出だしの姿（from）と途中の姿だけを書き、終わりの姿（to / 100%）は持たせない——
-      reduced-motion で animation: none になった姿が、そのまま動き終わった姿になる。途中の姿は
-      ブラックホールと天体が光の点から閃いて広がる所（orbit-ignite / orbit-birth）
-    */
-    for (const name of [
-      'orbit-light',
-      'orbit-ignite',
-      'orbit-trace',
-      'orbit-birth',
-      'orbit-count',
-      'orbit-condense',
-    ]) {
+  it('星系は完成形で初めから表示する。登場で動かすのはぼかしのない文字と件数だけ', () => {
+    // 大きい背景・光・線・親の濃さを動かす登場は、ソフトウェア描画で毎コマの再描画になる。
+    expect(sheet).not.toMatch(/@keyframes orbit-(light|ignite|condense|trace|birth)\b/)
+    expect(sheet).not.toMatch(/--(?:sky-dur|ignite|condense|trace|fill|birth|enter-blur)[\w-]*:/)
+    expect(bodyOf(sheet, '\n.orbit {')).not.toMatch(/stroke-dasharray|stroke-dashoffset/)
+    const rise = blockAt(sheet, '@keyframes rise-in')
+    expect(rise).toContain('opacity: 0')
+    expect(rise).toContain('translate: 0 var(--enter-shift)')
+    expect(rise).not.toMatch(/filter|blur|scale/)
+    const visible = bodyOf(
+      sheet,
+      '.hero h1 .phrase,\n.hero__copy > :not(h1),\n.hero > .nameplate,\n.tally__cell {',
+    )
+    expect(visible).toContain('animation: rise-in')
+    for (const name of ['rise-in', 'orbit-count']) {
       const frames = blockAt(sheet, `@keyframes ${name}`)
       expect(frames, name).toContain('from {')
       expect(frames, name).not.toMatch(/\bto\s*\{|100%\s*\{/)
     }
-    // レーダー（走査線・波紋）はやめた。ブラックホールが灯り、軌道が引かれる
-    expect(sheet).not.toMatch(/system__beam|orbit-ring|orbit-sweep|--sweep|--radar-/)
-    expect(bodyOf(sheet, '.system > .hole {')).toContain('animation: orbit-ignite')
-    // 星空は入口でだけ灯る（締めの星空は着いたときに動かない）
-    expect(bodyOf(sheet, '.hero > .cosmos {')).toContain('animation: orbit-light')
+    // 星空・星系の層で動くのは継続するものだけ。初期 opacity や filter は持たせない。
+    const graphics =
+      /\.(?:system(?:\b|__)|orbits(?:\b|__)|cosmos(?:\b|__)|hole(?:\b|__)|orbit(?:\b|-))/
+    for (const rule of rulesOf(sheet)) {
+      if (!rule.selectors.some((selector) => graphics.test(selector))) continue
+      for (const [property, value] of rule.decls) {
+        if (property === 'animation' || property === 'animation-name') {
+          if (/^none\s*!important$/.test(value)) {
+            expect(
+              rule.selectors.every((selector) => selector.startsWith('html[data-motion-staged]')),
+            ).toBe(true)
+            continue
+          }
+          expect(value, rule.selectors.join(', ')).toMatch(LASTING)
+        }
+      }
+    }
     /*
-      星系が生まれる（持ち主が「初期表示をかっこよく」で選んだ形）。軌道の線は内側から順に
-      引かれる——線の長さを部品が pathLength 100 にそろえ、破線1本ぶんで1周を覆う（止まった姿は
-      全部引いた線）。奥の半分を引いてから手前の半分。全部が同時に浮かんで回り込む
-      （orbit-infall）登場は、2 秒足らずで終わる平らなものだった
-    */
-    expect(bodyOf(sheet, '\n.orbit {')).toContain('stroke-dasharray: 100')
-    const far = bodyOf(sheet, '.system__orbits--far .orbit {')
-    const near = bodyOf(sheet, '.system__orbits--near .orbit {')
-    expect(far).toContain('animation: orbit-trace var(--trace-dur) linear')
-    expect(near).toContain('animation: orbit-trace var(--trace-dur) linear')
-    expect(near).toContain('var(--trace-delay) + var(--trace-dur) + var(--reach, 0)')
-    expect(sheet).not.toMatch(/orbit-infall|--infall-/)
-    // 天体は乗る軌道を引き終えてから灯る。大きさの揺れの上に重ねる（あとに並べる）
-    const birth = bodyOf(
-      blockAt(sheet, '@media (prefers-reduced-motion: no-preference)'),
-      '.system .orbit-body {',
-    )
-    expect(birth.indexOf('orbit-sway')).toBeGreaterThan(-1)
-    expect(birth.indexOf('orbit-birth')).toBeGreaterThan(birth.indexOf('orbit-sway'))
-    /*
-      動かない層（帯・線）は自分の合成の層に描く。帯のぼかしを一度だけ描いて使い回し、回る星屑や
-      天体、流れる星と粒が動くたびに描き直さない（動くものは別の SVG に分けてある）。星屑の層も
-      自分の合成の層——星屑は1秒に数回だけ進むので、そのあいだは描いた層を使い回す
+      動かない帯・線と、100msごとの星屑・天体は描いた層を使い回す。
+      粒と流れる星が動くたびに、帯のぼかしや千を超える星屑を描き直さない。
     */
     const cached = ruleWith(sheet, 'will-change: transform').selector.replace(/\s+/g, ' ')
     for (const layer of [
@@ -1731,43 +1764,11 @@ describe('入口の軌道図', () => {
     ]) {
       expect(cached, layer).toContain(layer)
     }
-
-    // 着いたときの動きは繰り返さない（続くものは下の「動き続ける」）
-    const moving = rulesOf(sheet).filter((rule) =>
-      rule.decls.some(
-        ([name, value]) => name === 'animation' && /orbit-/.test(value) && !LASTING.test(value),
-      ),
-    )
-    expect(moving.length).toBeGreaterThanOrEqual(5)
-    for (const rule of moving) {
-      const [, value] = rule.decls.find(([name]) => name === 'animation') ?? ['', '']
-      expect(value, rule.selectors.join(', ')).not.toMatch(/infinite/)
-    }
-
-    /*
-      5 秒以内に止まる（WCAG 2.2.2）。いちばん遅いのは星雲の凝りと、軌道を引き終えてから
-      灯る流れる星と粒
-    */
-    const ms = (name: string) => token(name)
-    const ignite = ms('--ignite-delay') + ms('--ignite-dur')
-    const traced = ms('--trace-delay') + ms('--trace-stagger') + ms('--trace-dur') * 2
-    const filled = ms('--trace-delay') + ms('--trace-dur') + ms('--fill-dur')
-    const condense = ms('--condense-delay') + ms('--condense-dur')
-    for (const end of [
-      ignite,
-      traced,
-      traced + ms('--birth-dur'),
-      traced + ms('--count-dur'),
-      traced + ms('--fill-dur'),
-      filled,
-      condense,
-    ]) {
-      expect(end).toBeGreaterThan(1000)
-      expect(end).toBeLessThanOrEqual(5000)
-    }
-    expect(root()).toContain(
-      '--count-delay: calc(var(--trace-delay) + var(--trace-stagger) + var(--trace-dur) * 2)',
-    )
+    // 字を先に見せ、件数は短い待ちで数え上げる。一度きりの動きは5秒以内。
+    expect(token('--count-delay')).toBeGreaterThanOrEqual(0)
+    expect(token('--count-delay')).toBeLessThanOrEqual(1000)
+    expect(token('--count-delay') + token('--count-dur')).toBeLessThanOrEqual(5000)
+    expect(token('--dur-spring') + 4 * token('--stagger')).toBeLessThanOrEqual(5000)
   })
 
   it('動き続けるものは、動きを減らす設定の外でだけ動く。keyframes は var() を持たない', () => {
@@ -1785,6 +1786,11 @@ describe('入口の軌道図', () => {
     for (const rule of lasting) {
       const [, value] = rule.decls.find(([name]) => name === 'animation') ?? ['', '']
       expect(value, rule.selectors.join(', ')).toMatch(LASTING)
+      if (value.includes('var(--motion)')) {
+        for (const selector of rule.selectors) {
+          expect(['.orbit-grain__dot', '.orbit-flow', '.orbit-flow__tail']).toContain(selector)
+        }
+      }
       expect(rule.context, rule.selectors.join(', ')).toEqual([
         '@media (prefers-reduced-motion: no-preference)',
       ])
@@ -1816,17 +1822,28 @@ describe('入口の軌道図', () => {
       回る枠の中を回る（大きさはその軌道の平均で、毎コマは変えない）
     */
     /*
-      毎コマ動くもの（流れる星と粒）も 1/60 秒の刻みで進める。144Hz の画面で毎コマ描き直すと、
-      GPU の仕事が1コマの枠を超えてブラウザごと重くなった（持ち主の「edge などで開くと異常に重い」）
+      粒と流れる星は、小さい HTML の固定座標を区間ごとの steps() で1/60秒ずつ進める。
+      動く粒を SVG で描き直していたころは、アクセラレーションを切った Edge で重くなった
     */
-    expect(bodyOf(breathing, '.orbit-flows :is(.orbit-spin, .orbit-unspin) {')).toContain(
-      'animation-timing-function: steps(var(--ticks))',
+    const flowMotion = rulesOf(breathing).filter(
+      (rule) =>
+        rule.selectors.length === 2 &&
+        rule.selectors.includes('.orbit-flow') &&
+        rule.selectors.includes('.orbit-flow__tail'),
     )
-    expect(bodyOf(breathing, '.orbit-grain__dot {')).toContain('steps(var(--ticks))')
+    expect(flowMotion).toHaveLength(1)
+    expect(flowMotion[0]?.decls).toContainEqual([
+      'animation',
+      'var(--motion) var(--dur) linear infinite',
+    ])
+    expect(bodyOf(breathing, '.orbit-grain__dot {')).toContain(
+      'animation: var(--motion) var(--dur) linear var(--delay) infinite',
+    )
     expect(sheet).not.toMatch(/--fall-ease|@keyframes orbit-fall\b/)
     expect(bodyOf(sheet, '.orbit-flow__glint {')).toContain('opacity: var(--flow-glint)')
     expect(bodyOf(sheet, '.orbit-flow__fade {')).toContain('stop-opacity: var(--flow-trail)')
-    expect(sheet).not.toMatch(/@keyframes orbit-flow\b|--flow-len|--flow-tail\b|\.orbit-flow\s*\{/)
+    expect(sheet).not.toMatch(/@keyframes orbit-flow\s*\{|--flow-len|--flow-tail\b/)
+    expect(sheet).not.toContain('.orbit-flows :is(.orbit-spin, .orbit-unspin)')
     // 止める手は外した
     expect(sheet).not.toMatch(/\.motion\b|motion-toggle/)
 
@@ -1839,13 +1856,14 @@ describe('入口の軌道図', () => {
       'orbit-swirl',
       'orbit-unswirl',
       'orbit-sway',
-      'orbit-grain-fall',
       'orbit-drift',
       'orbit-twinkle',
       'orbit-meteor',
     ]) {
       expect(blockAt(sheet, `@keyframes ${name}`), name).not.toContain('var(')
     }
+    // 粒と流れる星の literal 座標は SSR が生成する。共通の道や動く SVG の逆変換は持たない。
+    expect(sheet).not.toMatch(/@keyframes orbit-grain-fall\s*\{|offset-distance|--grain-frame-w/)
     /*
       星雲が漂うのは素材を背景に置いた箱ごと（雲の模様を毎コマ描き直さない）。
       星の瞬きは明るさだけで、もとの明るさは星ごとの opacity 属性——keyframes は真ん中の
@@ -1855,15 +1873,114 @@ describe('入口の軌道図', () => {
     expect(bodyOf(quietMotion, '.cosmos__nebula {')).toContain('animation: orbit-drift')
     expect(bodyOf(quietMotion, '.cosmos__twinkle {')).toContain('animation: orbit-twinkle')
     expect(bodyOf(quietMotion, '.cosmos__meteor {')).toContain('animation: orbit-meteor')
-    /*
-      入口の星雲は、着いたときに凝って灯る動きと漂う動きを1つの宣言に並べる（animation は
-      1つの宣言しか効かない。分けて書くと、後ろの宣言が前の動きを消す）
-    */
-    const hero = bodyOf(quietMotion, '.hero .cosmos__nebula {')
-    expect(hero).toContain('orbit-condense')
-    expect(hero).toContain('orbit-drift')
+    // 入口と締めの星雲は同じ漂いだけ。親の濃さや大きさを変える登場に戻さない。
+    expect(sheet).not.toContain('.hero .cosmos__nebula {')
     const twinkle = blockAt(sheet, '@keyframes orbit-twinkle')
     expect(twinkle).not.toMatch(/\bfrom\s*\{|\bto\s*\{/)
+  })
+
+  it('粒と流れる星は60回/秒まで更新する。keyframesにvar()を持たず、scriptは開始helperだけ', async () => {
+    await seedItem()
+    expect(MOTION_RATE).toBe(60)
+    for (const path of ['/', '/contact']) {
+      const html = await okText(path)
+      const scripts = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/gi)].filter(
+        (match) => !/type="application\/ld\+json"/i.test(match[1] ?? ''),
+      )
+      expect(scripts, path).toHaveLength(1)
+      expect(scripts[0]?.[1], path).toBe('')
+      expect(scripts[0]?.[2], path).toBe(MOTION_START)
+      const styles = [...html.matchAll(/<style>([\s\S]*?)<\/style>/g)]
+        .map((match) => match[1] ?? '')
+        .join('')
+      // 尾は親の周期を継ぐ。粒は遅れも60Hzの格子へそろえる。
+      const periods = new Map<string, number>()
+      for (const [, name = '', duration = ''] of html.matchAll(
+        /class="orbit-flow" style="--motion:([\w-]+);--dur:([\d.]+)s"/g,
+      )) {
+        periods.set(name, Number(duration))
+        periods.set(name.replace('orbit-flow-move-', 'orbit-flow-tail-'), Number(duration))
+      }
+      for (const [, name = '', duration = '', delay = ''] of html.matchAll(
+        /class="orbit-grain__dot" style="--motion:([\w-]+);--dur:([\d.]+)s;--delay:([-\d.]+)s;/g,
+      )) {
+        periods.set(name, Number(duration))
+        const tick = Number(delay) * MOTION_RATE
+        expect(tick, name).toBeCloseTo(Math.round(tick), 5)
+      }
+      expect(
+        [...periods.keys()].some((name) => name.startsWith('orbit-flow-move-')),
+        path,
+      ).toBe(true)
+      expect(
+        [...periods.keys()].some((name) => name.startsWith('orbit-grain-fall-')),
+        path,
+      ).toBe(true)
+      for (const [name, duration] of periods) {
+        const marker = styles.match(new RegExp(`@keyframes\\s+${name}\\s*\\{`))?.[0] ?? ''
+        expect(marker, name).not.toBe('')
+        const motion = blockAt(styles, marker)
+        expect(motion, name).not.toContain('var(')
+        const frames = rulesOf(motion)
+        expect(frames.length, name).toBeGreaterThan(2)
+        const times = frames.map((frame) => Number.parseFloat(frame.selectors[0] ?? '') / 100)
+        expect(times[0], name).toBe(0)
+        expect(times.at(-1), name).toBe(1)
+        frames.forEach((frame, i) => {
+          for (const [property] of frame.decls) {
+            expect(['transform', 'opacity', 'animation-timing-function'], name).toContain(property)
+          }
+          const at = times[i] ?? 0
+          const tick = at * duration * MOTION_RATE
+          expect(tick, name).toBeCloseTo(Math.round(tick), 5)
+          const next = times[i + 1]
+          if (next === undefined) return
+          const timing = frame.decls.find(([property]) => property === 'animation-timing-function')
+          const steps = Number(timing?.[1].match(/^steps\((\d+)\)$/)?.[1])
+          expect(steps, name).toBeGreaterThan(0)
+          // 区間ごとの段数が整数コマ数と一致し、高速画面でも毎コマの更新へ戻らない。
+          expect(steps, name).toBeCloseTo((next - at) * duration * MOTION_RATE, 5)
+          const transform = frame.decls.find(([property]) => property === 'transform')?.[1] ?? ''
+          expect(transform, name).toMatch(/^(translate|matrix)\(/)
+        })
+      }
+    }
+  })
+
+  it('装飾の開始待ちはhelperの印がある通常motionだけ。JS無効時のCSSとreduced-motionを妨げない', () => {
+    const gate = rulesOf(sheet).find(
+      (rule) =>
+        rule.selectors.some((selector) => selector.startsWith('html[data-motion-staged]')) &&
+        rule.decls.some(([property]) => property === 'animation'),
+    )
+    expect(gate?.context).toEqual(['@media (prefers-reduced-motion: no-preference)'])
+    expect(gate?.decls).toContainEqual(['animation', 'none !important'])
+    const selector = gate?.selectors.join(', ') ?? ''
+    expect(selector).toContain(':not([data-motion-ready])')
+    for (const part of [
+      '.orbit-flow',
+      '.orbit-flow__tail',
+      '.cosmos__twinkle',
+      '.cosmos__meteor',
+      '.orbit-grain__dot',
+      '.orbit-spin',
+      '.orbit-unspin',
+      '.orbit-body',
+      '.hole__art',
+      '.cosmos__nebula',
+    ]) {
+      expect(selector, part).toContain(part)
+    }
+    expect(selector).not.toMatch(/hero__copy|phrase|tally|nameplate/)
+    const hidden = rulesOf(sheet).find((rule) =>
+      rule.selectors.includes('html[data-motion-staged] .orbit-flow:not([data-motion-ready])'),
+    )
+    expect(hidden?.context).toEqual(['@media (prefers-reduced-motion: no-preference)'])
+    expect(hidden?.decls).toContainEqual(['visibility', 'hidden'])
+    // SSR は helper が走らないときのため、最初から開始待ちの印を置かない。
+    expect(MOTION_START).toContain("root.setAttribute('data-motion-staged','')")
+    expect(MOTION_START).toContain("el.setAttribute('data-motion-ready','')")
+    expect(MOTION_START).not.toContain("removeAttribute('data-motion-staged')")
   })
 
   it('星屑と天体は軌道ごと回る。天体は形を保ったまま、手前へ来るほど大きい', () => {
@@ -1892,14 +2009,32 @@ describe('入口の軌道図', () => {
     expect(sway).toMatch(/from\s*\{\s*scale:\s*0;?\s*\}/)
     expect(sway).toMatch(/to\s*\{\s*scale:\s*1;?\s*\}/)
     /*
-      星屑は千を超える粒なので、1周を刻んで進める（1秒に十数回）。進まないあいだは星屑の層を
-      描き直さない
+      星屑は1周を刻んで進める（10Hz）。進まないあいだは星屑の層を描き直さない
     */
     expect(bodyOf(motion, '.stardust .orbit-spin {')).toContain(
       'animation-timing-function: steps(var(--ticks))',
     )
-    // 星屑の濃さの坂は回らない覆いが掛ける（点の色に塗ると坂も一緒に回る）。覆いは濃さだけを読む
-    expect(bodyOf(sheet, '.stardust-fade {')).toContain('mask-type: alpha')
+    // 星屑は奥・手前の代表濃さ。内外ともmaskを持たず、層全体の描き直しを避ける。
+    for (const [side, opacity] of [
+      ['far', 'calc((1 + 3 * var(--stardust-far)) / 4)'],
+      ['near', 'calc((3 + var(--stardust-far)) / 4)'],
+    ]) {
+      const fades = rulesOf(sheet).filter((rule) =>
+        rule.selectors.includes(`.system__stardust--${side}`),
+      )
+      expect(fades).toHaveLength(1)
+      expect(fades[0]?.context).toEqual([])
+      expect(fades[0]?.selectors).toEqual([
+        `.system__stardust--${side}`,
+        `.orbits__stardust--${side}`,
+      ])
+      expect(fades[0]?.decls).toContainEqual(['opacity', opacity])
+    }
+    for (const rule of rulesOf(sheet)) {
+      if (!rule.selectors.some((selector) => selector.includes('stardust'))) continue
+      expect(rule.decls.some(([property]) => property.startsWith('mask'))).toBe(false)
+    }
+    expect(sheet).not.toMatch(/\.stardust-fade\b|\.stardust-depth__|--stardust-(angle|start|end)/)
     expect(bodyOf(sheet, '.stardust path {')).toContain('stroke: var(--ink)')
     // 前の、天体を寄せてから止める動き（札と食い違って跳んだ）は戻さない
     expect(sheet).not.toMatch(/orbit-turn|\.orbit-mover|\.orbit-settle|--settle/)
@@ -1944,8 +2079,20 @@ describe('星空と星雲', () => {
       'z-index: -1',
       'overflow: hidden',
       'pointer-events: none',
+      'container-type: size',
     ]) {
       expect(cosmos, decl).toContain(decl)
+    }
+    // 動く星は小さい HTML の点。位置の視野は静止した SVG と同じ1600×1000の中央 slice。
+    const field = bodyOf(sheet, '.cosmos__stars--twinkle,\n.cosmos__meteors {')
+    for (const decl of [
+      'left: 50%',
+      'top: 50%',
+      `width: max(100cqw, ${(COSMOS.width / COSMOS.height) * 100}cqh)`,
+      `height: max(${(COSMOS.height / COSMOS.width) * 100}cqw, 100cqh)`,
+      'transform: translate(-50%, -50%)',
+    ]) {
+      expect(field, decl).toContain(decl)
     }
   })
 
@@ -1990,10 +2137,35 @@ describe('星空と星雲', () => {
     expect(wideVeil).toContain('calc(-1 * var(--veil-side))')
     expect(bodyOf(sheet, ':root {')).toMatch(/--veil-x: linear-gradient\(\s*to right/)
 
-    // 星空の覆いは底だけ（入口は件数の帯の上、締めは足元の罫線の手前）。左の列を消す覆いに戻さない
-    for (const selector of ['.cosmos--hero {', '.cosmos--contact {']) {
-      expect(bodyOf(sheet, selector), selector).toMatch(/mask-image: linear-gradient\(\s*to bottom/)
+    // 星空の覆いは底だけ。動く子を持つ親には mask を掛けず、同じ地の色を静止した1枚で重ねる
+    const fade = bodyOf(sheet, '.cosmos::after {')
+    for (const decl of [
+      "content: ''",
+      'position: absolute',
+      'inset: 0',
+      'top: auto',
+      'height: var(--cosmos-fade-h)',
+      'z-index: 1',
+      'background: var(--cosmos-fade)',
+      'pointer-events: none',
+    ]) {
+      expect(fade, decl).toContain(decl)
     }
+    expect(fade).not.toMatch(/\banimation|\bmask/)
+    for (const selector of ['.cosmos--hero {', '.cosmos--contact {']) {
+      expect(bodyOf(sheet, selector), selector).toMatch(
+        /--cosmos-fade: linear-gradient\(\s*to bottom/,
+      )
+      expect(bodyOf(sheet, selector), selector).not.toMatch(/\bmask/)
+    }
+    expect(bodyOf(sheet, '.cosmos {')).not.toMatch(/\bmask/)
+    const heroFade = bodyOf(sheet, '.cosmos--hero {')
+    // 元の底から page-pad+220px で消え始め、page-pad+100px で消えきる位置を保つ。
+    expect(heroFade).toContain('--cosmos-fade-h: calc(var(--page-pad) + 220px)')
+    expect(heroFade).toContain('linear-gradient(to bottom, transparent 0, var(--bg) 120px)')
+    const contactFade = bodyOf(sheet, '.cosmos--contact {')
+    expect(contactFade).toContain('--cosmos-fade-h: calc(var(--page-pad) * 2)')
+    expect(contactFade).toContain('linear-gradient(to bottom, transparent, var(--bg))')
     expect(bodyOf(wide, '.cosmos--hero {')).not.toContain('mask')
 
     // はっきり見たい設定・背の低い窓・紙では、星空も暗がりも出さない
@@ -2078,8 +2250,20 @@ describe('星空と星雲', () => {
     const stars = bodyOf(sheet, '.cosmos__stars path {')
     expect(stars).toContain('stroke: var(--ink)')
     expect(stars).toContain('vector-effect: non-scaling-stroke')
-    expect(bodyOf(sheet, '.cosmos__meteor {')).toContain('vector-effect: non-scaling-stroke')
-    expect(bodyOf(sheet, '.cosmos__trail {')).toContain('stop-color: var(--ink)')
+    const twinkle = bodyOf(sheet, '.cosmos__twinkle {')
+    expect(twinkle).toContain('background: var(--ink)')
+    expect(twinkle).toContain('border-radius: 50%')
+    const meteor = bodyOf(sheet, '.cosmos__meteor {')
+    expect(meteor).toContain('height: calc(var(--orbit-line) * 1.5)')
+    expect(meteor).toContain('background: linear-gradient(to right, transparent, var(--ink))')
+    const head = bodyOf(sheet, '.cosmos__meteor::after {')
+    expect(head).toContain('width: calc(var(--orbit-line) * 1.5)')
+    expect(head).toContain('border-radius: 50%')
+    expect(head).toContain('background: var(--ink)')
+    // 尾の90視野単位に対する420の距離。画面の縦横比が変わっても同じ視野を流れる。
+    const motion = blockAt(sheet, '@keyframes orbit-meteor')
+    const run = Number(motion.match(/translate\(([\d.]+)%, 0px\)/)?.[1])
+    expect((run / 100) * 90).toBeCloseTo(420, 5)
   })
 })
 

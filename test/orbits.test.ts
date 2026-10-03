@@ -326,6 +326,18 @@ describe('入口の軌道図の形', () => {
     expect(empty.orbits).toEqual([])
   })
 
+  it('作品が増えても公転する星屑は図全体で600粒を超えない', () => {
+    for (const frame of [HERO_FRAME, CONTACT_FRAME]) {
+      for (const count of [1, 7, 24, 1000]) {
+        const map = orbitMap({ app: count, work: count }, frame)
+        const dots = map.orbits.flatMap((orbit) => unitDots(orbit.stardust.join('')))
+        expect(dots.length).toBeGreaterThan(0)
+        expect(dots.length).toBeLessThanOrEqual(600)
+        expect(map.orbits.every((orbit) => orbit.stardust.some(Boolean))).toBe(true)
+      }
+    }
+  })
+
   it('軌道は区分を持たない。区分は天体が持つ（業務は輪のある惑星）', () => {
     /*
       業務の軌道を破線にしていたころは、線が図面に見えた（持ち主の「線と点が図面っぽい」）。
@@ -573,13 +585,11 @@ describe('動き続けるもの', () => {
       expect(grain.delay).toBeLessThanOrEqual(0)
       expect(Math.abs(grain.delay)).toBeLessThanOrEqual(grain.dur)
       // 描画側へ渡す道は64区間。始まり・半周の節点・落ち切る所が以前の写しと一致する
-      const points = [...grain.d.matchAll(/[ML](-?[\d.]+) (-?[\d.]+)/g)].map((match) => ({
-        x: Number(match[1]),
-        y: Number(match[2]),
-      }))
+      const points = grain.path
       expect(points).toHaveLength(65)
-      expect(grain.d.length).toBeLessThan(2048)
-      expect(grain.d).not.toContain('Z')
+      expect(points.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y))).toBe(
+        true,
+      )
       const start = apply(`${map.plane} rotate(${grain.a})`, { x: grain.r0, y: 0 })
       const middle = apply(`${map.plane} rotate(${grain.a + 62.6})`, {
         x: grain.r1 + (Math.round((grain.r0 - grain.r1) * 10) / 10) * 0.826,

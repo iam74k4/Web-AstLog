@@ -2,6 +2,7 @@ import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:
 import assetHeaders from 'virtual:repo:public/_headers'
 import { beforeEach, describe, expect, it } from 'vitest'
 import app from '../src/index'
+import { MOTION_CSP, MOTION_START } from '../src/ui/motion'
 import { get, okText, resetDb, seedItem, seedMember, signIn, uncachedEnv } from './helpers'
 
 beforeEach(resetDb)
@@ -23,10 +24,10 @@ const directives = (csp: string | null) =>
       .map(([name, ...values]) => [name, values.join(' ')]),
   )
 
-function expectPageHeaders(response: Response, label: string) {
+function expectPageHeaders(response: Response, label: string, motion = false) {
   const csp = directives(response.headers.get('content-security-policy'))
-  // JavaScript 0本を機械が守る。JSON-LD はデータの塊なのでこれで止まらない
-  expect(csp['script-src'], label).toBe("'none'")
+  // 公開 Layout の成功した HTML だけに、初期描画の補助1本のハッシュを許す
+  expect(csp['script-src'], label).toBe(motion ? `'${MOTION_CSP}'` : "'none'")
   expect(csp['default-src'], label).toBe("'self'")
   expect(csp['object-src'], label).toBe("'none'")
   expect(csp['base-uri'], label).toBe("'none'")
@@ -36,6 +37,7 @@ function expectPageHeaders(response: Response, label: string) {
   expect(csp['img-src'], label).toBe("'self'")
   expect(csp['style-src'], label).toBe("'self' 'unsafe-inline'")
   expect(response.headers.get('x-content-type-options'), label).toBe('nosniff')
+  expect(response.headers.get('x-astlog-motion'), label).toBeNull()
   /*
     no-referrer にしない。Chromium はそのページから出た同じオリジンの POST に
     Origin: null を付け、sameOrigin が 403 で弾く（管理画面の保存が全部止まる）
@@ -47,20 +49,20 @@ describe('応答のヘッダ', () => {
   it('公開ページ・全体ページ・404・robots・sitemap・リダイレクトのどれにも付く', async () => {
     await seedMember()
     await seedItem({ slug: 'appmixer' })
-    for (const [path, status] of [
-      ['/', 200],
-      ['/projects', 200],
-      ['/apps/item/appmixer', 200],
-      ['/all', 200],
-      ['/contact', 200],
-      ['/robots.txt', 200],
-      ['/sitemap.xml', 200],
-      ['/apps', 301],
-      ['/no-such-page', 404],
+    for (const [path, status, motion] of [
+      ['/', 200, true],
+      ['/projects', 200, true],
+      ['/apps/item/appmixer', 200, true],
+      ['/all', 200, true],
+      ['/contact', 200, true],
+      ['/robots.txt', 200, false],
+      ['/sitemap.xml', 200, false],
+      ['/apps', 301, false],
+      ['/no-such-page', 404, false],
     ] as const) {
       const response = await get(path)
       expect(response.status, path).toBe(status)
-      expectPageHeaders(response, path)
+      expectPageHeaders(response, path, motion)
       // 訪問者に返す公開ページは共有のキャッシュに置いてよい（no-store は管理画面だけ）
       expect(response.headers.get('cache-control'), path).toBeNull()
     }
@@ -80,14 +82,36 @@ describe('応答のヘッダ', () => {
     expectPageHeaders(response, '500')
   })
 
-  it('公開ページの <script> は JSON-LD だけ（CSP の script-src が止めるものが無い）', async () => {
+  it('公開ページの実行スクリプトは初期描画の補助1本だけ。ほかは JSON-LD', async () => {
     await seedMember()
     await seedItem({ slug: 'appmixer' })
     for (const path of ['/', '/apps/item/appmixer', '/all', '/members/okazaki']) {
       const html = await okText(path)
-      const scripts = html.match(/<script\b[^>]*>/g) ?? []
-      for (const tag of scripts) expect(tag, path).toBe('<script type="application/ld+json">')
+      const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)]
+      const helpers = scripts.filter((script) => script[1] !== ' type="application/ld+json"')
+      expect(helpers, path).toHaveLength(1)
+      expect(helpers[0]?.[0], path).toBe(`<script>${MOTION_START}</script>`)
     }
+  })
+
+  it('CSP のハッシュは、実際に配った補助の UTF-8 全文の SHA-256 と一致する', async () => {
+    const response = await get('/')
+    const html = await response.text()
+    const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1]
+    expect(script).toBe(MOTION_START)
+    if (script === undefined) throw new Error('初期描画の補助が無い')
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(script))
+    const hash = `sha256-${btoa(String.fromCharCode(...new Uint8Array(digest)))}`
+    expect(MOTION_CSP).toBe(hash)
+    expect(directives(response.headers.get('content-security-policy'))['script-src']).toBe(
+      `'${hash}'`,
+    )
+  })
+
+  it('要求ヘッダで公開 Layout の内部印を偽っても、404 に実行許可は付かない', async () => {
+    const response = await get('/no-such-page', { headers: { 'x-astlog-motion': 'staged' } })
+    expect(response.status).toBe(404)
+    expectPageHeaders(response, '内部印を偽った404')
   })
 
   it('管理画面は no-store。ログイン前の画面・壁のリダイレクト・ログイン後の画面のどれも', async () => {
@@ -118,7 +142,7 @@ describe('応答のヘッダ', () => {
     const response = await fetchAs('/')
     expect(response.status).toBe(200)
     expect(response.headers.get('cache-control')).toBe('private, no-store')
-    expectPageHeaders(response, '/')
+    expectPageHeaders(response, '/', true)
   })
 
   /*
