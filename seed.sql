@@ -132,11 +132,11 @@ INSERT INTO item_tags (item_id, tag, sort_order) VALUES
 
 INSERT INTO item_links (item_id, label, url, sort_order) VALUES
   (1, 'App Store', 'https://apps.apple.com/jp/app/appmixer/id6804171608', 0),
-  (3, 'Repository', 'https://github.com/iam74k4/ai-agent-config', 0),
-  (4, 'Repository', 'https://github.com/iam74k4/DiscordBot', 0),
+  (3, 'Repository', 'https://github.com/iam74k4/Tool-AgentConfig', 0),
+  (4, 'Repository', 'https://github.com/iam74k4/Bot-Discord', 0),
   (6, 'Repository', 'https://github.com/iam74k4/Booking-Platform', 0),
-  (7, 'Repository', 'https://github.com/iam74k4/EventPlayback', 0),
-  (8, 'Repository', 'https://github.com/iam74k4/AgentDeck-StreamDeckPlus', 0);
+  (7, 'Repository', 'https://github.com/iam74k4/Tool-EventPlayback', 0),
+  (8, 'Repository', 'https://github.com/iam74k4/Device-AgentDeck', 0);
 
 -- 画像 ------------------------------------------------------------------
 
