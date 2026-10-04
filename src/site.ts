@@ -40,5 +40,5 @@ export const SITE = {
 
   email: 'iam74k4@gmail.com',
   github: 'https://github.com/iam74k4',
-  origin: 'https://noctifex.dev',
+  origin: 'https://astlog.dev',
 } as const

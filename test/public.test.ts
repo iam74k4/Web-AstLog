@@ -202,7 +202,7 @@ describe('名乗り', () => {
     const html = await okText('/')
     expect(html).toContain('"@type":"Organization"')
     // 中の member の列はそのまま。Team ブロックも members テーブルも生きている
-    expect(html).toContain('"url":"https://noctifex.dev/members/hoshino"')
+    expect(html).toContain('"url":"https://astlog.dev/members/hoshino"')
   })
 
   it('Team の見出しに添えを置かない。訳語も人数も', async () => {
@@ -377,22 +377,22 @@ describe('名乗り', () => {
     const home = await okText('/')
     // 1人：サイト自身がその人。url はサイトの origin
     expect(home).toContain(`"@type":"Person","name":"${solo.name}"`)
-    expect(home).toContain('"url":"https://noctifex.dev"')
-    expect(home).not.toContain('"url":"https://noctifex.dev/members/okazaki"')
+    expect(home).toContain('"url":"https://astlog.dev"')
+    expect(home).not.toContain('"url":"https://astlog.dev/members/okazaki"')
 
     // 2人目が公開されると器に戻り、member[] の中では各自の URL を名乗る
     await seedMember({ slug: 'hoshino', name: '星野' })
     const org = await okText('/')
     expect(org).toContain('"@type":"Organization"')
-    expect(org).toContain('"url":"https://noctifex.dev/members/okazaki"')
-    expect(org).toContain('"url":"https://noctifex.dev/members/hoshino"')
+    expect(org).toContain('"url":"https://astlog.dev/members/okazaki"')
+    expect(org).toContain('"url":"https://astlog.dev/members/hoshino"')
 
     /*
       個人ページ：その人の URL。1人のサイトの個人ページは並びの途中なので
       名乗り自体を載せない（上の「名乗りは入口のページだけ」）。見るのは2人以上のとき
     */
     const mine = await okText('/members/okazaki')
-    expect(mine).toContain('"url":"https://noctifex.dev/members/okazaki"')
+    expect(mine).toContain('"url":"https://astlog.dev/members/okazaki"')
   })
 })
 

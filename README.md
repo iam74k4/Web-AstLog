@@ -4,12 +4,12 @@
 1つの Worker が返す。
 
 名前は AstLog（astro ＋ log）。リポジトリ・Worker・D1・クッキーとヘッダの名前も
-astlog にそろえてある。ドメインだけは前の名前で取った `noctifex.dev` のまま——
-新しいドメインを取ったら、`src/site.ts` の `origin`・`wrangler.toml` の `routes`・
+astlog にそろえてある。公開ドメインは `astlog.dev`。
+ドメインを変更するときは、`src/site.ts` の `origin`・`wrangler.toml` の `routes`・
 OAuth のコールバック URL（下の「OAuth のクライアントを作る」）を一緒に替える。
 
-- 公開: `https://noctifex.dev`
-- 管理: `https://noctifex.dev/admin`
+- 公開: `https://astlog.dev`
+- 管理: `https://astlog.dev/admin`
 
 ## 構成
 
@@ -91,8 +91,8 @@ OAuth クライアントが要る。作り方と `.dev.vars` の書き方は下�
 GitHub（OAuth App。コールバック URL を1つしか持てないので、本番用と開発用の2つを作る）
 
 1. GitHub の Settings → Developer settings → OAuth Apps → New OAuth App
-2. 本番用: Homepage URL `https://noctifex.dev`、Authorization callback URL
-   `https://noctifex.dev/admin/auth/github/callback`
+2. 本番用: Homepage URL `https://astlog.dev`、Authorization callback URL
+   `https://astlog.dev/admin/auth/github/callback`
 3. 開発用: Homepage URL `http://localhost:8787`、Authorization callback URL
    `http://localhost:8787/admin/auth/github/callback`
 4. それぞれの Client ID と、Generate a new client secret で出るシークレットを控える。
@@ -105,7 +105,7 @@ Google（ウェブ アプリケーションの OAuth クライアントを1つ�
 2. 「認証情報」→「認証情報を作成」→「OAuth クライアント ID」→ 種類は
    「ウェブ アプリケーション」
 3. 承認済みのリダイレクト URI に2つ足す:
-   `https://noctifex.dev/admin/auth/google/callback` と
+   `https://astlog.dev/admin/auth/google/callback` と
    `http://localhost:8787/admin/auth/google/callback`
 
 開発では `.dev.vars`（コミットしない）に、開発用の値を書く。
@@ -118,10 +118,10 @@ GOOGLE_CLIENT_SECRET=…
 OAUTH_REDIRECT_ORIGIN=http://localhost:8787
 ```
 
-`OAUTH_REDIRECT_ORIGIN` は開発でだけ要る。`wrangler.toml` に `routes`（noctifex.dev）が
-あると、`wrangler dev` は Worker に見せる URL を `http://noctifex.dev/…` に書き換える
+`OAUTH_REDIRECT_ORIGIN` は開発でだけ要る。`wrangler.toml` に `routes`（astlog.dev）が
+あると、`wrangler dev` は Worker に見せる URL を `http://astlog.dev/…` に書き換える
 ので、リクエストから組んだコールバックが登録したもの（`http://localhost:8787/…`）と
-食い違う。本番では入れない（リクエストの origin＝`https://noctifex.dev` を使う）。
+食い違う。本番では入れない（リクエストの origin＝`https://astlog.dev` を使う）。
 
 本番では同じ4つを secret で入れる（GitHub は本番用の OAuth App の値）。
 

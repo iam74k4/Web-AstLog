@@ -71,7 +71,7 @@ export function safeNext(value: string | null | undefined): string | null {
 }
 
 /*
-  クッキーの Secure は https のときだけ。本番（noctifex.dev）は常に https なので
+  クッキーの Secure は https のときだけ。本番（astlog.dev）は常に https なので
   必ず付く。http://localhost の開発では、Secure のクッキーを捨てるブラウザが
   あり（Safari）、付けるとログインの往復そのものが通らなくなる
 */

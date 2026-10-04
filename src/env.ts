@@ -27,7 +27,7 @@ export type Env = {
   /*
     wrangler dev だけで使う（.dev.vars に http://localhost:8787）。提供元へ渡す
     コールバックの origin。wrangler dev は Worker に見せる URL を routes の
-    noctifex.dev に書き換えるので、リクエストからは組めない（src/lib/oauth.ts の callbackUrl）
+    astlog.dev に書き換えるので、リクエストからは組めない（src/lib/oauth.ts の callbackUrl）
   */
   OAUTH_REDIRECT_ORIGIN?: string
   /*

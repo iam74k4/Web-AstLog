@@ -59,25 +59,25 @@ it('クライアントは ID とシークレットの両方がそろったとき
 })
 
 describe('コールバック（redirect_uri）', () => {
-  it('ふだんはリクエストの origin。本番は https://noctifex.dev', () => {
-    expect(callbackUrl({}, 'https://noctifex.dev/admin/auth/github/start?next=x', 'github')).toBe(
-      'https://noctifex.dev/admin/auth/github/callback',
+  it('ふだんはリクエストの origin。本番は https://astlog.dev', () => {
+    expect(callbackUrl({}, 'https://astlog.dev/admin/auth/github/start?next=x', 'github')).toBe(
+      'https://astlog.dev/admin/auth/github/callback',
     )
   })
 
   /*
-    wrangler dev は routes があると、Worker に見せる URL を http://noctifex.dev/… に
+    wrangler dev は routes があると、Worker に見せる URL を http://astlog.dev/… に
     書き換える（実測。ブラウザは localhost:8787 に居る）。そのまま組むと、開発用に
     登録したコールバックと食い違って提供元に断られる
   */
   it('wrangler dev では OAUTH_REDIRECT_ORIGIN を使う。読めない値なら使わない', () => {
     const dev = { OAUTH_REDIRECT_ORIGIN: 'http://localhost:8787/' }
-    expect(callbackUrl(dev, 'http://noctifex.dev/admin/auth/google/start', 'google')).toBe(
+    expect(callbackUrl(dev, 'http://astlog.dev/admin/auth/google/start', 'google')).toBe(
       'http://localhost:8787/admin/auth/google/callback',
     )
     expect(
-      callbackUrl({ OAUTH_REDIRECT_ORIGIN: 'not a url' }, 'https://noctifex.dev/x', 'github'),
-    ).toBe('https://noctifex.dev/admin/auth/github/callback')
+      callbackUrl({ OAUTH_REDIRECT_ORIGIN: 'not a url' }, 'https://astlog.dev/x', 'github'),
+    ).toBe('https://astlog.dev/admin/auth/github/callback')
   })
 })
 
