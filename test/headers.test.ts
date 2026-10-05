@@ -244,7 +244,7 @@ describe('応答のヘッダ', () => {
       expect(links[0], path).toMatch(version)
       expect(links[0], path).toMatch(/^\/app\.css/)
       // ブラックホールの絵（上の帯のロゴの O と入口の真ん中）も、版の無い URL では読まない
-      const art = [...html.matchAll(/\/assets\/blackhole\.webp[^"]*/g)].map((found) => found[0])
+      const art = [...html.matchAll(/\/assets\/blackhole\.webp[^"'\s)]*/g)].map((found) => found[0])
       expect(art.length, path).toBeGreaterThan(0)
       for (const url of art) expect(url, path).toMatch(/^\/assets\/blackhole\.webp\?v=[0-9a-f]{8}$/)
     }

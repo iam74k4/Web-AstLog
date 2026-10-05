@@ -1686,7 +1686,7 @@ describe('入口の軌道図', () => {
       黒い円・光の縁・横線の記号を大きく描いていたころは、星雲の中で日食かレンズのフレアに
       見えた（持ち主の「ブラックホールが違和感」）。共通画像（src/ui/logo.ts の BLACKHOLE_ART）を
       img で置く。絵にも黒い影はあるが、絵の濃さが揺らいでも奥の軌道を透かさないよう、CSS の
-      黒い円を下に敷く。流れる円盤にも同じ画像を使い、別の素材や CSS の背景には分岐させない
+      黒い円を下に敷く。光を通す円盤の固定maskも同じ画像を使い、別の素材には分岐させない
     */
     expect(sheet).not.toMatch(/\/assets\/(moon|blackhole)/)
     const shadow = bodyOf(sheet, '.hole::before {')
@@ -2173,6 +2173,26 @@ describe('プロフィールと表紙の天体の動き', () => {
         expect(selector).toMatch(/\[data-celestial-body=['"]?(moon|neptune|saturn)['"]?\]/)
       }
     }
+  })
+
+  it('円盤の光は固定の輝度mask内だけを流れ、黒い中心や画像の輪郭を複製しない', () => {
+    const texture = bodyOf(sheet, '.blackhole-flow__texture {')
+    expect(texture).toContain('mask-image: var(--blackhole-flow-art)')
+    expect(texture).toContain('mask-mode: luminance')
+    expect(texture).toContain('overflow: hidden')
+    expect(texture).not.toMatch(/animation|transform/)
+    expect(bodyOf(sheet, '.blackhole-flow__beam {')).toContain(
+      'background: var(--celestial-flow-beam)',
+    )
+    const beamAnimations = moving().filter((rule) =>
+      rule.decls.some(
+        ([property, value]) => property === 'animation' && value.includes('celestial-flow'),
+      ),
+    )
+    expect(beamAnimations).toHaveLength(1)
+    expect(beamAnimations[0]?.selectors).toEqual(['.blackhole-flow__beam'])
+    expect(blockAt(sheet, '@supports not (mask-mode: luminance)')).toContain('.blackhole-flow')
+    expect(blockAt(sheet, '@supports not (mask-mode: luminance)')).toContain('display: none')
   })
 
   it('黒い影・小さな記号・ガイド・ロゴは新しい継続動作の対象にしない', () => {

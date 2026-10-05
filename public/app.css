@@ -330,19 +330,21 @@
   --breathe-ticks: 40;
   --breathe-low: 0.82;
   /* 天体の小さな浮遊・外周の光。画像は固定画素、更新は約100msごと。 */
-  --celestial-moon-dur: 26s;
-  --celestial-moon-ticks: 33;
-  --celestial-neptune-dur: 24s;
-  --celestial-neptune-ticks: 30;
-  --celestial-saturn-dur: 20s;
-  --celestial-saturn-ticks: 25;
-  --celestial-radiance-dur: 7s;
-  --celestial-radiance-ticks: 70;
-  --celestial-breathe-dur: 6s;
-  --celestial-breathe-ticks: 60;
-  --celestial-flow-dur: 18s;
-  --celestial-flow-ticks: 45;
-  --celestial-flow-offset: -9s;
+  --celestial-moon-dur: 14s;
+  --celestial-moon-ticks: 18;
+  --celestial-neptune-dur: 16s;
+  --celestial-neptune-ticks: 20;
+  --celestial-saturn-dur: 14s;
+  --celestial-saturn-ticks: 18;
+  --celestial-radiance-dur: 5s;
+  --celestial-radiance-ticks: 50;
+  --celestial-breathe-dur: 4s;
+  --celestial-breathe-ticks: 40;
+  --celestial-flow-dur: 10s;
+  --celestial-flow-ticks: 25;
+  --celestial-flow-offset: -5s;
+  --celestial-flow-beam-w: 40%;
+  --celestial-flow-beam: linear-gradient(100deg, transparent, var(--ink), transparent);
   --celestial-flow-mask: linear-gradient(
     to bottom,
     transparent 42%,
@@ -2150,7 +2152,8 @@ body[data-site] > main {
   height: auto;
 }
 
-/* The moving disk never carries the shadow or a complete second silhouette. */
+/* The disk and its luminance mask stay still. A narrow light travels through
+   the existing bright texture; black pixels and the silhouette never move. */
 .blackhole-flow {
   display: none;
   position: absolute;
@@ -2162,12 +2165,23 @@ body[data-site] > main {
   pointer-events: none;
 }
 
-.blackhole-flow .blackhole-flow__image {
+.blackhole-flow__texture {
   position: absolute;
   inset: 0;
+  mask-image: var(--blackhole-flow-art);
+  mask-mode: luminance;
+  mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+  overflow: hidden;
+}
+
+.blackhole-flow__beam {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
   display: block;
-  width: 100%;
-  height: 100%;
+  width: var(--celestial-flow-beam-w);
+  background: var(--celestial-flow-beam);
   opacity: 0;
 }
 
@@ -2197,17 +2211,17 @@ body[data-site] > main {
   }
   12.5%,
   37.5% {
-    transform: translate(0.08%, -0.42%);
+    transform: translate(0.24%, -1.26%);
   }
   25% {
-    transform: translate(0.12%, -0.6%);
+    transform: translate(0.36%, -1.8%);
   }
   62.5%,
   87.5% {
-    transform: translate(-0.08%, 0.42%);
+    transform: translate(-0.24%, 1.26%);
   }
   75% {
-    transform: translate(-0.12%, 0.6%);
+    transform: translate(-0.36%, 1.8%);
   }
 }
 
@@ -2219,17 +2233,17 @@ body[data-site] > main {
   }
   12.5%,
   37.5% {
-    transform: translate(-0.14%, -0.57%);
+    transform: translate(-0.38%, -1.54%);
   }
   25% {
-    transform: translate(-0.2%, -0.8%);
+    transform: translate(-0.55%, -2.2%);
   }
   62.5%,
   87.5% {
-    transform: translate(0.14%, 0.57%);
+    transform: translate(0.38%, 1.54%);
   }
   75% {
-    transform: translate(0.2%, 0.8%);
+    transform: translate(0.55%, 2.2%);
   }
 }
 
@@ -2241,56 +2255,56 @@ body[data-site] > main {
   }
   12.5%,
   37.5% {
-    transform: translate(0.08%, -0.42%) rotate(-0.35deg);
+    transform: translate(0.22%, -1.12%) rotate(-0.53deg);
   }
   25% {
-    transform: translate(0.12%, -0.6%) rotate(-0.5deg);
+    transform: translate(0.32%, -1.6%) rotate(-0.75deg);
   }
   62.5%,
   87.5% {
-    transform: translate(-0.08%, 0.42%) rotate(0.35deg);
+    transform: translate(-0.22%, 1.12%) rotate(0.53deg);
   }
   75% {
-    transform: translate(-0.12%, 0.6%) rotate(0.5deg);
+    transform: translate(-0.32%, 1.6%) rotate(0.75deg);
   }
 }
 
 @keyframes celestial-radiance {
   from {
     transform: scale(1);
-    opacity: 0.65;
+    opacity: 0.5;
   }
   to {
-    transform: scale(1.035);
+    transform: scale(1.065);
     opacity: 1;
   }
 }
 
 @keyframes celestial-breathe {
   from {
-    opacity: 0.9;
+    opacity: 0.82;
   }
 }
 
 @keyframes celestial-flow {
   0% {
-    transform: translateX(-1.2%);
+    transform: translateX(-100%);
     opacity: 0;
   }
   25% {
-    transform: translateX(-0.6%);
-    opacity: 0.12;
+    transform: translateX(12.5%);
+    opacity: 0.2;
   }
   50% {
-    transform: translateX(0);
-    opacity: 0.18;
+    transform: translateX(125%);
+    opacity: 0.28;
   }
   75% {
-    transform: translateX(0.6%);
-    opacity: 0.12;
+    transform: translateX(237.5%);
+    opacity: 0.2;
   }
   100% {
-    transform: translateX(1.2%);
+    transform: translateX(350%);
     opacity: 0;
   }
 }
@@ -2315,10 +2329,10 @@ body[data-site] > main {
   .celestial__corona {
     display: block;
   }
-  .blackhole-flow__image {
+  .blackhole-flow__beam {
     animation: celestial-flow var(--celestial-flow-dur) steps(var(--celestial-flow-ticks)) infinite;
   }
-  .blackhole-flow__image[data-flow-layer='1'] {
+  .blackhole-flow__beam[data-flow-layer='1'] {
     animation-delay: var(--celestial-flow-offset);
   }
   .celestial__corona-image,
@@ -2332,6 +2346,14 @@ body[data-site] > main {
 @supports not (mask-image: linear-gradient(#000, #000)) {
   .blackhole-flow,
   .celestial__corona {
+    display: none;
+  }
+}
+
+/* Alpha-only masks would light the opaque black center. Keep the original
+   breathing artwork on engines without luminance masking. */
+@supports not (mask-mode: luminance) {
+  .blackhole-flow {
     display: none;
   }
 }
