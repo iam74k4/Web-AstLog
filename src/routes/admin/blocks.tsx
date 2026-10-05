@@ -29,7 +29,8 @@ import { bool, str } from '../../lib/format'
 import { Area, Confirm, Field, FormActions, FormKey, PublishToggle } from '../../ui/AdminForm'
 import { AdminLayout } from '../../ui/AdminLayout'
 import { StatusPill } from '../../ui/components'
-import { PencilIcon, TrashIcon } from '../../ui/icons'
+import { ExternalIcon, PencilIcon, TrashIcon } from '../../ui/icons'
+import { blockAdminPath } from '../public/page'
 import {
   asValues,
   cameFromEdit,
@@ -50,7 +51,7 @@ export const blockRoutes = new Hono<AppEnv>()
 
   表示する id と公開状態は listBlocks の答えを使う。移行済みの種類は1行のまま。
 */
-async function findAdminBlock(database: Db, id: number) {
+export async function findAdminBlock(database: Db, id: number) {
   const stored = await database.query.blocks.findFirst({ where: eq(schema.blocks.id, id) })
   if (!stored) return undefined
   const type = LEGACY_BLOCK_KEYS[stored.type]
@@ -123,9 +124,8 @@ const BlocksPage = (props: {
         </div>
         {/*
           「見る」は2つある。入口（/）は読む人が着くところで、節ごとのページを
-          目次で行き来する姿そのもの。全体ページ（/all）は置いたものが全部縦に
-          並ぶ唯一の姿で、この一覧が「合計 N ページ」と言っている中身を通しで
-          見られる——並べ替えたあとに確かめる先はこちらのほう。
+          目次で行き来する姿そのもの。全体プレビューは公開中の内容を縦に並べ、
+          この一覧が「合計 N ページ」と言っている中身を通しで確認できる。
 
           入れ物は .form-actions__right（横並び・同じ幅）を借りる。管理画面で
           ボタンを2つ並べる形はこれ1つで、新しい見た目を増やさない。
@@ -134,8 +134,8 @@ const BlocksPage = (props: {
           <a class="btn btn--ghost" href="/" target="_blank" rel="noreferrer">
             サイトを見る ↗
           </a>
-          <a class="btn btn--ghost" href="/all" target="_blank" rel="noreferrer">
-            全体を1ページで見る ↗
+          <a class="btn btn--ghost" href="/admin/preview" target="_blank" rel="noreferrer">
+            保存済みの全体をプレビュー ↗
           </a>
         </div>
       </div>
@@ -143,7 +143,7 @@ const BlocksPage = (props: {
       {props.error ? <p class="banner banner--error">{props.error}</p> : null}
 
       {/*
-        まだ1行も無いときは「足す」を出さない。今そこに見えている5節は
+        まだ1行も無いときは「足す」を出さない。今そこに見えている4節は
         既定の並びで、行としては存在しない。先にそれを行にしてから触らせる
       */}
       {props.rows.length === 0 ? (
@@ -203,6 +203,11 @@ const BlocksPage = (props: {
                       {type?.label ?? block.type}
                       {type?.kind === 'fixed' ? ' · 中身は自動' : ''}
                     </span>
+                    {type?.kind === 'fixed' ? (
+                      <a class="row__sub" href={blockAdminPath(block)}>
+                        中身を編集 →
+                      </a>
+                    ) : null}
                     {/*
                       1人のサイトの Team。公開ページでは Team のページを作らず、その
                       位置にその人のプロフィールが並ぶ（目次は「Profile」）。ここで
@@ -219,6 +224,16 @@ const BlocksPage = (props: {
                   <span class="row__col">{shown[index] ? '出る' : '出ない'}</span>
                   <StatusPill published={block.published} />
                   <span class="row__actions">
+                    <a
+                      class="icon-btn"
+                      href={`/admin/preview/blocks/${block.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`${blockLabel(block)} の保存済み内容をプレビュー`}
+                    >
+                      <ExternalIcon />
+                      <span class="icon-btn__text">プレビュー</span>
+                    </a>
                     {/*
                       公開と下書きを、編集フォームを通らずに切り替える。
                       フォームを通ると本文の検査に当たるので、上限より前に
@@ -346,9 +361,22 @@ const BlockForm = (props: {
           <span class="crumbs">構成 / {block ? '編集' : '追加'}</span>
           <h1>{type.label}</h1>
         </div>
+        {block ? (
+          <a
+            class="btn btn--ghost"
+            href={`/admin/preview/blocks/${block.id}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            保存済みをプレビュー ↗
+          </a>
+        ) : null}
       </div>
 
       {props.notice ? <p class="banner banner--error">{props.notice}</p> : null}
+      <p class="form-note">
+        入力中の内容は「保存前にプレビュー」で別タブに表示できます。プレビューでは保存・公開されません。
+      </p>
 
       <form
         method="post"
@@ -383,6 +411,18 @@ const BlockForm = (props: {
           ) : (
             <p class="form-note field--wide">
               中身は自動で入ります（{type.note}）。ここでは出す・出さないだけを決めます。
+              {block ? (
+                <>
+                  {' '}
+                  <a href={blockAdminPath(block)}>中身を編集 →</a>
+                  {block.type === 'hero' ? (
+                    <>
+                      {' '}
+                      <a href="/admin/members">1人のサイトの大見出しはプロフィールから →</a>
+                    </>
+                  ) : null}
+                </>
+              ) : null}
             </p>
           )}
         </div>
@@ -391,6 +431,7 @@ const BlockForm = (props: {
           <PublishToggle published={published} />
           <FormActions
             cancelHref="/admin/blocks"
+            previewAction={block ? `/admin/preview/blocks/${block.id}` : '/admin/preview/blocks'}
             deleteHref={block ? `/admin/blocks/${block.id}/delete?from=edit` : undefined}
             deleteLabel="トップから外す…"
           />
@@ -444,7 +485,7 @@ blockRoutes.get('/blocks/:id/edit', async (c) => {
   )
 })
 
-function readBlockForm(form: FormData) {
+export function readBlockForm(form: FormData) {
   return {
     title: str(form.get('title')),
     body: str(form.get('body')),

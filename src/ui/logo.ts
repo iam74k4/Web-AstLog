@@ -5,9 +5,9 @@
 
   ロゴは「字で組む ΛSTLOG の O をブラックホールにしたもの」。横棒の無い A（Λ）と、
   線の太さをそろえた幾何の大文字で、宇宙機関の字の系譜。O の位置には、入口と締めの軌道図の
-  真ん中と同じブラックホールの絵（BLACKHOLE_ART。光の曲がりを計算して焼いた光の絵と、その下に
-  敷く影の黒い円）を、影の半径が HOLE.core になる大きさで置く——持ち主の「AstLog の o も
-  ブラックホールのデザインに合わせて」。前は黒い円・光の縁・後ろを通る横線の記号で、入口の
+  真ん中と同じブラックホールの絵（BLACKHOLE_ART）を、影の半径が HOLE.core になる大きさで
+  置く——持ち主の「AstLog の o もブラックホールのデザインに合わせて」。前は黒い円・光の縁・
+  後ろを通る横線の記号で、入口の
   絵と別のものに見えた。線で描き直した姿（輪のある玉）は、大きく描くと土星に見えた。印だけの
   とき（favicon・404・管理画面・作品の星図）も、同じ絵を1つで使う。
 
@@ -25,8 +25,8 @@
 
 const round = (value: number) => Math.round(value * 1000) / 1000
 
-// O の左右を開ける量（光の翼が L と G に触れないように）
-const SHIFT = 2.2
+// 現画像の明るい翼が L と G につながらないよう、O の左右の字間を広げる。
+const SHIFT = 14
 
 // 字の箱（上の帯・ログイン画面のワードマークは、この箱の高さで置く）
 const BOX = { top: -20.31, bottom: 0.31, width: round(131.67 + 2 * SHIFT) }
@@ -50,25 +50,26 @@ export const HOLE = {
 } as const
 
 /*
-  ブラックホールの絵（scripts/blackhole/render.py の hero が焼く）。光の曲がりを計算した姿を
-  12° から見たもので、GitHub の Organization の顔（avatar）と同じ作り。影の上へ回り込む光の
-  弧と、影の前を横切る円盤で、ひと目でブラックホールと分かる。入口と締めの軌道図の真ん中
-  （components.tsx の Hole）とロゴの O（icons.tsx の HoleArt）が同じ1枚を使う。
+  ほかの天体の表紙と質感をそろえたブラックホールの絵。入口と締めの軌道図の真ん中
+  （components.tsx の Hole）、プロフィールの表紙（CelestialArt）、ロゴの O（HoleArt）が
+  同じ1枚を使う。favicon とワードマークの素材も scripts/logo/export.mjs がこの絵から作る。
 
-  絵は光だけの透過の WebP（明るさが不透明度。色は字の白だけ）。影は焼かず、描く側が黒い円で
-  光の下に敷く——影は真円なので、分けても重ねた姿は同じで、光だけを揺らせる。width / height は
-  絵の画素、shadow は影の半径（画素）。影は絵の真ん中。
+  外側の光は透過で、中央の黒い影は絵にも入っている。表示側でも影の黒い円を下に敷く——
+  絵の濃さを揺らしても、影の後ろの軌道を透かさないため。width / height は透明余白を含む絵の
+  画素、lightWidth は可視光（alpha が約2%以上）の横幅、shadow は中央の影の半径（いずれも画素）。
+  画像の中央を影の中心として配置し、img と holeArt の寸法には余白を含む width / height を使う。
 
   URL には版（?v= はファイルの SHA-256 の頭8桁）を付け、public/_headers が1年・immutable で
   配る。上の帯のロゴがどのページでも読むので、既定（毎回確かめる）のままだと、ページを移る
-  たびに O の光が1往復ぶん消えてから灯る。焼き直したら、render.py が書き出す影の半径と版に
-  合わせる（test/public.test.ts がファイルの寸法と版を突き合わせる）
+  たびに O の光が1往復ぶん消えてから灯る。差し替えたら実寸・影の半径・版を合わせる
+  （test/public.test.ts がファイルの寸法と版を突き合わせる）
 */
 export const BLACKHOLE_ART = {
-  src: '/assets/blackhole.webp?v=c48dd421',
-  width: 1024,
-  height: 576,
-  shadow: 127,
+  src: '/assets/blackhole.webp?v=8c794528',
+  width: 1672,
+  height: 941,
+  lightWidth: 1544,
+  shadow: 184,
 } as const
 
 // 影の半径が core になるように置いた絵の箱（中心 (cx, cy) のまわり。字の格子の単位）
@@ -80,7 +81,7 @@ export const holeArt = (cx: number, cy: number, core: number = HOLE.core) => {
 
 /*
   印だけのときの枠（O を真ん中に置く正方形）。MARK_HALF はその半分の幅。光の翼の淡い端
-  （影の半径の約3倍）は枠の外へ出して見せる（icons.tsx の HoleMark の overflow）——枠を翼に
+  は枠の外へ出して見せる（icons.tsx の HoleMark の overflow）——枠を翼に
   合わせると、影が小さな点になる
 */
 export const MARK_HALF = 19
@@ -93,8 +94,8 @@ export const MARK_VIEWBOX = `${-MARK_HALF} ${-MARK_HALF} ${2 * MARK_HALF} ${2 * 
 const ICON_HALF = 16
 
 /*
-  素材のファイルに焼き込む色。ファイルは貼る先の字の色を継げない（currentColor が
-  効くのはページに直に描いた SVG だけで、<img> や favicon では黒になる）ので、サイトと
+  素材のファイルの文字・地・下敷きの影に焼き込む色。ファイルは貼る先の字の色を継げない
+  （currentColor が効くのはページに直に描いた SVG だけで、<img> や favicon では黒になる）ので、サイトと
   同じ黒基調の色を決め打つ。app.css の :root の --ink・--bg・--hole-core と同じ値
   （test/theme.test.ts が突き合わせる）
 */
@@ -116,8 +117,8 @@ const holeSvg = (cx: number, cy: number, art: string) => {
 const svg = (viewBox: string, body: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}"><title>AstLog</title>${body}</svg>\n`
 
-// 光の見える上下の広がり（影の半径に対して。上へ回り込む弧と下の輪。絵の不透明度が 2% を切る所）
-const LIGHT_REACH = { up: 1.9, down: 1.5 }
+// 光の見える上下の広がり（影の半径に対して。alpha > 5 の実測上1.62・下1.56に少し余裕を足す）
+const LIGHT_REACH = { up: 1.65, down: 1.6 }
 
 // ワードマークのファイル。暗い地に貼る素材で、枠は光が上下に出るぶん広い
 export const wordmarkSvg = (art: string) => {
@@ -133,8 +134,7 @@ export const wordmarkSvg = (art: string) => {
 
 /*
   アイコン（favicon.svg と、favicon・iPhone のホーム画面の PNG）。どれも同じ1枚で、
-  地の色の正方形に印を載せる——光は白なので、透明のままだと明るいタブでは光が
-  白に溶け、黒い点だけになる
+  地の色の正方形に印を載せる——明るい光が白いタブに溶けず、サイトと同じ姿で見えるように
 */
 export const iconSvg = (art: string) => {
   const edge = 2 * ICON_HALF

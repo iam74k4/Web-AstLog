@@ -69,14 +69,24 @@ app.use(async (c, next) => {
     c.res.status === 200 &&
     /^text\/html(?:;|$)/i.test(headers.get('content-type') ?? '') &&
     !admin
+  const preview = c.req.path === '/admin/preview' || c.req.path.startsWith('/admin/preview/')
   headers.delete(MOTION_LAYOUT_HEADER)
   if (!headers.has('content-security-policy')) {
-    headers.set('content-security-policy', motion ? MOTION_PAGE_CSP : PAGE_CSP)
+    // 未保存の画像は検査した raster bytes を応答内に閉じ込める。許可は認証内のプレビューだけ。
+    headers.set(
+      'content-security-policy',
+      preview
+        ? PAGE_CSP.replace("img-src 'self'", "img-src 'self' data:")
+        : motion
+          ? MOTION_PAGE_CSP
+          : PAGE_CSP,
+    )
   }
   headers.set('x-content-type-options', 'nosniff')
   headers.set('referrer-policy', 'strict-origin-when-cross-origin')
   if (admin) {
-    headers.set('cache-control', 'no-store')
+    headers.set('cache-control', preview ? 'private, no-store' : 'no-store')
+    if (preview) headers.set('x-robots-tag', 'noindex, nofollow')
   }
 })
 

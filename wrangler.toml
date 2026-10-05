@@ -1,4 +1,5 @@
 name = "astlog"
+account_id = "360a84624267a606e9d58788216eb46d"
 main = "src/index.tsx"
 # テスト（vitest-pool-workers 同梱の workerd）が対応する最新日付に合わせている。
 # ここだけ新しくすると、本番の挙動をテストで確かめられなくなる。
@@ -6,7 +7,14 @@ main = "src/index.tsx"
 compatibility_date = "2026-08-22"
 
 # 本番は独自ドメイン。DNS が Cloudflare 管理下にあるので custom domain として割り当てる。
-routes = [{ pattern = "noctifex.dev", custom_domain = true }]
+routes = [{ pattern = "astlog.dev", custom_domain = true }]
+# 正規のドメイン以外から同じ管理画面・内容を公開しない。
+workers_dev = false
+preview_urls = false
+
+[observability]
+enabled = true
+head_sampling_rate = 1
 
 # public/ の中身は Worker より先に配られる（/app.css, /assets/...）。
 # それ以外のパスが Worker に落ちてくる。
@@ -31,17 +39,17 @@ binding = "CF_VERSION_METADATA"
 #   wrangler kv namespace create MEDIA
 # ローカル（wrangler dev・テスト）は id を見ないので、この値のままでも動く。
 # id は秘密ではない。TO_BE_CREATED のままだと、本番に触れる入口（deploy ワークフロー・
-# npm run deploy / db:migrate / db:seed:remote:destroys-prod）が scripts/check-ids.mjs で止まる。
+# npm run deploy / db:migrate）が scripts/check-ids.mjs で止まる。
 [[d1_databases]]
 binding = "DB"
 database_name = "astlog"
-database_id = "TO_BE_CREATED"
+database_id = "20039699-2a95-430f-977e-54eaa6c97ee4"
 migrations_dir = "drizzle"
 
 [[kv_namespaces]]
 # アバター（avatars/）と作品の画像（items/）と、公開ページの写しの版（site:version）の1行
 binding = "MEDIA"
-id = "TO_BE_CREATED"
+id = "a5a250ad632b47b68574541ace272378"
 
 # ログインの入口（/admin/auth/:provider/start）の回数の上限。IP ごとに 60 秒で 10 回。
 # 入口は開くたびに D1 へ1行書く（OAuth の state）ので、上限が無いと未認証の GET だけで

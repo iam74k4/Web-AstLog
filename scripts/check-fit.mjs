@@ -538,6 +538,27 @@ async function tocPass(browser, base, paths) {
 }
 
 /*
+  lazy の画像も測る前に読み込む。画像が 404 や壊れた中身でも、枠だけを測ると検査は
+  通ってしまうので、decode と寸法で確かめ、読めなかった URL を知らせる。
+*/
+const awaitImages = async () => {
+  const images = [...document.images]
+  for (const image of images) image.loading = 'eager'
+  const failed = await Promise.all(
+    images.map(async (image) => {
+      try {
+        await image.decode()
+        if (image.naturalWidth > 0 && image.naturalHeight > 0) return null
+      } catch {
+        // HTTP の失敗と、200 でも画像として読めない中身を同じ欠落として扱う
+      }
+      return image.currentSrc || image.src || '(URL なし)'
+    }),
+  )
+  return [...new Set(failed.filter((url) => url !== null))]
+}
+
+/*
   (12) 全体ページが横に動かない。/all は節を縦に積んだ1本の文書で、帯を貼り付けない
   （app.css の「ページの外枠」の外）ので上の測り方には入れていない。横はどのページも動かない。
 */
@@ -556,6 +577,9 @@ async function wholePass(browser, base, typefaces) {
       await context.close()
       continue
     }
+    const images = await page.evaluate(awaitImages)
+    for (const url of images)
+      failures.push(`${viewport.width}x${viewport.height} /all — 画像を読めない: ${url}`)
     await page.evaluate(() => document.fonts.ready.then(() => true))
     for (const typeface of typefaces) {
       const wide = await page.evaluate((typeface) => {
@@ -613,6 +637,8 @@ async function measureRun(browser, base, run, typefaces) {
             `${where} ${path} — ログインしたのに上の帯に管理画面の入口が無い（姿を測れていない）`,
           )
         }
+        const images = await page.evaluate(awaitImages)
+        for (const url of images) failures.push(`${where} ${path} — 画像を読めない: ${url}`)
         // 書体が決まる前に測ると、行の高さが見積もりとずれる
         await page.evaluate(() => document.fonts.ready.then(() => true))
 

@@ -205,14 +205,16 @@ describe('応答のヘッダ', () => {
     長く持たせてよいのは版つきの URL で読まれるものだけ——版の無い素材（ロゴの素材・GitHub の顔）を
     immutable にすると、差し替えた絵が1年届かない。ブラックホールの絵も版つき（上の帯のロゴの O が
     どのページでも読む。版は src/ui/logo.ts の BLACKHOLE_ART で、test/public.test.ts が中身と突き合わせる）。
-    星雲の絵も CSS が中身の版つきで読み、同じテストで実ファイルと突き合わせる
+    星雲とメンバーの天体の絵も中身の版つきで読み、同じテストで実ファイルと突き合わせる
   */
   it('スタイルシートは版つきの URL で読み、1年・immutable で配る', async () => {
     const rules = headerRules()
     const cached = [
       '/app.css',
       '/admin.css',
+      '/preview.css',
       '/assets/blackhole.webp',
+      ...['sun', 'moon', 'neptune', 'saturn'].map((body) => `/assets/celestial-${body}-v2.webp`),
       ...['iris', 'violet', 'ember', 'mint', 'sky', 'rose'].map(
         (name) => `/assets/nebula-${name}.webp`,
       ),
@@ -223,7 +225,7 @@ describe('応答のヘッダ', () => {
     const long = [...rules].filter(([, values]) => values['cache-control']?.includes('immutable'))
     expect(long.map(([path]) => path).sort()).toEqual([...cached].sort())
 
-    const version = /^\/(app|admin)\.css\?v=[0-9a-z]+$/
+    const version = /^\/(app|admin|preview)\.css\?v=[0-9a-z]+$/
     const sheets = (html: string) =>
       [...html.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map((found) => found[1])
 

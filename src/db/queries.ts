@@ -2,6 +2,7 @@ import { and, asc, count, eq, min, sql } from 'drizzle-orm'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import { blockType, DEFAULT_BLOCKS, LEGACY_BLOCK_KEYS } from '../blocks'
 import { ITEM_KIND_KEYS, type ItemKind, type ItemView, type KindCounts } from '../domain'
+import { normalizeSiteSettings, SITE_SETTING_KEYS, type SiteSettings } from '../site'
 import { normalizeTheme, THEME_KEYS, type Theme, type ThemeKey } from '../theme'
 import * as schema from './schema'
 
@@ -175,6 +176,15 @@ export async function findPublishedItem(db: Db, slug: string): Promise<ItemView 
   return row ? toItemView(row) : null
 }
 
+// 認証された管理プレビュー専用。公開ルートは findPublishedItem を使う。
+export async function findAdminItemView(db: Db, id: number): Promise<ItemView | null> {
+  const row = await db.query.items.findFirst({
+    where: eq(schema.items.id, id),
+    with: itemWith,
+  })
+  return row ? toItemView(row) : null
+}
+
 /*
   公開中の作品の並びだけ（id・区分・slug）。sitemap.xml が恒久リンクを数え上げるのに
   使う。並びは一覧と同じ itemOrder。
@@ -265,6 +275,29 @@ export async function saveTheme(db: Db, theme: Theme) {
   await db
     .insert(schema.settings)
     .values(THEME_KEYS.map((key) => ({ key: settingKey(key), value: theme[key], updatedAt })))
+    .onConflictDoUpdate({
+      target: schema.settings.key,
+      set: { value: sql`excluded.value`, updatedAt },
+    })
+}
+
+/* ------------------------------------------------------------- サイト設定 */
+
+export async function loadSiteSettings(db: Db): Promise<SiteSettings> {
+  const rows = await db.query.settings.findMany()
+  const raw: Partial<SiteSettings> = {}
+  for (const key of SITE_SETTING_KEYS) {
+    raw[key] = rows.find((row) => row.key === `site.${key}`)?.value
+  }
+  return normalizeSiteSettings(raw)
+}
+
+export async function saveSiteSettings(db: Db, site: SiteSettings) {
+  const updatedAt = new Date().toISOString()
+  // 5項目を1文で書き、失敗時に文言と宛先だけが別々の版になるのを防ぐ。
+  await db
+    .insert(schema.settings)
+    .values(SITE_SETTING_KEYS.map((key) => ({ key: `site.${key}`, value: site[key], updatedAt })))
     .onConflictDoUpdate({
       target: schema.settings.key,
       set: { value: sql`excluded.value`, updatedAt },

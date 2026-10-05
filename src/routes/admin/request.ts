@@ -1,5 +1,6 @@
 import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
+import { createMiddleware } from 'hono/factory'
 import * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
 import { newToken } from '../../lib/auth'
@@ -12,10 +13,34 @@ import { int, str, toSlug } from '../../lib/format'
 
 export const db = (c: { env: { DB: D1Database } }) => drizzle(c.env.DB, { schema })
 
+/*
+  認証のあとでフォームを先に読む。壊れた multipart の境界などは入力の 400 で返し、
+  サーバー障害の 500 にしない。Hono が formData を要求ごとにキャッシュするので、
+  各保存ルートは同じ内容を再利用できる。フォーム以外（本文の無い操作を含む）は触らない。
+*/
+export const readAdminForm = createMiddleware<AppEnv>(async (c, next) => {
+  const type = c.req.header('content-type')?.split(';', 1)[0]?.trim().toLowerCase()
+  if (
+    c.req.method === 'POST' &&
+    (type === 'multipart/form-data' || type === 'application/x-www-form-urlencoded')
+  ) {
+    try {
+      await c.req.formData()
+    } catch {
+      return c.text(
+        'フォームを読み取れませんでした。前の画面に戻り、もう一度送信してください。',
+        400,
+      )
+    }
+  }
+  await next()
+})
+
 // URL の :id は数字とは限らない。数字でなければ 404 にする
 export function parseId(value: string | undefined): number | null {
+  if (!value || !/^[1-9][0-9]*$/.test(value)) return null
   const id = Number(value)
-  return Number.isInteger(id) && id > 0 ? id : null
+  return Number.isSafeInteger(id) ? id : null
 }
 
 // 保存の知らせ。下書きで保存したときは、サイトにまだ出ていないことまで言う

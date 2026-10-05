@@ -433,6 +433,32 @@ async function fallback(browser, base, screen, content, reduced) {
             .map((node) => String(node.className.baseVal ?? node.className)),
         )
       assert.deepEqual(inactive, [], `${screen.name}: JS 無効で開始していない装飾がある`)
+      // CSS の playState は pending 中も running になり得る。最初の描画で開始時刻が
+      // 確定するまで条件付きで待ち、下の時計・再生状態の検査はそのまま行う。
+      await page.waitForFunction(
+        (targets) => {
+          const animations = [...document.querySelectorAll(targets)].flatMap((node) =>
+            node
+              .getAnimations()
+              .filter(
+                (animation) =>
+                  animation instanceof CSSAnimation &&
+                  animation.effect.getTiming().iterations === Infinity,
+              ),
+          )
+          return (
+            animations.length > 0 &&
+            animations.every(
+              (animation) =>
+                !animation.pending &&
+                Number.isFinite(animation.startTime) &&
+                Number.isFinite(animation.currentTime),
+            )
+          )
+        },
+        TARGETS,
+        { timeout: 6_000 },
+      )
       const invalid = await page.locator(TARGETS).evaluateAll((nodes) =>
         nodes.flatMap((node) =>
           node

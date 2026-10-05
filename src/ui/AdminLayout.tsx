@@ -3,8 +3,8 @@ import { ColorSchemeMeta, FaviconLinks, HtmlDocument, Stylesheets } from './comp
 import { HoleMark } from './icons'
 
 /*
-  管理画面の外枠。900px 以上で左ナビ、それ未満では上のバーになる（CSS 側）。
-  項目が4つしかないので、折りたたむメニューは持たない。
+  管理画面の外枠。900px 以上で左ナビ、それ未満では上のナビになる（CSS 側）。
+  節の名前に短い説明を添え、狭い画面では3列に分けて全項目を表示する。
 
   公開ページと違い、ここは見た目のプリセットを当てない。編集する場所の
   見え方まで一緒に変わると、直したのが中身なのか設定なのか分からなくなる。
@@ -31,7 +31,7 @@ const AdminHead = ({ title }: { title: string }) => (
 
 export const AdminLayout = (props: {
   title: string
-  active: 'members' | 'items' | 'blocks' | 'appearance' | 'account'
+  active: 'dashboard' | 'members' | 'items' | 'blocks' | 'appearance' | 'site' | 'account'
   // いま誰として入っているか（最後にログインしたアカウントの @ログイン名かメールアドレス）
   account: string
   flash?: string | null
@@ -40,6 +40,9 @@ export const AdminLayout = (props: {
   <HtmlDocument>
     <AdminHead title={props.title} />
     <body>
+      <a class="skip" href="#admin-main">
+        管理内容へスキップ
+      </a>
       <div class="admin-shell">
         <aside class="admin-nav">
           <span class="admin-nav__brand">
@@ -47,30 +50,45 @@ export const AdminLayout = (props: {
             <span>ADMIN</span>
           </span>
           <nav class="admin-nav__links">
+            <a href="/admin" aria-current={props.active === 'dashboard' ? 'page' : undefined}>
+              <span>概要</span>
+              <span class="admin-nav__note">準備と状況</span>
+            </a>
             <a href="/admin/members" aria-current={props.active === 'members' ? 'page' : undefined}>
-              Members
+              <span>Members</span>
+              <span class="admin-nav__note">プロフィール</span>
             </a>
             <a href="/admin/items" aria-current={props.active === 'items' ? 'page' : undefined}>
-              Projects
+              <span>Projects</span>
+              <span class="admin-nav__note">作品・業務</span>
             </a>
             <a href="/admin/blocks" aria-current={props.active === 'blocks' ? 'page' : undefined}>
-              構成
+              <span>構成</span>
+              <span class="admin-nav__note">ページと順番</span>
             </a>
             <a
               href="/admin/appearance"
               aria-current={props.active === 'appearance' ? 'page' : undefined}
             >
-              見た目
+              <span>見た目</span>
+              <span class="admin-nav__note">色と書体</span>
+            </a>
+            <a href="/admin/site" aria-current={props.active === 'site' ? 'page' : undefined}>
+              <span>サイト設定</span>
+              <span class="admin-nav__note">紹介・連絡先</span>
             </a>
           </nav>
           <div class="admin-nav__foot">
             {/* どの画面からも、直した結果をすぐ見に行けるように */}
+            <a class="btn btn--ghost" href="/admin/preview" target="_blank" rel="noreferrer">
+              全体プレビュー ↗
+            </a>
             <a class="btn btn--link" href="/" target="_blank" rel="noreferrer">
-              サイトを見る ↗
+              公開サイト ↗
             </a>
             {/*
               いま誰として入っているかを出し、そのままアカウントの画面への入口にする。
-              上の4つと並べないのは、900 未満の横帯に5つ目が入らないため
+              主要な編集項目とは役割が異なるため、足元に置く
             */}
             <a
               class="admin-nav__account"
@@ -87,7 +105,7 @@ export const AdminLayout = (props: {
             </form>
           </div>
         </aside>
-        <main class="admin-main">
+        <main class="admin-main" id="admin-main" tabindex={-1}>
           {props.flash ? <p class="flash">{props.flash}</p> : null}
           {props.children}
         </main>

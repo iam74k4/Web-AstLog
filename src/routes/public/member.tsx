@@ -5,6 +5,7 @@ import {
   findMovedMember,
   findPublishedMember,
   listPublishedMembers,
+  loadSiteSettings,
   loadTheme,
   publishedBlocks,
 } from '../../db/queries'
@@ -61,7 +62,7 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
   */
   if (rest !== null && rest !== 'contact' && !isSection(rest)) return c.notFound()
   const db = drizzle(c.env.DB, { schema })
-  const [member, members, theme, blocks] = await Promise.all([
+  const [member, members, theme, blocks, site] = await Promise.all([
     findPublishedMember(db, slug),
     /*
       人数だけを見る。サイトが1人として名乗っているあいだ（soloMember）は、
@@ -73,6 +74,7 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
     listPublishedMembers(db),
     loadTheme(db),
     publishedBlocks(db),
+    loadSiteSettings(db),
   ])
 
   /*
@@ -92,7 +94,7 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
   // サイトのページの並び。1人のサイトならこの人のページはもう入っている（profileOf）
   const [counts, { pages, counted }] = await Promise.all([
     countPublishedByKind(db, member.id),
-    sitePages(db, blocks, members, NO_FILTER),
+    sitePages(db, blocks, members, NO_FILTER, undefined, site),
   ])
   const links = sitePageLinks(pages, NO_FILTER, solo)
 
@@ -139,6 +141,7 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
   const page = memberPage(
     member,
     band ? <Band href={band.href} label="このメンバーのつくったもの" counts={band.counts} /> : null,
+    site,
   )
 
   return screenPage(c, {
@@ -158,7 +161,7 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
       このページが何の URL かを言う
     */
     jsonLd: inSite
-      ? firstOnly(links, inSite, siteJsonLd(members))
+      ? firstOnly(links, inSite, siteJsonLd(members, site))
       : {
           '@context': 'https://schema.org',
           ...personJsonLd(member, `${SITE.origin}${href}`, {
@@ -172,7 +175,7 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
         },
     theme,
     // 足元はサイトのもの。個人ページだけのものに入れ替えると、別のサイトへ飛んだように見える
-    footer: <SiteIdentity solo={solo} />,
+    footer: <SiteIdentity site={site} solo={solo} />,
     adminPath: `/admin/members/${member.id}/edit`,
   })
 }

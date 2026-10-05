@@ -12,14 +12,14 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply astlog --local",
     "db:migrate": "node scripts/check-ids.mjs && wrangler d1 migrations apply astlog --remote",
-    "db:seed:local": "wrangler d1 execute astlog --local --file=./seed.sql && node scripts/touch-site.mjs --local",
+    "db:seed:local": "node scripts/seed-local.mjs",
     "site:touch": "node scripts/touch-site.mjs --remote",
-    "db:seed:remote:destroys-prod": "node scripts/seed-remote.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "check:fit": "node scripts/check-fit.mjs",
     "check:contrast": "node scripts/check-contrast.mjs",
     "check:motion": "node scripts/check-motion.mjs",
+    "check:celestial-motion": "node scripts/check-celestial-motion.mjs",
     "check:restore": "node scripts/check-restore.mjs",
     "check:ids": "node scripts/check-ids.mjs"
   },
@@ -36,5 +36,12 @@
   "dependencies": {
     "drizzle-orm": "^0.45.2",
     "hono": "^4.13.8"
+  },
+  "overrides": {
+    "undici": "7.29.1",
+    "sharp": "0.35.5",
+    "@esbuild-kit/core-utils": {
+      "esbuild": "^0.25.12"
+    }
   }
 }

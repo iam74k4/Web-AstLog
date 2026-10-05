@@ -1,6 +1,7 @@
 import { relations, sql } from 'drizzle-orm'
 import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { BLOCK_KEYS, FIXED_BLOCK_KEYS } from '../blocks'
+import { DEFAULT_CELESTIAL } from '../celestial'
 import { ITEM_KIND_KEYS } from '../domain'
 import { PROVIDER_KEYS } from '../lib/oauth'
 
@@ -39,6 +40,9 @@ export const members = sqliteTable(
     careerText: text('career_text').notNull().default(''),
     // /images/<key>（KV にアップロードしたもの）か /assets/...（同梱）。null なら頭文字
     avatarUrl: text('avatar_url'),
+    // 旧メンバーは同じ天体・サイトの色を維持する。未知のDB値はSSRで正規化する。
+    celestialBody: text('celestial_body').notNull().default(DEFAULT_CELESTIAL.body),
+    celestialAccent: text('celestial_accent').notNull().default(DEFAULT_CELESTIAL.accent),
     github: text('github'),
     email: text('email'),
     published: integer('published').notNull().default(0),
@@ -373,11 +377,11 @@ export const blocks = sqliteTable(
 )
 
 /*
-  管理画面から変えられる、サイト全体の設定。今のところ見た目のプリセットだけ。
+  管理画面から変えられる、サイト全体の設定。見た目（theme.*）と公開文言・連絡先（site.*）。
 
   列を増やさず key-value にしているのは、設定が1つ増えるたびに移行を
-  書かずに済ませるため。選べる値は src/theme.ts が正で、ここは選んだ結果を
-  置くだけ。知らない値が入っていても既定に戻して描く。
+  書かずに済ませるため。見た目の値は src/theme.ts、文言と連絡先の検査は src/site.ts
+  が正で、ここは保存した結果を置くだけ。受け取れない値は既定に戻して描く。
 */
 export const settings = sqliteTable('settings', {
   key: text('key').primaryKey(),

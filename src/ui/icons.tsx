@@ -8,8 +8,9 @@ import { BLACKHOLE_ART, HOLE, holeArt, MARK_VIEWBOX, WORDMARK } from './logo'
 /*
   ロゴの O のブラックホール。入口と締めの軌道図の真ん中と同じ絵（logo.ts の BLACKHOLE_ART）を、
   影の黒い円（CSS の --hole-core。app.css の .logo-core）の上に、影の半径が HOLE.core になる
-  大きさで置く。絵は光だけの透過の WebP で、/assets から読む（入口と同じ1枚。版つきの URL で
-  1年持つので、ページを移っても取り直さない。CSP の img-src 'self' の中）。
+  大きさで置く。絵は外側の光が透過し、中央の黒い影も含む WebP。/assets から読む
+  （入口と同じ1枚。版つきの URL で1年持つので、ページを移っても取り直さない。
+  CSP の img-src 'self' の中）。
 
   強制色のモードでは絵の色を変えられない（白い光が明るい地に溶ける）ので、app.css が絵を隠して
   影の円を字の色の輪にする——O の字の形だけは残る。輪の太さは字の線と同じ（stroke-width。

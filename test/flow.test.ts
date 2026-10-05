@@ -244,10 +244,12 @@ describe('管理画面からサイトへ', () => {
     expect(html).not.toContain('href="/members/draft"')
   })
 
-  it('どの画面の左ナビにも「サイトを見る」がある', async () => {
+  it('どの画面の左ナビにもプレビューと公開サイトへの入口がある', async () => {
     const signed = await signIn()
     for (const path of ['/admin/members', '/admin/items', '/admin/blocks', '/admin/appearance']) {
-      expect(await (await signed(path)).text(), path).toContain('サイトを見る')
+      const html = await (await signed(path)).text()
+      expect(html, path).toContain('href="/admin/preview"')
+      expect(html, path).toContain('公開サイト ↗')
     }
   })
 })

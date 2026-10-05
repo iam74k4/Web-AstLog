@@ -1,5 +1,6 @@
 import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test'
 import packageJson from 'virtual:repo:package.json'
+import seedScript from 'virtual:repo:scripts/seed-local.mjs'
 import touchScript from 'virtual:repo:scripts/touch-site.mjs'
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -302,9 +303,8 @@ describe('管理画面を通らない書き換え', () => {
 
   it('seed を流したら版を上げる。本番の手直しのあとに打つ入口もある', () => {
     // 上げないと、seed の前に置いた写しが FRESH_MS のあいだ出続ける
-    expect(scripts['db:seed:local']).toMatch(
-      /--file=\.\/seed\.sql && node scripts\/touch-site\.mjs --local$/,
-    )
+    expect(scripts['db:seed:local']).toBe('node scripts/seed-local.mjs')
+    expect(seedScript).toContain("['scripts/touch-site.mjs', '--local']")
     expect(scripts['site:touch']).toBe('node scripts/touch-site.mjs --remote')
     // 鍵の名前は src/lib/page-cache.ts と同じ（.mjs からは TS を読めないので写してある）
     expect(touchScript).toContain(`const KEY = '${SITE_VERSION_KEY}'`)

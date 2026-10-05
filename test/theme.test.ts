@@ -9,7 +9,8 @@ import { MOTION_START } from '../src/ui/motion'
 import { db, form, get, okText, resetDb, seedItem, seedMember, signIn } from './helpers'
 
 // 着いたあとも動き続ける animation の名前。粒と流れる星の固定名は部品が --motion で渡す。
-const LASTING = /orbit-(swirl|unswirl|sway|breathe|drift|twinkle|meteor)\b|var\(--motion\)/
+const LASTING =
+  /orbit-(swirl|unswirl|sway|breathe|drift|twinkle|meteor)\b|celestial-(float|drift|rock|radiance|breathe|flow)\b|var\(--motion\)/
 
 beforeEach(resetDb)
 
@@ -53,7 +54,7 @@ describe('見た目のプリセット', () => {
     await save({ accent: 'mint', typeface: 'mono' })
 
     const rows = await db().select().from(schema.settings)
-    expect(rows).toHaveLength(2)
+    expect(rows.filter((row) => row.key.startsWith('theme.'))).toHaveLength(2)
     expect(await okText('/')).toContain('data-accent="mint"')
   })
 
@@ -209,10 +210,11 @@ describe('スタイルシートの分け方', () => {
     expect(between).toBeGreaterThan(inside)
   })
 
-  it('admin.css のメディアクエリも 600 / 900 と入力手段だけ', () => {
+  it('admin.css のメディアクエリも 600 / 900 と入力手段・表示設定だけ', () => {
     const queries = [...new Set(adminSheet.match(/@media[^{]+/g)?.map((q) => q.trim()))].sort()
     expect(queries).toEqual(
       [
+        '@media (forced-colors: active)',
         '@media (hover: hover)',
         '@media (max-width: 899px)',
         '@media (min-width: 600px)',
@@ -220,6 +222,22 @@ describe('スタイルシートの分け方', () => {
         '@media (pointer: coarse)',
       ].sort(),
     )
+  })
+
+  it('強制色では公開状態と見た目の選択を標準の入力部品で見せる', () => {
+    const forced = blockAt(adminSheet, '@media (forced-colors: active)')
+    for (const selector of ['.toggle input {', '.preset input {']) {
+      const input = bodyOf(forced, selector)
+      expect(input).toContain('opacity: 1')
+      expect(input).toContain('width: var(--switch-knob)')
+      expect(input).toContain('height: var(--switch-knob)')
+      expect(input).not.toContain('appearance: none')
+    }
+    expect(bodyOf(forced, '.toggle__track {')).toContain('display: none')
+    expect(bodyOf(forced, '.preset__box {')).toContain('padding-top: calc(')
+    // 通常の表示は既存の装飾を使い続ける。強制色の指定を括りの外へ出さない。
+    expect(bodyOf(adminSheet, '.toggle input {')).toContain('opacity: 0')
+    expect(bodyOf(adminSheet, '.preset input {')).toContain('opacity: 0')
   })
 })
 
@@ -726,9 +744,17 @@ describe('部品の作法', () => {
     */
     expect(bodyOf(sheet, '.links a {')).toContain('color: var(--accent)')
     expect(ruleWith(sheet, "content: '↗'").body).not.toContain('opacity')
-    // 目次の番号にあった 0.7 も含め、色を薄める生の値は残っていない
-    expect(sheet).not.toContain('opacity: 0.7')
-    expect(sheet).not.toContain('opacity: 0.6')
+    // 操作子や目次の番号を薄めない。装飾の明滅はこの契約の対象に含めない。
+    const operations = rulesOf(sheet).filter((rule) =>
+      rule.selectors.some((selector) => /\.links\b|\.toc(?:__num)?\b/.test(selector)),
+    )
+    expect(operations.length).toBeGreaterThan(0)
+    for (const rule of operations) {
+      for (const [property, value] of rule.decls) {
+        if (property !== 'opacity') continue
+        expect(value.replace(/\s*!important$/, ''), rule.selectors.join(', ')).toBe('1')
+      }
+    }
   })
 
   it('一覧の行は面ごと押せる。題のリンクの覆いを行に被せ、ほかのリンクはその上に出す', () => {
@@ -1111,65 +1137,38 @@ describe('部品の作法', () => {
     expect(beside).toContain('min-height: var(--shot-h)')
   })
 
-  it('作品の画像の帯は横にだけ送る箱。高さは :root の段、幅は絵の比から。右の余白へはみ出して薄れる', () => {
-    /*
-      画像が2枚以上の作品（components.tsx の ItemShots）。1枚ずつ左端に止まり、帯の高さは
-      --strip-h、幅は絵の縦横比から（img の width / height）——読み込む前から幅が決まる。
-      寸法の分からない画像は --strip-ratio の枠。帯は右の余白へ --gutter だけはみ出して
-      薄れ、本文の幅にちょうど2枚入る画面（1440 の 16:10）でも、次の1枚の端がのぞく
-    */
-    const root = bodyOf(sheet, ':root {')
-    expect(root).toContain('--strip-h:')
-    expect(root).toContain('--strip-ratio:')
-    const strip = bodyOf(sheet, '.strip {')
-    expect(strip).toContain('overflow-x: auto')
-    expect(strip).toContain('scroll-snap-type: x mandatory')
-    expect(strip).toContain('margin-inline-end: calc(var(--gutter) * -1)')
-    expect(strip).toContain('padding-inline-end: var(--gutter)')
-    expect(strip).toContain('mask-image: var(--fade-right)')
-    // 縦には送らない（縦のスクロール箱はページ1つ）
-    expect(strip).not.toMatch(/overflow-y|overflow:/)
-    const img = bodyOf(sheet, '.strip img {')
-    expect(img).toContain('height: var(--strip-h)')
-    expect(img).toContain('width: auto')
-    expect(img).toContain('object-fit: contain')
-    expect(img).toContain('scroll-snap-align: start')
-    expect(bodyOf(sheet, '.strip img:not([width]) {')).toContain('aspect-ratio: var(--strip-ratio)')
-    // 紙では送れないので、折り返して全部を刷る
-    expect(bodyOf(blockAt(sheet, '@media print'), '.strip {')).toContain('flex-wrap: wrap')
-    /*
-      帯にフォーカスが来たときの輪郭は内側に描き、ぼかしを外す。mask は箱の外を描かないので、
-      外へ離す素の輪郭は消えていた（Tab で帯に止まっても、どこにいるか見えなかった）
-    */
-    const focused = bodyOf(sheet, '.strip:focus-visible {')
-    expect(focused).toContain('outline-offset: calc(var(--focus-ring) * -1)')
-    expect(focused).toContain('mask-image: none')
+  it('画像のギャラリーは縦に読み、枠は読み込み前に決まり、画像を切らない', () => {
+    const gallery = bodyOf(sheet, '.gallery {')
+    expect(gallery).toContain('display: grid')
+    expect(gallery).not.toMatch(/overflow|mask-image|scroll-snap/)
+    const frame = bodyOf(sheet, '.gallery__frame {')
+    expect(frame).toContain('aspect-ratio: var(--thumb-ratio)')
+    expect(frame).toContain('max-height: var(--gallery-shot-h)')
+    expect(bodyOf(sheet, '.gallery__item--lead .gallery__frame {')).toContain(
+      'max-height: var(--gallery-lead-h)',
+    )
+    const image = bodyOf(sheet, '.gallery__image img {')
+    expect(image).toContain('position: absolute')
+    expect(image).toContain('object-fit: contain')
+    // 横スクロールと、その操作だけのための部品は残さない
+    expect(sheet).not.toMatch(/\.strip|--strip-|::scroll-button/)
+    expect(bodyOf(blockAt(sheet, '@media print'), '.gallery__item {')).toContain(
+      'break-inside: avoid',
+    )
   })
 
-  it('帯を送る手はマウスの端末だけ。::scroll-button は列に並べず、端まで送ると消える', () => {
-    const buttons = rulesOf(sheet).filter((rule) =>
-      rule.selectors.some((one) => one.includes('::scroll-button')),
+  it('広いギャラリーは先頭を全幅、続きは大小の列。読み順はDOMのまま', () => {
+    const wide = blockAt(sheet, '@media (min-width: 900px)')
+    expect(bodyOf(wide, '.gallery {')).toContain(
+      'grid-template-columns: repeat(12, minmax(0, 1fr))',
     )
-    expect(buttons.length).toBeGreaterThan(0)
-    for (const rule of buttons) {
-      // 知らないブラウザが列ごと捨てないよう、1つの規則に1つのセレクタ（:has と同じ）
-      expect(rule.selectors).toHaveLength(1)
-      expect(rule.context).toContain('@media (hover: hover)')
-    }
-    const hover = blockAt(sheet, '@media (hover: hover)')
-    expect(bodyOf(hover, '.strip::scroll-button(*):disabled {')).toContain('opacity: 0')
-    // 矢印の字と、読み上げの名前
-    expect(bodyOf(hover, '.strip::scroll-button(left) {')).toMatch(/content: '←' \/ '[^']+'/)
-    expect(bodyOf(hover, '.strip::scroll-button(right) {')).toMatch(/content: '→' \/ '[^']+'/)
-    // 押す的は指の的と同じ大きさ。地の濃さは :root の段
-    const button = bodyOf(hover, '.strip::scroll-button(*) {')
-    expect(button).toContain('width: var(--tap)')
-    expect(button).toContain('var(--strip-button-mix)')
-    expect(bodyOf(sheet, ':root {')).toContain('--strip-button-mix:')
-    // フォーカスはサイトの輪郭（素の :focus-visible は疑似要素に届かない）
-    expect(bodyOf(hover, '.strip::scroll-button(*):focus-visible {')).toContain(
-      'outline: var(--focus-ring) solid var(--accent)',
-    )
+    expect(bodyOf(wide, '.gallery__item {')).toContain('grid-column: span 7')
+    expect(bodyOf(wide, '.gallery__item:nth-child(4n + 3),')).toContain('grid-column: span 5')
+    expect(bodyOf(wide, '.gallery__item--lead,')).toContain('grid-column: 1 / -1')
+    expect(wide).not.toContain('grid-auto-flow: dense')
+    // フォーカスの輪郭は画像とキャプションをまとめて囲む
+    const focus = bodyOf(sheet, '.gallery__image:focus-visible::after {')
+    expect(focus).toContain('outline: var(--focus-ring) solid var(--accent)')
   })
 
   it('アイコンは題の行の高さを変えない（はみ出しは負の余白で受ける）。見出しの字の真ん中に置く', () => {
@@ -1682,13 +1681,12 @@ describe('入口の軌道図', () => {
     }
   })
 
-  it('ブラックホールは焼いた光の絵と、その下に敷く影の黒い円。軌道と天体はページに直に描く', async () => {
+  it('ブラックホールは共通の透過画像と、その下に敷く影の黒い円。軌道と天体はページに直に描く', async () => {
     /*
       黒い円・光の縁・横線の記号を大きく描いていたころは、星雲の中で日食かレンズのフレアに
-      見えた（持ち主の「ブラックホールが違和感」）。光の曲がりを計算して焼いた光の絵
-      （src/ui/logo.ts の BLACKHOLE_ART）を img で置き、影は CSS の黒い円で絵の下に敷く——影は
-      真円なので分けても重ねた姿は同じで、光だけを揺らせる。絵を CSS の背景として読まない
-      （読む素材は img の1枚。前の月の素材を読む道も残さない）
+      見えた（持ち主の「ブラックホールが違和感」）。共通画像（src/ui/logo.ts の BLACKHOLE_ART）を
+      img で置く。絵にも黒い影はあるが、絵の濃さが揺らいでも奥の軌道を透かさないよう、CSS の
+      黒い円を下に敷く。流れる円盤にも同じ画像を使い、別の素材や CSS の背景には分岐させない
     */
     expect(sheet).not.toMatch(/\/assets\/(moon|blackhole)/)
     const shadow = bodyOf(sheet, '.hole::before {')
@@ -1733,7 +1731,7 @@ describe('入口の軌道図', () => {
     }
     // 星空・星系の層で動くのは継続するものだけ。初期 opacity や filter は持たせない。
     const graphics =
-      /\.(?:system(?:\b|__)|orbits(?:\b|__)|cosmos(?:\b|__)|hole(?:\b|__)|orbit(?:\b|-))/
+      /\.(?:system(?:\b|__)|orbits(?:\b|__)|cosmos(?:\b|__)|hole(?:\b|__)|orbit(?:\b|-)|celestial(?:\b|__)|blackhole-flow(?:\b|__))/
     for (const rule of rulesOf(sheet)) {
       if (!rule.selectors.some((selector) => graphics.test(selector))) continue
       for (const [property, value] of rule.decls) {
@@ -2056,6 +2054,154 @@ describe('入口の軌道図', () => {
   })
 })
 
+describe('プロフィールと表紙の天体の動き', () => {
+  const names = [
+    'celestial-float',
+    'celestial-drift',
+    'celestial-rock',
+    'celestial-radiance',
+    'celestial-breathe',
+    'celestial-flow',
+  ]
+  const moving = () =>
+    rulesOf(sheet).filter((rule) =>
+      rule.decls.some(
+        ([property, value]) =>
+          (property === 'animation' || property === 'animation-name') &&
+          names.some((name) => value.includes(name)),
+      ),
+    )
+
+  it('各天体の継続動作は通常設定だけで始まり、更新を約10回/秒までに抑える', () => {
+    const active = moving()
+    const rootValues = new Map(
+      rulesOf(sheet).find((rule) => rule.context.length === 0 && rule.selectors.includes(':root'))
+        ?.decls,
+    )
+    for (const name of names) {
+      const frames = blockAt(sheet, `@keyframes ${name}`)
+      const frameRules = rulesOf(frames)
+      const offsets = [
+        ...new Set([
+          0,
+          1,
+          ...frameRules.flatMap((rule) =>
+            rule.selectors.map((offset) =>
+              offset === 'from' ? 0 : offset === 'to' ? 1 : Number.parseFloat(offset) / 100,
+            ),
+          ),
+        ]),
+      ].sort((a, b) => a - b)
+      const shortest = Math.min(
+        ...offsets.slice(1).map((offset, index) => offset - (offsets[index] ?? 0)),
+      )
+      const matching = active.filter((rule) =>
+        rule.decls.some(([property, value]) => property === 'animation' && value.includes(name)),
+      )
+      expect(matching.length, name).toBeGreaterThan(0)
+      for (const rule of matching) {
+        expect(rule.context, name).toEqual(['@media (prefers-reduced-motion: no-preference)'])
+        const animation = (
+          rule.decls.find(([property]) => property === 'animation')?.[1] ?? ''
+        ).replace(/var\((--[\w-]+)\)/g, (_, token: string) => rootValues.get(token) ?? 'MISSING')
+        expect(animation, name).toContain('infinite')
+        const duration = animation.match(/(?:^|\s)(\d+(?:\.\d+)?)(ms|s)(?:\s|$)/)
+        const seconds = Number(duration?.[1]) / (duration?.[2] === 'ms' ? 1000 : 1)
+        const steps = Number(animation.match(/steps\((\d+)/)?.[1])
+        expect(seconds, name).toBeGreaterThan(0)
+        expect(steps, name).toBeGreaterThan(0)
+        // steps() は各keyframe区間ごとに再開するため、最短の区間で更新頻度を測る。
+        const frequency = steps / (seconds * shortest)
+        expect(frequency, name).toBeGreaterThanOrEqual(8)
+        expect(frequency, name).toBeLessThanOrEqual(12)
+      }
+      expect(frames, name).not.toContain('var(')
+      const properties = frameRules.flatMap((rule) => rule.decls.map(([property]) => property))
+      expect(properties.length, name).toBeGreaterThan(0)
+      for (const property of properties) {
+        expect(['transform', 'translate', 'rotate', 'scale', 'opacity'], name).toContain(property)
+      }
+    }
+    // 基本画像の明暗だけを変え、黒い影やレイアウトを動かさない。
+    const breathing = rulesOf(blockAt(sheet, '@keyframes celestial-breathe')).flatMap((rule) =>
+      rule.decls.map(([property]) => property),
+    )
+    expect(new Set(breathing)).toEqual(new Set(['opacity']))
+  })
+
+  it('追加する円盤とコロナは静止設定で隠れ、太陽の基本画像は動かさない', () => {
+    const rules = rulesOf(sheet)
+    for (const layer of ['.blackhole-flow', '.celestial__corona']) {
+      const own = rules.filter((rule) => rule.selectors.includes(layer))
+      expect(
+        own.some((rule) =>
+          rule.decls.some(([property, value]) => property === 'mask-image' && value !== 'none'),
+        ),
+        layer,
+      ).toBe(true)
+      expect(
+        own.some(
+          (rule) =>
+            rule.context.length === 0 &&
+            rule.decls.some(([property, value]) => property === 'display' && value === 'none'),
+        ),
+        layer,
+      ).toBe(true)
+      const visible = own.filter((rule) =>
+        rule.decls.some(([property, value]) => property === 'display' && value !== 'none'),
+      )
+      expect(visible.length, layer).toBeGreaterThan(0)
+      for (const rule of visible) {
+        expect(rule.context, layer).toEqual(['@media (prefers-reduced-motion: no-preference)'])
+      }
+      const fallback = rulesOf(
+        blockAt(sheet, '@supports not (mask-image: linear-gradient(#000, #000))'),
+      )
+      expect(
+        fallback.some(
+          (rule) =>
+            rule.selectors.includes(layer) &&
+            rule.decls.some(([property, value]) => property === 'display' && value === 'none'),
+        ),
+        layer,
+      ).toBe(true)
+    }
+    for (const rule of moving()) {
+      for (const selector of rule.selectors) {
+        if (!/\.celestial__image\b/.test(selector)) continue
+        // 太陽の本体を回すと粒模様が回転する球になり、外周だけが揺れる契約を破る。
+        expect(selector).toMatch(/\[data-celestial-body=['"]?(moon|neptune|saturn)['"]?\]/)
+      }
+    }
+  })
+
+  it('黒い影・小さな記号・ガイド・ロゴは新しい継続動作の対象にしない', () => {
+    for (const rule of moving()) {
+      const selectors = rule.selectors.join(', ')
+      expect(selectors).not.toMatch(
+        /\.hole::before|\.celestial__black-hole::before|\.celestial--symbol\b|\.celestial__guide\b|\.logo-(art|core)\b|\.brand-word\b/,
+      )
+    }
+    for (const selector of ['.hole::before {', '.celestial__black-hole::before {']) {
+      expect(bodyOf(sheet, selector), selector).toContain('background: var(--hole-core)')
+    }
+    // reduce は疑似要素も含めて停止する。追加層も既定の display:none に戻る。
+    const reduced = blockAt(sheet, '@media (prefers-reduced-motion: reduce)')
+    expect(reduced).toContain('*::before')
+    expect(reduced).toContain('*::after')
+    expect(reduced).toContain('animation: none !important')
+  })
+
+  it('強制色と高コントラストでは装飾の表紙を隠す', () => {
+    const contrast = blockAt(sheet, '@media (forced-colors: active), (prefers-contrast: more)')
+    const hidden = rulesOf(contrast).filter((rule) =>
+      rule.decls.some(([property, value]) => property === 'display' && value === 'none'),
+    )
+    expect(hidden.some((rule) => rule.selectors.includes('.celestial--art'))).toBe(true)
+    expect(blockAt(sheet, '@media print')).toContain('.celestial--art')
+  })
+})
+
 /*
   星空と星雲（components.tsx の Cosmos / Nebula。形は orbits.ts の cosmosMap / nebulaMap）。
   入口と締めで、軌道図のまわりを本文の幅いっぱいの星空にし、ブラックホールのまわりに大きな
@@ -2277,8 +2423,14 @@ describe('星空と星雲', () => {
   無い色の段があると、その色だけが紙に黒い地の色のまま残る（白い紙に白に近い字）。
 */
 describe('配色（黒基調と紙）', () => {
-  // 覆い（--fade-right と字の暗がりの --veil-y / --veil-x）は不透明度の坂で、色の段ではない（地の色と関わらない）
-  const MASKS = new Set(['--fade-right', '--veil-y', '--veil-x'])
+  // 覆い・字の暗がり・円盤とコロナのmaskは不透明度の坂で、紙に差し替える色の段ではない。
+  const MASKS = new Set([
+    '--fade-right',
+    '--veil-y',
+    '--veil-x',
+    '--celestial-flow-mask',
+    '--celestial-corona-mask',
+  ])
   const colorTokens = (body: string) =>
     [...body.matchAll(/(--[\w-]+):\s*([^;]+);/g)]
       .filter(

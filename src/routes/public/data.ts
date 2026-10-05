@@ -10,6 +10,7 @@ import {
   totalOf,
 } from '../../domain'
 import type { AppEnv } from '../../env'
+import type { SiteSettings } from '../../site'
 
 /*
   公開ページを組むのに使う「サイトの今の姿」。どのページを描く側（top・member・item・
@@ -21,7 +22,7 @@ import type { AppEnv } from '../../env'
 
   1人か器かを人数だけで決める。Team の横長/グリッドや、絞り込みに名前の
   手を出すかどうかと同じ数え方なので、2人目を公開した日に自動で器へ戻る
-  （文言 src/site.ts だけは手で複数形に書き直す）。
+  （文言は管理画面のサイト設定で調整する）。
 */
 export const soloMember = (members: schema.Member[]) =>
   members.length === 1 ? members[0] : undefined
@@ -94,6 +95,7 @@ export const rowNumber = (list: ItemListData, item: ItemView, order: number) =>
   list.numbers?.get(item.id) ?? order + 1
 
 export type TopData = {
+  site?: SiteSettings
   members: schema.Member[]
   // Projects（個人開発と業務を1つにした一覧）
   projects: ItemListData
