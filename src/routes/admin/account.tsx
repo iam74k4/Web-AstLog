@@ -5,7 +5,7 @@ import * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
 import { destroyUserSessions, SESSION_COOKIE } from '../../lib/auth'
 import { timeInJapan } from '../../lib/format'
-import { PROVIDER_KEYS, PROVIDER_LABEL } from '../../lib/oauth'
+import { clientFor, PROVIDER_KEYS, PROVIDER_LABEL } from '../../lib/oauth'
 import { AdminLayout } from '../../ui/AdminLayout'
 import { db } from './request'
 import { isHttps } from './session'
@@ -26,7 +26,8 @@ accountRoutes.get('/account', async (c) => {
     .where(eq(schema.userIdentities.userId, c.get('user').id))
     .orderBy(asc(schema.userIdentities.provider), asc(schema.userIdentities.id))
   const unlinked = PROVIDER_KEYS.filter(
-    (provider) => !identities.some((identity) => identity.provider === provider),
+    (provider) =>
+      clientFor(c.env, provider) && !identities.some((identity) => identity.provider === provider),
   )
 
   return c.html(
@@ -50,15 +51,14 @@ accountRoutes.get('/account', async (c) => {
       </ul>
       {unlinked.map((provider) => (
         <p class="form-note" key={provider}>
-          {PROVIDER_LABEL[provider]} はまだ紐づいていません。
-          {provider === 'github'
-            ? 'OWNER_GITHUB_ID と同じ ID の GitHub アカウントで一度ログインすると紐づきます。'
-            : 'OWNER_GOOGLE_EMAIL と同じ、Google が確認済みのアドレスで一度ログインすると紐づきます。'}
-          {/* 環境変数の値は1度きり（src/db/schema.ts の owner_claims）。外したあとは紐づき直らない */}
-          一度外したアカウントは、D1 の owner_claims の行も消すまで紐づきません（README
-          の「紐づけを外す」）。
+          {PROVIDER_LABEL[provider]} はまだ登録されていません。ログイン用として設定した
+          {PROVIDER_LABEL[provider]} アカウントでログインすると、ここに表示されます。
         </p>
       ))}
+      <p class="form-note">
+        ログイン方法の追加・変更には認証設定の変更が必要です。サイトに公開する連絡先は
+        <a href="/admin/site">サイト設定</a>で変更できます。
+      </p>
       <section class="catalog">
         <h2 class="catalog__title">すべての端末からログアウト</h2>
         <p class="catalog__note">

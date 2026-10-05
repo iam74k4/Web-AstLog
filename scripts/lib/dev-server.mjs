@@ -17,6 +17,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { demoMediaFile } from './demo-media.mjs'
 
 export const ROOT = fileURLToPath(new URL('../..', import.meta.url))
 
@@ -202,6 +203,17 @@ export async function scratchState(label, sqlTexts) {
       await writeFile(file, sql)
       await run(['d1', 'execute', 'astlog', '--local', '--persist-to', dir, `--file=${file}`])
     }
+    await run([
+      'kv',
+      'bulk',
+      'put',
+      await demoMediaFile(dir),
+      '--binding',
+      'MEDIA',
+      '--local',
+      '--persist-to',
+      dir,
+    ])
   } catch (error) {
     await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 })
     throw error

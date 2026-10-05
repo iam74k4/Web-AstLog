@@ -277,13 +277,15 @@ authRoutes.get('/auth/:provider/callback', async (c) => {
   }
 
   const code = c.req.query('code')
+  const expiresAt = row ? new Date(row.expiresAt).getTime() : Number.NaN
   if (
     !row ||
     !cookieState ||
     !queryState ||
     !timingSafeEqual(cookieState, queryState) ||
     row.provider !== provider ||
-    new Date(row.expiresAt).getTime() <= Date.now() ||
+    !Number.isFinite(expiresAt) ||
+    expiresAt <= Date.now() ||
     !code
   ) {
     return c.redirect(backToLogin('expired', row?.next), 303)

@@ -6,6 +6,7 @@ import { blockType, MAX_CHARS } from '../src/blocks'
 import * as schema from '../src/db/schema'
 import { STORY_SECTIONS } from '../src/domain'
 import { yearFrom } from '../src/lib/format'
+import { SITE_VERSION_KEY } from '../src/lib/page-cache'
 import { db, form, get, okText, resetDb, seedItem, seedMember, signIn, touch } from './helpers'
 import { avif, file, gif, heic, jpeg, png, svg, webp } from './images'
 
@@ -28,6 +29,15 @@ describe('認証', () => {
     const response = await get('/admin/items', { method: 'POST', body: form({ title: '侵入' }) })
     expect(response.status).toBe(303)
     expect(response.headers.get('location')).toBe('/admin/login')
+  })
+
+  it('メンバーの編集でも不正な id は 404 にし、DB エラーを起こさない', async () => {
+    const signed = await signIn()
+    const member = await seedMember({ id: 10 })
+    for (const id of ['abc', 'Infinity', '0xa', '1e1', '10.0', '010']) {
+      expect((await signed(`/admin/members/${id}/edit`)).status, id).toBe(404)
+    }
+    expect((await signed(`/admin/members/${member.id}/edit`)).status).toBe(200)
   })
 
   it('別のサイトからの送信は受け付けない', async () => {
@@ -116,6 +126,58 @@ describe('認証', () => {
     const edit = await (await signed(`/admin/members/${member.id}/edit`)).text()
     expect(edit).toContain('このメンバーを削除…')
     expect(edit).not.toContain('この項目を削除')
+  })
+})
+
+describe('フォームの読み取り', () => {
+  it.each(['multipart/form-data', 'multipart/form-data; boundary=missing'])(
+    '%s の壊れた本文は 400 にし、保存も公開ページの版更新もしない',
+    async (contentType) => {
+      const signed = await signIn()
+      const version = await env.MEDIA.get(SITE_VERSION_KEY)
+      const response = await signed('/admin/members', {
+        method: 'POST',
+        headers: { 'content-type': contentType },
+        body: 'invalid multipart payload',
+      })
+      expect(response.status).toBe(400)
+      expect(await response.text()).toContain('フォームを読み取れませんでした')
+      expect(await db().select().from(schema.members)).toHaveLength(0)
+      expect(await env.MEDIA.get(SITE_VERSION_KEY)).toBe(version)
+    },
+  )
+
+  it('ログイン前の壊れたフォームも、認証の壁でログインへ戻す', async () => {
+    const response = await get('/admin/members', {
+      method: 'POST',
+      headers: { 'content-type': 'multipart/form-data' },
+      body: 'invalid multipart payload',
+    })
+    expect(response.status).toBe(303)
+    expect(response.headers.get('location')).toBe('/admin/login')
+    expect(await db().select().from(schema.members)).toHaveLength(0)
+  })
+
+  it('urlencoded と画像を含む multipart は先読み後もそのまま保存できる', async () => {
+    const signed = await signIn()
+    const urlencoded = await signed('/admin/members', {
+      method: 'POST',
+      body: new URLSearchParams({ name: 'Form', slug: 'urlencoded' }),
+    })
+    expect(urlencoded.status).toBe(303)
+
+    const body = form({ name: 'Image', slug: 'multipart' })
+    body.append('avatar', file(png(), 'avatar.png', 'image/png'))
+    const multipart = await signed('/admin/members', { method: 'POST', body })
+    expect(multipart.status).toBe(303)
+
+    const members = await db().select().from(schema.members).orderBy(asc(schema.members.id))
+    expect(members.map((member) => member.slug)).toEqual(['urlencoded', 'multipart'])
+    const avatarUrl = members[1]?.avatarUrl
+    expect(avatarUrl).toMatch(/^\/images\/avatars\//)
+    const image = await get(avatarUrl ?? '')
+    expect(image.status).toBe(200)
+    expect(image.headers.get('content-type')).toBe('image/png')
   })
 })
 
@@ -218,6 +280,19 @@ describe('Items', () => {
       body: form({ type: 'app', title: 'x' }),
     })
     expect(notANumber.status).toBe(404)
+  })
+
+  it('非10進・小数・指数表記の id で別の行を開いたり削除したりできない', async () => {
+    const signed = await signIn()
+    const item = await seedItem({ id: 10, title: '残す項目' })
+    for (const id of ['0xa', '1e1', '10.0', '010', '9007199254740993', 'Infinity']) {
+      const edit = await signed(`/admin/items/${id}/edit`)
+      expect(edit.status, id).toBe(404)
+      const deletion = await signed(`/admin/items/${id}/delete`, { method: 'POST' })
+      expect(deletion.status, id).toBe(404)
+    }
+    expect((await signed(`/admin/items/${item.id}/edit`)).status).toBe(200)
+    expect((await db().select().from(schema.items)).map((row) => row.id)).toEqual([item.id])
   })
 
   it('タイトルが空なら弾き、打った内容は残す', async () => {
@@ -593,7 +668,9 @@ describe('Items — 本文のテンプレート', () => {
       const html = await (await signed(`/admin/items/new?type=${type}`)).text()
       expect(storyFields(html), type).toEqual(STORY_SECTIONS.map((section) => section.column))
       for (const section of STORY_SECTIONS) {
-        expect(html, type).toContain(`<span class="field__label">${section.label}</span>`)
+        expect(html, type).toContain(
+          `<span class="field__label" id="field-${section.column}-label">${section.label}</span>`,
+        )
         expect(html, type).toContain(`作品のページの見出しは ${section.heading}`)
       }
       expect(html, type).toContain('name="metricValue"')
@@ -699,7 +776,7 @@ describe('Items — 本文のテンプレート', () => {
 */
 /*
   作品のアイコンとほかの画像（スクリーンショット）。どちらも管理画面から上げ、KV の
-  items/ に置く（メインの画像と同じ経路と検査）。ほかの画像は作品のページの横の帯に
+  items/ に置く（メインの画像と同じ経路と検査）。ほかの画像は作品のページのギャラリーに
   並び（components.tsx の ItemShots）、1枚ずつ代替テキストが要る（公開の関門）。
 */
 describe('Items — アイコンとほかの画像', () => {
@@ -745,15 +822,15 @@ describe('Items — アイコンとほかの画像', () => {
       )
     await touch()
   }
-  // 作品のページの帯の画像（src と代替テキスト）を並びのまま
-  const stripOf = (html: string) => {
-    const from = html.indexOf('<section class="strip"')
+  // 作品のページのギャラリーの画像（src と代替テキスト）を並びのまま
+  const galleryOf = (html: string) => {
+    const from = html.indexOf('<section class="gallery"')
     if (from < 0) return []
-    const strip = html.slice(from, html.indexOf('</section>', from))
-    return [...strip.matchAll(/<img src="([^"]+)" alt="([^"]*)"/g)].map((m) => [m[1], m[2]])
+    const gallery = html.slice(from, html.indexOf('</section>', from))
+    return [...gallery.matchAll(/<img src="([^"]+)" alt="([^"]*)"/g)].map((m) => [m[1], m[2]])
   }
 
-  it('アイコンとほかの画像を上げると KV の items/ に置き、作品のページで横の帯に並ぶ', async () => {
+  it('アイコンとほかの画像を上げると KV の items/ に置き、作品のページでギャラリーに並ぶ', async () => {
     const signed = await signIn()
     const response = await signed('/admin/items', {
       method: 'POST',
@@ -781,7 +858,7 @@ describe('Items — アイコンとほかの画像', () => {
     // アイコンのキーも /images/* の検査を通る形（置き場/slug-icon-乱数.拡張子）
     expect(row?.iconUrl).toMatch(/^\/images\/items\/appmixer-icon-[0-9a-f]{8}\.png$/)
     const shots = await shotsOf(row?.id ?? 0)
-    // 寸法は中身の頭から読む（帯は読み込む前から幅が決まる）。並び順は 10 刻み
+    // 寸法は中身の頭から読む（画像の縦横比と共有カードに使う）。並び順は 10 刻み
     expect(shots.map((shot) => [shot.alt, shot.sortOrder, shot.width, shot.height])).toEqual([
       ['通話中の画面', 10, 1200, 630],
       ['機能の一覧', 20, 1200, 630],
@@ -798,12 +875,12 @@ describe('Items — アイコンとほかの画像', () => {
     expect(html).toContain(
       `<img class="head__icon" src="${row?.iconUrl}" alt="" width="64" height="64" decoding="async"/>`,
     )
-    // 2枚以上なので、説明の組には絵を置かず、帯に全部を並べる（メインの画像が先）
+    // 2枚以上なので、説明の組には絵を置かず、ギャラリーに全部を並べる（メインの画像が先）
     expect(html).not.toContain('<figure class="shot">')
     expect(html).toContain(
-      '<section class="strip" aria-label="Screenshots" tabindex="0"><img src="',
+      '<section class="gallery" aria-label="Screenshots"><figure class="gallery__item gallery__item--lead">',
     )
-    expect(stripOf(html)).toEqual([
+    expect(galleryOf(html)).toEqual([
       [row?.imageUrl, 'メインの画面'],
       [shots[0]?.url, '通話中の画面'],
       [shots[1]?.url, '機能の一覧'],
@@ -900,7 +977,7 @@ describe('Items — アイコンとほかの画像', () => {
       ['一枚目', 30],
     ])
     expect(await itemKeys()).toEqual(['items/appmixer-aaaaaaaa.png', 'items/appmixer-bbbbbbbb.png'])
-    expect(stripOf(await okText('/apps/item/appmixer'))).toEqual([
+    expect(galleryOf(await okText('/apps/item/appmixer'))).toEqual([
       ['/images/items/appmixer-bbbbbbbb.png', '二枚目（直した）'],
       ['/images/items/appmixer-aaaaaaaa.png', '一枚目'],
     ])
@@ -1535,7 +1612,7 @@ describe('URL の検査（保存）', () => {
     ])
   })
 
-  it('メンバーの GitHub は https:// の絶対 URL だけ。欄も type=url', async () => {
+  it('メンバーの GitHub は https:// の絶対 URL だけ。畳む欄は inputmode=url', async () => {
     const signed = await signIn()
     for (const github of [
       'javascript:alert(1)',
@@ -1558,7 +1635,7 @@ describe('URL の検査（保存）', () => {
     expect(ok.status).toBe(303)
 
     const html = await (await signed('/admin/members/new')).text()
-    expect(html).toMatch(/<input class="input" type="url" name="github"/)
+    expect(html).toMatch(/<input class="input" type="text" inputmode="url" name="github"/)
   })
 
   it('アバターを選んで別の欄で弾かれたら、画像はまだ保存していないと添える', async () => {
@@ -1740,17 +1817,17 @@ describe('構成 — 公開ページに出るかを見せる', () => {
   })
 
   /*
-    置いたものを通しで見る手はここにしか無い。「サイトを見る ↗」は入口（/）に
+    置いたものを通しで見る手を構成にも置く。「サイトを見る ↗」は入口（/）に
     着くだけで、そこから全部を見るには目次をたどるしかない——並べ替えたあとに
     確かめるのは全体のほう。
   */
-  it('構成から全体ページを開ける', async () => {
+  it('構成から保存済みの全体プレビューを開ける', async () => {
     const signed = await signIn()
     await signed('/admin/blocks/init', { method: 'POST' })
 
     const html = await (await signed('/admin/blocks')).text()
-    expect(html).toContain('href="/all"')
-    expect(html).toContain('全体を1ページで見る ↗')
+    expect(html).toContain('href="/admin/preview"')
+    expect(html).toContain('保存済みの全体をプレビュー ↗')
     // 入口への1本も残す。読む人が着くのはこちら
     expect(html).toContain('href="/"')
   })

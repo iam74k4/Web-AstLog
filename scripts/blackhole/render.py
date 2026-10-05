@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 """
-光の曲がりを計算したブラックホールの絵を焼く。2枚——軌道図の真ん中とロゴの O の絵
-（hero）と、GitHub の Organization の顔（avatar）。どちらも持ち主が選んだ姿。
+光の曲がりを計算したブラックホールの比較用の絵（hero）と、GitHub の Organization の顔
+（avatar）を焼く。hero は以前の配信素材を比較するために残した物理レンダー。
 
-    python3 scripts/blackhole/render.py hero               # public/assets/blackhole.webp
+    python3 scripts/blackhole/render.py hero               # dist/blackhole-physical.webp（gitignore）
     python3 scripts/blackhole/render.py avatar             # public/assets/astlog-avatar.png
     python3 scripts/blackhole/render.py hero --preview     # 小さく試し焼き（PNG を BH_OUT へ）
 
 numpy と Pillow が要る。10 コアでどちらも約2分。
 
-hero の1枚は入口と締めと作品の星図の真ん中、上の帯のロゴの O、404・管理画面の頭の印が
-みな使う（src/ui/logo.ts の BLACKHOLE_ART）。焼き直したら、書き出す影の半径と版を
-BLACKHOLE_ART に写し、ロゴの素材（favicon・ワードマーク）を scripts/logo/export.mjs で
-書き直す。
+配信中の blackhole.webp は image_gen の参照画像から作った透過素材で、このスクリプトでは
+上書きしない。再生成は README.md の「共有ブラックホール素材の更新」を参照。
 
 ## 何を計算しているか
 
@@ -26,7 +24,7 @@ x'' = -1.5 h² x / r⁵（h は |x × v|。光の道の形がシュワルツシ�
 不透明度ぶん奥を暗くする。円盤の奥の側は光が上へ曲がって影の上に弧として見え、
 下を回った光が影の下に細い弧を作る。地平面に落ちた光は黒（影）。
 
-カメラは円盤の面から elevation 度だけ上（PRESETS。顔は 7°、軌道図は 12°）で、絵の幅に
+カメラは円盤の面から elevation 度だけ上（PRESETS。顔は 7°、比較素材は 12°）で、絵の幅に
 入る範囲は field_w（M の単位）。
 
 ## 絵の作り
@@ -36,10 +34,10 @@ x'' = -1.5 h² x / r⁵（h は |x × v|。光の道の形がシュワルツシ�
 作るので、焼き直すと同じ絵になる。最後に光のにじみ（ぼかしを重ねたもの）を足して、
 ACES の曲線で 0〜1 に収める。
 
-軌道図の絵（alpha のプリセット）は光だけを透過で焼く——星雲の上に置くので。光の明るさが
+比較素材（alpha のプリセット）は光だけを透過で焼く。光の明るさが
 そのまま不透明度で、光の無い所は透ける。影（円盤の内縁より内を通る光。地平面に落ちる光を
 含む）は焼かず、半径だけを書き出す。光がどこまで近づくかは画面の中心からの離れだけで
-決まるので影は真円で、ページが CSS の黒い円で光の下に敷く（奥を回る軌道と星雲を隠す）。
+決まるので影は真円で、プレビューでは黒い円を光の下に敷く。
 """
 
 import argparse
@@ -55,6 +53,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
 ASSETS = ROOT / 'public' / 'assets'
+DIST = ROOT / 'dist'
 
 
 # 円盤の明るさの色（半径 / 内縁 → 線形の RGB）。内縁の白から、外へ琥珀と赤茶へ
@@ -105,7 +104,7 @@ BASE = {
 }
 
 PRESETS = {
-    # 入口と締めの軌道図の真ん中（src/ui/components.tsx の Hole と BLACKHOLE_ART）。12° から
+    # 以前の入口と締めの比較素材。12° から
     # 見て、上へ回り込む光の弧と、影の前を横切る円盤で、ひと目でブラックホールと分かる姿。
     # 軌道（28° から見下ろす）より寝かせる——28° で焼くと、手前の円盤が影の下で灰色の椀に
     # 見えた。透過の WebP（alpha）。高さは光のにじみが上下で消えきる幅（影は真ん中）
@@ -115,7 +114,7 @@ PRESETS = {
         'field_w': 24.0,
         'elevation': 12.0,
         'alpha': 1,
-        'name': 'blackhole',
+        'name': 'blackhole-physical',
     },
     # GitHub の Organization の顔（持ち主が選んだ姿）。低い 7° から見て、手前の
     # 円盤が影の前を細く明るい帯で横切り、影の下半分は黒いまま残る姿を、正方形に（見えて
@@ -305,11 +304,11 @@ def render(p, workers):
     return rgb, traced[..., 3]
 
 
-# 軌道図の絵の WebP の画質（光の坂に縞が出ない所）
+# 比較素材の WebP の画質（光の坂に縞が出ない所）
 WEBP_QUALITY = 90
 
 
-def save(rgb, shadow, name, p, preview):
+def save(rgb, shadow, name, p, preview, output_dir):
     to8 = lambda v: np.clip(np.round(v * 255), 0, 255).astype(np.uint8)  # noqa: E731
     bg = np.array([12, 12, 14]) / 255
     # 確かめる用の絵はリポジトリの外へ（BH_OUT で置き場所を変えられる）
@@ -317,7 +316,7 @@ def save(rgb, shadow, name, p, preview):
     preview_dir.mkdir(parents=True, exist_ok=True)
     if p.get('alpha'):
         # 光だけの絵。光の明るさが不透明度（色は不透明度で割り戻す）。影は焼かない——影は
-        # 光線の近さだけで決まる真円なので、ページが CSS の黒い円で描く（光だけを揺らせる）
+        # 光線の近さだけで決まる真円なので、プレビューでは黒い円を別に描く
         alpha = rgb.max(axis=2)
         color = np.where(alpha[..., None] > 1e-6, rgb / np.maximum(alpha[..., None], 1e-6), 0.0)
         art = Image.fromarray(np.dstack([to8(np.clip(color, 0, 1)), to8(alpha)]), 'RGBA')
@@ -327,17 +326,16 @@ def save(rgb, shadow, name, p, preview):
         Image.fromarray(np.dstack([to8(np.clip(shown, 0, 1)), to8(whole)]), 'RGBA').save(
             preview_dir / f'{name}-preview.png'
         )
-        # 影の半径（真ん中の列を上から見て、影が半分を超える所まで）。src/ui/logo.ts の
-        # BLACKHOLE_ART.shadow はこの数（試し焼きは半分の大きさなので半分になる）
+        # 比較用の影の半径（真ん中の列を上から見て、影が半分を超える所まで）。
+        # 試し焼きは半分の大きさなので半分になる。配信素材の metadata には使わない。
         column = shadow[:, p['width'] // 2] >= 0.5
         print(f'影の半径 {p["height"] / 2 - np.argmax(column):.1f}px（{p["width"]}x{p["height"]}）')
         if preview:
             return
-        out = ASSETS / f'{name}.webp'
+        output_dir.mkdir(parents=True, exist_ok=True)
+        out = output_dir / f'{name}.webp'
         art.save(out, 'WEBP', quality=WEBP_QUALITY, method=6, alpha_quality=100)
-        # URL の版（BLACKHOLE_ART.src の ?v=）。public/_headers が1年・immutable で配るので、
-        # 焼き直したら必ず写す（test/public.test.ts が中身と突き合わせる）
-        print(f'版 ?v={hashlib.sha256(out.read_bytes()).hexdigest()[:8]}')
+        print(f'比較素材 {out}: SHA-256 {hashlib.sha256(out.read_bytes()).hexdigest()[:8]}')
         return
     # 地に重ねずに、色と不透明度に分ける（黒い地に重ねたときに同じ見た目になる形）
     alpha = rgb.max(axis=2)
@@ -350,17 +348,23 @@ def save(rgb, shadow, name, p, preview):
     if preview:
         return
     # 地（--bg）に重ねた姿をそのまま。透明を持たない
-    Image.fromarray(to8(shown), 'RGB').save(ASSETS / f'{name}.png', optimize=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    Image.fromarray(to8(shown), 'RGB').save(output_dir / f'{name}.png', optimize=True)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('preset', choices=sorted(PRESETS))
     parser.add_argument('--preview', action='store_true')
-    parser.add_argument('--name')
+    parser.add_argument('--name', help='出力ファイルの名前（ディレクトリは指定しない）')
     parser.add_argument('--set', action='append', default=[], help='key=value で値を差し替える')
     args = parser.parse_args()
     p = {**BASE, **PRESETS[args.preset]}
+    name = args.name or p['name']
+    if Path(name).name != name or name in ('.', '..'):
+        raise SystemExit('--name はディレクトリを含まないファイル名で指定する')
+    # hero は --name や --set alpha=0 でも、配信素材を置く public/ へ書かない。
+    output_dir = DIST if args.preset == 'hero' else ASSETS
     for pair in args.set:
         key, value = pair.split('=', 1)
         # 打ち間違えた鍵を黙って足さない（効かないまま焼き上がる）。数の値だけを差し替える
@@ -374,7 +378,7 @@ def main():
         p['height'] //= 2
         p['supersample'] = 1
     rgb, shadow = render(p, os.cpu_count() or 4)
-    save(rgb, shadow, args.name or p['name'], p, args.preview)
+    save(rgb, shadow, name, p, args.preview, output_dir)
 
 
 if __name__ == '__main__':

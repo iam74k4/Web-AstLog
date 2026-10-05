@@ -66,12 +66,22 @@ export const sameOrigin = createMiddleware<AppEnv>(async (c, next) => {
 export function safeNext(value: string | null | undefined): string | null {
   if (!value || !/^\/admin(\/[\w\-./?=&%]*)?$/.test(value)) return null
   if (value.includes('..') || value.includes('//')) return null
-  if (/^\/admin\/(login|logout|auth)/.test(value)) return null
+  // ブラウザが正規化する %2e の階層移動と、ルーターが読む %61uth なども同じ検査に通す
+  let path: string
+  try {
+    path = decodeURIComponent(new URL(value, 'https://astlog.invalid').pathname)
+  } catch {
+    return null
+  }
+  if (!/^\/admin(?:\/[\w.-]*)*$/.test(path) || path.includes('..') || path.includes('//')) {
+    return null
+  }
+  if (/^\/admin\/(login|logout|auth)/.test(path)) return null
   return value
 }
 
 /*
-  クッキーの Secure は https のときだけ。本番（noctifex.dev）は常に https なので
+  クッキーの Secure は https のときだけ。本番（astlog.dev）は常に https なので
   必ず付く。http://localhost の開発では、Secure のクッキーを捨てるブラウザが
   あり（Safari）、付けるとログインの往復そのものが通らなくなる
 */

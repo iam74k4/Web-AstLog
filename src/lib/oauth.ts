@@ -38,9 +38,9 @@ export type Client = { id: string; secret: string }
 /*
   提供元に渡すコールバック（redirect_uri）。提供元に登録したものと1字でも違うと断られる。
 
-  ふだんはリクエストの origin（本番は https://noctifex.dev）。wrangler dev だけは
+  ふだんはリクエストの origin（本番は https://astlog.dev）。wrangler dev だけは
   OAUTH_REDIRECT_ORIGIN（.dev.vars）で渡す——wrangler.toml に routes があると、
-  wrangler dev は Worker に見せる URL を http://noctifex.dev/… に書き換える
+  wrangler dev は Worker に見せる URL を http://astlog.dev/… に書き換える
   （ブラウザは http://localhost:8787 に居るのに）。書き換わった origin を渡すと、
   開発用に登録したコールバックと食い違う。
 

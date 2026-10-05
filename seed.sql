@@ -1,9 +1,6 @@
--- 移行前の index.html に載っていた内容を、そのまま D1 に入れる。
--- 何度流しても同じ状態になるよう、先に消してから入れている——**中身を全部消す**。
---
--- ふだん流すのはローカルだけ（npm run db:seed:local）。本番に流すのは空の D1 に
--- 一度きりで、npm run db:seed:remote:destroys-prod（scripts/seed-remote.mjs）が
--- 作品・メンバー・構成が1行でもあれば止める。
+-- ローカルの開発・画面検査専用。内容を全部消してから入れ直す。
+-- 本番には流さず、管理画面から内容と画像を登録する。
+-- 画像は scripts/fixtures/media/ からローカル KV にだけ入れる。
 --
 -- プラットフォームの選択肢（platforms）は参照データなので、ここではなく移行
 -- （drizzle/0011_platforms_reference）が入れる。先に移行を流してから流すこと。
@@ -63,7 +60,7 @@ Playwright',
   '2024.03 — 現在 | システムエンジニア / 金融ビジネス本部 | 株式会社リンクレア
 2024.03 卒業 | コンピュータサイエンス学部 コンピュータサイエンス学科 | 東京工科大学
 2021.03 卒業 | 情報処理科 | 日本工学院八王子専門学校',
-  '/assets/avatar.png',
+  '/images/avatars/avatar.png',
   'https://github.com/iam74k4',
   'iam74k4@gmail.com',
   1,
@@ -87,7 +84,7 @@ INSERT INTO items (id, type, member_id, platform_key, title, slug, year, summary
   (2, 'app', 1, 'ios', 'AllTasks', 'alltasks', '2026', 'Apple リマインダー・Microsoft To Do・Google ToDo を1つの受信箱にまとめるタスクアプリ。3つのサービスを横断して1画面で扱えるようにしている。', 1, 20),
   (3, 'app', 1, 'cli', 'AI Agent Config', 'ai-agent-config', '2026', 'Cursor / Claude Code / Copilot でばらつくルールを1か所に集約し、1コマンドで各環境へ配る設定ツール。本業の AI 活用を自分の環境にも通すためにつくった。', 1, 30),
   (4, 'app', 1, 'server', 'Discord Bot', 'discord-bot', '2026', '機能追加がコマンド単位で完結する153ファイルのモジュール構成。VC 録音と SQLite 永続化を備え、Railway へ継続デプロイしている。', 1, 40),
-  (5, 'app', 1, 'web', 'AstLog', 'astlog', '2026', 'Cloudflare Workers で動くこのポートフォリオ。JavaScript を1行も配らず、入口の軌道図の動きもページの切り替えも CSS だけで組んでいる。', 1, 50);
+  (5, 'app', 1, 'web', 'AstLog', 'astlog', '2026', 'Cloudflare Workers で動くこのポートフォリオ。本文と導線をサーバーで描画し、入口の軌道図とページの切り替えを CSS で組んでいる。', 1, 50);
 
 -- 5 は前の Portfolio（スクロールしない SPA のサイト。リポジトリはもう無い）を、このサイトに
 -- 差し替えたもの。前の slug（/apps/item/portfolio）は転送表に残し、貼られたリンクを殺さない
@@ -141,27 +138,34 @@ INSERT INTO item_links (item_id, label, url, sort_order) VALUES
 -- 画像 ------------------------------------------------------------------
 
 -- AppMixer（1）のアイコンとスクリーンショットは、Mac App Store の掲載（id6804171608）と同じもの。
--- 管理画面から上げた画像は KV に置くが、seed は SQL だけで入れるので、同梱の素材
--- （public/assets の appmixer-*）を指す。管理画面から差し替えれば KV の画像に替わる（同梱の
--- 素材は消さない。src/routes/admin/images.ts の removeImage は /images/ だけを消す）。
--- 寸法は帯（作品のページの横に送る帯）の幅のため。画像が5枚あるので、作品のページでは
--- 全部を帯に並べる（メインの画像が先）
+-- 検査用の画像はローカル KV に置く。本番の public/ には含めない。
+-- 寸法は表示と共有カードに使う。メインの画像が先頭。
 UPDATE items SET
-  icon_url = '/assets/appmixer-icon.png',
-  image_url = '/assets/appmixer-01-per-app-volume.jpg',
+  icon_url = '/images/items/appmixer-icon.png',
+  image_url = '/images/items/appmixer-01-per-app-volume.jpg',
   image_alt = 'AppMixer のミキサー。Discord・Google Chrome・ミュージックの音量をアプリごとに変えている画面',
   image_width = 1440,
   image_height = 900
 WHERE id = 1;
 
 INSERT INTO item_shots (item_id, url, alt, width, height, sort_order) VALUES
-  (1, '/assets/appmixer-02-auto-ducking.jpg', 'FaceTime の通話が始まり、ほかのアプリの音量を自動で下げている画面', 1440, 900, 10),
-  (1, '/assets/appmixer-03-per-device-memory.jpg', 'AirPods Pro と MacBook Air のスピーカーで、同じアプリの音量を別々に覚えている画面', 1440, 900, 20),
-  (1, '/assets/appmixer-04-per-app-output.jpg', 'ミュージックの出力先をスピーカーに、FaceTime を AirPods Pro に振り分けている画面', 1440, 900, 30),
-  (1, '/assets/appmixer-05-features.jpg', 'AppMixer の機能の一覧。アプリ別の音量とミュート、レベルメーター、通話中の自動ダッキング、デバイスごとの音量の記憶、アプリ別の出力先、メニューバー常駐', 1440, 900, 40);
+  (1, '/images/items/appmixer-02-auto-ducking.jpg', 'FaceTime の通話が始まり、ほかのアプリの音量を自動で下げている画面', 1440, 900, 10),
+  (1, '/images/items/appmixer-03-per-device-memory.jpg', 'AirPods Pro と MacBook Air のスピーカーで、同じアプリの音量を別々に覚えている画面', 1440, 900, 20),
+  (1, '/images/items/appmixer-04-per-app-output.jpg', 'ミュージックの出力先をスピーカーに、FaceTime を AirPods Pro に振り分けている画面', 1440, 900, 30),
+  (1, '/images/items/appmixer-05-features.jpg', 'AppMixer の機能の一覧。アプリ別の音量とミュート、レベルメーター、通話中の自動ダッキング、デバイスごとの音量の記憶、アプリ別の出力先、メニューバー常駐', 1440, 900, 40);
 
 -- 前の slug --------------------------------------------------------------
 
 -- 差し替えた 5 の前の URL を、いまの URL へ 301 で送る（src/routes/public/item.tsx の renderItem）
 INSERT INTO item_slug_redirects (old_slug, item_id) VALUES
   ('portfolio', 5);
+
+
+-- ローカル見本のサイト設定 ------------------------------------------------
+-- 公開文言・宛先の編集は管理画面で行う。本番の初期値には個人データを置かない。
+INSERT OR REPLACE INTO settings (key, value) VALUES
+  ('site.tagline', 'つくる人の、置き場所。'),
+  ('site.heroLead', '個人でつくったアプリと、仕事で取り組んだ開発効率化をまとめています。'),
+  ('site.contactLead', '開発効率化や生成AIの活用、個人開発について話せる機会を探しています。お仕事のご相談も歓迎です。'),
+  ('site.email', 'iam74k4@gmail.com'),
+  ('site.github', 'https://github.com/iam74k4');

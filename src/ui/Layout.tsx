@@ -31,14 +31,12 @@ export type NavItem = { href: string; label: string; active?: boolean }
   1枚に戻す（X が og:image に読むのは JPEG / PNG / WebP / GIF だけ）。
 
   **それ以外のページはサイトの1枚**（SITE_IMAGE）。素材はリポジトリにある
-  public/assets/avatar.png（持ち主の顔）。このサイトは1人として名乗るので、貼られた
-  札に出すのはロゴではなく顔にする。
+  public/assets/astlog-avatar.png（サイトのロゴ）。メンバーの顔は管理画面から
+  アップロードしたプロフィールだけに載せ、空の DB で個人の顔を公開しない。
 
   twitter:card は画像の寸法で決める（cardOf）。横長で X の大きい札の下限
-  （300x157）以上なら summary_large_image、それ以外は summary。サイトの1枚は
-  144x144 で推奨（1200x630）に届かないので、小さな正方形のサムネイルの
-  summary のまま（summary_large_image にすると、横長の枠に 144px の絵を
-  引き伸ばした札になる）。縦長のスクリーンショットも summary——大きい札は
+  （300x157）以上なら summary_large_image、それ以外は summary。サイトのロゴは
+  正方形（1024x1024）なので summary のまま。縦長のスクリーンショットも summary——大きい札は
   横長に切り抜くので、縦長の絵は真ん中の帯しか残らない。寸法が分からない
   画像も summary に倒す。
 
@@ -57,11 +55,11 @@ export type OgImage = {
 }
 
 const SITE_IMAGE: OgImage = {
-  url: `${SITE.origin}/assets/avatar.png`,
+  url: `${SITE.origin}/assets/astlog-avatar.png`,
   alt: `${SITE.name} のアイコン`,
   type: 'image/png',
-  width: 144,
-  height: 144,
+  width: 1024,
+  height: 1024,
 }
 
 const cardOf = ({ width, height }: OgImage) =>
@@ -120,6 +118,10 @@ export const Layout = (props: {
   admin?: string
   // 共有カードの画像。渡さなければサイトの1枚（SITE_IMAGE）
   image?: OgImage
+  // 認証済みプレビューの案内。検索・共有用のメタ情報と開始スクリプトは出さない。
+  preview?: Child
+  // 未保存の値はこの応答だけ。全体への移動で保存済みの内容へ戻ることを明示する。
+  previewUnsaved?: boolean
   children?: Child
 }) => (
   <HtmlDocument>
@@ -129,20 +131,25 @@ export const Layout = (props: {
       <ColorSchemeMeta />
       <title>{props.title}</title>
       <meta name="description" content={props.description} />
-      <link rel="canonical" href={props.canonical} />
-
-      <meta property="og:type" content="website" />
-      <meta property="og:site_name" content={SITE.name} />
-      <meta property="og:title" content={props.title} />
-      <meta property="og:description" content={props.description} />
-      <meta property="og:url" content={props.canonical} />
-      <meta property="og:locale" content="ja_JP" />
-      <ShareImage image={props.image ?? SITE_IMAGE} />
+      {props.preview ? (
+        <meta name="robots" content="noindex, nofollow, noarchive" />
+      ) : (
+        <>
+          <link rel="canonical" href={props.canonical} />
+          <meta property="og:type" content="website" />
+          <meta property="og:site_name" content={SITE.name} />
+          <meta property="og:title" content={props.title} />
+          <meta property="og:description" content={props.description} />
+          <meta property="og:url" content={props.canonical} />
+          <meta property="og:locale" content="ja_JP" />
+          <ShareImage image={props.image ?? SITE_IMAGE} />
+        </>
+      )}
 
       <FaviconLinks />
-      <script dangerouslySetInnerHTML={{ __html: MOTION_START }} />
-      <Stylesheets />
-      {props.jsonLd ? (
+      {props.preview ? null : <script dangerouslySetInnerHTML={{ __html: MOTION_START }} />}
+      <Stylesheets preview={Boolean(props.preview)} />
+      {props.jsonLd && !props.preview ? (
         <script
           type="application/ld+json"
           // JSON の中の < を潰しておく。</script> で早期に閉じられるのを防ぐため
@@ -161,16 +168,18 @@ export const Layout = (props: {
       data-accent={props.theme.accent}
       data-typeface={props.theme.typeface}
       data-whole={props.whole ? '' : undefined}
+      data-preview={props.preview ? '' : undefined}
     >
       <a class="skip" href="#main">
         本文へスキップ
       </a>
+      {props.preview}
       {/*
         上の帯。ロゴ（入口へ）と目次と、ログイン中だけ管理画面への入口。ページの上に
         貼り付き（全体ページを除く）、ページを移っても同じ場所に居る。
       */}
       <header class="top">
-        <Brand />
+        <Brand href={props.preview ? '/admin/preview' : '/'} />
         {/*
           いま見ているページには aria-current="page"。'true' ではなく 'page' な
           のは、目次の行き先が別の URL（/projects）だから。'true' は「この一覧の
@@ -227,10 +236,20 @@ export const Layout = (props: {
             全体ページ（/all）への1本道。印刷・Ctrl-F・ブラウザ翻訳の宛先で、
             sitemap.xml にも載る。全体ページ自身には出さない（自分への行き先）。
 
-            矢印は →。同じタブで開くサイトの中の行き先なので、「外へ出る・
-            別タブ」の印（↗）は付けない（components.tsx の LinkList を見ること）。
+            未保存プレビューの全体GETは保存済みの内容。現在の見本を残すため別タブで
+            開き、リンク名でも切替先の状態を伝える。
           */}
-          {props.whole ? null : <a href="/all">全体を1ページで見る →</a>}
+          {props.whole ? null : (
+            <a
+              href={props.preview ? '/admin/preview' : '/all'}
+              target={props.preview && props.previewUnsaved ? '_blank' : undefined}
+              rel={props.preview && props.previewUnsaved ? 'noreferrer' : undefined}
+            >
+              {props.preview && props.previewUnsaved
+                ? '保存済みの全体プレビュー ↗'
+                : '全体を1ページで見る →'}
+            </a>
+          )}
         </p>
       </footer>
     </body>

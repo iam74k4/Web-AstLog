@@ -1,4 +1,4 @@
-# public/ の静的なファイル（app.css・admin.css・ロゴの素材・ブラックホールの絵・GitHub の顔・共有カードの画像）のヘッダ。
+# public/ の静的なファイル（CSS・ロゴ・天体の絵・共有カードの画像）のヘッダ。
 # ここは Worker を通らない（wrangler.toml の [assets] が先に配る）ので、
 # src/index.tsx のミドルウェアは届かない。Workers Static Assets がこのファイルを
 # 読んで付け、このファイル自身は配らない。
@@ -26,10 +26,27 @@
 /admin.css
   Cache-Control: public, max-age=31536000, immutable
 
+/preview.css
+  Cache-Control: public, max-age=31536000, immutable
+
 # ブラックホールの絵も版つき（/assets/blackhole.webp?v=…。版はファイルの SHA-256 の頭で、
 # src/ui/logo.ts の BLACKHOLE_ART が持つ）。上の帯のロゴの O がどのページでも読むので、
 # 毎回確かめると、ページを移るたびに O の光が1往復ぶん消えてから灯る。
 /assets/blackhole.webp
+  Cache-Control: public, max-age=31536000, immutable
+
+# メンバーの天体も内容の SHA-256 を版に付けて読む（src/ui/celestial-art.ts）。
+# 同じパスに絵を更新しても、HTML の URL が変わり前の写しは使われない。
+/assets/celestial-sun-v2.webp
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/celestial-moon-v2.webp
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/celestial-neptune-v2.webp
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/celestial-saturn-v2.webp
   Cache-Control: public, max-age=31536000, immutable
 
 # 星雲の絵は CSS のプリセットが中身の SHA-256 の頭8桁を版として付けて読む。

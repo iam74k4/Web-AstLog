@@ -1,6 +1,8 @@
 import type { Child } from 'hono/jsx'
 import { memberUnits } from '../../blocks'
 import type * as schema from '../../db/schema'
+import { SITE, type SiteSettings } from '../../site'
+import { CelestialArt } from '../../ui/Celestial'
 import {
   Empty,
   Hero,
@@ -56,7 +58,7 @@ export function memberSectionHref(member: schema.Member, section: MemberSection)
 }
 
 // band は名札の下に置く一覧への帯（呼ぶ側が決める。1人のサイトのプロフィールでは null）
-export function memberPage(member: schema.Member, band: Child) {
+export function memberPage(member: schema.Member, band: Child, site: SiteSettings = SITE) {
   // 開き方は src/blocks.ts の memberUnits が正（全体ページの Profile の節も同じ式を読む）
   const { bio, skills, career } = memberUnits(member)
 
@@ -68,8 +70,9 @@ export function memberPage(member: schema.Member, band: Child) {
 
   const node = (
     <>
-      <Hero profile>
-        {/*
+      <Hero profile celestial={member}>
+        <div class="profile-cover__copy">
+          {/*
           名札（顔・名前・肩書きと所在地）。足元はサイトのままなので、その人の
           顔はここにしか出ない。Team のカードと同じ並びにして、カードを押した
           先で同じ顔に着くようにする。
@@ -77,19 +80,21 @@ export function memberPage(member: schema.Member, band: Child) {
           見出し（h1）は大見出しがあればそれ、無ければ名札の名前。どちらでも
           このページの中で完結する1つの h1 になる
         */}
-        <Nameplate member={member} heading={!member.headline} />
-        {member.headline ? (
-          <h1 class="hero__headline">
-            <Phrases text={member.headline} />
-          </h1>
-        ) : null}
-        {/*
+          <Nameplate member={member} heading={!member.headline} />
+          {member.headline ? (
+            <h1 class="hero__headline">
+              <Phrases text={member.headline} />
+            </h1>
+          ) : null}
+          {/*
           この人だけの連絡先。個人ページの Contact は持たずサイトの Contact に
           合流させたので、サイトと違う行き先を持つ人のぶんはここに置く
         */}
-        <OwnSocials member={member} />
-        {/* 帯は id も名前も持たない。目次からは指さないので、指すための名前が要らない */}
-        {band}
+          <OwnSocials member={member} site={site} />
+          {/* 帯は id も名前も持たない。目次からは指さないので、指すための名前が要らない */}
+          {band}
+        </div>
+        <CelestialArt member={member} />
       </Hero>
       {/* 添えは置かない。訳語（紹介）は見出しを2度言うだけ */}
       <Screen id="about" label="About">

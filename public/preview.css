@@ -1,0 +1,47 @@
+/* 公開ページの部品は app.css のまま、管理プレビューの案内だけを加える。 */
+.preview-notice {
+  padding: var(--sp-4) var(--gutter);
+  border-bottom: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--ink-mid);
+  font-size: var(--fs-sm);
+}
+
+.preview-notice__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3) var(--sp-6);
+  max-width: var(--w-page);
+  margin-inline: auto;
+}
+
+.preview-notice__copy {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.preview-notice__copy strong {
+  color: var(--ink);
+}
+
+.preview-notice__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3) var(--sp-5);
+}
+
+.preview-notice__actions a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  color: var(--ink);
+}
+
+@media print {
+  .preview-notice__actions {
+    display: none;
+  }
+}

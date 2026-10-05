@@ -12,7 +12,7 @@ import {
   type Theme,
   type ThemeKey,
 } from '../../theme'
-import { FormActions } from '../../ui/AdminForm'
+import { FormActions, Select } from '../../ui/AdminForm'
 import { AdminLayout } from '../../ui/AdminLayout'
 import { db } from './request'
 
@@ -57,9 +57,13 @@ const AppearancePage = (props: {
         <h1>見た目</h1>
       </div>
       <a class="btn btn--ghost" href="/" target="_blank" rel="noreferrer">
-        サイトを見る ↗
+        公開中のサイトを見る ↗
       </a>
     </div>
+
+    <p class="form-note">
+      色と書体を選び、保存前にプレビューでサイト全体を別のタブで確認できます。プレビューでは保存されません。保存すると公開中のサイトに反映します。
+    </p>
 
     {props.error ? <p class="banner banner--error">{props.error}</p> : null}
 
@@ -90,7 +94,20 @@ const AppearancePage = (props: {
         </fieldset>
       ))}
 
-      <FormActions cancelHref="/admin/appearance" />
+      <Select
+        label="プレビューする画面"
+        name="previewScreen"
+        value="hero"
+        options={[
+          { value: 'hero', label: '入口' },
+          { value: 'projects', label: 'Projects' },
+          { value: 'team', label: 'Profile / Team' },
+          { value: 'contact', label: 'Contact' },
+          { value: 'all', label: '全体' },
+        ]}
+        hint="Profile / Team は、公開中のメンバーが1人ならプロフィール、複数ならメンバー一覧です。画面の選択は設定として保存されません"
+      />
+      <FormActions cancelHref="/admin/appearance" previewAction="/admin/preview/appearance" />
     </form>
   </AdminLayout>
 )

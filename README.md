@@ -4,12 +4,15 @@
 1つの Worker が返す。
 
 名前は AstLog（astro ＋ log）。リポジトリ・Worker・D1・クッキーとヘッダの名前も
-astlog にそろえてある。ドメインだけは前の名前で取った `noctifex.dev` のまま——
-新しいドメインを取ったら、`src/site.ts` の `origin`・`wrangler.toml` の `routes`・
-OAuth のコールバック URL（下の「OAuth のクライアントを作る」）を一緒に替える。
+astlog にそろえてある。公開先は取得済みの独自ドメイン `astlog.dev`。
 
-- 公開: `https://noctifex.dev`
-- 管理: `https://noctifex.dev/admin`
+- 公開先: `https://astlog.dev`
+- 管理画面: `https://astlog.dev/admin`
+
+`wrangler.toml` の Custom Domain と `src/site.ts` の origin を合わせてある。
+workers.dev とプレビュー URL は無効。公開はデプロイ後で、購入したドメインだけでは
+サイトは動かない。Cloudflare の Custom Domain が DNS と証明書を用意する
+（[公式手順](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)）。
 
 ## 構成
 
@@ -28,7 +31,9 @@ OAuth のコールバック URL（下の「OAuth のクライアントを作る�
 | レイアウトの検査 | Playwright（`npm run check:fit`） | はみ出し・切り取り・上の帯の貼り付け・入口のブラックホールの置き場所を実際に測る |
 | 可読性の検査 | Playwright（`npm run check:contrast`） | 入口と締めの軌道図のまわりで文字が読めるかを画素で測る |
 
-ランタイム依存は Hono と Drizzle だけ。**内容と導線は JavaScript なしで成立する**。
+ランタイム依存は Hono と Drizzle だけ。
+開発ツールの間接依存（undici・sharp・旧 esbuild loader）は、セキュリティ修正版へ
+`package.json` の overrides で固定し、型・テスト・ビルドと Drizzle の schema export を確認する。**内容と導線は JavaScript なしで成立する**。
 公開ページは装飾を順に動かし始める inline helper 1本だけを持ち、`<script src>` は0本。
 絞り込みとページの移動は URL とサーバー、管理画面は HTML フォームと 303 で動く。
 全部の応答に CSP（公開 HTML は helper の exact SHA-256 だけ、ほかは `script-src 'none'`）と
@@ -60,7 +65,7 @@ view transitions で短く切り替わる（一覧の行の題が作品のペー
 ```bash
 npm install
 npm run db:migrate:local   # ローカル D1 にスキーマと選択肢（platforms）を作る
-npm run db:seed:local      # 初期データを入れる（ローカルの中身を全部入れ直す）
+npm run db:seed:local      # 任意: 開発・画面検査用のデータと画像（ローカルの中身を入れ直す）
 npm run dev                # http://localhost:8787
 ```
 
@@ -75,7 +80,7 @@ OAuth クライアントが要る。作り方と `.dev.vars` の書き方は下�
 - `OWNER_GITHUB_ID` — GitHub の**数値の**ユーザー id（ログイン名ではない。
   `https://api.github.com/users/<ログイン名>` の `id`）。いまは `118629892`
 - `OWNER_GOOGLE_EMAIL` — Google アカウントのメールアドレス（Google が確認済みの
-  もの。大小は無視する）。いまはサイトに出しているアドレス `iam74k4@gmail.com` を
+  もの。大小は無視する）。いまは管理者として指定したアドレス `iam74k4@gmail.com` を
   入れてある。**別の Google アカウントで入るなら、ここを書き換える**
 
 そのアカウントで一度ログインすると D1 の `user_identities` に紐づき、以後は
@@ -91,8 +96,8 @@ OAuth クライアントが要る。作り方と `.dev.vars` の書き方は下�
 GitHub（OAuth App。コールバック URL を1つしか持てないので、本番用と開発用の2つを作る）
 
 1. GitHub の Settings → Developer settings → OAuth Apps → New OAuth App
-2. 本番用: Homepage URL `https://noctifex.dev`、Authorization callback URL
-   `https://noctifex.dev/admin/auth/github/callback`
+2. 本番用: Homepage URL `https://astlog.dev`、Authorization callback URL
+   `https://astlog.dev/admin/auth/github/callback`
 3. 開発用: Homepage URL `http://localhost:8787`、Authorization callback URL
    `http://localhost:8787/admin/auth/github/callback`
 4. それぞれの Client ID と、Generate a new client secret で出るシークレットを控える。
@@ -100,12 +105,18 @@ GitHub（OAuth App。コールバック URL を1つしか持てないので、�
 
 Google（ウェブ アプリケーションの OAuth クライアントを1つ）
 
+現在は [AstLog プロジェクトのクライアント画面](https://console.cloud.google.com/auth/clients?project=gothic-concept-510617-g4)
+にある「AstLog Admin」を使う。Google の同意画面は「テスト中」で、テストユーザーには
+`iam74k4@gmail.com` を登録してある。本番 Worker の `GOOGLE_CLIENT_ID` と
+`GOOGLE_CLIENT_SECRET` は Cloudflare の Secrets に保存する。管理者として通すかの判定は、
+Google の設定とは別に、上の許可設定と登録済みの固有 ID で行う。
+
 1. Google Cloud Console の「API とサービス」→ OAuth 同意画面を作る。スコープは
    `openid` と `email` だけ。公開前（テスト中）のままなら、テストユーザーに自分を足す
 2. 「認証情報」→「認証情報を作成」→「OAuth クライアント ID」→ 種類は
    「ウェブ アプリケーション」
 3. 承認済みのリダイレクト URI に2つ足す:
-   `https://noctifex.dev/admin/auth/google/callback` と
+   `https://astlog.dev/admin/auth/google/callback` と
    `http://localhost:8787/admin/auth/google/callback`
 
 開発では `.dev.vars`（コミットしない）に、開発用の値を書く。
@@ -118,10 +129,10 @@ GOOGLE_CLIENT_SECRET=…
 OAUTH_REDIRECT_ORIGIN=http://localhost:8787
 ```
 
-`OAUTH_REDIRECT_ORIGIN` は開発でだけ要る。`wrangler.toml` に `routes`（noctifex.dev）が
-あると、`wrangler dev` は Worker に見せる URL を `http://noctifex.dev/…` に書き換える
+`OAUTH_REDIRECT_ORIGIN` は開発でだけ要る。`wrangler.toml` に `routes`（astlog.dev）が
+あると、`wrangler dev` は Worker に見せる URL を `http://astlog.dev/…` に書き換える
 ので、リクエストから組んだコールバックが登録したもの（`http://localhost:8787/…`）と
-食い違う。本番では入れない（リクエストの origin＝`https://noctifex.dev` を使う）。
+食い違う。本番では入れない（リクエストの origin＝`https://astlog.dev` を使う）。
 
 本番では同じ4つを secret で入れる（GitHub は本番用の OAuth App の値）。
 
@@ -164,6 +175,36 @@ npx wrangler d1 execute astlog --remote --command "DELETE FROM owner_claims WHER
 ```bash
 npx wrangler d1 execute astlog --remote --command "DELETE FROM sessions"
 ```
+
+## 公開する文言と連絡先を設定する
+
+管理画面の概要（`/admin`）から、次にする設定と公開/下書きの件数を確認できる。
+Members・Projects のフォームは基本情報を先に書き、本文・画像・URL・並び順などは必要なときに開く。
+保存済みのメンバー・作品・ブロックは、下書きのまま管理者専用プレビューで表示を確認できる。
+各編集フォームの「保存前にプレビュー」で、入力中の文章・選んだ画像・見た目を別タブに表示する。
+保存・公開はせず、元のフォームも残る。サイト設定と見た目は入口・作品・Profile / Team・連絡先・全体から確認先を選べる。
+Profile / Team は公開中が1人ならプロフィール、複数なら一覧を表示する。未保存プレビューの全体リンクは保存済み内容を別タブで開く。
+全体プレビューは現在公開中のデータを使う。プレビューは認証・送り元検査・
+`no-store`・`noindex` で守り、公開ページのキャッシュの版を変えない。
+
+Members の「天体と色」で、ブラックホール・土星・海王星・月・太陽とアクセント色を選べる。
+「保存前にプレビュー」で、写真を残したプロフィールの天体を確認する。
+公開中が1人なら入口と Contact の中心にも反映される。新規・未設定はブラックホールとサイトの色。
+色は装飾に使い、本文の読みやすさとサイト全体のロゴ・書体は共通のまま。
+大きな天体にはCSSだけの動きがある。ブラックホールは中心を固定して円盤の光を流し、
+太陽は球体を固定して外周の光だけを揺らす。月・海王星は浮遊し、土星は小さく傾く。
+名札の記号とロゴは静止。OSの動きを減らす設定では止まり、保存前プレビューにも同じCSSを使う。
+`npm run check:celestial-motion` で5天体・PC/スマホ・保存前プレビュー・停止設定を検証する。
+
+管理画面の「サイト設定」（`/admin/site`）でサイトの一言・入口の紹介文・Contact の案内文・
+公開するメールアドレス・GitHub URL を編集する。保存した値は D1 の `settings` の `site.*` に入り、
+公開ページと説明文・構造化データに反映される。メールと GitHub は空にすると掲載しない。
+どちらも未設定なら Contact に「連絡先を準備しています」と出る。
+
+空の D1 には個人のプロフィール・作品・メール・GitHub を入れない。メンバーと作品はそれぞれの
+管理画面から追加する。ローカルの `seed.sql` は見本用で、本番の初期設定には使わない。
+サイトの名前と公開先（`https://astlog.dev`）は `src/site.ts` のブランド・デプロイ設定として固定する。
+ログインできるアカウントは公開する連絡先とは独立している。
 
 ## 確かめる
 
@@ -282,23 +323,22 @@ npx wrangler kv namespace create MEDIA   # 出力の id を wrangler.toml へ
 
 2つの id は秘密ではないので、`wrangler.toml` に書いて**コミットする**。
 `TO_BE_CREATED` のままだと、本番に触れる入口（deploy ワークフロー・`npm run deploy`・
-`npm run db:migrate`・本番の seed）は `scripts/check-ids.mjs` が直し方を言って止める
+`npm run db:migrate`）は `scripts/check-ids.mjs` が直し方を言って止める
 （`npm run check:ids` で先に確かめられる）。check の「ビルド」（`wrangler deploy --dry-run`）
 は id を見ないので、プレースホルダでも緑のまま。
 
 OAuth のクライアントの secret も入れる（上の「管理画面に入る」）。
 
-空の D1 に、スキーマと最初の中身を入れる（一度きり）。
+本番にはスキーマと選択肢だけを入れる。
 
 ```bash
-npm run db:migrate                       # スキーマとプラットフォームの選択肢
-npm run db:seed:remote:destroys-prod     # 移行前の index.html の中身
+npm run db:migrate    # スキーマとプラットフォームの選択肢
 ```
 
-`seed.sql` は作品・メンバー・構成を**全部消してから**入れ直す。本番向けの名前が長いのは
-わざとで、中身の `scripts/seed-remote.mjs` は本番の件数を数え、作品・メンバー・構成の
-どれかが1行でもあれば流さずに止まる。運用が始まった D1 に seed の出番は無い
-（中身は管理画面から変える）。ローカルは `npm run db:seed:local`。
+`seed.sql` はローカルの開発・画面検査専用で、本番へ流すコマンドはない。
+Worker を出して `/admin` にログインしたら、サイト設定・プロフィール・作品・画像を
+管理画面から登録する。公開内容の設定が済んだものから公開する。
+ローカル用の作品画像は `scripts/fixtures/media/` から KV に入れ、本番の静的素材には含めない。
 
 ### 出す
 
@@ -377,8 +417,7 @@ https://github.com/actions/<名前>` で引き直し、行末のタグ名も直�
   npm run site:touch   # 本番の site:version を新しくする（id の番兵を通る）
   ```
 
-  上げ忘れても、写しは1時間で引き直される。seed（`db:seed:local` と本番の
-  `db:seed:remote:destroys-prod`）は最後に自分で上げる
+  上げ忘れても、写しは1時間で引き直される。ローカルの `db:seed:local` は最後に自分で上げる
 - 写しを通ったかは応答の `x-astlog-cache`（`hit` / `miss` / `stale`）で分かる
 
 ### 戻す
@@ -458,11 +497,10 @@ deploy が残した栞（その移行を流す**前**に取ったもの）まで
 `items.body`（作品の本文）・`items.image_url`（スクリーンショット）・`items.image_alt`
 （その代替テキスト）はマイグレーションで入り、既にある作品は本文と代替テキストが
 空、画像は無しのまま——作品のページに `figure` も本文の小節（Story）も無く、
-一覧にサムネイルも出ないだけ（代わりの絵は置かない）。`seed.sql` は本文を書かない（本人の作品の中身を作り話で
-埋めない）。画像は AppMixer だけで、Mac App Store の掲載と同じアイコンとスクリーンショットを同梱の素材
-（`public/assets/appmixer-*`）で指す（seed は SQL だけで入れるので KV に置けない）。ほかは管理画面の作品のフォームから書く。本文を書いた作品は、作品のページの
-説明の下に本文の小節（`#story`）を持つ（以前の本文の画面 `/apps/item/<slug>/story` は
-そこへ 301）。
+一覧にサムネイルも出ないだけ（代わりの絵は置かない）。`seed.sql` は本文を書かない。
+検査用の AppMixer 画像は `scripts/fixtures/media/` からローカル KV にだけ入れる。
+本番の作品・画像・本文は管理画面から登録する。本文を書いた作品は説明の下に
+小節（`#story`）を持つ。以前の `/apps/item/<slug>/story` はそこへ 301。
 画像は KV の `items/` に置かれ、`/images/items/…` から出る。画像を公開するときは
 代替テキストが要る。
 
@@ -470,7 +508,8 @@ deploy が残した栞（その移行を流す**前**に取ったもの）まで
 1枚ずつ）は `0017_item_shots` で入る。どちらも足すだけの移行で、既にある作品はアイコンも
 ほかの画像も無いまま（作品のページは今までどおり）。前の版の Worker へ戻しても、前の版は
 この列と表を読まないので壊れない。画像がメインの画像と合わせて2枚以上ある作品は、作品の
-ページで全部を横に送る帯（`#screenshots`）に並べる。
+ページのギャラリー（`#screenshots`）に並べる。先頭を大きく置き、900px 以上は続きの画像を
+大小の2列に配置する。狭い画面では全幅の1列。1枚ずつ番号と説明を添え、原寸を別タブで開ける。
 
 本文のテンプレートの欄（`items.story_background` / `story_approach` / `story_highlights` /
 `story_results`。背景・取り組み・工夫・成果）は `0018_item_story` で入る。足すだけの移行で、
@@ -484,7 +523,7 @@ seed に本文が無いので、seed の `check:fit` は本文の小節を1つ�
 4つとも埋めた作品・1つだけの作品・欄だけの作品）が測る。
 
 `items.image_width` / `image_height`（画像の寸法。共有カードの `og:image:width` /
-`height` と `twitter:card` の大きさと、作品のページの横の帯の幅に使う）は `0008_item_image_size` で入る。
+`height` と `twitter:card` の大きさと、画像そのものの縦横比に使う）は `0008_item_image_size` で入る。
 既にある画像は寸法が `null` のまま——作品のページの共有カードは寸法を名乗らず、
 小さい札（`summary`）になるだけ。画像を選び直して保存すれば読み取って入る。
 
@@ -555,7 +594,7 @@ EXPLAIN QUERY PLAN で並べ直しが無いことを見ている）。
 ```
 src/
   index.tsx          入口。応答のヘッダ（CSP など）を全部に付け、ルートを束ねて 404 / 500 を出す
-  site.ts            サイト全体の文言と宛先（管理画面からは変えない）
+  site.ts            ブランド・公開先と、サイト設定の初期値・検査
   theme.ts           見た目のプリセット。選べる値はここが正
   domain.ts          作品の区分（ITEM_KINDS: データの値・URL の語・呼び名の対応）と、
                      UI と DB が共有する作品の型（ItemView・ItemFilter）
@@ -565,7 +604,7 @@ src/
   env.ts             バインディングの型
   db/
     schema.ts        テーブル定義。ここが正
-    queries.ts       公開ページが読む問い合わせと、構成・見た目の読み書き
+    queries.ts       公開ページが読む問い合わせと、構成・見た目・サイト設定の読み書き
   lib/
     auth.ts          セッション（D1 にはハッシュで置く）と、通してよいアカウントの判定
     oauth.ts         GitHub / Google との約束（認可 URL・トークンの交換・id_token の検査）
@@ -594,20 +633,27 @@ src/
       session.ts     送り元の検査（sameOrigin）と認証の壁（requireAuth）
       request.ts     要求の読み方（id・並び順・slug・札）と保存の知らせ
       auth.tsx       ログインの往復（/admin/login・/admin/auth/*・ログアウト）
+      dashboard.tsx  概要・設定の状態と次の一手（閲覧だけ）
+      preview.tsx    管理者専用の保存済み/保存前プレビュー（保存しない）
+      block-preview.tsx 構成の入力中の内容を検査して表示（保存しない）
       images.ts      画像の取り込み（pickImage / putImage）と KV・D1 の順序
       members.tsx    Members
       items.tsx      Projects の項目（個人開発・業務）
       blocks.tsx     構成
       appearance.tsx 見た目
+      site-settings.tsx 公開する文言と連絡先
       account.tsx    アカウント
   ui/
     Layout.tsx       公開ページの外枠（上の帯・本文・足元）
     AdminLayout.tsx  管理画面の外枠
+    AdminDashboard.tsx 概要の設定案内と状態
+    PreviewLayout.tsx プレビューの案内と公開ページの外枠
     AdminForm.tsx    管理画面のフォームの部品（欄・公開のトグル・確認）
     components.tsx   画面を組む部品。main の直接の子は Screen / Hero だけが作る
                      外枠はどれも HtmlDocument で <html> を開く（DOCTYPE を出す）
     icons.tsx        インライン SVG（ロゴの Wordmark / HoleMark もここで描く）
-    logo.ts          ロゴの形と素材に焼く色の正（ΛSTLOG の O は入口と同じブラックホールの絵
+    celestial.ts     メンバーの天体・色の選択肢、入力検査と安全な既定値
+    logo.ts          ロゴの形と素材に焼く色の正（ΛSTLOG の O はブラックホールの絵
                      BLACKHOLE_ART。軌道図の真ん中も同じ1枚。JSX を持たない）
     motion.ts        装飾を順に動かし始める helper と、それだけを許可する CSP の SHA-256
 public/
@@ -617,18 +663,18 @@ public/
                      ページを移るときの切り替え（@view-transition）もここ
   admin.css          管理画面だけの規則。管理画面は app.css のあとにこれを読み、
                      公開ページは読まない（:root は持たず、app.css の段を読む）
+  preview.css        管理プレビューの案内。公開の部品は app.css を使う
   _headers           静的なファイルに付けるヘッダ（Worker を通らないので、ここで付ける）
                      Workers Static Assets が読む規則で、ファイルとしては配られない
-                     2枚の CSS とブラックホール・星雲の絵は 1年・immutable（中身の版つきの URL
+                     3枚の CSS とブラックホール・星雲の絵は 1年・immutable（中身の版つきの URL
                      /app.css?v=… などで読むので、変えてデプロイすれば URL が変わる）
-  assets/            ブラックホールの光の絵（blackhole.webp。軌道図の真ん中とロゴの O）と GitHub の
-                     Organization の顔（astlog-avatar.png）——scripts/blackhole/render.py が焼く。
+  assets/            共有ブラックホールの透過素材（blackhole.webp。image_gen の参照画像から生成）。
+                     GitHub の Organization の顔（astlog-avatar.png）は scripts/blackhole/render.py の avatar。
                      星雲の透過 WebP（nebula-{iris,violet,ember,mint,sky,rose}.webp。1800×1000）——
                      scripts/nebula/render.mjs が焼く。mono と iris は同じ1枚を使う。
                      favicon（favicon.svg・favicon-32.png・apple-touch-icon.png）とページの外で使う
                      ワードマーク（astlog-wordmark.svg）——scripts/logo/export.mjs が src/ui/logo.ts と
-                     その絵から書く。共有カードの絵（avatar.png）。AppMixer の画像（appmixer-*。
-                     Mac App Store の掲載と同じアイコンとスクリーンショット）——seed.sql が指す
+                     その絵から書く。サイトの共有カードにも astlog-avatar.png を使う。
                      ※ ここに robots.txt や sitemap.xml を置かないこと。
                        public/ は Worker より先に配られるので、置くと
                        Worker が組み立てているほうが静かに届かなくなる
@@ -638,12 +684,12 @@ scripts/
   check-contrast.mjs npm run check:contrast の中身。軌道図のまわりの文字を画素で測る
   check-restore.mjs  npm run check:restore の中身。deploy の写し（定義と中身の2本）を空の D1 に戻して突き合わせる
   check-ids.mjs      本番に触れる前の番兵。wrangler.toml の id がプレースホルダなら止める
-  seed-remote.mjs    npm run db:seed:remote:destroys-prod の中身。本番が空のときだけ流す
+  seed-local.mjs     ローカルにだけ検査用のデータと画像を入れる
+  fixtures/media/    検査用の作品画像とプロフィール素材。本番には配らない
   touch-site.mjs     公開ページの写しの版を上げる（npm run site:touch / db:seed:local の最後）
-  blackhole/         render.py。ブラックホールの絵を焼く（シュワルツシルトの測地線を追う。numpy と
-                     Pillow）。python3 scripts/blackhole/render.py hero で軌道図とロゴの O の光の絵（影の
-                     半径と版を書き出す。src/ui/logo.ts の BLACKHOLE_ART をその数に。焼き直したら
-                     logo/export.mjs も流す）、avatar で GitHub の顔を public/assets に書く
+  blackhole/         render.py。旧素材との比較用の物理レンダー（numpy と Pillow）。hero は
+                     dist/blackhole-physical.webp に書き、配信中の素材を上書きしない。
+                     avatar は従来どおり GitHub の顔を public/assets に書く
   logo/              export.mjs。ロゴの素材（SVG と favicon・iPhone のホーム画面の PNG）を src/ui/logo.ts
                      から書く（node scripts/logo/export.mjs。SVG は O の絵を小さくして data URI で
                      抱える。PNG は Playwright の Chromium で撮る）
@@ -662,10 +708,27 @@ scripts/
 drizzle/             生成されたマイグレーション（手で書かない）
 test/                workerd 上で動くテスト
 docs/                画面一覧と画面遷移図
-seed.sql             移行前の index.html の内容（全部消してから入れ直す。本番は空のときだけ）
+seed.sql             ローカルの開発・画面検査用の見本（全部消してから入れ直す。本番へは流さない）
 ```
 
 書き方の約束は `CLAUDE.md` に置いてある。
+
+### 共有ブラックホール素材の更新
+
+`blackhole.webp` は image_gen で生成した透過素材。表紙・入口・Contact・ロゴの O は
+`src/ui/logo.ts` の `BLACKHOLE_ART` から同じ1枚を読む。
+
+1. 採用した天体アートを image_gen の参照画像にし、`transparent_background=true` で生成する。
+   背景の透過と影の中心を確認し、WebP として `public/assets/blackhole.webp` に保存する。
+2. 実ファイルの幅・高さ・中央の影の半径を `BLACKHOLE_ART` の `width`・`height`・`shadow` に
+   合わせ、`src` の `?v=` をそのファイルの SHA-256 の頭8桁に更新する。
+   alpha 約2%の可視光域を実測し、`lightWidth`（横幅）と `LIGHT_REACH`（影半径に対する
+   上下の広がり）も合わせる。透明な余白を光の幅として数えない。
+3. `node scripts/logo/export.mjs` でワードマーク・favicon・Appleアイコンも更新し、
+   小さいロゴと入口・Contact・表紙の焦点、影、光の広がりを確認する。
+
+`python3 scripts/blackhole/render.py hero` は比較用の物理レンダーを `dist/` に書く。
+配信素材の再生成には使わない。GitHub の顔は従来の `avatar` 出力を使う。
 
 星雲の形（`src/lib/orbits.ts` の `NEBULA_LOBES`）、色（`app.css` の `--nebula-a` / `-b` / `-c`・
 `--ink`・`--bg`）、4層の濃さ（`--nebula-light` / `-cloud` / `-veil` / `-dust`）を変えたら、

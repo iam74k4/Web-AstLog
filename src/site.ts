@@ -1,44 +1,70 @@
-/*
-  サイト全体の文言と宛先。
-
-  ここは管理画面から編集できない。トップの名乗りや連絡先は月に一度も
-  変わらないので、変更する手段を用意するより、1か所に集めて直接書くほうが早い。
-  変わるもの（メンバー・Projects の項目）だけを DB に置いている。
-*/
+import { isHttpsUrl } from './lib/format'
 
 /*
-  名乗りは1人ぶん。
-
-  実体は1人なので、複数形（「つくる人たち」「メンバーごとに」）では名乗らない。
-  採る側は「誰を採るのか」を探しに来ているので、器の名前より人の名前が要る。
-
-  1人であることを決めているのは、この2つの文言と、公開中のメンバーが
-  ちょうど1人かどうか（src/routes/public/data.ts の soloMember）の2つだけ。
-  members テーブルも Team ブロックもそのまま残してあるので、2人目を公開した
-  日に器の姿へ戻り、あとはここの2文を複数形に書き直せば元の名乗りになる。
+  ブランドと公開先はデプロイの設定。紹介文と連絡先は settings に保存し、
+  管理画面の「サイト設定」から変更する。空の DB に個人の連絡先を埋め込まない。
 */
 export const SITE = {
   name: 'AstLog',
+  origin: 'https://astlog.dev',
   tagline: 'つくる人の、置き場所。',
-
-  /*
-    入口の大見出しの下のリード文。本文なので「です・ます」。大見出しは、1人のサイトなら
-    その人の一文（members.headline。無ければ名前）、2人以上ならサイトの一言（tagline）
-  */
-  heroLead: '個人でつくったアプリと、仕事で取り組んだ開発効率化をまとめています。',
-
-  /*
-    Contact の誘いの1文。締めの画面（/contact）のメールの手の上と、全体ページ（/all）の
-    Contact の節に出す。/contact の description にも同じ文を使う——検索結果と
-    貼られたカードに、何のための画面かを1文で出すため。
-
-    締めの表紙で軌道図の下に大きく組む字なので、長さを変えたら npm run check:fit と
-    npm run check:contrast（行の数と位置が変わる）。本文なので「です・ます」（CLAUDE.md「文言」）
-  */
-  contactLead:
-    '開発効率化や生成AIの活用、個人開発について話せる機会を探しています。お仕事のご相談も歓迎です。',
-
-  email: 'iam74k4@gmail.com',
-  github: 'https://github.com/iam74k4',
-  origin: 'https://noctifex.dev',
+  heroLead: 'つくったものと、取り組んできたことをまとめています。',
+  contactLead: 'ご相談やお問い合わせは、こちらからお願いします。',
+  email: '',
+  github: '',
 } as const
+
+export const SITE_SETTING_KEYS = ['tagline', 'heroLead', 'contactLead', 'email', 'github'] as const
+export type SiteSettingKey = (typeof SITE_SETTING_KEYS)[number]
+export type SiteSettings = Record<SiteSettingKey, string>
+
+// 大きな見出しと表紙の文は、管理画面から変えても既存のレイアウトに収まる長さにする。
+export const SITE_SETTING_LIMITS = {
+  tagline: 80,
+  heroLead: 160,
+  contactLead: 120,
+  email: 254,
+  github: 2048,
+} as const
+
+// biome-ignore lint/suspicious/noControlCharactersInRegex: 制御文字を弾くのがこの検査の目的
+const CONTROL = /[\u0000-\u001f\u007f]/
+
+// mailto にヘッダや複数の宛先を混ぜさせない。空は連絡先を掲載しない指定。
+export const isContactEmail = (email: string) =>
+  /^[^\s@?&#,;]+@[^\s@?&#,;]+\.[^\s@?&#,;]+$/.test(email) &&
+  !CONTROL.test(email) &&
+  !/[<>"\\]/.test(email) &&
+  !/%(?:0[0-9a-f]|1[0-9a-f]|7f)/i.test(email)
+
+export function siteSettingsErrors(site: SiteSettings): Record<string, string> | null {
+  const errors: Record<string, string> = {}
+  for (const key of SITE_SETTING_KEYS) {
+    if ([...site[key]].length > SITE_SETTING_LIMITS[key]) {
+      errors[key] = `${SITE_SETTING_LIMITS[key]} 字までにしてください`
+    }
+  }
+  for (const key of ['tagline', 'heroLead', 'contactLead'] as const) {
+    if (!site[key]) errors[key] = '文を入れてください'
+    else if (CONTROL.test(site[key])) errors[key] = '改行や制御文字を含めないでください'
+  }
+  if (site.email && !isContactEmail(site.email)) errors.email = 'メールアドレスを1つ入れてください'
+  if (site.github && !isHttpsUrl(site.github))
+    errors.github = 'https:// で始まる URL を入れてください'
+  return Object.keys(errors).length ? errors : null
+}
+
+/*
+  読む側でも検査する。手動で DB に入った値や、検査を通る前の古い値から
+  メールや URL を組み立てない。未設定だけ既定文に戻し、空の連絡先は空のまま。
+*/
+export function normalizeSiteSettings(raw: Partial<SiteSettings>): SiteSettings {
+  const site = Object.fromEntries(
+    SITE_SETTING_KEYS.map((key) => [key, (raw[key] ?? SITE[key]).trim()]),
+  ) as SiteSettings
+  const errors = siteSettingsErrors(site)
+  if (errors) {
+    for (const key of SITE_SETTING_KEYS) if (errors[key]) site[key] = SITE[key]
+  }
+  return site
+}

@@ -4,13 +4,13 @@
   形の正は src/ui/logo.ts（ページのロゴはそこから直に SVG を描く）。ここは、ページの
   外で使う素材——ファイルとしての SVG（ワードマークと favicon）と、SVG を読めない所に
   渡す PNG（favicon・iPhone のホーム画面）——を同じ形から作る。O の光は入口のブラック
-  ホールと同じ絵（public/assets/blackhole.webp。scripts/blackhole/render.py が焼く）で、
-  絵を焼き直したらここも流し直す（GitHub の Organization の顔は render.py の avatar が焼く）。
+  ホールと同じ絵（logo.ts の BLACKHOLE_ART が指す1枚）で、差し替えたらここも流し直す。
   手で描き直さない（test/public.test.ts が SVG の中身を logo.ts と突き合わせる）。
 
   SVG のファイルはページの外で開かれ、/assets の絵を読みに行けないので、絵を data URI で
-  抱える。元の絵のままだと 50KB 近いので、ブラウザ（Playwright の Chromium）の canvas で
-  幅 ART_WIDTH に描き直した WebP を入れる。PNG は元の絵のまま描いて撮る。favicon と
+  抱える。全ページでキャッシュを共有する原画像を各SVGに複製しないよう、ブラウザ
+  （Playwright の Chromium）の canvas で幅 ART_WIDTH に描き直した WebP を入れる。
+  PNG は元の絵のまま描いて撮る。favicon と
   ホーム画面は、どちらも地の色の正方形に載せた同じ印（logo.ts の iconSvg）を大きさだけ
   変えて撮る。全部を撮り終えてから書く——途中で落ちたときに、新しい SVG と古い PNG が
   並んで残らないように。
@@ -25,11 +25,13 @@ const logo = await importTs('src/ui/logo.ts')
 const ASSETS = `${ROOT}public/assets/`
 
 /*
-  SVG のファイルに抱える絵の幅（画素）。ワードマークを幅 400px ほどに貼ると O の絵は
-  約 170px になり、2倍の画面でもこの幅で足りる。favicon は大きくても 64px 前後
+  SVG のファイルに抱える絵の幅（画素）。ページ内のロゴと表紙は2倍解像度にも余裕のある
+  原画像を読む。この縮小画像はファイルとして使うロゴ用で、favicon の2倍解像度にも足りる。
+  test/public.test.ts は埋め込む絵が12KB未満であることを確かめる
 */
 const ART_WIDTH = 320
-const ART_QUALITY = 0.9
+// 原画像の細部を残しつつ、埋め込みの12KB予算に収める（320pxで実測11,782 bytes）。
+const ART_QUALITY = 0.89
 
 // 絵のファイル（URL の ?v= の版を落としたパス）
 const artPath = `${ROOT}public${logo.BLACKHOLE_ART.src.split('?')[0]}`

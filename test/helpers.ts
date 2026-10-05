@@ -2,11 +2,20 @@ import { env, SELF } from 'cloudflare:test'
 import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { expect } from 'vitest'
+import { saveSiteSettings } from '../src/db/queries'
 import * as schema from '../src/db/schema'
 import { createSession, SESSION_COOKIE } from '../src/lib/auth'
 import { touchSite } from '../src/lib/page-cache'
+import { SITE } from '../src/site'
 
 export const db = () => drizzle(env.DB, { schema })
+
+// 連絡先を設定したサイトの代表値。アプリの初期値に個人データを残さない。
+export const TEST_SITE = {
+  ...SITE,
+  email: 'contact@example.test',
+  github: 'https://github.com/example',
+}
 
 // テストごとに素の状態から始める。前のテストの残りに引きずられないように
 export async function resetDb() {
@@ -29,6 +38,7 @@ export async function resetDb() {
     { key: 'web', label: 'Web', sortOrder: 10 },
     { key: 'cli', label: 'CLI', sortOrder: 20 },
   ])
+  await saveSiteSettings(database, TEST_SITE)
   await touchSite(env.MEDIA)
 }
 
