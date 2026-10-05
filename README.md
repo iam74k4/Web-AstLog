@@ -668,7 +668,7 @@ public/
                      Workers Static Assets が読む規則で、ファイルとしては配られない
                      3枚の CSS とブラックホール・星雲の絵は 1年・immutable（中身の版つきの URL
                      /app.css?v=… などで読むので、変えてデプロイすれば URL が変わる）
-  assets/            共有ブラックホールの透過素材（blackhole.webp。image_gen の参照画像から生成）。
+  assets/            共有ブラックホールの透過素材（blackhole.webp。0b42d90 の旧デザインを復元）。
                      GitHub の Organization の顔（astlog-avatar.png）は scripts/blackhole/render.py の avatar。
                      星雲の透過 WebP（nebula-{iris,violet,ember,mint,sky,rose}.webp。1800×1000）——
                      scripts/nebula/render.mjs が焼く。mono と iris は同じ1枚を使う。
@@ -715,11 +715,17 @@ seed.sql             ローカルの開発・画面検査用の見本（全部�
 
 ### 共有ブラックホール素材の更新
 
-`blackhole.webp` は image_gen で生成した透過素材。表紙・入口・Contact・ロゴの O は
+![旧ブラックホールの白い光に揃えた5種類の天体](docs/celestial-design.png)
+
+`blackhole.webp` は `0b42d90` の旧デザインを復元した透過素材（SHA-256: `c48dd421`）。
+滑らかな白い光と黒い影を基準に、ほかの天体も細かな表面模様を抑える。表紙・入口・Contact・ロゴの O は
 `src/ui/logo.ts` の `BLACKHOLE_ART` から同じ1枚を読む。
 
-1. 採用した天体アートを image_gen の参照画像にし、`transparent_background=true` で生成する。
-   背景の透過と影の中心を確認し、WebP として `public/assets/blackhole.webp` に保存する。
+1. ブラックホールを復元する場合は `git show 0b42d90:public/assets/blackhole.webp` から取り出す。
+   太陽・月・海王星・土星は、この旧ブラックホールを暗い背景に重ねた参照画像から
+   image_gen（`transparent_background=true`）で個別に生成した素材。白〜灰色、滑らかな陰影、
+   柔らかな縁の光を使い、写真のような粒状感や炎を加えない。透過余白を保った1254×1254の
+   WebP（quality 88）で `celestial-*-v2.webp` に保存し、`src/ui/celestial-art.ts` の版も更新する。
 2. 実ファイルの幅・高さ・中央の影の半径を `BLACKHOLE_ART` の `width`・`height`・`shadow` に
    合わせ、`src` の `?v=` をそのファイルの SHA-256 の頭8桁に更新する。
    alpha 約2%の可視光域を実測し、`lightWidth`（横幅）と `LIGHT_REACH`（影半径に対する

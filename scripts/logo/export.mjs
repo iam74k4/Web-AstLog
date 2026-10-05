@@ -30,7 +30,7 @@ const ASSETS = `${ROOT}public/assets/`
   test/public.test.ts は埋め込む絵が12KB未満であることを確かめる
 */
 const ART_WIDTH = 320
-// 原画像の細部を残しつつ、埋め込みの12KB予算に収める（320pxで実測11,782 bytes）。
+// 原画像の柔らかな光を残しつつ、埋め込みの12KB予算に収める。
 const ART_QUALITY = 0.89
 
 // 絵のファイル（URL の ?v= の版を落としたパス）

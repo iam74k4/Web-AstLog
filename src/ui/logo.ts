@@ -25,8 +25,8 @@
 
 const round = (value: number) => Math.round(value * 1000) / 1000
 
-// 現画像の明るい翼が L と G につながらないよう、O の左右の字間を広げる。
-const SHIFT = 14
+// 旧素材の光の翼が L と G に触れない字間。
+const SHIFT = 2.2
 
 // 字の箱（上の帯・ログイン画面のワードマークは、この箱の高さで置く）
 const BOX = { top: -20.31, bottom: 0.31, width: round(131.67 + 2 * SHIFT) }
@@ -50,11 +50,11 @@ export const HOLE = {
 } as const
 
 /*
-  ほかの天体の表紙と質感をそろえたブラックホールの絵。入口と締めの軌道図の真ん中
+  旧デザインの滑らかな白い光を持つブラックホール（0b42d90 の素材を復元）。入口と締めの軌道図の真ん中
   （components.tsx の Hole）、プロフィールの表紙（CelestialArt）、ロゴの O（HoleArt）が
   同じ1枚を使う。favicon とワードマークの素材も scripts/logo/export.mjs がこの絵から作る。
 
-  外側の光は透過で、中央の黒い影は絵にも入っている。表示側でも影の黒い円を下に敷く——
+  絵は光だけの透過素材で、中央の影は表示側が黒い円を下に敷く——
   絵の濃さを揺らしても、影の後ろの軌道を透かさないため。width / height は透明余白を含む絵の
   画素、lightWidth は可視光（alpha が約2%以上）の横幅、shadow は中央の影の半径（いずれも画素）。
   画像の中央を影の中心として配置し、img と holeArt の寸法には余白を含む width / height を使う。
@@ -65,11 +65,11 @@ export const HOLE = {
   （test/public.test.ts がファイルの寸法と版を突き合わせる）
 */
 export const BLACKHOLE_ART = {
-  src: '/assets/blackhole.webp?v=8c794528',
-  width: 1672,
-  height: 941,
-  lightWidth: 1544,
-  shadow: 184,
+  src: '/assets/blackhole.webp?v=c48dd421',
+  width: 1024,
+  height: 576,
+  lightWidth: 785,
+  shadow: 127,
 } as const
 
 // 影の半径が core になるように置いた絵の箱（中心 (cx, cy) のまわり。字の格子の単位）
@@ -117,8 +117,8 @@ const holeSvg = (cx: number, cy: number, art: string) => {
 const svg = (viewBox: string, body: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}"><title>AstLog</title>${body}</svg>\n`
 
-// 光の見える上下の広がり（影の半径に対して。alpha > 5 の実測上1.62・下1.56に少し余裕を足す）
-const LIGHT_REACH = { up: 1.65, down: 1.6 }
+// 光の見える上下の広がり（影の半径に対して。alpha > 5 の実測上1.898・下1.465）
+const LIGHT_REACH = { up: 1.9, down: 1.5 }
 
 // ワードマークのファイル。暗い地に貼る素材で、枠は光が上下に出るぶん広い
 export const wordmarkSvg = (art: string) => {
