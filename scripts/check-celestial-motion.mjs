@@ -349,8 +349,26 @@ async function geometry(page, screen) {
           const style = getComputedStyle(node)
           need(style.maskImage !== 'none', '複製画像のmaskが無い')
           need(inside(rect(node), stage), 'maskの固定枠が天体stageから出た')
-          if (node.matches('.blackhole-flow'))
-            need(node.querySelectorAll('img').length === 2, '流れる円盤が2枚でない')
+          if (node.matches('.blackhole-flow')) {
+            const texture = node.querySelector('.blackhole-flow__texture')
+            need(texture, '円盤の固定texture maskが無い')
+            const textureStyle = getComputedStyle(texture)
+            need(textureStyle.maskMode === 'luminance', '円盤が輝度maskでない')
+            need(
+              textureStyle.maskImage.includes('/assets/blackhole.webp'),
+              '円盤maskが共通素材でない',
+            )
+            need(
+              texture.getAnimations({ subtree: false }).length === 0,
+              '円盤のtexture自体が動いた',
+            )
+            need(textureStyle.overflow === 'hidden', '流れる光がmask枠から溢れる')
+            need(
+              texture.querySelectorAll('.blackhole-flow__beam').length === 2,
+              '流れる光が2本でない',
+            )
+            need(node.querySelectorAll('img').length === 0, '円盤に移動する複製画像が残った')
+          }
           return { className: node.className, bounds: rect(node), mask: style.maskImage }
         },
       )
@@ -365,7 +383,10 @@ async function geometry(page, screen) {
       need(identityAnimations.length === 0, '小記号/ロゴが動いている')
       need(document.querySelectorAll('main h1').length === 1, 'h1が1つでない')
       need(document.querySelectorAll(scope).length > 0, '検査対象が無い')
-      return { center, stage, shadow, duplicates, visible }
+      const primary = root.querySelector('.celestial__image')
+      const primaryBox = primary ? rect(primary) : null
+      const primaryCenterY = primaryBox ? (primaryBox.top + primaryBox.bottom) / 2 : null
+      return { center, stage, shadow, duplicates, visible, primaryCenterY }
     },
     { screen, scope: SCOPE },
   )
@@ -384,6 +405,11 @@ async function motion(page, body, screen) {
       animation.name,
       /^(celestial-(float|drift|rock|radiance|breathe|flow)|orbit-breathe)$/,
     )
+    if (animation.name.startsWith('celestial-'))
+      assert.ok(
+        animation.duration <= 18000,
+        `${animation.name}: 1周期が18秒を超え、動きが見えにくい`,
+      )
     assert.ok(animation.intervals.length > 0)
     for (const interval of animation.intervals) {
       assert.match(interval.easing, /^steps\(/)
@@ -441,6 +467,17 @@ async function motion(page, body, screen) {
     }
     samples.push(sample)
   }
+  const primaryCenterYs = samples
+    .map((sample) => sample.primaryCenterY)
+    .filter((value) => Number.isFinite(value))
+  const verticalTravelPx = primaryCenterYs.length
+    ? Math.max(...primaryCenterYs) - Math.min(...primaryCenterYs)
+    : null
+  if (screen.key === 'profile' && ['moon', 'neptune', 'saturn'].includes(body))
+    assert.ok(
+      verticalTravelPx >= 5,
+      `${body}: Profileの上下移動が${verticalTravelPx}pxしかなく、5pxに届かない`,
+    )
   const paused = await animations(page)
   await page.waitForTimeout(250)
   assert.deepEqual(await animations(page), paused, 'pause後に天体が動いた')
@@ -452,6 +489,8 @@ async function motion(page, body, screen) {
     animations: before.length,
     timings: before.map(({ name, duration, intervals }) => ({ name, duration, intervals })),
     samples: samples.length,
+    primaryCenterYs,
+    verticalTravelPx,
     paused: true,
   }
 }

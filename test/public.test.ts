@@ -427,7 +427,8 @@ describe('名乗り', () => {
       expect(html, body).toContain('/preview.css?v=')
       expect(html, body).not.toContain('<script')
       if (body === 'black-hole') {
-        expect(main.match(/class="blackhole-flow__image"/g), body).toHaveLength(2)
+        expect(main.match(/class="blackhole-flow__beam"/g), body).toHaveLength(2)
+        expect(main, body).toContain(`--blackhole-flow-art:url(${BLACKHOLE_ART.src})`)
         expect(main, body).not.toContain('class="celestial__corona"')
       } else if (body === 'sun') {
         expect(main.match(/class="celestial__corona-image"/g), body).toHaveLength(1)
@@ -1390,15 +1391,18 @@ describe('締めのページ（Contact）', () => {
     await seedItem({ type: 'app', slug: 'a' })
     const pct = (value: number) => `${Math.round(value * 10000) / 100}%`
     const flowingDisk = (main: string, label: string) => {
-      const flow = main.match(/<span class="blackhole-flow"[^>]*>[\s\S]*?<\/span>/)?.[0] ?? ''
+      const start = main.indexOf('<span class="blackhole-flow"')
+      const flow = main.slice(start, main.indexOf('</div>', start))
       expect(main.match(/class="blackhole-flow"/g), label).toHaveLength(1)
       expect(flow, label).toContain(
-        `style="aspect-ratio:${BLACKHOLE_ART.width}/${BLACKHOLE_ART.height}"`,
+        `style="aspect-ratio:${BLACKHOLE_ART.width}/${BLACKHOLE_ART.height};--blackhole-flow-art:url(${BLACKHOLE_ART.src})"`,
       )
-      expect(flow.match(/<img\b/g), label).toHaveLength(2)
+      expect(flow, label).toContain('<span class="blackhole-flow__texture">')
+      expect(flow, label).not.toContain('<img')
+      expect(flow.match(/class="blackhole-flow__beam"/g), label).toHaveLength(2)
       for (const layer of [0, 1]) {
         expect(flow, label).toContain(
-          `<img class="blackhole-flow__image" data-flow-layer="${layer}" src="${BLACKHOLE_ART.src}" width="${BLACKHOLE_ART.width}" height="${BLACKHOLE_ART.height}" alt="" decoding="async"/>`,
+          `<span class="blackhole-flow__beam" data-flow-layer="${layer}"></span>`,
         )
       }
     }
@@ -1715,16 +1719,12 @@ describe('ページの URL', () => {
     expect(system).not.toMatch(/system__(labels|label|number|name)/)
     expect(system.slice(0, system.indexOf('</div>'))).not.toContain('<a ')
     /*
-      読む素材はブラックホールの1枚で、基本画像と円盤を動かす追加2層も同じ版つきURLを使う
+      読む素材はブラックホールの1枚で、基本画像と光を通す固定maskも同じ版つきURLを使う
       （飾りなので alt は空）。軌道と天体はページに直に描く SVG で、色は app.css が
       --accent と --ink から敷くので、**見た目プリセットで軌道図の色も変わる**
     */
     expect(home.match(/<img\b[^>]*>/g)).toEqual([
       `<img class="hole__art" src="${BLACKHOLE_ART.src}" width="${BLACKHOLE_ART.width}" height="${BLACKHOLE_ART.height}" alt="" decoding="async"/>`,
-      ...[0, 1].map(
-        (layer) =>
-          `<img class="blackhole-flow__image" data-flow-layer="${layer}" src="${BLACKHOLE_ART.src}" width="${BLACKHOLE_ART.width}" height="${BLACKHOLE_ART.height}" alt="" decoding="async"/>`,
-      ),
     ])
     expect(home).not.toMatch(/(?:stroke|fill)="#/)
 
