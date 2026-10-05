@@ -44,6 +44,44 @@ const perpetualCount = () =>
     )
   }).length
 
+const animationStartState = (nodes) => {
+  const animations = nodes.flatMap((node) =>
+    node
+      .getAnimations()
+      .filter(
+        (animation) =>
+          animation instanceof CSSAnimation && animation.effect.getTiming().iterations === Infinity,
+      )
+      .map((animation) => ({
+        target: String(node.className.baseVal ?? node.className),
+        name: animation.animationName,
+        state: animation.playState,
+        pending: animation.pending,
+        start: animation.startTime,
+        current: animation.currentTime,
+        rate: animation.playbackRate,
+      })),
+  )
+  const unready = animations.filter(
+    (animation) =>
+      animation.pending ||
+      animation.state !== 'running' ||
+      animation.rate !== 1 ||
+      !Number.isFinite(animation.start) ||
+      !Number.isFinite(animation.current),
+  )
+  return {
+    visibility: document.visibilityState,
+    readyState: document.readyState,
+    fonts: document.fonts.status,
+    timeline: document.timeline.currentTime,
+    targets: nodes.length,
+    animations: animations.length,
+    unready: unready.length,
+    sample: unready.slice(0, 16),
+  }
+}
+
 async function open(browser, base, screen, options = {}) {
   const page = await browser.newPage({ ...OPTIONS, ...options })
   const errors = []
@@ -433,32 +471,45 @@ async function fallback(browser, base, screen, content, reduced) {
             .map((node) => String(node.className.baseVal ?? node.className)),
         )
       assert.deepEqual(inactive, [], `${screen.name}: JS 無効で開始していない装飾がある`)
-      // CSS の playState は pending 中も running になり得る。最初の描画で開始時刻が
-      // 確定するまで条件付きで待ち、下の時計・再生状態の検査はそのまま行う。
-      await page.waitForFunction(
-        (targets) => {
-          const animations = [...document.querySelectorAll(targets)].flatMap((node) =>
-            node
-              .getAnimations()
-              .filter(
-                (animation) =>
-                  animation instanceof CSSAnimation &&
-                  animation.effect.getTiming().iterations === Infinity,
-              ),
-          )
-          return (
-            animations.length > 0 &&
-            animations.every(
-              (animation) =>
-                !animation.pending &&
-                Number.isFinite(animation.startTime) &&
-                Number.isFinite(animation.currentTime),
+      // JS 無効の Linux headless では初回描画と RAF の開始が揺れる。撮影で描画を
+      // 促すが動作は止めず、RAF に依存しない条件待ちの後も既存の時計検査を維持する。
+      const beforeStart = await page.locator(TARGETS).evaluateAll(animationStartState)
+      try {
+        await page.screenshot({ animations: 'allow', timeout: 6_000 })
+        await page.waitForFunction(
+          (targets) => {
+            const animations = [...document.querySelectorAll(targets)].flatMap((node) =>
+              node
+                .getAnimations()
+                .filter(
+                  (animation) =>
+                    animation instanceof CSSAnimation &&
+                    animation.effect.getTiming().iterations === Infinity,
+                ),
             )
-          )
-        },
-        TARGETS,
-        { timeout: 6_000 },
-      )
+            return (
+              animations.length > 0 &&
+              animations.every(
+                (animation) =>
+                  !animation.pending &&
+                  Number.isFinite(animation.startTime) &&
+                  Number.isFinite(animation.currentTime),
+              )
+            )
+          },
+          TARGETS,
+          { timeout: 6_000, polling: 100 },
+        )
+      } catch (error) {
+        const afterStart = await page
+          .locator(TARGETS)
+          .evaluateAll(animationStartState)
+          .catch((diagnosticError) => ({ error: diagnosticError.message }))
+        console.error(
+          `${screen.name}/JS 無効: 開始待ち失敗の診断 ${JSON.stringify({ beforeStart, afterStart })}`,
+        )
+        throw error
+      }
       const invalid = await page.locator(TARGETS).evaluateAll((nodes) =>
         nodes.flatMap((node) =>
           node
