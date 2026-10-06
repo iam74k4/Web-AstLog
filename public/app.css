@@ -1806,18 +1806,19 @@ body[data-site] > main {
 @media (prefers-reduced-motion: no-preference) {
   /* 初期化 helper が小さい装飾群を順に始める。印が無いJS無効時は通常のCSS動作。 */
   html[data-motion-staged]
-  :is(
-    .orbit-flow,
-    .orbit-flow__tail,
-    .cosmos__twinkle,
-    .cosmos__meteor,
-    .orbit-grain__dot,
-    .orbit-spin,
-    .orbit-unspin,
-    .orbit-body,
-    .hole__art,
-    .cosmos__nebula
-  ):not([data-motion-ready]) {
+  :is(.cosmos__twinkle, .orbit-spin, .orbit-unspin, .orbit-body, .hole__art, .cosmos__nebula):not(
+    [data-motion-ready]
+  ) {
+    /* 最初のフレームを保つ。animation:none では開始時に光や天体の大きさが跳ぶ。 */
+    /* biome-ignore lint/complexity/noImportantStyles: 開始済みの印が付くまで初期フレームで待つ */
+    animation-play-state: paused !important;
+  }
+
+  html[data-motion-staged]
+    :is(.orbit-flow, .orbit-flow__tail, .cosmos__meteor, .orbit-grain__dot):not(
+      [data-motion-ready]
+    ) {
+    /* 初めは見せない小さい粒のanimationは、各群の開始時にだけ作る。 */
     /* biome-ignore lint/complexity/noImportantStyles: 下の通常animationを開始済みの印が付くまで止める */
     animation: none !important;
   }

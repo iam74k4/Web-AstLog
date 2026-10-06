@@ -86,8 +86,8 @@ CSS の版は `Stylesheets` が Worker に同梱した文字列から作る（`w
 **公開の実行 script は装飾開始 helper 1本だけ。** `src/ui/motion.ts` の `MOTION_START` と
 exact SHA-256（`MOTION_CSP`）で許す。外部 script・任意の inline は増やさない。内容と導線は SSR、
 絞り込みはリンクと query（`?kind=` `?member=`）、管理は HTML フォームと 303。JSON API も SPA も無い。
-load の1200ms後から小さい装飾群を350ms間隔で始め、共通の時計にそろえる。開始済みの印は残し、
-全群の開始後は処理を終える。JS 無効時は通常の CSS 動作、動きを減らす設定では helper も動かさない。
+DOM構築の1200ms後から群ごと350ms間隔で始める。星屑と天体は同時、時計は群内で同期。
+初期フレームで待機し、開始済みの印を残して終える。JS無効時はCSS動作、reduceでは動かさない。
 管理・エラーは `script-src 'none'`。JSON-LD はデータ（`test/headers.test.ts` が許可範囲を確かめる）。
 
 **畳んだ欄はエラー時に開く**（`FormDetails`）。URL・メールは `inputmode` とサーバー検証を使う

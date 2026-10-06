@@ -1946,30 +1946,38 @@ describe('入口の軌道図', () => {
   })
 
   it('装飾の開始待ちはhelperの印がある通常motionだけ。JS無効時のCSSとreduced-motionを妨げない', () => {
-    const gate = rulesOf(sheet).find(
-      (rule) =>
-        rule.selectors.some((selector) => selector.startsWith('html[data-motion-staged]')) &&
-        rule.decls.some(([property]) => property === 'animation'),
-    )
-    expect(gate?.context).toEqual(['@media (prefers-reduced-motion: no-preference)'])
-    expect(gate?.decls).toContainEqual(['animation', 'none !important'])
-    const selector = gate?.selectors.join(', ') ?? ''
-    expect(selector).toContain(':not([data-motion-ready])')
-    for (const part of [
-      '.orbit-flow',
-      '.orbit-flow__tail',
-      '.cosmos__twinkle',
-      '.cosmos__meteor',
-      '.orbit-grain__dot',
-      '.orbit-spin',
-      '.orbit-unspin',
-      '.orbit-body',
-      '.hole__art',
-      '.cosmos__nebula',
-    ]) {
-      expect(selector, part).toContain(part)
+    const gates = [
+      {
+        property: 'animation-play-state',
+        value: 'paused !important',
+        parts: [
+          '.cosmos__twinkle',
+          '.orbit-spin',
+          '.orbit-unspin',
+          '.orbit-body',
+          '.hole__art',
+          '.cosmos__nebula',
+        ],
+      },
+      {
+        property: 'animation',
+        value: 'none !important',
+        parts: ['.orbit-flow', '.orbit-flow__tail', '.cosmos__meteor', '.orbit-grain__dot'],
+      },
+    ]
+    for (const { property, value, parts } of gates) {
+      const gate = rulesOf(sheet).find(
+        (rule) =>
+          rule.selectors.some((selector) => selector.startsWith('html[data-motion-staged]')) &&
+          rule.decls.some(([name]) => name === property),
+      )
+      expect(gate?.context).toEqual(['@media (prefers-reduced-motion: no-preference)'])
+      expect(gate?.decls).toContainEqual([property, value])
+      const selector = gate?.selectors.join(', ') ?? ''
+      expect(selector.replace(/\s+/g, '')).toContain(':not([data-motion-ready])')
+      for (const part of parts) expect(selector, part).toContain(part)
+      expect(selector).not.toMatch(/hero__copy|phrase|tally|nameplate/)
     }
-    expect(selector).not.toMatch(/hero__copy|phrase|tally|nameplate/)
     const hidden = rulesOf(sheet).find((rule) =>
       rule.selectors.includes('html[data-motion-staged] .orbit-flow:not([data-motion-ready])'),
     )
