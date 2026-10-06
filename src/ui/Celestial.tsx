@@ -1,13 +1,8 @@
-import { normalizeCelestial } from '../celestial'
+import { type CelestialMember, normalizeCelestial } from '../celestial'
 import { BlackholeFlow } from './BlackholeFlow'
 import { CELESTIAL_ART } from './celestial-art'
 import { HoleMark } from './icons'
 import { BLACKHOLE_ART } from './logo'
-
-export type CelestialMember = {
-  celestialBody?: string | null
-  celestialAccent?: string | null
-}
 
 type CelestialProps = {
   member?: CelestialMember

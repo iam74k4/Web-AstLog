@@ -1957,6 +1957,7 @@ describe('入口の軌道図', () => {
           '.orbit-body',
           '.hole__art',
           '.cosmos__nebula',
+          '.brand__word .logo-art',
         ],
       },
       {
@@ -2070,6 +2071,7 @@ describe('プロフィールと表紙の天体の動き', () => {
     'celestial-radiance',
     'celestial-breathe',
     'celestial-flow',
+    'wordmark-radiance',
   ]
   const moving = () =>
     rulesOf(sheet).filter((rule) =>
@@ -2203,12 +2205,15 @@ describe('プロフィールと表紙の天体の動き', () => {
     expect(blockAt(sheet, '@supports not (mask-mode: luminance)')).toContain('display: none')
   })
 
-  it('黒い影・小さな記号・ガイド・ロゴは新しい継続動作の対象にしない', () => {
+  it('黒い影・小さな記号・ガイドは静止し、ロゴはOの画像だけを動かす', () => {
     for (const rule of moving()) {
       const selectors = rule.selectors.join(', ')
       expect(selectors).not.toMatch(
-        /\.hole::before|\.celestial__black-hole::before|\.celestial--symbol\b|\.celestial__guide\b|\.logo-(art|core)\b|\.brand-word\b/,
+        /\.hole::before|\.celestial__black-hole::before|\.celestial--symbol\b|\.celestial__guide\b|\.logo-core\b/,
       )
+      for (const selector of rule.selectors.filter((value) => value.includes('.logo-art'))) {
+        expect(selector).toMatch(/^\.brand__word\[data-celestial-body=['"][\w-]+['"]\] \.logo-art$/)
+      }
     }
     for (const selector of ['.hole::before {', '.celestial__black-hole::before {']) {
       expect(bodyOf(sheet, selector), selector).toContain('background: var(--hole-core)')

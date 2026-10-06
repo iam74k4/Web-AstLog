@@ -14,6 +14,8 @@ import { devServer, ROOT, scratchState } from './lib/dev-server.mjs'
 import { importTs } from './lib/ts-import.mjs'
 
 const { CELESTIAL_BODY_KEYS } = await importTs('src/celestial.ts')
+const { BLACKHOLE_ART } = await importTs('src/ui/logo.ts')
+const { CELESTIAL_ART } = await importTs('src/ui/celestial-art.ts')
 const { HERO_FRAME, CONTACT_FRAME } = await importTs('src/lib/orbits.ts')
 const SCOPE = '.celestial--art, .hole'
 const EXPECTED = {
@@ -177,7 +179,7 @@ async function ready(page) {
     // Existing BH brightness starts through the original helper; do not count it mid-start.
     await page.waitForFunction(
       () =>
-        [...document.querySelectorAll('.hole__art')].every((node) =>
+        [...document.querySelectorAll('.hole__art, .brand__word .logo-art')].every((node) =>
           node.hasAttribute('data-motion-ready'),
         ),
       undefined,
@@ -378,9 +380,10 @@ async function geometry(page, screen) {
         .filter(
           (a) =>
             a.effect?.target instanceof Element &&
-            a.effect.target.closest('.celestial--symbol, .brand__word, .logo-art, .logo-core'),
+            (a.effect.target.closest('.celestial--symbol, .logo-core') ||
+              (a.effect.target.closest('.brand__word') && !a.effect.target.matches('.logo-art'))),
         )
-      need(identityAnimations.length === 0, '小記号/ロゴが動いている')
+      need(identityAnimations.length === 0, '小記号/ロゴの文字や影が動いている')
       need(document.querySelectorAll('main h1').length === 1, 'h1が1つでない')
       need(document.querySelectorAll(scope).length > 0, '検査対象が無い')
       const primary = root.querySelector('.celestial__image')
@@ -392,7 +395,44 @@ async function geometry(page, screen) {
   )
 }
 
+async function wordmark(page, body) {
+  const result = await page.locator('.brand__word').evaluate((svg) => {
+    const image = svg.querySelector('.logo-art')
+    const animations = svg.getAnimations({ subtree: true })
+    const animation = animations[0]
+    const fixed = [svg, ...svg.querySelectorAll('path, circle')].map((node) => {
+      const rect = node.getBoundingClientRect()
+      return [rect.x, rect.y, rect.width, rect.height, getComputedStyle(node).opacity]
+    })
+    const style = getComputedStyle(image)
+    return {
+      body: svg.dataset.celestialBody,
+      src: image.getAttribute('href'),
+      count: animations.length,
+      name: animation?.animationName,
+      state: animation?.playState,
+      at: animation?.currentTime,
+      fixed,
+      appearance: [style.transform, style.opacity],
+    }
+  })
+  assert.equal(result.body, body, 'ワードマークの天体がページと一致しない')
+  assert.equal(result.src, body === 'black-hole' ? BLACKHOLE_ART.src : CELESTIAL_ART[body].src)
+  assert.equal(result.count, 1, 'ワードマークはOの画像だけを動かす')
+  assert.equal(
+    result.name,
+    body === 'black-hole'
+      ? 'celestial-breathe'
+      : body === 'sun'
+        ? 'wordmark-radiance'
+        : EXPECTED[body],
+  )
+  assert.equal(result.state, 'running')
+  return result
+}
+
 async function motion(page, body, screen) {
+  const wordBefore = await wordmark(page, body)
   const before = await animations(page)
   assert.ok(
     before.some((a) => a.name === EXPECTED[body]),
@@ -430,6 +470,10 @@ async function motion(page, body, screen) {
       )
   }
   await page.waitForTimeout(350)
+  const wordAfter = await wordmark(page, body)
+  assert.deepEqual(wordAfter.fixed, wordBefore.fixed, 'ロゴの文字・影・レイアウトが動いた')
+  assert.ok(wordAfter.at > wordBefore.at + 200, 'ロゴの時計が進まない')
+  assert.notDeepEqual(wordAfter.appearance, wordBefore.appearance, 'ロゴのOが動かない')
   const after = await animations(page)
   assert.equal(after.length, before.length)
   assert.ok(
@@ -492,12 +536,27 @@ async function motion(page, body, screen) {
     primaryCenterYs,
     verticalTravelPx,
     paused: true,
+    wordmark: { body, animation: wordAfter.name, fixedLetters: true },
   }
 }
 
 async function stopped(page, mode) {
   await page.emulateMedia(mode)
   assert.equal((await animations(page)).length, 0, '停止設定でも天体が動く')
+  assert.equal(
+    await page
+      .locator('.brand__word')
+      .evaluate((svg) => svg.getAnimations({ subtree: true }).length),
+    0,
+    '停止設定でもロゴが動く',
+  )
+  if (mode.forcedColors === 'active') {
+    const fallback = await page.locator('.brand__word .logo-core').evaluate((node) => ({
+      width: node.getBoundingClientRect().width,
+      stroke: getComputedStyle(node).stroke,
+    }))
+    assert.ok(fallback.width > 0 && fallback.stroke !== 'none', '強制色でOが読めない')
+  }
   if (mode.reducedMotion === 'reduce') {
     assert.equal(
       await page.evaluate(() => document.getAnimations().length),

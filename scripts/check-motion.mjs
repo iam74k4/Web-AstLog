@@ -330,7 +330,15 @@ async function initialDisplay(browser, base, screen, phone = false, slowImage = 
       })
       addEventListener(
         'DOMContentLoaded',
-        () => {
+        async () => {
+          // DOMContentLoaded は外部CSSの到着を待たない。装飾が描かれる初回の姿を測る。
+          await Promise.all(
+            [...document.querySelectorAll('link[rel="stylesheet"]')].map((link) =>
+              link.sheet
+                ? Promise.resolve()
+                : new Promise((resolve) => link.addEventListener('load', resolve, { once: true })),
+            ),
+          )
           const before = new Map()
           const state = (node) => {
             const css = getComputedStyle(node)
@@ -347,7 +355,7 @@ async function initialDisplay(browser, base, screen, phone = false, slowImage = 
             ]
           }
           const selector =
-            '.stardust .orbit-spin, .orbit-bodies :is(.orbit-spin, .orbit-unspin, .orbit-body), .hole__art, .cosmos__nebula, .cosmos__twinkle'
+            '.stardust .orbit-spin, .orbit-bodies :is(.orbit-spin, .orbit-unspin, .orbit-body), .hole__art, .cosmos__nebula, .cosmos__twinkle, .brand__word .logo-art'
           for (const node of document.querySelectorAll(selector)) {
             before.set(node, state(node))
             if (

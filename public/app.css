@@ -124,7 +124,7 @@
   --top-clear: calc(var(--top-h) + var(--sp-5));
 
   /*
-    上の帯のロゴ（ワードマーク ΛSTLOG。O がブラックホール）の字の高さ。字の幅は字の
+    上の帯のロゴ（ワードマーク ΛSTLOG。O は選択中の天体）の字の高さ。字の幅は字の
     高さの約 6.6 倍（15px で 99px）。ログイン画面のワードマークも同じ規則（.brand__word）。
     --hole-core はロゴの O の黒い円（影）の色で、地より一段深い黒。src/ui/logo.ts の
     LOGO_COLORS（素材のファイルに焼く色）と同じ値
@@ -735,6 +735,15 @@ body[data-site] > main {
   height: var(--brand-h);
   width: auto;
   overflow: visible;
+}
+
+.brand__word .logo-art {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.wordmark__fallback {
+  display: none;
 }
 
 /*
@@ -1806,9 +1815,15 @@ body[data-site] > main {
 @media (prefers-reduced-motion: no-preference) {
   /* 初期化 helper が小さい装飾群を順に始める。印が無いJS無効時は通常のCSS動作。 */
   html[data-motion-staged]
-  :is(.cosmos__twinkle, .orbit-spin, .orbit-unspin, .orbit-body, .hole__art, .cosmos__nebula):not(
-    [data-motion-ready]
-  ) {
+  :is(
+    .cosmos__twinkle,
+    .orbit-spin,
+    .orbit-unspin,
+    .orbit-body,
+    .hole__art,
+    .cosmos__nebula,
+    .brand__word .logo-art
+  ):not([data-motion-ready]) {
     /* 最初のフレームを保つ。animation:none では開始時に光や天体の大きさが跳ぶ。 */
     /* biome-ignore lint/complexity/noImportantStyles: 開始済みの印が付くまで初期フレームで待つ */
     animation-play-state: paused !important;
@@ -2287,6 +2302,18 @@ body[data-site] > main {
   }
 }
 
+/* 小さい O では輪郭を読める濃さで保ち、光と大きさだけを穏やかに変える。 */
+@keyframes wordmark-radiance {
+  from {
+    transform: scale(1);
+    opacity: 0.82;
+  }
+  to {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+}
+
 @keyframes celestial-flow {
   0% {
     transform: translateX(-100%);
@@ -2311,20 +2338,28 @@ body[data-site] > main {
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .celestial[data-celestial-body='moon'] > .celestial__image {
+  .celestial[data-celestial-body='moon'] > .celestial__image,
+  .brand__word[data-celestial-body='moon'] .logo-art {
     animation: celestial-float var(--celestial-moon-dur) steps(var(--celestial-moon-ticks)) infinite;
   }
-  .celestial[data-celestial-body='neptune'] > .celestial__image {
+  .celestial[data-celestial-body='neptune'] > .celestial__image,
+  .brand__word[data-celestial-body='neptune'] .logo-art {
     animation: celestial-drift var(--celestial-neptune-dur) steps(var(--celestial-neptune-ticks))
       infinite;
   }
-  .celestial[data-celestial-body='saturn'] > .celestial__image {
+  .celestial[data-celestial-body='saturn'] > .celestial__image,
+  .brand__word[data-celestial-body='saturn'] .logo-art {
     animation: celestial-rock var(--celestial-saturn-dur) steps(var(--celestial-saturn-ticks))
       infinite;
   }
-  .celestial__black-hole > img {
+  .celestial__black-hole > img,
+  .brand__word[data-celestial-body='black-hole'] .logo-art {
     animation: celestial-breathe var(--celestial-breathe-dur) steps(var(--celestial-breathe-ticks))
       infinite alternate;
+  }
+  .brand__word[data-celestial-body='sun'] .logo-art {
+    animation: wordmark-radiance var(--celestial-radiance-dur)
+      steps(var(--celestial-radiance-ticks)) infinite alternate;
   }
   .blackhole-flow,
   .celestial__corona {
@@ -4241,9 +4276,17 @@ body[data-site] > main {
     display: none;
   }
 
+  .brand__word[data-celestial-body] .logo-art {
+    animation: none;
+  }
+
   .logo-core {
     fill: Canvas;
     stroke: currentColor;
+  }
+
+  .wordmark__fallback {
+    display: inline;
   }
 }
 

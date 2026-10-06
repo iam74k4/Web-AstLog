@@ -23,6 +23,10 @@ export const CELESTIAL_ACCENTS = [
 export type CelestialBody = (typeof CELESTIAL_BODIES)[number]['key']
 export type CelestialAccent = (typeof CELESTIAL_ACCENTS)[number]['key']
 export type Celestial = { body: CelestialBody; accent: CelestialAccent }
+export type CelestialMember = {
+  celestialBody?: string | null
+  celestialAccent?: string | null
+}
 
 export const DEFAULT_CELESTIAL = {
   body: 'black-hole',
@@ -36,9 +40,7 @@ export const isCelestialAccent = (value: string): value is CelestialAccent =>
   CELESTIAL_ACCENTS.some((option) => option.key === value)
 
 // 手動で入った値や、将来なくなった選択肢も、SSRでは安全な既定値に戻す。
-export function normalizeCelestial(
-  raw: { celestialBody?: string | null; celestialAccent?: string | null } = {},
-): Celestial {
+export function normalizeCelestial(raw: CelestialMember = {}): Celestial {
   return {
     body:
       raw.celestialBody && isCelestialBody(raw.celestialBody)

@@ -3,7 +3,7 @@ import type { Child } from 'hono/jsx'
 import adminCss from '../../public/admin.css'
 import appCss from '../../public/app.css'
 import previewCss from '../../public/preview.css'
-import { normalizeCelestial } from '../celestial'
+import { type CelestialMember, normalizeCelestial } from '../celestial'
 import type { Item, Member } from '../db/schema'
 import {
   ITEM_KIND_KEYS,
@@ -156,15 +156,15 @@ export const FaviconLinks = () => (
 )
 
 /*
-  上の帯の左端のロゴ（ワードマーク ΛSTLOG。O がブラックホール）。押すと入口へ。
+  上の帯の左端のロゴ（ワードマーク ΛSTLOG。O はこのページの天体）。押すと入口へ。
   大きさは1つだけ（app.css の --brand-h）。
 
   絵は aria-hidden で、リンクの名前は .sr-only の字（サイトの名前）が持つ（WCAG 4.1.2。
   絵だけのリンクは名前を持たない）。
 */
-export const Brand = ({ href = '/' }: { href?: string } = {}) => (
+export const Brand = ({ href = '/', member }: { href?: string; member?: CelestialMember } = {}) => (
   <a class="brand" href={href}>
-    <Wordmark class="brand__word" />
+    <Wordmark class="brand__word" member={member} />
     <span class="sr-only">{SITE.name}</span>
   </a>
 )

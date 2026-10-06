@@ -1,4 +1,5 @@
 import type { Child } from 'hono/jsx'
+import type { CelestialMember } from '../celestial'
 import { yearInJapan } from '../lib/format'
 import { SITE } from '../site'
 import type { Theme } from '../theme'
@@ -101,6 +102,8 @@ export const Layout = (props: {
   jsonLd?: unknown
   nav: NavItem[]
   theme: Theme
+  // 公開中の1人、またはこのページの持ち主。未指定なら O はブラックホール。
+  celestial?: CelestialMember
   /*
     足元の名乗り（components.tsx の SiteIdentity）。どのページにも出るので、
     ここに載せたものは全ページに載る
@@ -179,7 +182,7 @@ export const Layout = (props: {
         貼り付き（全体ページを除く）、ページを移っても同じ場所に居る。
       */}
       <header class="top">
-        <Brand href={props.preview ? '/admin/preview' : '/'} />
+        <Brand href={props.preview ? '/admin/preview' : '/'} member={props.celestial} />
         {/*
           いま見ているページには aria-current="page"。'true' ではなく 'page' な
           のは、目次の行き先が別の URL（/projects）だから。'true' は「この一覧の

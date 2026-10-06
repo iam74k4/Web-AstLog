@@ -368,13 +368,14 @@ GitHub の手）。メールの手はアドレスそのものを大きな字に�
 同じことを言うだけ）——`.sr-only` の `h1`「Contact」で残す。`/all` では目に見える見出しを置く。
 `contactLead` は `/contact` の description にも使う。
 
-**ロゴは字で組む ΛSTLOG で、O は入口と同じブラックホールの絵**（`Wordmark`・`HoleArt`。持ち主の
-「o も合わせて」）。絵（`BLACKHOLE_ART`）は入口・締め・
-ロゴで1枚を使い、影の黒い円（`--hole-core`）を下に敷く。記号に描き直さない（記号の O は入口と
-別物に、輪のある玉は土星に見えた）。印だけのとき（404・管理画面の `HoleMark`、favicon）は O を1つで。
-favicon と apple-touch-icon は地の色の正方形に載せた同じ1枚（`iconSvg`）。素材は `scripts/logo/export.mjs`
-が書き（SVG は絵を data URI で抱える）、黒い地で透明に戻さない（光が白い）。強制色では O を字の色の輪に
-替える。形の正と字の組み方は `src/ui/logo.ts`（GitHub の顔は render.py の `avatar`）。
+**ロゴは ΛSTLOG、O は選択中の天体。** 1人のサイトはその人、プロフィール・作品は公開の持ち主、
+未指定・複数人の共通ページはブラックホール。プレビューは編集中の天体を使う。
+本文と同じ版つき素材を読み、文字の幅・O の中心は固定。CSS で O の画像だけを動かし、
+影・他の文字・小記号は静止。helper は初期フレームから始め、reduce では止める。
+ブラックホールは `BLACKHOLE_ART` と黒い円（`--hole-core`）を重ねる。強制色では全天体を字の色の輪に替える。
+`HoleMark`・配布素材・favicon は静止したブラックホール。
+形は `src/ui/logo.ts`。`scripts/logo/export.mjs` が SVG・PNG を書く。SVG は絵を data URI で抱え、
+favicon・apple-touch-icon は黒い地を敷く。GitHub の顔は render.py の `avatar`。
 
 前の入口の月の記録は `docs/moon.md`。
 
