@@ -99,10 +99,16 @@ const ROW_LISTS = {
   捨てられる。節を出すかどうかは blockShown が決める——別々に決めると「節は
   出ないのに URL だけある」ページができる。
 */
-export function renderBlock(block: schema.Block, data: TopData, whole: boolean): Rendered | null {
+export function renderBlock(
+  block: schema.Block,
+  data: TopData,
+  whole: boolean,
+  options: { projectsBase?: string } = {},
+): Rendered | null {
   const type = blockType(block.type)
   if (!type || !blockShown(block, siteCountsOf(data))) return null
   const { members, projects, kinds, filter, showMember, band } = data
+  const site = data.site ?? SITE
 
   const id = type.kind === 'fixed' ? type.key : `block-${block.id}`
   // 見出しが空なら、フォームの初期値と同じ名前（それも無ければ種類の名前）
@@ -125,7 +131,7 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
           nav: null,
           toc: false,
           title: null,
-          description: describe(siteDescription(solo)),
+          description: describe(siteDescription(solo, site)),
           node: (
             <Hero>
               {solo?.role ? <Eyebrow parts={[solo.role]} /> : null}
@@ -133,7 +139,7 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
                 <Phrases text={name} />
               </h1>
               <p class="hero__lead">
-                <Phrases text={SITE.heroLead} />
+                <Phrases text={site.heroLead} />
               </p>
             </Hero>
           ),
@@ -152,7 +158,7 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
         （Since）は、公開中の作品の年を DB で集約した値（site.ts の pageRows）から。軌道図は
         件数だけから描く（天体に作品の札は添えない。作品へは「一覧で見る →」から）。
       */
-      const statement = solo ? solo.headline || solo.name : SITE.tagline
+      const statement = solo ? solo.headline || solo.name : site.tagline
       const eyebrow = solo ? [solo.role, solo.location].filter(Boolean) : []
       return {
         id,
@@ -161,20 +167,20 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
         toc: false,
         title: null,
         // 入口はサイトそのもののページ。名乗りと同じ文をそのまま出す
-        description: describe(siteDescription(solo)),
+        description: describe(siteDescription(solo, site)),
         node: (
-          <Hero orbit>
+          <Hero orbit celestial={solo ?? undefined}>
             <div class="hero__copy">
               {eyebrow.length ? <Eyebrow parts={eyebrow} /> : null}
               <h1>
                 <Phrases text={statement} />
               </h1>
               <p class="hero__lead">
-                <Phrases text={SITE.heroLead} />
+                <Phrases text={site.heroLead} />
               </p>
               {band ? <Cta href={band.href}>一覧で見る</Cta> : null}
             </div>
-            <OrbitSystem counts={data.counts} />
+            <OrbitSystem counts={data.counts} member={solo ?? undefined} />
             {band ? <Tally counts={band.counts} since={projects.since ?? null} /> : null}
           </Hero>
         ),
@@ -237,7 +243,7 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
                 */}
                 {whole ? null : (
                   <FilterLinks
-                    base={`/${id}`}
+                    base={options.projectsBase ?? `/${id}`}
                     kinds={kinds}
                     members={members.map((member) => ({ slug: member.slug, name: member.name }))}
                     filter={filter}
@@ -303,7 +309,7 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
             <Screen id="profile" label="Profile">
               <SectionHead title="Profile" />
               <ProfileWhole member={person} {...memberUnits(person)}>
-                <OwnSocials member={person} />
+                <OwnSocials member={person} site={site} />
               </ProfileWhole>
             </Screen>
           ),
@@ -350,9 +356,16 @@ export function renderBlock(block: schema.Block, data: TopData, whole: boolean):
         nav: 'Contact',
         toc: true,
         title: 'Contact',
-        description: describe(SITE.contactLead),
+        description: describe(site.contactLead),
         node: (
-          <Contact email={SITE.email} github={SITE.github} counts={data.counts} whole={whole} />
+          <Contact
+            lead={site.contactLead}
+            email={site.email}
+            github={site.github}
+            counts={data.counts}
+            whole={whole}
+            member={soloMember(members) ?? undefined}
+          />
         ),
       }
 

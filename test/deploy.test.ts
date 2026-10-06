@@ -309,13 +309,16 @@ describe('本番へ出す道', () => {
     }
   })
 
-  it('本番の seed は短い名前で打てない。打てる名前は件数を見るラッパーを通る', () => {
+  it('seed はローカル専用で、本番に流す入口はない', () => {
     for (const [name, command] of Object.entries(scripts)) {
       if (!/--file=\.\/seed\.sql/.test(command)) continue
       expect(command, name).toContain('--local')
     }
     expect(scripts['db:seed']).toBeUndefined()
-    expect(scripts['db:seed:remote:destroys-prod']).toBe('node scripts/seed-remote.mjs')
+    expect(Object.keys(scripts).filter((name) => name.startsWith('db:seed'))).toEqual([
+      'db:seed:local',
+    ])
+    expect(scripts['db:seed:local']).toBe('node scripts/seed-local.mjs')
     // 本番に触れる入口は、どれも先に id の番兵を通る
     expect(scripts.deploy).toMatch(/^node scripts\/check-ids\.mjs && /)
     expect(scripts['db:migrate']).toMatch(/^node scripts\/check-ids\.mjs && /)

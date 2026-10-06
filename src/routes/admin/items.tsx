@@ -30,13 +30,15 @@ import {
   Confirm,
   Field,
   FormActions,
+  FormDetails,
   FormKey,
+  FormSection,
   PublishToggle,
   Select,
 } from '../../ui/AdminForm'
 import { AdminLayout } from '../../ui/AdminLayout'
 import { itemHref, Shot, StatusPill } from '../../ui/components'
-import { PencilIcon, TrashIcon } from '../../ui/icons'
+import { ExternalIcon, PencilIcon, TrashIcon } from '../../ui/icons'
 import {
   commitWithImage,
   discardImages,
@@ -145,6 +147,28 @@ itemRoutes.get('/items', async (c) => {
               <span class="row__col row__col--num">{item.sortOrder}</span>
               <StatusPill published={item.published} />
               <span class="row__actions">
+                <a
+                  class="icon-btn"
+                  href={`/admin/preview/items/${item.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`${item.title} の保存済み内容をプレビュー`}
+                >
+                  <ExternalIcon />
+                  <span class="icon-btn__text">プレビュー</span>
+                </a>
+                {item.published && itemHref(item) ? (
+                  <a
+                    class="icon-btn"
+                    href={itemHref(item) ?? ''}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`${item.title} の公開ページを見る`}
+                  >
+                    <ExternalIcon />
+                    <span class="icon-btn__text">公開ページ</span>
+                  </a>
+                ) : null}
                 <a
                   class="icon-btn"
                   href={`/admin/items/${item.id}/edit`}
@@ -486,7 +510,32 @@ const ItemForm = (props: ItemFormData) => {
           </span>
           <h1>{item ? item.title : '新しい項目'}</h1>
         </div>
+        {item ? (
+          <div class="admin-head__actions">
+            <a
+              class="btn btn--ghost"
+              href={`/admin/preview/items/${item.id}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              保存済み内容をプレビュー ↗
+            </a>
+            {item.published && itemHref(item) ? (
+              <a
+                class="btn btn--ghost"
+                href={itemHref(item) ?? ''}
+                target="_blank"
+                rel="noreferrer"
+              >
+                公開ページを見る ↗
+              </a>
+            ) : null}
+          </div>
+        ) : null}
       </div>
+      <p class="form-note">
+        入力中の内容と選んだ画像は「保存前にプレビュー」で別のタブに表示できます。プレビューでは保存されず、公開状態も変わりません。
+      </p>
 
       {/* 画像を受け取るので multipart。アバターのフォーム（MemberForm）と同じ */}
       <form
@@ -497,7 +546,10 @@ const ItemForm = (props: ItemFormData) => {
       >
         <input type="hidden" name="type" value={props.type} />
         <FormKey value={props.formKey} />
-        <div class="form-grid">
+        <FormSection
+          title="基本情報"
+          note="タイトルだけでも下書きとして保存できます。公開するときは説明文も必要です。"
+        >
           {/*
             作品名は一覧の行の題・作品のページの見出しに出る。長さは公開する
             ときにだけ見る（MAX_CHARS.itemTitle。理由は src/blocks.ts）
@@ -510,78 +562,6 @@ const ItemForm = (props: ItemFormData) => {
             maxlength={MAX_CHARS.itemTitle}
             hint={`${MAX_CHARS.itemTitle} 字まで（一覧の行の題と作品のページの見出しに出る）`}
             error={props.errors?.title}
-          />
-          {/*
-            この作品だけを指す URL。一覧の URL（/projects/3）は並べ替えるたびに
-            別の作品を指すので、貼るならこちら。変えてよい——前の URL は新しい
-            URL へ 301 で送る（item_slug_redirects）。それを書く前に言っておく
-          */}
-          <Field
-            label="slug"
-            name="slug"
-            value={d.slug}
-            error={props.errors?.slug}
-            hint={
-              item?.slug
-                ? `${itemHref({ type: props.type, slug: '<slug>' })} になる。変えると、前の URL は新しい URL へ転送する。空にしたときはいまのまま`
-                : `${itemHref({ type: props.type, slug: '<slug>' })} になる。空なら作品名から作る（日本語だけの題からは作れないので自動生成になる）`
-            }
-          />
-          <Select
-            label="担当メンバー"
-            name="memberId"
-            value={d.memberId}
-            error={props.errors?.memberId}
-            options={[
-              { value: '', label: '（なし）' },
-              ...props.members.map((member) => ({ value: String(member.id), label: member.name })),
-            ]}
-          />
-          {props.type === 'app' ? (
-            <Select
-              label="プラットフォーム"
-              name="platformKey"
-              value={d.platformKey}
-              error={props.errors?.platformKey}
-              options={[
-                { value: '', label: '（なし）' },
-                ...props.platforms.map((platform) => ({
-                  value: platform.key,
-                  label: platform.label,
-                })),
-              ]}
-              hint="絞り込みボタンと同じ値。自由入力にしないのは表記ゆれを防ぐため"
-            />
-          ) : (
-            <Field
-              label="区分"
-              name="category"
-              value={d.category}
-              placeholder="金融系基幹システム"
-            />
-          )}
-          {/*
-            年の書き方は経歴（「2024.03 — 現在」）とそろえる。「2024 —」と書いて
-            いたころは、ダッシュの先が空いたまま書きかけに見えた。一覧の並び
-            （新しい順）は頭の数字4桁だけで決まる（items.year_from。DB が year から
-            作る列で、知らせは同じ規則の src/lib/format.ts の yearFrom）ので、
-            「2024 — 現在」でも 2024 として並ぶ。
-
-            頭が数字4桁でない年（「令和6」「FY2024」）は保存を止めない（表示の
-            書き方は自由）が、並びに使われないことをその場で言う——言わないと、
-            一覧の最後に回った理由がどこにも見えない
-          */}
-          <Field
-            label="年"
-            name="year"
-            value={d.year}
-            placeholder="2026 / 2024 — 現在"
-            warning={
-              unordered
-                ? '頭が数字4桁ではないので、並びに使われません（一覧では年の無い作品と一緒に最後に並びます）'
-                : undefined
-            }
-            hint="終わったものは「2026」、続いているものは「2024 — 現在」。一覧は頭の数字4桁で新しい順に並ぶ"
           />
           <Area
             label="説明文"
@@ -600,11 +580,13 @@ const ItemForm = (props: ItemFormData) => {
             maxlength={MAX_CHARS.itemSummary}
             error={props.errors?.summary}
           />
-          {/*
-            本文は作品のページの説明の下に、小節「Story」として出る（一覧には
-            出ない）。空なら小節は作らない。長さに上限は無い（ページは縦に読む）
-          */}
-          <StoryFields story={d.story} body={d.body} error={props.errors?.body} />
+        </FormSection>
+        <FormDetails
+          title="画像を追加する"
+          note="メイン画像・アイコン・スクリーンショット（任意）"
+          errors={props.errors}
+          fields={['image', 'imageAlt', 'icon', 'newShot', 'shots', 'shotOrder']}
+        >
           <label class="field">
             <span class="field__label">画像</span>
             <input
@@ -682,27 +664,25 @@ const ItemForm = (props: ItemFormData) => {
             errors={props.errors}
             slots={Math.max(0, Math.min(SHOT_SLOTS, MAX_SHOTS - d.shots.length))}
           />
-          <Field
-            label="タグ"
-            name="tags"
-            value={d.tags}
-            error={props.errors?.tags}
-            hint="カンマ区切り"
-          />
+        </FormDetails>
+        <FormDetails
+          title="取り組みの内容を書く"
+          note="背景・取り組み・工夫・成果（任意）"
+          errors={props.errors}
+          fields={['body', ...STORY_SECTIONS.map(({ column }) => column)]}
+        >
           {/*
-            並びは年が先に効き、同じ年の中でこの数。個人開発と業務は公開ページで
-            1つの一覧に混ざるので、この数も区分をまたいで比べる（queries.ts の
-            itemOrder）。「小さいほど先」とだけ書いていたころは、1 を付けても年が
-            古い作品は後ろのままで、理由が分からなかった
+            本文は作品のページの説明の下に、小節「Story」として出る（一覧には
+            出ない）。空なら小節は作らない。長さに上限は無い（ページは縦に読む）
           */}
-          <Field
-            label="並び順"
-            name="sortOrder"
-            value={d.sortOrder}
-            error={props.errors?.sortOrder}
-            hint="同じ年の中で、小さいほど先。個人開発と業務をまたいで比べる（同じ数なら先に作ったほう）。10刻み"
-          />
-
+          <StoryFields story={d.story} body={d.body} error={props.errors?.body} />
+        </FormDetails>
+        <FormDetails
+          title="リンクを追加する"
+          note="リポジトリ・サービス・関連ページ（任意）"
+          errors={props.errors}
+          fields={['links']}
+        >
           {/*
             行ごとの検査は readLinks。知らせは何行目かで言うので、行の順は
             送った順のまま描き直す（submittedItem）
@@ -741,7 +721,13 @@ const ItemForm = (props: ItemFormData) => {
               もっと足すときは、保存してから開き直すと空いた行が出る
             </span>
           </fieldset>
-
+        </FormDetails>
+        <FormDetails
+          title="成果の数字を追加する"
+          note="ダウンロード数・利用者数・削減量など（任意）"
+          errors={props.errors}
+          fields={['metricValue', 'metricUnit', 'metricNote']}
+        >
           {/*
             実績値はどちらの区分も同じ欄（個人開発ならダウンロード数・利用者数など）。
             業務にだけ出していたころは、同じ一覧の中で個人開発の行だけ成果の数字を持てなかった
@@ -777,12 +763,119 @@ const ItemForm = (props: ItemFormData) => {
             {/* 添えは値のあとに続けて読まれる（METRIC_NOTE_HINT を見ること） */}
             <span class="field__hint">{METRIC_NOTE_HINT}</span>
           </fieldset>
-        </div>
+        </FormDetails>
+        <FormDetails
+          title="分類と担当を設定する"
+          note="担当メンバー・分類・年・タグ（任意）"
+          errors={props.errors}
+          fields={['memberId', 'platformKey', 'category', 'year', 'tags']}
+        >
+          <Select
+            label="担当メンバー"
+            name="memberId"
+            value={d.memberId}
+            error={props.errors?.memberId}
+            options={[
+              { value: '', label: '（なし）' },
+              ...props.members.map((member) => ({ value: String(member.id), label: member.name })),
+            ]}
+          />
+          {props.type === 'app' ? (
+            <Select
+              label="プラットフォーム"
+              name="platformKey"
+              value={d.platformKey}
+              error={props.errors?.platformKey}
+              options={[
+                { value: '', label: '（なし）' },
+                ...props.platforms.map((platform) => ({
+                  value: platform.key,
+                  label: platform.label,
+                })),
+              ]}
+              hint="絞り込みボタンと同じ値。自由入力にしないのは表記ゆれを防ぐため"
+            />
+          ) : (
+            <Field
+              label="区分"
+              name="category"
+              value={d.category}
+              placeholder="金融系基幹システム"
+            />
+          )}
+          {/*
+            年の書き方は経歴（「2024.03 — 現在」）とそろえる。「2024 —」と書いて
+            いたころは、ダッシュの先が空いたまま書きかけに見えた。一覧の並び
+            （新しい順）は頭の数字4桁だけで決まる（items.year_from。DB が year から
+            作る列で、知らせは同じ規則の src/lib/format.ts の yearFrom）ので、
+            「2024 — 現在」でも 2024 として並ぶ。
+
+            頭が数字4桁でない年（「令和6」「FY2024」）は保存を止めない（表示の
+            書き方は自由）が、並びに使われないことをその場で言う——言わないと、
+            一覧の最後に回った理由がどこにも見えない
+          */}
+          <Field
+            label="年"
+            name="year"
+            value={d.year}
+            placeholder="2026 / 2024 — 現在"
+            warning={
+              unordered
+                ? '頭が数字4桁ではないので、並びに使われません（一覧では年の無い作品と一緒に最後に並びます）'
+                : undefined
+            }
+            hint="終わったものは「2026」、続いているものは「2024 — 現在」。一覧は頭の数字4桁で新しい順に並ぶ"
+          />
+          <Field
+            label="タグ"
+            name="tags"
+            value={d.tags}
+            error={props.errors?.tags}
+            hint="カンマ区切り"
+          />
+        </FormDetails>
+        <FormDetails
+          title="詳細設定"
+          note="ページの URL・同じ年の中での並び順"
+          errors={props.errors}
+          fields={['slug', 'sortOrder']}
+        >
+          {/*
+            この作品だけを指す URL。一覧の URL（/projects/3）は並べ替えるたびに
+            別の作品を指すので、貼るならこちら。変えてよい——前の URL は新しい
+            URL へ 301 で送る（item_slug_redirects）。それを書く前に言っておく
+          */}
+          <Field
+            label="URL の末尾"
+            name="slug"
+            value={d.slug}
+            error={props.errors?.slug}
+            hint={
+              item?.slug
+                ? `${itemHref({ type: props.type, slug: '<slug>' })} になる。変えると、前の URL は新しい URL へ転送する。空にしたときはいまのまま`
+                : `${itemHref({ type: props.type, slug: '<slug>' })} になる。空なら作品名から作る（日本語だけの題からは作れないので自動生成になる）`
+            }
+          />
+          {/*
+            並びは年が先に効き、同じ年の中でこの数。個人開発と業務は公開ページで
+            1つの一覧に混ざるので、この数も区分をまたいで比べる（queries.ts の
+            itemOrder）。「小さいほど先」とだけ書いていたころは、1 を付けても年が
+            古い作品は後ろのままで、理由が分からなかった
+          */}
+          <Field
+            label="並び順"
+            name="sortOrder"
+            value={d.sortOrder}
+            error={props.errors?.sortOrder}
+            hint="同じ年の中で、小さいほど先。個人開発と業務をまたいで比べる（同じ数なら先に作ったほう）。10刻み"
+          />
+        </FormDetails>
 
         <div class="form-foot">
           <PublishToggle published={d.published} />
           <FormActions
             cancelHref={`/admin/items?type=${props.type}`}
+            previewAction={item ? `/admin/preview/items/${item.id}` : '/admin/preview/items'}
             deleteHref={item ? `/admin/items/${item.id}/delete?from=edit` : undefined}
           />
         </div>
@@ -791,7 +884,7 @@ const ItemForm = (props: ItemFormData) => {
   )
 }
 
-async function formContext(c: { env: { DB: D1Database } }) {
+export async function formContext(c: { env: { DB: D1Database } }) {
   const database = db(c)
   const [members, platforms] = await Promise.all([
     database.query.members.findMany({ orderBy: [asc(schema.members.sortOrder)] }),
@@ -847,7 +940,7 @@ itemRoutes.get('/items/:id/edit', async (c) => {
   保存すると、以前は外部キーで 500 になり、打った内容も消えていた。いまは
   選び直してもらう（400。打った内容は残す）。
 */
-function readItemForm(
+export function readItemForm(
   form: FormData,
   context: { members: schema.Member[]; platforms: schema.Platform[] },
   existing?: schema.Item,
@@ -916,12 +1009,12 @@ function readItemForm(
   長い中身を持つ作品が「公開を外すことすらできない」行き止まりになる
   （CLAUDE.md「下書きに戻す保存では長さを見ない」）。
 */
-function itemValueErrors(values: { title: string }): Record<string, string> | null {
+export function itemValueErrors(values: { title: string }): Record<string, string> | null {
   return values.title ? null : { title: 'タイトルは必須です' }
 }
 
 // slug の重なり。いまの slug と、ほかの作品の前の slug（memberSlugTaken と同じ規則）
-async function itemSlugTaken(
+export async function itemSlugTaken(
   database: Db,
   slug: string,
   exceptId: number | null,
@@ -996,7 +1089,7 @@ function submittedItem(form: FormData): Record<string, string> {
 
   下書きでも見る。長さではなく、受け取れない値なので（画像の種類と同じ）。
 */
-type ItemLink = { label: string; url: string }
+export type ItemLink = { label: string; url: string }
 
 // 1行の検査。通らなければ「N 行目」に続ける言葉を返す（フォームも行の印に同じものを使う）
 function linkProblem(label: string, url: string): string | null {
@@ -1006,7 +1099,7 @@ function linkProblem(label: string, url: string): string | null {
   return null
 }
 
-function readLinks(form: FormData): { links: ItemLink[]; error?: string } {
+export function readLinks(form: FormData): { links: ItemLink[]; error?: string } {
   const labels = form.getAll('linkLabel').map((value) => str(value))
   const urls = form.getAll('linkUrl').map((value) => str(value))
   const links: ItemLink[] = []
@@ -1029,9 +1122,9 @@ const shotOrder = [asc(schema.itemShots.sortOrder), asc(schema.itemShots.id)]
   送信。1度目が作った画像はそのフォームに無い）はいまのまま残す。並び順は全角の数字も
   読み、読めなければ何枚目かを言って止める（黙って別の数に倒さない。作品の並び順と同じ）
 */
-type ShotEdit = { shot: schema.ItemShot; alt: string; sortOrder: number; remove: boolean }
+export type ShotEdit = { shot: schema.ItemShot; alt: string; sortOrder: number; remove: boolean }
 
-function readShotEdits(form: FormData, shots: schema.ItemShot[]) {
+export function readShotEdits(form: FormData, shots: schema.ItemShot[]) {
   const unreadable: number[] = []
   const edits: ShotEdit[] = shots.map((shot, index) => {
     const alt = form.get(`shotAlt-${shot.id}`)
@@ -1059,7 +1152,7 @@ function readShotEdits(form: FormData, shots: schema.ItemShot[]) {
   いない欄も止める——黙って捨てると、書いた代替テキストが消えたのに「保存しました」と
   出る（弾いたあとの描き直しでファイルの欄は空に戻るので、選び直し忘れがここに来る）
 */
-async function readNewShots(form: FormData) {
+export async function readNewShots(form: FormData) {
   const picks = await pickImages(form, 'newShot')
   const alts = form.getAll('newShotAlt').map((value) => str(value))
   const problems = Array.from({ length: Math.max(picks.length, alts.length) }, (_, index) => {
@@ -1084,7 +1177,10 @@ async function readNewShots(form: FormData) {
   何枚目か（外す行も数える。行の読み上げの名前と同じ）、足す画像は何番目の欄か。保存した
   あとの並びで数えると、並べ替えたり外したりした保存で、知らせの番号が行と食い違った
 */
-function shotPlan(edits: ShotEdit[], added: { image: PickedImage; alt: string; slot: number }[]) {
+export function shotPlan(
+  edits: ShotEdit[],
+  added: { image: PickedImage; alt: string; slot: number }[],
+) {
   const kept = edits
     .filter((edit) => !edit.remove)
     .sort((a, b) => a.sortOrder - b.sortOrder || a.shot.id - b.shot.id)
@@ -1243,7 +1339,7 @@ function itemSlugMoves(
 }
 
 // 画像の列（URL と寸法）。寸法は読めたときだけ（src/db/schema.ts の imageWidth）
-const imageColumns = (url: string | null, image: PickedImage | null) => ({
+export const imageColumns = (url: string | null, image: PickedImage | null) => ({
   imageUrl: url,
   imageWidth: image?.width ?? null,
   imageHeight: image?.height ?? null,

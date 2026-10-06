@@ -98,11 +98,12 @@ Projects、個人ページは Profile か Team）。先頭の Hero へはロゴ�
 絞り込み（区分・メンバー）は**ページを移る**。絞り込みの手はリンクで、押すと絞り込んだ一覧の
 ページへ遷移する。絞り込みは目次の Projects の行き先にも同じ query が付いて、目次から
 一覧へ戻っても外れない。もう一度同じ手を押すとその軸だけ外れる（「すべて」は両方）。
-公開ページは JavaScript を1バイトも持たないので、切っても何も変わらない。
+内容と導線は SSR で成立し、JavaScript を切ってもたどれる。装飾開始の補助だけが JavaScript。
 
 作品1件のページ（`/apps/item/<slug>` ・ `/works/item/<slug>`）は、一覧の行を開いたものと、
 本文を書いた作品なら説明の下の小節「Story」（`#story`）。画像（あれば）はここに大きく出る
-（2枚以上なら、横に送る帯の小節「Screenshots」（`#screenshots`）に並べる）。
+（2枚以上なら、小節「Screenshots」（`#screenshots`）で先頭を大きく見せ、
+続きは番号と説明を添えたギャラリーに並べる）。
 頭の「← 一覧に戻る」は一覧のその作品の行（`/projects#item-<slug>`）へ戻す——一覧は
 全件を1ページに並べるので、開いた行の所から読み続けられる。作品同士をめくる手は無い
 （隣の作品は、戻った一覧の隣の行）。目次の印は Projects に付く。一覧の行は面ごと
@@ -144,10 +145,10 @@ Projects、個人ページは Profile か Team）。先頭の Hero へはロゴ�
 
 | 見ているページ | 行き先 |
 |---|---|
-| 入口（Hero） | 1人のサイトならその人の編集、それ以外は Members 一覧 |
+| 入口（Hero） | 1人のサイトならその人の編集、それ以外はサイト設定 |
 | Projects | 項目の一覧（`/admin/items`。個人開発 / 業務のタブ） |
 | Team（2人以上のサイト） | Members 一覧 |
-| Contact | 構成のその行（中身は `src/site.ts` にあり、管理画面からは変えられない） |
+| Contact | サイト設定（`/admin/site`。文言と公開する宛先を編集） |
 | 打ち込むブロック（ひとこと・メモ …） | そのブロックの編集 |
 | 全体ページ（`/all`）・0件のトップ | 構成 |
 | 作品1件 | その項目の編集 |
@@ -161,11 +162,17 @@ Projects、個人ページは Profile か Team）。先頭の Hero へはロゴ�
 
 ## 管理側
 
-追加・編集・削除は、どれも「一覧 → フォーム → 一覧」で閉じる。削除だけ確認を挟む。
+ログイン後は概要から次の設定に進む。追加・編集・削除は「一覧 → フォーム → 一覧」で閉じ、
+削除は確認を挟む。保存済みの内容は下書きもプレビューできる。メンバー・作品・ブロック・
+サイト設定・見た目の入力中の内容も、選んだ画像とともに別タブで確認してから保存できる。
+Members の「天体と色」も同じプレビューを使う。メンバーごとに選んだ天体と色は個人ページ・
+Team に反映され、公開中が1人なら入口・Contact の中心も変わる。写真は天体とは別に残す。
 
 ```mermaid
 flowchart TD
     Login["ログイン<br>GET /admin/login"]
+    Dashboard["概要・次の設定<br>GET /admin"]
+    Preview["管理者専用プレビュー<br>/admin/preview/*<br>保存・公開はしない"]
     Members["Members 一覧<br>GET /admin/members"]
     Account["アカウント<br>GET /admin/account"]
     Items["Projects（個人開発 / 業務）<br>GET /admin/items?type="]
@@ -177,20 +184,35 @@ flowchart TD
     BForm["ブロックフォーム<br>/blocks/new?type= ・ /:id/edit"]
     BDel["外す確認<br>GET /blocks/:id/delete"]
     Look["見た目<br>GET /admin/appearance"]
+    SiteSettings["サイト設定<br>GET /admin/site"]
     Public["公開ページ<br>/ ・ /all"]
 
-    Login -->|"GitHub / Google でログイン（認証の節）<br>成功 → 303（?next= があればそこへ）"| Members
+    Login -->|"GitHub / Google でログイン（認証の節）<br>成功 → 303（?next= があればそこへ）"| Dashboard
+    Dashboard --> Members
+    Dashboard --> Items
+    Dashboard --> Blocks
+    Dashboard --> SiteSettings
+    Dashboard --> Look
+    Dashboard -->|"保存済み全体を確認"| Preview
+    MForm -->|"保存済み / 入力中を別タブで確認"| Preview
+    IForm -->|"保存済み / 入力中を別タブで確認"| Preview
+    BForm -->|"保存済み / 入力中を別タブで確認"| Preview
+    SiteSettings -->|"フォームを別タブに POST・保存しない"| Preview
+    Look -->|"フォームを別タブに POST・保存しない"| Preview
     Members <-->|"左ナビの足元の名前"| Account
     Account -->|"すべての端末からログアウト<br>POST /admin/account/logout-all → 303 ?out=all"| Login
     Members <-->|"左ナビ"| Items
     Items <-->|"左ナビ"| Blocks
     Blocks <-->|"左ナビ"| Look
+    Look <-->|"左ナビ"| SiteSettings
+    SiteSettings -->|"POST → 303 ?saved=1<br>不正な値なら 400"| SiteSettings
 
     Blocks -->|"↑↓ POST /:id/move → 303 #block-id"| Blocks
     Blocks -->|"公開/下書き POST /:id/publish → 303 #block-id"| Blocks
     Blocks -->|"公開にするのを関門が止めた → 303 /:id/edit?publish=blocked"| BForm
     Blocks -->|"足す（決まった中身）<br>POST /admin/blocks → 303 #block-id"| Blocks
-    Blocks -->|"サイトを見る ↗ / 全体を1ページで見る ↗"| Public
+    Blocks -->|"サイトを見る ↗"| Public
+    Blocks -->|"保存済みの全体をプレビュー ↗"| Preview
     Members -->|"サイトで見る ↗（公開中の行）"| Public
     Public -->|"上の帯の「管理画面」（ログイン中だけ。その画面を直す場所へ）"| Members
     Blocks -->|"足す（打ち込む）/ 編集"| BForm
@@ -286,8 +308,8 @@ flowchart TD
 先にそれを行にしてから触らせる。直接 `POST /admin/blocks` が来たときも、
 足す前に既定の並びを行にする（足したのに4節が消える、を起こさないため）。
 
-見た目だけは一覧を持たず、同じ画面に戻る。選ぶものが2つしかないので、
-「どれを編集中か」を示す一覧が要らない。
+見た目とサイト設定は一覧を持たず、保存すると同じ画面に戻る。固定の項目を
+編集するので、「どれを編集中か」を示す一覧が要らない。
 
 ## 認証
 

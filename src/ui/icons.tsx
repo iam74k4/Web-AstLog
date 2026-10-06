@@ -3,13 +3,16 @@
   場所の文字色になる。
 */
 
-import { BLACKHOLE_ART, HOLE, holeArt, MARK_VIEWBOX, WORDMARK } from './logo'
+import { type CelestialMember, normalizeCelestial } from '../celestial'
+import { CELESTIAL_ART } from './celestial-art'
+import { BLACKHOLE_ART, HOLE, holeArt, MARK_VIEWBOX, WORDMARK, wordmarkArt } from './logo'
 
 /*
   ロゴの O のブラックホール。入口と締めの軌道図の真ん中と同じ絵（logo.ts の BLACKHOLE_ART）を、
   影の黒い円（CSS の --hole-core。app.css の .logo-core）の上に、影の半径が HOLE.core になる
-  大きさで置く。絵は光だけの透過の WebP で、/assets から読む（入口と同じ1枚。版つきの URL で
-  1年持つので、ページを移っても取り直さない。CSP の img-src 'self' の中）。
+  大きさで置く。絵は外側の光が透過し、中央の黒い影も含む WebP。/assets から読む
+  （入口と同じ1枚。版つきの URL で1年持つので、ページを移っても取り直さない。
+  CSP の img-src 'self' の中）。
 
   強制色のモードでは絵の色を変えられない（白い光が明るい地に溶ける）ので、app.css が絵を隠して
   影の円を字の色の輪にする——O の字の形だけは残る。輪の太さは字の線と同じ（stroke-width。
@@ -33,23 +36,46 @@ export const HoleArt = ({ cx, cy }: { cx: number; cy: number }) => {
 }
 
 /*
-  ワードマーク（ΛSTLOG。O がブラックホール）。大きさは置く側の CSS が高さで決める
+  ワードマーク（ΛSTLOG。O は選択中の天体、未指定ならブラックホール）。大きさは CSS の高さで決める
   （幅は viewBox の縦横比から。O の光は字の箱の外へはみ出して見せる——overflow visible）。読み上げには出さない——名前は置く側が字で持つ（.sr-only の AstLog）
 */
-export const Wordmark = ({ class: className }: { class: string }) => (
-  <svg
-    class={className}
-    viewBox={WORDMARK.viewBox}
-    fill="currentColor"
-    overflow="visible"
-    aria-hidden="true"
-    focusable="false"
-  >
-    <HoleArt cx={HOLE.cx} cy={HOLE.cy} />
-    <path d={WORDMARK.lambda} />
-    <path d={WORDMARK.strokes} fill="none" stroke="currentColor" stroke-width={WORDMARK.stroke} />
-  </svg>
-)
+export const Wordmark = ({
+  class: className,
+  member,
+}: {
+  class: string
+  member?: CelestialMember
+}) => {
+  const { body } = normalizeCelestial(member)
+  return (
+    <svg
+      class={className}
+      data-celestial-body={body}
+      viewBox={WORDMARK.viewBox}
+      fill="currentColor"
+      overflow="visible"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {body === 'black-hole' ? (
+        <HoleArt cx={HOLE.cx} cy={HOLE.cy} />
+      ) : (
+        <>
+          <circle
+            class="logo-core wordmark__fallback"
+            cx={HOLE.cx}
+            cy={HOLE.cy}
+            r={HOLE.core}
+            stroke-width={WORDMARK.stroke}
+          />
+          <image class="logo-art" href={CELESTIAL_ART[body].src} {...wordmarkArt(body)} />
+        </>
+      )}
+      <path d={WORDMARK.lambda} />
+      <path d={WORDMARK.strokes} fill="none" stroke="currentColor" stroke-width={WORDMARK.stroke} />
+    </svg>
+  )
+}
 
 /*
   印だけ（ワードマークの O を1つで）。404 と管理画面の頭で使う。

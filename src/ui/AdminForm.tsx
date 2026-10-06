@@ -4,14 +4,71 @@ import type { Child } from 'hono/jsx'
   管理画面のフォームの部品。どの管理画面も、この部品だけで欄と操作を組む。
 */
 
+type FieldFeedback = { name: string; error?: string; warning?: string; hint?: string }
+
+const describedBy = (props: FieldFeedback) =>
+  (['error', 'warning', 'hint'] as const)
+    .filter((kind) => props[kind])
+    .map((kind) => `field-${props.name}-${kind}`)
+    .join(' ') || undefined
+
+// 欄の名前はラベルだけ。修正理由とヒントは別の説明として、その欄へ結び付ける。
+const Feedback = (props: FieldFeedback) => (
+  <>
+    {props.error ? (
+      <span class="field__error" id={`field-${props.name}-error`}>
+        {props.error}
+      </span>
+    ) : null}
+    {props.warning ? (
+      <span class="field__warn" id={`field-${props.name}-warning`}>
+        {props.warning}
+      </span>
+    ) : null}
+    {props.hint ? (
+      <span class="field__hint" id={`field-${props.name}-hint`}>
+        {props.hint}
+      </span>
+    ) : null}
+  </>
+)
+
 export const FormKey = ({ value }: { value?: string | null }) =>
   value ? <input type="hidden" name="formKey" value={value} /> : null
+
+export const FormSection = (props: { title: string; note?: string; children?: Child }) => (
+  <section class="form-section">
+    <div class="form-section__head">
+      <h2 class="form-section__title">{props.title}</h2>
+      {props.note ? <p class="form-section__note">{props.note}</p> : null}
+    </div>
+    <div class="form-grid">{props.children}</div>
+  </section>
+)
+
+// 畳んだ欄で保存が止まったときは、その理由が隠れないように開いて返す。
+export const FormDetails = (props: {
+  title: string
+  note?: string
+  errors?: Record<string, string> | null
+  fields: readonly string[]
+  children?: Child
+}) => (
+  <details class="form-details" open={props.fields.some((field) => Boolean(props.errors?.[field]))}>
+    <summary class="form-details__summary">
+      {props.title}
+      {props.note ? <span class="form-details__note">{props.note}</span> : null}
+    </summary>
+    <div class="form-grid">{props.children}</div>
+  </details>
+)
 
 export const Field = (props: {
   label: string
   name: string
   value?: string | number | null
   type?: string
+  inputmode?: 'url' | 'email' | 'numeric' | 'text'
   hint?: string
   error?: string
   /*
@@ -25,19 +82,23 @@ export const Field = (props: {
   maxlength?: number
 }) => (
   <label class="field">
-    <span class="field__label">{props.label}</span>
+    <span class="field__label" id={`field-${props.name}-label`}>
+      {props.label}
+    </span>
     <input
       class={props.error ? 'input input--error' : 'input'}
       type={props.type ?? 'text'}
+      inputmode={props.inputmode}
       name={props.name}
+      aria-labelledby={`field-${props.name}-label`}
+      aria-describedby={describedBy(props)}
+      aria-invalid={props.error ? 'true' : undefined}
       value={props.value ?? ''}
       required={props.required}
       placeholder={props.placeholder}
       maxlength={props.maxlength}
     />
-    {props.error ? <span class="field__error">{props.error}</span> : null}
-    {props.warning ? <span class="field__warn">{props.warning}</span> : null}
-    {props.hint ? <span class="field__hint">{props.hint}</span> : null}
+    <Feedback {...props} />
   </label>
 )
 
@@ -58,17 +119,21 @@ export const Area = (props: {
   maxlength?: number
 }) => (
   <label class="field field--wide">
-    <span class="field__label">{props.label}</span>
+    <span class="field__label" id={`field-${props.name}-label`}>
+      {props.label}
+    </span>
     <textarea
       class={props.error ? 'input input--area input--error' : 'input input--area'}
       name={props.name}
+      aria-labelledby={`field-${props.name}-label`}
+      aria-describedby={describedBy(props)}
+      aria-invalid={props.error ? 'true' : undefined}
       rows={props.rows ?? 4}
       maxlength={props.maxlength}
     >
       {props.value ?? ''}
     </textarea>
-    {props.error ? <span class="field__error">{props.error}</span> : null}
-    {props.hint ? <span class="field__hint">{props.hint}</span> : null}
+    <Feedback {...props} />
   </label>
 )
 
@@ -81,8 +146,16 @@ export const Select = (props: {
   error?: string
 }) => (
   <label class="field">
-    <span class="field__label">{props.label}</span>
-    <select class={props.error ? 'input input--error' : 'input'} name={props.name}>
+    <span class="field__label" id={`field-${props.name}-label`}>
+      {props.label}
+    </span>
+    <select
+      class={props.error ? 'input input--error' : 'input'}
+      name={props.name}
+      aria-labelledby={`field-${props.name}-label`}
+      aria-describedby={describedBy(props)}
+      aria-invalid={props.error ? 'true' : undefined}
+    >
       {props.options.map((option) => (
         <option
           key={option.value}
@@ -93,8 +166,7 @@ export const Select = (props: {
         </option>
       ))}
     </select>
-    {props.error ? <span class="field__error">{props.error}</span> : null}
-    {props.hint ? <span class="field__hint">{props.hint}</span> : null}
+    <Feedback {...props} />
   </label>
 )
 
@@ -105,7 +177,7 @@ export const PublishToggle = ({ published }: { published: number }) => (
       <span class="toggle__knob" />
     </span>
     <span class="toggle__text">
-      公開する<span class="toggle__hint">外すと下書き。サイトには出ない</span>
+      公開する<span class="toggle__hint">保存すると反映。外すと下書き</span>
     </span>
   </label>
 )
@@ -114,10 +186,12 @@ export const FormActions = ({
   cancelHref,
   deleteHref,
   deleteLabel = 'この項目を削除…',
+  previewAction,
 }: {
   cancelHref: string
   deleteHref?: string
   deleteLabel?: string
+  previewAction?: string
 }) => (
   <div class="form-actions">
     {deleteHref ? (
@@ -131,9 +205,21 @@ export const FormActions = ({
       <a class="btn btn--ghost" href={cancelHref}>
         キャンセル
       </a>
+      {/* Enter による送信も、これまでどおり保存へ進む。最初の submit を保存にする。 */}
       <button class="btn btn--primary" type="submit">
         保存
       </button>
+      {previewAction ? (
+        <button
+          class="btn btn--ghost"
+          type="submit"
+          formaction={previewAction}
+          formtarget="_blank"
+          formnovalidate
+        >
+          保存前にプレビュー ↗
+        </button>
+      ) : null}
     </div>
   </div>
 )

@@ -23,7 +23,7 @@ const migrations = await readD1Migrations('./drizzle')
   読み直される（設定ファイルは読み直されないので、ここで固めると古いまま残る）。
 */
 const CSS_TEXT = '\0astlog-css:'
-const CSS_FILES = new Set(['app.css', 'admin.css'])
+const CSS_FILES = new Set(['app.css', 'admin.css', 'preview.css'])
 
 const cssTextPlugin = (): Plugin => ({
   name: 'astlog:css-text',
@@ -88,6 +88,7 @@ const REPO_FILES = new Set([
   'package.json',
   'public/_headers',
   'scripts/touch-site.mjs',
+  'scripts/seed-local.mjs',
   'seed.sql',
 ])
 
@@ -163,6 +164,8 @@ export default defineConfig({
         bindings: {
           // drizzle-kit が生成した SQL をそのままテスト用 D1 に流す
           TEST_MIGRATIONS: migrations,
+          // 手元の .dev.vars にある開発用 callback をテストの origin に混ぜない。
+          OAUTH_REDIRECT_ORIGIN: '',
           /*
             OAuth の設定。本物のクライアントではなく、テストの中だけの値。
             wrangler.toml の [vars]（持ち主の本物の ID とアドレス）はここで上書きする

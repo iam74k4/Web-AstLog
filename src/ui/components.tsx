@@ -2,6 +2,8 @@ import { raw } from 'hono/html'
 import type { Child } from 'hono/jsx'
 import adminCss from '../../public/admin.css'
 import appCss from '../../public/app.css'
+import previewCss from '../../public/preview.css'
+import { type CelestialMember, normalizeCelestial } from '../celestial'
 import type { Item, Member } from '../db/schema'
 import {
   ITEM_KIND_KEYS,
@@ -27,7 +29,9 @@ import {
   type OrbitMap,
   orbitMap,
 } from '../lib/orbits'
-import { SITE } from '../site'
+import { isContactEmail, SITE, type SiteSettings } from '../site'
+import { BlackholeFlow } from './BlackholeFlow'
+import { CelestialArt, CelestialSymbol, celestialTheme } from './Celestial'
 import { GithubIcon, MailIcon, PencilIcon, Wordmark } from './icons'
 import { BLACKHOLE_ART } from './logo'
 
@@ -82,8 +86,9 @@ export const HtmlDocument = ({ children }: { children: Child }) => (
   スタイルシートの <link>。公開ページ（Layout）と 404（ErrorPage）は app.css だけ、
   管理画面（AdminLayout / AdminBare）は app.css のあとに admin.css を読む
   （管理画面の部品の規則は admin.css にしか無い。公開ページの訪問者に配らない）。
+  管理プレビューだけは app.css のあとに preview.css を読み、確認用の操作を付ける。
 
-  URL には中身から作った版（?v=…）を付け、public/_headers が2つの CSS を
+  URL には中身から作った版（?v=…）を付け、public/_headers が CSS を
   1年・immutable で配る。ブラウザは同じ版のあいだ一度も取り直さず、CSS を
   1字でも変えてデプロイすれば URL が変わるので、新しい HTML は新しい CSS を読む。
   既定（max-age=0, must-revalidate）のままだったころは、ページを移るたびに
@@ -111,12 +116,20 @@ const cssVersion = (text: string) => {
 const STYLESHEETS = {
   app: `/app.css?v=${cssVersion(appCss)}`,
   admin: `/admin.css?v=${cssVersion(adminCss)}`,
+  preview: `/preview.css?v=${cssVersion(previewCss)}`,
 } as const
 
-export const Stylesheets = ({ admin = false }: { admin?: boolean }) => (
+export const Stylesheets = ({
+  admin = false,
+  preview = false,
+}: {
+  admin?: boolean
+  preview?: boolean
+}) => (
   <>
     <link rel="stylesheet" href={STYLESHEETS.app} />
     {admin ? <link rel="stylesheet" href={STYLESHEETS.admin} /> : null}
+    {preview ? <link rel="stylesheet" href={STYLESHEETS.preview} /> : null}
   </>
 )
 
@@ -143,15 +156,15 @@ export const FaviconLinks = () => (
 )
 
 /*
-  上の帯の左端のロゴ（ワードマーク ΛSTLOG。O がブラックホール）。押すと入口へ。
+  上の帯の左端のロゴ（ワードマーク ΛSTLOG。O はこのページの天体）。押すと入口へ。
   大きさは1つだけ（app.css の --brand-h）。
 
   絵は aria-hidden で、リンクの名前は .sr-only の字（サイトの名前）が持つ（WCAG 4.1.2。
   絵だけのリンクは名前を持たない）。
 */
-export const Brand = () => (
-  <a class="brand" href="/">
-    <Wordmark class="brand__word" />
+export const Brand = ({ href = '/', member }: { href?: string; member?: CelestialMember } = {}) => (
+  <a class="brand" href={href}>
+    <Wordmark class="brand__word" member={member} />
     <span class="sr-only">{SITE.name}</span>
   </a>
 )
@@ -318,11 +331,13 @@ export const Screen = ({
   id,
   label,
   orbital,
+  celestial,
   children,
 }: {
   id?: string
   label?: string
   orbital?: boolean
+  celestial?: Member
   children: Child
 }) => (
   <section
@@ -330,6 +345,7 @@ export const Screen = ({
     class={orbital ? 'orbital' : undefined}
     role={label ? 'region' : undefined}
     aria-label={label}
+    data-accent={celestialTheme(celestial)}
   >
     {children}
   </section>
@@ -348,13 +364,18 @@ export const Screen = ({
 export const Hero = ({
   profile,
   orbit,
+  celestial,
   children,
 }: {
   profile?: boolean
   orbit?: boolean
+  celestial?: Member
   children: Child
 }) => (
-  <header class={profile ? 'hero hero--profile' : orbit ? 'hero hero--orbit' : 'hero'}>
+  <header
+    class={profile ? 'hero hero--profile' : orbit ? 'hero hero--orbit' : 'hero'}
+    data-accent={celestialTheme(celestial)}
+  >
     {orbit ? <Cosmos map={cosmosMap()} id="hero-cosmos" place="hero" /> : null}
     {children}
   </header>
@@ -933,7 +954,7 @@ const Nebula = () => <div class="cosmos__nebula" aria-hidden="true"></div>
 const twoDigits = (value: number) => String(value).padStart(2, '0')
 
 /*
-  ブラックホール（入口と締め）。光の曲がりを計算して焼いた絵（logo.ts の
+  ブラックホール（入口と締め）。白銀の円盤と回り込む光の弧を描いた絵（logo.ts の
   BLACKHOLE_ART。ロゴの O と同じ1枚）を、影の半径が枠の hole になる大きさで置く。影の黒い円
   （--hole-shadow は円の径の、絵の幅に対する割合）は絵の下に敷く（app.css の .hole::before）。
   黒い円・光の縁・横線の記号を大きく描いていたころは、星雲の中で日食かレンズのフレアに
@@ -962,6 +983,23 @@ const Hole = ({ frame }: { frame: OrbitFrame }) => {
         alt=""
         decoding="async"
       />
+      <BlackholeFlow />
+    </span>
+  )
+}
+
+// Keep the existing black-hole projection intact. Other bodies share its exact focus,
+// while their slightly wider stage leaves room for rings and the sun's corona.
+const OrbitCenter = ({ frame, member }: { frame: OrbitFrame; member?: Member }) => {
+  if (normalizeCelestial(member).body === 'black-hole') return <Hole frame={frame} />
+  const pct = (value: number) => `${Math.round(value * 10000) / 100}%`
+  return (
+    <span
+      class="orbit-center"
+      aria-hidden="true"
+      style={`left:${pct(frame.focus.x / frame.width)};top:${pct(frame.focus.y / frame.height)};width:${pct((frame.hole * 5.4) / frame.width)}`}
+    >
+      <CelestialArt member={member} />
     </span>
   )
 }
@@ -990,7 +1028,7 @@ const Hole = ({ frame }: { frame: OrbitFrame }) => {
   呼ぶのは renderBlock の case 'hero' だけで、全体ページ（/all）には置かない
   （印刷・Ctrl-F・翻訳の宛先）。
 */
-export const OrbitSystem = ({ counts }: { counts: KindCounts }) => {
+export const OrbitSystem = ({ counts, member }: { counts: KindCounts; member?: Member }) => {
   const map = orbitMap(counts, HERO_FRAME)
   const view = `0 0 ${map.width} ${map.height}`
   /*
@@ -1039,7 +1077,7 @@ export const OrbitSystem = ({ counts }: { counts: KindCounts }) => {
   return (
     <div class="system">
       {half('far')}
-      <Hole frame={HERO_FRAME} />
+      <OrbitCenter frame={HERO_FRAME} member={member} />
       {half('near')}
     </div>
   )
@@ -1121,7 +1159,7 @@ export const Cta = ({ href, children }: { href: string; children: Child }) => (
   粒は小さい HTML の箱に分ける（入口と同じ理由）。まわりの星空と星雲は Contact が敷く（Cosmos）。動き続けるものも入口と同じ
   （Flows・Dust・Hole・Cosmos）——星屑と天体は軌道ごと公転する。
 */
-export const ContactOrbits = ({ counts }: { counts: KindCounts }) => {
+export const ContactOrbits = ({ counts, member }: { counts: KindCounts; member?: Member }) => {
   const map = orbitMap(counts, CONTACT_FRAME)
   const view = `0 0 ${map.width} ${map.height}`
   // 奥の半分と手前の半分に、同じ順で層を重ねる（入口と同じ。帯と線は動かないので1枚）
@@ -1149,7 +1187,7 @@ export const ContactOrbits = ({ counts }: { counts: KindCounts }) => {
   return (
     <div class="orbits">
       {half('far')}
-      <Hole frame={CONTACT_FRAME} />
+      <OrbitCenter frame={CONTACT_FRAME} member={member} />
       {half('near')}
     </div>
   )
@@ -1449,7 +1487,7 @@ export const Shot = ({ src, alt }: { src: string; alt: string }) => (
   組む——担当を出す条件（showMemberOf）はサイトの構成を知っている側にしかない。
 
   画像が1枚の作品は画像だけ——絵は1つにする。画像が2枚以上の作品は、ここには絵を置かず、
-  すぐ下の横の帯（ItemShots）に全部を並べる（同じ画像を2度出さない）。画像の無い作品は
+  すぐ下のギャラリー（ItemShots）に全部を並べる（同じ画像を2度出さない）。画像の無い作品は
   絵を置かず、文の列だけ（代わりの絵は置かない。一覧の行の ItemRow と同じ）。
 */
 export const ItemDetail = ({
@@ -1475,34 +1513,50 @@ export const ItemDetail = ({
 }
 
 /*
-  作品の画像を横に並べた帯（作品のページの小節「Screenshots」。#screenshots）。画像が
-  2枚以上の作品だけで、メインの画像が先、ほかの画像が並び順で続く（src/domain.ts の
-  itemImages）。App Store の画面の並べ方と同じく、横に送って見る（持ち主の「画像を
-  いい感じに横並びで見れるように」）。帯は横にだけ送れる箱で、ページは縦に読むまま。
+  作品の画像のギャラリー（作品のページの小節「Screenshots」。#screenshots）。画像が
+  2枚以上の作品だけ。メインの画像を大きく置き、残りは大小の列に並べる。狭い画面では
+  1列になるので、スクリーンショットが小さく潰れず、ページと同じ向きに読み進められる。
+  順は itemImages のまま（管理画面で決めた順を、CSS の配置で変えない）。
 
-  - 高さは CSS が決め（:root の --strip-h）、幅は絵の縦横比から取る。寸法（width /
-    height）を img に書くので、読み込む前から幅が決まり、読み込んでも何も動かない。
-    寸法の分からない画像は決まった比の枠に収める（app.css の .strip img）
-  - 代替テキストは1枚ずつ（空のまま公開させない。publishErrors）
-  - 帯は Tab で止まり、矢印のキーで送れる（tabindex と、名前を持つ section）。初めの2枚だけすぐ読み、
-    残りは帯を送って近づいたときに読む（loading="lazy"）
+  枠の比と高さの上限は CSS が先に決め、絵は切らずに収める。原寸は画像のリンクで
+  別タブに開ける。操作は HTML のリンクだけなので、JavaScript 無効でも拡大できる。
+  各画像の説明は代替テキストをそのまま見せる。リンクの名前が説明と操作を含むため、
+  キャプションは読み上げから外し、同じ文を2度読ませない。先頭だけすぐ読み、続きは遅延。
 */
 export const ItemShots = ({ images }: { images: ItemImage[] }) =>
   images.length > 1 ? (
     <div class="shots" id="screenshots">
       <SectionHead title="Screenshots" sub={2} />
-      {/* 名前を持つ section は読み上げで1つの区画になる。Tab で止まり、矢印のキーで送れる */}
-      <section class="strip" aria-label="Screenshots" tabindex={0}>
+      <section class="gallery" aria-label="Screenshots">
         {images.map((image, index) => (
-          <img
+          <figure
+            class={index === 0 ? 'gallery__item gallery__item--lead' : 'gallery__item'}
             key={image.url}
-            src={image.url}
-            alt={image.alt}
-            width={image.width ?? undefined}
-            height={image.height ?? undefined}
-            loading={index < 2 ? undefined : 'lazy'}
-            decoding="async"
-          />
+          >
+            <a
+              class="gallery__image"
+              href={image.url}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`画像${index + 1}「${image.alt}」を拡大して見る（別タブ）`}
+            >
+              <span class="gallery__frame">
+                <img
+                  src={image.url}
+                  alt={image.alt}
+                  width={image.width ?? undefined}
+                  height={image.height ?? undefined}
+                  loading={index === 0 ? undefined : 'lazy'}
+                  decoding="async"
+                />
+              </span>
+            </a>
+            <figcaption class="gallery__caption" aria-hidden="true">
+              <span class="gallery__number">{twoDigits(index + 1)}</span>
+              <span class="gallery__description">{image.alt}</span>
+              <span class="gallery__open">拡大して見る ↗</span>
+            </figcaption>
+          </figure>
         ))}
       </section>
     </div>
@@ -1600,18 +1654,21 @@ export const ItemStories = ({
 export const Nameplate = ({ member, heading }: { member: Member; heading?: boolean }) => (
   <div class="nameplate">
     <Avatar src={member.avatarUrl} name={member.name} size={56} />
-    <span class="nameplate__body">
-      {heading ? (
-        <h1 class="nameplate__name">{member.name}</h1>
-      ) : (
-        <strong class="nameplate__name">{member.name}</strong>
-      )}
+    <div class="nameplate__body">
+      <div class="nameplate__heading">
+        {heading ? (
+          <h1 class="nameplate__name">{member.name}</h1>
+        ) : (
+          <strong class="nameplate__name">{member.name}</strong>
+        )}
+        <CelestialSymbol member={member} />
+      </div>
       {member.role || member.location ? (
         <span class="nameplate__meta">
           {[member.role, member.location].filter(Boolean).join(' · ')}
         </span>
       ) : null}
-    </span>
+    </div>
   </div>
 )
 
@@ -1702,7 +1759,10 @@ export const MemberCardWide = ({ member }: { member: Member }) => (
     <Avatar src={member.avatarUrl} name={member.name} size={52} />
     <span class="member__body">
       <span class="member__line">
-        <strong>{member.name}</strong>
+        <strong class="member__name">
+          {member.name}
+          <CelestialSymbol member={member} />
+        </strong>
         <span class="member__role">
           {member.role}
           {member.location ? ` · ${member.location}` : ''}
@@ -1717,7 +1777,10 @@ export const MemberCardWide = ({ member }: { member: Member }) => (
 export const MemberCardCompact = ({ member }: { member: Member }) => (
   <a class="member member--compact" href={`/members/${member.slug}`}>
     <Avatar src={member.avatarUrl} name={member.name} size={44} />
-    <strong>{member.name}</strong>
+    <strong class="member__name">
+      {member.name}
+      <CelestialSymbol member={member} />
+    </strong>
     <span class="member__role">{member.role}</span>
     <span class="member__go">プロフィール →</span>
   </a>
@@ -2071,7 +2134,7 @@ export const Socials = ({
         <GithubIcon /> GitHub
       </a>
     ) : null}
-    {email ? (
+    {email && isContactEmail(email) ? (
       <a href={`mailto:${email}`} aria-label={owner ? `${owner}のメール` : undefined}>
         <MailIcon /> メール
       </a>
@@ -2090,16 +2153,16 @@ export const Socials = ({
   ほうを外さないのは、足元がどのページでも同じサイトの足元だから（個人ページ専用の
   ものに入れ替えない。CLAUDE.md「個人ページは1ページで、サイトの並びの一部」）。
 */
-export const OwnSocials = ({ member }: { member: Member }) => {
-  const github = isHttpsUrl(member.github) && member.github !== SITE.github ? member.github : null
-  const email = member.email && member.email !== SITE.email ? member.email : null
+export const OwnSocials = ({ member, site = SITE }: { member: Member; site?: SiteSettings }) => {
+  const github = isHttpsUrl(member.github) && member.github !== site.github ? member.github : null
+  const email = member.email && member.email !== site.email ? member.email : null
   return github || email ? <Socials github={github} email={email} owner={member.name} /> : null
 }
 
 /*
   連絡先のページ。サイトの並びの最後で、入口と対になる締め。
 
-  ページに出すのは軌道図と、誘う1文（SITE.contactLead）と、メールと GitHub の手。
+  ページに出すのは軌道図と、誘う1文（サイト設定の contactLead）と、メールと GitHub の手。
   軌道図は入口と同じ星系を、帯の真ん中に置く（ContactOrbits）。字は図の下に置き、
   図の上には乗せない。
 
@@ -2121,30 +2184,37 @@ export const OwnSocials = ({ member }: { member: Member }) => {
   作品の件数（入口と同じ星系にする）。
 */
 export const Contact = ({
+  lead = SITE.contactLead,
   email,
   github,
   counts,
   whole,
+  member,
 }: {
+  lead?: string
   email: string
   github?: string | null
   counts: KindCounts
   whole?: boolean
+  member?: Member
 }) => (
-  <Screen id="contact" label="Contact" orbital={!whole}>
+  <Screen id="contact" label="Contact" orbital={!whole} celestial={whole ? undefined : member}>
     {whole ? <SectionHead title="Contact" /> : <HiddenHeading text="Contact" h1 />}
     {whole ? null : <Cosmos map={cosmosMap()} id="contact-cosmos" place="contact" />}
-    {whole ? null : <ContactOrbits counts={counts} />}
+    {whole ? null : <ContactOrbits counts={counts} member={member} />}
     <div class="contact">
       <p class="contact__lead">
-        <Phrases text={SITE.contactLead} />
+        <Phrases text={lead} />
       </p>
-      <a class="contact__mail" href={`mailto:${email}`}>
-        <span class="contact__address">{email}</span>
-        <span class="contact__go">
-          <span aria-hidden="true">→ </span>メールを送る
-        </span>
-      </a>
+      {email && isContactEmail(email) ? (
+        <a class="contact__mail" href={`mailto:${email}`}>
+          <span class="contact__address">{email}</span>
+          <span class="contact__go">
+            <span aria-hidden="true">→ </span>メールを送る
+          </span>
+        </a>
+      ) : null}
+      {!email && !github ? <p>連絡先を準備しています</p> : null}
       {isHttpsUrl(github) ? (
         <a class="contact__sub" href={github} rel="me noreferrer" target="_blank">
           <span lang="en">GitHub</span>
@@ -2171,13 +2241,21 @@ export const Contact = ({
   足元の GitHub / メールは出さない（同じ行き先を1つのページに2つ置かない）。
   全体ページ（/all）では出す（あそこの Contact は節の1つで、足元は全体の足元）。
 */
-export const SiteIdentity = ({ solo, contact }: { solo?: Member; contact?: boolean }) => (
+export const SiteIdentity = ({
+  solo,
+  contact,
+  site = SITE,
+}: {
+  solo?: Member
+  contact?: boolean
+  site?: SiteSettings
+}) => (
   <div class="identity">
     <div class="identity__who">
       {solo ? <span class="identity__name">{solo.name}</span> : null}
       {solo?.role ? <span class="identity__role">{solo.role}</span> : null}
-      <span class="identity__tagline">{SITE.tagline}</span>
+      <span class="identity__tagline">{site.tagline}</span>
     </div>
-    {contact ? null : <Socials github={SITE.github} email={SITE.email} />}
+    {contact ? null : <Socials github={site.github} email={site.email} />}
   </div>
 )

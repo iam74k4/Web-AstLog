@@ -404,6 +404,18 @@ describe('state は1回きり', () => {
     expect(calls).toHaveLength(0)
   })
 
+  it('期限を読めない state は通らず、提供元にも問い合わせない', async () => {
+    const calls = providers(github().handlers)
+    const flow = await start('github')
+    await db().update(schema.oauthStates).set({ expiresAt: 'not-a-date' })
+
+    const response = await callback('github', { code: 'c', state: flow.state }, flow.cookie)
+    expect(response.headers.get('location')).toBe('/admin/login?error=expired')
+    expect(sessionCookie(response)).toBeUndefined()
+    expect(calls).toHaveLength(0)
+    expect(await states()).toHaveLength(0)
+  })
+
   it('別の提供元のコールバックに回した state は通らない', async () => {
     const calls = providers(github().handlers)
     const flow = await start('github')
@@ -471,6 +483,12 @@ describe('戻り先（next）', () => {
       '/admin/logout',
       '/admin/auth/github/start',
       '/admin/login',
+      '/admin/%2e%2e/',
+      '/admin/one/%2e%2e/auth/github/start',
+      '/admin/%61uth/github/start',
+      '/admin/%6cogin',
+      '/admin/%2f%2fevil.example',
+      '/admin/%',
     ]) {
       vi.restoreAllMocks()
       const response = await signInWith('github', github().handlers, next)
@@ -480,6 +498,16 @@ describe('戻り先（next）', () => {
 })
 
 describe('セッション', () => {
+  it('期限を読めないセッションでは入れず、そのセッションを消す', async () => {
+    const owner = await ensureOwner()
+    const { token } = await createSession(db(), owner.id)
+    await db().update(schema.sessions).set({ expiresAt: 'not-a-date' })
+
+    const response = await withCookie(`${SESSION_COOKIE}=${token}`)('/admin/members')
+    expect(response.status).toBe(303)
+    expect(await db().select().from(schema.sessions)).toHaveLength(0)
+  })
+
   it('D1 にはクッキーの値ではなく、その SHA-256 だけを置く', async () => {
     const response = await signInWith('github', github().handlers)
     const token = sessionCookie(response)?.split(';')[0]?.split('=')[1] ?? ''

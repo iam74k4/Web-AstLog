@@ -60,7 +60,9 @@ export async function getSessionUser(db: Db, token: string) {
 
   const row = rows[0]
   if (!row) return null
-  if (new Date(row.expiresAt) < new Date()) {
+  const expiresAt = new Date(row.expiresAt).getTime()
+  // 読めない期限も失効として扱う。Invalid Date の比較は false になり、無期限で通る
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
     await db.delete(schema.sessions).where(eq(schema.sessions.id, id))
     return null
   }

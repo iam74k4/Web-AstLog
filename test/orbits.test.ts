@@ -410,7 +410,8 @@ describe('入口の軌道図の形', () => {
       （持ち主の「ブラックホールとの釣り合い」）
     */
     expect(HERO_FRAME.hole / HERO_FRAME.outer).toBeLessThan(1 / 10)
-    const art = (BLACKHOLE_ART.width / BLACKHOLE_ART.shadow) * HERO_FRAME.hole
+    // 光の外縁で測る。原画像の透過余白は、見える星系との釣り合いに含めない。
+    const art = (BLACKHOLE_ART.lightWidth / BLACKHOLE_ART.shadow) * HERO_FRAME.hole
     expect(art / (2 * HERO_FRAME.outer)).toBeGreaterThan(1 / 5)
     expect(art / (2 * HERO_FRAME.outer)).toBeLessThan(1 / 3)
   })

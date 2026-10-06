@@ -2,6 +2,7 @@ import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import { getCookie } from 'hono/cookie'
 import type { Child } from 'hono/jsx'
+import type { CelestialMember } from '../../celestial'
 import * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
 import { getSessionUser, SESSION_COOKIE } from '../../lib/auth'
@@ -63,7 +64,7 @@ export function movedTo(c: Context<AppEnv>, to: string) {
   打ち込むブロックはその編集画面。決まった中身のブロックは、中身の出どころへ
   ——Projects は項目の一覧、Team はメンバーの一覧、入口の名乗り（大見出し・肩書き・
   足元の名前）はメンバー（1人のサイトならその人の編集）。Contact と入口のリード文は
-  src/site.ts にあって管理画面からは変えられないので、「構成」のその行へ送る。
+  サイト設定から編集する。Contact はその設定画面へ送る。
 */
 export const blockAdminPath = (block: schema.Block, solo?: schema.Member) => {
   switch (block.type) {
@@ -72,10 +73,9 @@ export const blockAdminPath = (block: schema.Block, solo?: schema.Member) => {
     case 'team':
       return '/admin/members'
     case 'hero':
-      return solo ? `/admin/members/${solo.id}/edit` : '/admin/members'
+      return solo ? `/admin/members/${solo.id}/edit` : '/admin/site'
     case 'contact':
-      // 既定の並び（まだ構成を保存していない）では id が 0 で、指す行が無い
-      return block.id ? `/admin/blocks#block-${block.id}` : '/admin/blocks'
+      return '/admin/site'
     default:
       return `/admin/blocks/${block.id}/edit`
   }
@@ -105,6 +105,7 @@ export async function screenPage(
     */
     jsonLd?: unknown
     theme: Theme
+    celestial?: CelestialMember
     footer: Child
     // このページの中身を直す管理画面（adminHref が、ログインしている人にだけ出す）
     adminPath: string
@@ -121,6 +122,7 @@ export async function screenPage(
       jsonLd={page.jsonLd}
       nav={page.nav}
       theme={page.theme}
+      celestial={page.celestial}
       footer={page.footer}
       admin={await adminHref(c, page.adminPath)}
       image={page.image}

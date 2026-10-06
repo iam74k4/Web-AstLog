@@ -3,13 +3,31 @@ import type { BatchItem } from 'drizzle-orm/batch'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { MAX_CHARS, publishErrors } from '../../blocks'
+import {
+  CELESTIAL_ACCENTS,
+  CELESTIAL_BODIES,
+  DEFAULT_CELESTIAL,
+  isCelestialAccent,
+  isCelestialBody,
+} from '../../celestial'
 import type { Db } from '../../db/queries'
 import * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
 import { newToken } from '../../lib/auth'
 import { bool, isHttpsUrl, str } from '../../lib/format'
 import { IMAGE_ACCEPT, IMAGE_LABELS } from '../../lib/image'
-import { Area, Confirm, Field, FormActions, FormKey, PublishToggle } from '../../ui/AdminForm'
+import { isContactEmail } from '../../site'
+import {
+  Area,
+  Confirm,
+  Field,
+  FormActions,
+  FormDetails,
+  FormKey,
+  FormSection,
+  PublishToggle,
+  Select,
+} from '../../ui/AdminForm'
 import { AdminLayout } from '../../ui/AdminLayout'
 import { Avatar, StatusPill } from '../../ui/components'
 import { ExternalIcon, PencilIcon, TrashIcon } from '../../ui/icons'
@@ -68,6 +86,16 @@ memberRoutes.get('/members', async (c) => {
               <span class="row__col row__col--num">{member.sortOrder}</span>
               <StatusPill published={member.published} />
               <span class="row__actions">
+                <a
+                  class="icon-btn"
+                  href={`/admin/preview/members/${member.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`${member.name} の保存済み内容をプレビュー`}
+                >
+                  <ExternalIcon />
+                  <span class="icon-btn__text">プレビュー</span>
+                </a>
                 {/* 下書きの人のページは 404 なので、公開中のときだけ出す */}
                 {member.published ? (
                   <a
@@ -78,7 +106,7 @@ memberRoutes.get('/members', async (c) => {
                     aria-label={`${member.name} のページをサイトで見る`}
                   >
                     <ExternalIcon />
-                    <span class="icon-btn__text">サイトで見る</span>
+                    <span class="icon-btn__text">公開ページ</span>
                   </a>
                 ) : null}
                 <a
@@ -124,6 +152,17 @@ const MemberForm = (props: {
     送られて、引っ込めたはずのページが公開のまま残った
   */
   const published = props.values ? Number(props.values.published === '1') : (member?.published ?? 0)
+  const celestialBody = value('celestialBody', DEFAULT_CELESTIAL.body)
+  const celestialAccent = value('celestialAccent', DEFAULT_CELESTIAL.accent)
+  const celestialOptions = (
+    options: readonly { key: string; label: string }[],
+    selected: string,
+  ) => {
+    const choices = options.map((option) => ({ value: option.key, label: option.label }))
+    return options.some((option) => option.key === selected)
+      ? choices
+      : [{ value: selected, label: `選べない値: ${selected}` }, ...choices]
+  }
 
   return (
     <AdminLayout
@@ -136,7 +175,32 @@ const MemberForm = (props: {
           <span class="crumbs">Members / {member ? '編集' : '追加'}</span>
           <h1>{member ? member.name : '新しいメンバー'}</h1>
         </div>
+        {member ? (
+          <div class="admin-head__actions">
+            <a
+              class="btn btn--ghost"
+              href={`/admin/preview/members/${member.id}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              保存済み内容をプレビュー ↗
+            </a>
+            {member.published ? (
+              <a
+                class="btn btn--ghost"
+                href={`/members/${member.slug}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                公開ページを見る ↗
+              </a>
+            ) : null}
+          </div>
+        ) : null}
       </div>
+      <p class="form-note">
+        入力中の内容は「保存前にプレビュー」で別のタブに表示できます。プレビューでは保存されず、公開状態も変わりません。
+      </p>
 
       <form
         method="post"
@@ -145,7 +209,7 @@ const MemberForm = (props: {
         class="form"
       >
         <FormKey value={props.formKey} />
-        <div class="form-grid">
+        <FormSection title="基本情報" note="氏名だけでも下書きとして保存できます。">
           <Field
             label="氏名"
             name="name"
@@ -153,62 +217,45 @@ const MemberForm = (props: {
             required
             error={props.errors?.name}
           />
-          {/*
-            変えてよい。前の URL は新しい URL へ 301 で送る（member_slug_redirects）。
-            それを書く前に言っておく——言わないと、変えた人は貼った先を全部
-            直しに行くか、変えるのをあきらめる
-          */}
-          <Field
-            label="slug"
-            name="slug"
-            value={value('slug')}
-            error={props.errors?.slug}
-            hint={
-              member
-                ? '/members/<slug> になる。変えると、前の URL は新しい URL へ転送する。空にしたときはいまのまま'
-                : '/members/<slug> になる。空なら氏名から作る'
-            }
-          />
           <Field label="役割 / 肩書" name="role" value={value('role')} />
-          <Field label="所在地" name="location" value={value('location')} />
           <Field
-            label="大見出し"
+            label="ページの見出し"
             name="headline"
             value={value('headline')}
             error={props.errors?.headline}
             hint={`個人ページの一番上。言い切りで · ${MAX_CHARS.memberHeadline} 字まで`}
           />
-          <Field
-            label="並び順"
-            name="sortOrder"
-            value={value('sortOrder', '10')}
-            error={props.errors?.sortOrder}
-            hint="小さいほど先。10刻み"
+        </FormSection>
+        <FormDetails
+          title="天体と色"
+          note="プロフィールの表紙とメンバー一覧に反映。公開中が1人なら入口・Contactにも反映"
+          errors={props.errors}
+          fields={['celestialBody', 'celestialAccent']}
+        >
+          <Select
+            label="天体"
+            name="celestialBody"
+            value={celestialBody}
+            options={celestialOptions(CELESTIAL_BODIES, celestialBody)}
+            error={props.errors?.celestialBody}
+            hint="保存前プレビューではプロフィールを確認できます。顔写真はそのまま残ります"
           />
-          {/*
-            個人ページは足元も Contact もサイトのものを使う。この人の行き先が出るのは、
-            サイトの行き先と違うときの名札の下だけ（同じ行き先を2つ置かない）
-          */}
-          {/*
-            https:// で始まる URL だけを受ける（memberErrors）。type=url でも
-            ブラウザは javascript: や http: を通すので、決めるのはサーバー側
-          */}
-          <Field
-            label="GitHub URL"
-            name="github"
-            type="url"
-            value={value('github')}
-            placeholder="https://github.com/…"
-            error={props.errors?.github}
-            hint="https:// から。サイトの GitHub と違うときだけ、個人ページの名札の下に出る"
+          <Select
+            label="装飾色"
+            name="celestialAccent"
+            value={celestialAccent}
+            options={celestialOptions(CELESTIAL_ACCENTS, celestialAccent)}
+            error={props.errors?.celestialAccent}
+            hint="「サイトの色を使う」は、見た目で選んだ色に合わせます。文字やリンクの色は変わりません"
           />
-          <Field
-            label="Email"
-            name="email"
-            type="email"
-            value={value('email')}
-            hint="サイトのメールと違うときだけ、個人ページの名札の下に出る"
-          />
+        </FormDetails>
+        <FormDetails
+          title="プロフィールを詳しく書く"
+          note="紹介文・スキル・経歴・所在地・画像（任意）"
+          errors={props.errors}
+          fields={['bio', 'skillsText', 'careerText', 'location', 'avatar']}
+        >
+          <Field label="所在地" name="location" value={value('location')} />
           {/* 紹介文は個人ページの About に全段落が出る。長さに上限は無い（ページは縦に読む） */}
           <Area
             label="紹介文"
@@ -253,12 +300,77 @@ const MemberForm = (props: {
                 : `${IMAGE_LABELS}（1MB まで）。未設定なら頭文字を出す`}
             </span>
           </label>
-        </div>
+        </FormDetails>
+        <FormDetails
+          title="個人の連絡先を追加する"
+          note="サイト全体の連絡先と違う場合に設定します（任意）"
+          errors={props.errors}
+          fields={['github', 'email']}
+        >
+          {/*
+            個人ページは足元も Contact もサイトのものを使う。この人の行き先が出るのは、
+            サイトの行き先と違うときの名札の下だけ（同じ行き先を2つ置かない）
+          */}
+          {/*
+            畳んだ欄の type=url/email による内蔵検証は、欄を開かず送信を止める。
+            キーボードは inputmode で選び、memberErrors で検査してから開いて返す。
+          */}
+          <Field
+            label="GitHub URL"
+            name="github"
+            inputmode="url"
+            value={value('github')}
+            placeholder="https://github.com/…"
+            error={props.errors?.github}
+            hint="https:// から。サイトの GitHub と違うときだけ、個人ページの名札の下に出る"
+          />
+          <Field
+            label="メールアドレス"
+            name="email"
+            inputmode="email"
+            value={value('email')}
+            error={props.errors?.email}
+            hint="サイトのメールと違うときだけ、個人ページの名札の下に出る"
+          />
+        </FormDetails>
+        <FormDetails
+          title="詳細設定"
+          note="ページの URL・並び順"
+          errors={props.errors}
+          fields={['slug', 'sortOrder']}
+        >
+          {/*
+            変えてよい。前の URL は新しい URL へ 301 で送る（member_slug_redirects）。
+            それを書く前に言っておく——言わないと、変えた人は貼った先を全部
+            直しに行くか、変えるのをあきらめる
+          */}
+          <Field
+            label="URL の末尾"
+            name="slug"
+            value={value('slug')}
+            error={props.errors?.slug}
+            hint={
+              member
+                ? '/members/<slug> になる。変えると、前の URL は新しい URL へ転送する。空にしたときはいまのまま'
+                : '/members/<slug> になる。空なら氏名から作る'
+            }
+          />
+          <Field
+            label="並び順"
+            name="sortOrder"
+            value={value('sortOrder', '10')}
+            error={props.errors?.sortOrder}
+            hint="小さいほど先。10刻み"
+          />
+        </FormDetails>
 
         <div class="form-foot">
           <PublishToggle published={published} />
           <FormActions
             cancelHref="/admin/members"
+            previewAction={
+              member ? `/admin/preview/members/${member.id}` : '/admin/preview/members'
+            }
             deleteHref={member ? `/admin/members/${member.id}/delete?from=edit` : undefined}
             deleteLabel="このメンバーを削除…"
           />
@@ -273,22 +385,37 @@ memberRoutes.get('/members/new', (c) =>
 )
 
 memberRoutes.get('/members/:id/edit', async (c) => {
+  const id = parseId(c.req.param('id'))
+  if (!id) return c.notFound()
   const member = await db(c).query.members.findFirst({
-    where: eq(schema.members.id, Number(c.req.param('id'))),
+    where: eq(schema.members.id, id),
   })
   if (!member) return c.notFound()
   return c.html(<MemberForm account={c.get('account')} member={member} />)
 })
 
-function readMemberForm(form: FormData, existing?: schema.Member) {
+export function readMemberForm(form: FormData, existing?: schema.Member) {
   const name = str(form.get('name'))
   const slug = readSlug(str(form.get('slug')), existing?.slug, name) ?? `member-${newToken(3)}`
   const sortOrder = readSortOrder(form, existing?.sortOrder)
+  // 古いフォームに欄がなければ維持する。送られたキーは完全一致で検査する。
+  const celestialValue = (field: 'celestialBody' | 'celestialAccent', fallback: string) => {
+    if (!form.has(field)) return existing?.[field] ?? fallback
+    const value = form.get(field)
+    return typeof value === 'string' ? value : ''
+  }
+  const celestialBody = celestialValue('celestialBody', DEFAULT_CELESTIAL.body)
+  const celestialAccent = celestialValue('celestialAccent', DEFAULT_CELESTIAL.accent)
+  const errors: Record<string, string> = { ...sortOrder.error }
+  if (form.has('celestialBody') && !isCelestialBody(celestialBody))
+    errors.celestialBody = '天体を選び直してください'
+  if (form.has('celestialAccent') && !isCelestialAccent(celestialAccent))
+    errors.celestialAccent = '装飾色を選び直してください'
 
   return {
     form,
     // 下書きでも止める、受け取れない値（並び順が数でない）
-    errors: sortOrder.error,
+    errors: Object.keys(errors).length ? errors : null,
     // 読めなかった並び順は、打ったままの字を欄へ返す（倒した数を見せない）
     typed: (sortOrder.error ? { sortOrder: sortOrder.text } : {}) as Record<string, string>,
     values: {
@@ -302,6 +429,8 @@ function readMemberForm(form: FormData, existing?: schema.Member) {
       careerText: str(form.get('careerText')),
       github: str(form.get('github')) || null,
       email: str(form.get('email')) || null,
+      celestialBody,
+      celestialAccent,
       sortOrder: sortOrder.value,
       published: bool(form.get('published')),
       updatedAt: new Date().toISOString(),
@@ -316,9 +445,10 @@ function readMemberForm(form: FormData, existing?: schema.Member) {
   publishErrors）——下書きの保存でも長さを見ていたころは、上限より前に保存された
   長い中身の人が「公開を外すことすらできない」行き止まりになっていた。
 */
-function memberErrors(values: {
+export function memberErrors(values: {
   name: string
   github: string | null
+  email: string | null
 }): Record<string, string> | null {
   if (!values.name) return { name: '氏名は必須です' }
   const errors: Record<string, string> = {}
@@ -331,10 +461,13 @@ function memberErrors(values: {
   if (values.github && !isHttpsUrl(values.github)) {
     errors.github = 'https:// で始まる URL を入れてください（例: https://github.com/…）'
   }
+  if (values.email && !isContactEmail(values.email)) {
+    errors.email = 'メールアドレスを1つ入れてください'
+  }
   return Object.keys(errors).length ? errors : null
 }
 
-async function memberSlugTaken(
+export async function memberSlugTaken(
   database: Db,
   slug: string,
   exceptId: number | null,

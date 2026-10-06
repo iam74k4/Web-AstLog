@@ -238,7 +238,7 @@ function memberRows() {
     bio: bio(shape),
     skills_text: SKILLS,
     career_text: career(shape),
-    avatar_url: '/assets/avatar.png',
+    avatar_url: '/images/avatars/avatar.png',
     github: `https://github.com/${slug}`,
     email: `${slug}@example.com`,
     published: 1,
@@ -250,7 +250,7 @@ function memberRows() {
     bio: text(80, id),
     skills_text: '',
     career_text: '',
-    avatar_url: avatar ? '/assets/avatar.png' : null,
+    avatar_url: avatar ? '/images/avatars/avatar.png' : null,
     github: null,
     email: null,
   })
@@ -293,7 +293,7 @@ function itemRows() {
     summary: text(MAX_CHARS.itemSummary, row.id),
     body: '',
     ...noStory,
-    image_url: '/assets/avatar.png',
+    image_url: '/images/avatars/avatar.png',
     image_alt: '作品の画面',
     image_width: 144,
     image_height: 144,
@@ -407,14 +407,13 @@ function itemRows() {
 }
 
 /*
-  作品のほかの画像（作品のページの横の帯）。画像のある行に、横長・正方形・寸法の分からない
-  画像を混ぜて並べる（帯は高さを決めて幅を絵の比から取る。寸法の無い画像は比の枠）。
-  いちばん重い行（id 1）は上限の 8 枚——帯がいちばん長く溢れる姿。どれも同梱の素材を指す
-  （KV を持たない使い捨ての D1 でも絵が出る）
+  作品のほかの画像。横長・正方形・寸法の分からない画像を混ぜてギャラリーを測る。
+  いちばん重い行（id 1）は 8 枚。ローカル KV の画像とサイトのロゴ素材を指し、
+  主画像と続く画像のサイズが異なる配置を確かめる。
 */
 const SHOT_SOURCES = [
-  { url: '/assets/blackhole.webp', width: 1024, height: 576 },
-  { url: '/assets/avatar.png', width: 144, height: 144 },
+  { url: '/assets/blackhole.webp', width: 1672, height: 941 },
+  { url: '/images/avatars/avatar.png', width: 144, height: 144 },
   { url: '/assets/apple-touch-icon.png', width: null, height: null },
 ]
 

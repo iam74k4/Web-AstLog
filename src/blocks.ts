@@ -24,7 +24,7 @@ import { isSafeUrl, paragraphs, parseLines, parseSkills } from './lib/format'
 
 export const BLOCK_TYPES = [
   // 決まった中身を持つもの。1つだけ置ける
-  { key: 'hero', label: 'Hero', note: '大見出しとリード。文言は src/site.ts', kind: 'fixed' },
+  { key: 'hero', label: 'Hero', note: '大見出しとリード。文言はサイト設定で編集', kind: 'fixed' },
   /*
     個人開発（app）と業務（work）を1つの一覧に並べる。見る側にとってはどちらも
     「つくったもの」で、節を分けると目次が2倍に伸びる。区分はデータに
@@ -44,7 +44,7 @@ export const BLOCK_TYPES = [
     note: 'メンバー。2人は横長、3人以上はグリッド。公開中が1人ならその人のプロフィールに置き換わる',
     kind: 'fixed',
   },
-  { key: 'contact', label: 'Contact', note: '連絡先。文言は src/site.ts', kind: 'fixed' },
+  { key: 'contact', label: 'Contact', note: '連絡先。文言と宛先はサイト設定で編集', kind: 'fixed' },
 
   // 中身を打ち込むもの。いくつでも置ける
   {

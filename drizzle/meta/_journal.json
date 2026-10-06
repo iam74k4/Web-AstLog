@@ -134,6 +134,13 @@
       "when": 1790927807538,
       "tag": "0018_item_story",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1791153938122,
+      "tag": "0019_member_celestial",
+      "breakpoints": true
     }
   ]
 }

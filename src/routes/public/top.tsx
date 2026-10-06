@@ -4,6 +4,7 @@ import {
   countPublishedByKind,
   listPublishedItems,
   listPublishedMembers,
+  loadSiteSettings,
   loadTheme,
   publishedBlocks,
 } from '../../db/queries'
@@ -46,11 +47,12 @@ import { pageRows, sitePageLinks, sitePages } from './site'
 */
 export async function renderWholePage(c: Context<AppEnv>) {
   const db = drizzle(c.env.DB, { schema })
-  const [members, items, theme, blocks] = await Promise.all([
+  const [members, items, theme, blocks, site] = await Promise.all([
     listPublishedMembers(db),
     listPublishedItems(db),
     loadTheme(db),
     publishedBlocks(db),
+    loadSiteSettings(db),
   ])
 
   /*
@@ -62,6 +64,7 @@ export async function renderWholePage(c: Context<AppEnv>) {
     ITEM_KIND_KEYS.map((kind) => [kind, items.filter((item) => item.type === kind).length]),
   ) as KindCounts
   const data: TopData = {
+    site,
     members,
     kinds: kindsOf(counts),
     filter: NO_FILTER,
@@ -99,7 +102,7 @@ export async function renderWholePage(c: Context<AppEnv>) {
           nav.length
             ? `${nav.map((item) => item.label).join(' · ')} を1ページにまとめた全体版です`
             : '',
-          siteDescription(solo),
+          siteDescription(solo, site),
         ),
       )}
       /*
@@ -108,16 +111,17 @@ export async function renderWholePage(c: Context<AppEnv>) {
         「作品を1件も含まないトップの複製」と申告することになる）。
       */
       canonical={`${SITE.origin}/all`}
-      jsonLd={siteJsonLd(members)}
+      jsonLd={siteJsonLd(members, site)}
       nav={nav}
       theme={theme}
+      celestial={solo}
       // 節を縦に積んだ1本の文書。app.css の「ページの外枠」を外す印
       whole
       /*
         足元で名乗る。Hero の h1 は同じページにあるが、印刷した紙の
         終わりや Ctrl-F で飛んだ先では、足元が誰のサイトかを言う
       */
-      footer={<SiteIdentity solo={solo} />}
+      footer={<SiteIdentity site={site} solo={solo} />}
       // 全部の節が並ぶページなので、節の並び（構成）へ送る
       admin={await adminHref(c, '/admin/blocks')}
     >
@@ -150,11 +154,12 @@ export async function renderProfileAlias(c: Context<AppEnv>) {
 */
 export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
   const db = drizzle(c.env.DB, { schema })
-  const [members, byKind, theme, blocks] = await Promise.all([
+  const [members, byKind, theme, blocks, site] = await Promise.all([
     listPublishedMembers(db),
     countPublishedByKind(db),
     loadTheme(db),
     publishedBlocks(db),
+    loadSiteSettings(db),
   ])
 
   const solo = soloMember(members)
@@ -173,7 +178,7 @@ export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
   }
 
   const { filter, memberId } = readFilter(c, kindsOf(byKind), members)
-  const { pages, counted } = await sitePages(db, blocks, members, filter, byKind)
+  const { pages, counted } = await sitePages(db, blocks, members, filter, byKind, site)
 
   /*
     出せるページが1つも無いとき（置いたブロックが全部下書き、など）。
@@ -186,11 +191,12 @@ export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
     return c.html(
       <Layout
         title={siteTitle(solo)}
-        description={siteDescription(solo)}
+        description={siteDescription(solo, site)}
         canonical={`${SITE.origin}/`}
         nav={[]}
         theme={theme}
-        footer={<SiteIdentity solo={solo} />}
+        celestial={solo}
+        footer={<SiteIdentity site={site} solo={solo} />}
         // 何も出ていないのは、構成に公開中のブロックが無いから。直す場所はそこ
         admin={await adminHref(c, '/admin/blocks')}
       >
@@ -238,10 +244,11 @@ export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
     node: rendered.node,
     // 説明文はこのページに出ているものから作る（renderBlock が持っている）
     description: rendered.description,
-    jsonLd: firstOnly(links, link, siteJsonLd(members)),
+    jsonLd: firstOnly(links, link, siteJsonLd(members, site)),
     theme,
+    celestial: solo,
     // Contact では足元の GitHub / メールを出さない（本文に同じ手がある。SiteIdentity）
-    footer: <SiteIdentity solo={solo} contact={current.block.type === 'contact'} />,
+    footer: <SiteIdentity site={site} solo={solo} contact={current.block.type === 'contact'} />,
     adminPath: blockAdminPath(current.block, solo),
   })
 }

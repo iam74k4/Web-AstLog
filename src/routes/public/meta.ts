@@ -2,7 +2,7 @@ import { type BlockKey, blockVisibleParts } from '../../blocks'
 import type * as schema from '../../db/schema'
 import type { ItemView } from '../../domain'
 import { isHttpsUrl } from '../../lib/format'
-import { SITE } from '../../site'
+import { SITE, type SiteSettings } from '../../site'
 import { soloMember } from './data'
 
 /*
@@ -48,8 +48,8 @@ export const excerpt = (text: string) => {
 export const siteTitle = (solo?: schema.Member) =>
   solo ? pageTitle(nameWithRole(solo)) : `${SITE.name} — Projects`
 
-export const siteDescription = (solo?: schema.Member) =>
-  solo ? `${nameWithRole(solo)}のポートフォリオ。${SITE.heroLead}` : SITE.heroLead
+export const siteDescription = (solo?: schema.Member, site: SiteSettings = SITE) =>
+  solo ? `${nameWithRole(solo)}のポートフォリオ。${site.heroLead}` : site.heroLead
 
 /*
   ページごとの説明文（<meta name="description"> と og:description）。
@@ -121,15 +121,17 @@ export const personJsonLd = (
   採る側は「誰を採るのか」を探しに来ているので、実体が1人のあいだはその人として
   名乗る（Organization では人の名前も職種も構造化データに1つも出ない）。
 */
-export const siteJsonLd = (members: schema.Member[]) => {
+export const siteJsonLd = (members: schema.Member[], site: SiteSettings = SITE) => {
   const solo = soloMember(members)
   if (solo) {
     return {
       '@context': 'https://schema.org',
       ...personJsonLd(solo, SITE.origin, {
-        description: SITE.heroLead,
+        description: site.heroLead,
         // 通らない GitHub（相対 URL・javascript:）は名乗らず、サイトのものに戻す
-        sameAs: [isHttpsUrl(solo.github) ? solo.github : SITE.github],
+        ...((isHttpsUrl(solo.github) ? solo.github : site.github)
+          ? { sameAs: [isHttpsUrl(solo.github) ? solo.github : site.github] }
+          : {}),
       }),
     }
   }
@@ -138,8 +140,8 @@ export const siteJsonLd = (members: schema.Member[]) => {
     '@type': 'Organization',
     name: SITE.name,
     url: SITE.origin,
-    description: SITE.heroLead,
-    sameAs: [SITE.github],
+    description: site.heroLead,
+    ...(site.github ? { sameAs: [site.github] } : {}),
     member: members.map((member) => personJsonLd(member, `${SITE.origin}/members/${member.slug}`)),
   }
 }

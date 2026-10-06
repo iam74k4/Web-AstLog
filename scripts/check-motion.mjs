@@ -1,6 +1,6 @@
 /*
   CSS の動作を実 CSP のままブラウザで測る。npm run check:motion。
-  初期化は12秒以内に終わり、奥/手前と回転/打ち消しは同じ時計を使う。
+  初期化は12秒以内に終わり、同期が必要な群（奥/手前・星屑/天体・回転/打ち消し）は同じ時計を使う。
   JS 無効・reduced-motion・紙でも本文を読み、リンクをたどれる。
   FPS は実機の検査に任せる。ここでは開始漏れ・時計のずれ・CSP の緩みを止める。
 
@@ -43,6 +43,44 @@ const perpetualCount = () =>
       target.closest('.system, .orbits, .cosmos')
     )
   }).length
+
+const animationStartState = (nodes) => {
+  const animations = nodes.flatMap((node) =>
+    node
+      .getAnimations()
+      .filter(
+        (animation) =>
+          animation instanceof CSSAnimation && animation.effect.getTiming().iterations === Infinity,
+      )
+      .map((animation) => ({
+        target: String(node.className.baseVal ?? node.className),
+        name: animation.animationName,
+        state: animation.playState,
+        pending: animation.pending,
+        start: animation.startTime,
+        current: animation.currentTime,
+        rate: animation.playbackRate,
+      })),
+  )
+  const unready = animations.filter(
+    (animation) =>
+      animation.pending ||
+      animation.state !== 'running' ||
+      animation.rate !== 1 ||
+      !Number.isFinite(animation.start) ||
+      !Number.isFinite(animation.current),
+  )
+  return {
+    visibility: document.visibilityState,
+    readyState: document.readyState,
+    fonts: document.fonts.status,
+    timeline: document.timeline.currentTime,
+    targets: nodes.length,
+    animations: animations.length,
+    unready: unready.length,
+    sample: unready.slice(0, 16),
+  }
+}
 
 async function open(browser, base, screen, options = {}) {
   const page = await browser.newPage({ ...OPTIONS, ...options })
@@ -107,7 +145,7 @@ async function pairs(page, exactClock = true) {
               animation.effect.getTiming().iterations === Infinity,
           )
       /*
-      通常の共通時計は motion.ts が保証する（CLAUDE.md「JavaScript とリンク」）。JS 無効時は
+      通常の群内の共通時計は motion.ts が保証する（CLAUDE.md「JavaScript とリンク」）。JS 無効時は
       通常の CSS 動作へ戻る。CSS Animations §2 は、style と keyframes が共に解決された時点で
       開始すると定め、別の DOM 要素へ同じ開始時刻を保証しない。
       https://www.w3.org/TR/css-animations-1/#animations
@@ -266,6 +304,123 @@ async function blockedInline(page, name) {
   )
 }
 
+// Observe the actual handoff, before the next paint can hide a seek or an opacity jump.
+// A held image must not prevent DOM-ready ornaments from starting.
+async function initialDisplay(browser, base, screen, phone = false, slowImage = false) {
+  const page = await browser.newPage({
+    ...OPTIONS,
+    ...(phone ? { viewport: { width: 390, height: 844 } } : {}),
+  })
+  const name = `${screen.name}/${phone ? 'phone' : 'PC'}${slowImage ? '/画像待機' : ''}`
+  let releaseImage
+  const held = new Promise((resolve) => {
+    releaseImage = resolve
+  })
+  if (slowImage)
+    await page.route('**/assets/blackhole.webp*', async (route) => {
+      await held
+      await route.continue()
+    })
+  try {
+    await page.addInitScript(() => {
+      const report = { checked: 0, expected: 0, firstReady: 0, loaded: false, failures: [] }
+      window.__initialMotion = report
+      addEventListener('load', () => {
+        report.loaded = true
+      })
+      addEventListener(
+        'DOMContentLoaded',
+        async () => {
+          // DOMContentLoaded は外部CSSの到着を待たない。装飾が描かれる初回の姿を測る。
+          await Promise.all(
+            [...document.querySelectorAll('link[rel="stylesheet"]')].map((link) =>
+              link.sheet
+                ? Promise.resolve()
+                : new Promise((resolve) => link.addEventListener('load', resolve, { once: true })),
+            ),
+          )
+          const before = new Map()
+          const state = (node) => {
+            const css = getComputedStyle(node)
+            const box = node.getBoundingClientRect()
+            const matrix = new DOMMatrix(css.transform)
+            return [
+              box.x,
+              box.y,
+              box.width,
+              box.height,
+              Number(css.opacity),
+              css.scale === 'none' ? 1 : Number(css.scale),
+              ...matrix.toFloat64Array(),
+            ]
+          }
+          const selector =
+            '.stardust .orbit-spin, .orbit-bodies :is(.orbit-spin, .orbit-unspin, .orbit-body), .hole__art, .cosmos__nebula, .cosmos__twinkle, .brand__word .logo-art'
+          for (const node of document.querySelectorAll(selector)) {
+            before.set(node, state(node))
+            if (
+              !node.getAnimations().length ||
+              node.getAnimations().some((a) => a.playState !== 'paused')
+            )
+              report.failures.push('初期フレームで待機していない')
+          }
+          report.expected = before.size
+          const observer = new MutationObserver((records) => {
+            for (const { target } of records) {
+              const previous = before.get(target)
+              if (!previous) continue
+              before.delete(target)
+              const current = state(target)
+              const delta = Math.max(...current.map((value, i) => Math.abs(value - previous[i])))
+              if (delta > 0.001)
+                report.failures.push(`${target.getAttribute('class')}: 開始時の段差 ${delta}`)
+              if (target.getAnimations().some((a) => Math.abs(a.currentTime) > 0.001))
+                report.failures.push('開始時にアニメーションの途中へ送った')
+              report.checked += 1
+              report.firstReady ||= performance.now()
+            }
+            if (!before.size) observer.disconnect()
+          })
+          observer.observe(document, {
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['data-motion-ready'],
+          })
+        },
+        { once: true },
+      )
+    })
+    await page.goto(base + screen.path, { waitUntil: 'domcontentloaded' })
+    // Trigger headless rendering without changing animations or their clocks.
+    await page.screenshot({ animations: 'allow' })
+    await page.waitForFunction(() => window.__initialMotion.firstReady > 0, undefined, {
+      timeout: 5_000,
+      polling: 100,
+    })
+    if (slowImage)
+      assert.equal(
+        await page.evaluate(() => window.__initialMotion.loaded),
+        false,
+        `${name}: load前に始まらない`,
+      )
+    releaseImage()
+    await page.waitForFunction(
+      () => {
+        const report = window.__initialMotion
+        return report.expected > 0 && report.checked === report.expected
+      },
+      undefined,
+      { timeout: 12_000, polling: 100 },
+    )
+    const report = await page.evaluate(() => window.__initialMotion)
+    assert.deepEqual(report.failures, [], `${name}: 初期表示から動作への切り替え`)
+    console.log(`  ${name}: ${report.checked}要素の開始フレームに位置・明るさの段差なし`)
+  } finally {
+    releaseImage()
+    await page.close()
+  }
+}
+
 async function normal(browser, base, screen) {
   const { page, errors } = await open(browser, base, screen)
   try {
@@ -314,15 +469,24 @@ async function normal(browser, base, screen) {
             throw new Error(`${node.className.baseVal ?? node.className}: 開始済みの動きがない`)
           starts.push(...animations.map((animation) => animation.startTime))
         }
-        if (
-          starts.some(
-            (start) => !Number.isFinite(start) || Math.abs(start - starts[0]) > clockEpsilon,
+        if (starts.some((start) => !Number.isFinite(start)))
+          throw new Error('継続 animation の startTime が無効')
+        // 独立した群を過去の時計へ送らない。同期の必要な公転は星屑と天体を一緒に測る。
+        for (const selector of [
+          '.stardust .orbit-spin, .orbit-bodies :is(.orbit-spin, .orbit-unspin, .orbit-body)',
+          '.hole__art',
+          '.cosmos__nebula',
+          '.cosmos__twinkle',
+          '.cosmos__meteor',
+          '.orbit-grain__dot',
+        ]) {
+          const times = [...document.querySelectorAll(selector)].flatMap((node) =>
+            node.getAnimations().map((animation) => animation.startTime),
           )
-        )
-          throw new Error(
-            `継続 animation の startTime がそろっていない: ${JSON.stringify([...new Set(starts)])}`,
-          )
-        return { start: starts[0], count: starts.length, ready: nodes.length }
+          if (times.some((start) => Math.abs(start - times[0]) > clockEpsilon))
+            throw new Error(`${selector}: 群内の時計がずれている`)
+        }
+        return { count: starts.length, ready: nodes.length }
       },
       { targets: TARGETS, clockEpsilon: CLOCK_EPSILON },
     )
@@ -380,7 +544,7 @@ async function normal(browser, base, screen) {
     assert.deepEqual(errors, [], `${screen.name}: helper の実行時エラー`)
     await blockedInline(page, screen.name)
     console.log(
-      `  ${screen.name}: ${clock.ready}要素/${clock.count}動作が共通時計、${paired}対が一致。CSP と完了後の継続を確認`,
+      `  ${screen.name}: ${clock.ready}要素/${clock.count}動作が群内で同期、${paired}対が一致。CSP と完了後の継続を確認`,
     )
     return content
   } finally {
@@ -433,6 +597,45 @@ async function fallback(browser, base, screen, content, reduced) {
             .map((node) => String(node.className.baseVal ?? node.className)),
         )
       assert.deepEqual(inactive, [], `${screen.name}: JS 無効で開始していない装飾がある`)
+      // JS 無効の Linux headless では初回描画と RAF の開始が揺れる。撮影で描画を
+      // 促すが動作は止めず、RAF に依存しない条件待ちの後も既存の時計検査を維持する。
+      const beforeStart = await page.locator(TARGETS).evaluateAll(animationStartState)
+      try {
+        await page.screenshot({ animations: 'allow', timeout: 6_000 })
+        await page.waitForFunction(
+          (targets) => {
+            const animations = [...document.querySelectorAll(targets)].flatMap((node) =>
+              node
+                .getAnimations()
+                .filter(
+                  (animation) =>
+                    animation instanceof CSSAnimation &&
+                    animation.effect.getTiming().iterations === Infinity,
+                ),
+            )
+            return (
+              animations.length > 0 &&
+              animations.every(
+                (animation) =>
+                  !animation.pending &&
+                  Number.isFinite(animation.startTime) &&
+                  Number.isFinite(animation.currentTime),
+              )
+            )
+          },
+          TARGETS,
+          { timeout: 6_000, polling: 100 },
+        )
+      } catch (error) {
+        const afterStart = await page
+          .locator(TARGETS)
+          .evaluateAll(animationStartState)
+          .catch((diagnosticError) => ({ error: diagnosticError.message }))
+        console.error(
+          `${screen.name}/JS 無効: 開始待ち失敗の診断 ${JSON.stringify({ beforeStart, afterStart })}`,
+        )
+        throw error
+      }
       const invalid = await page.locator(TARGETS).evaluateAll((nodes) =>
         nodes.flatMap((node) =>
           node
@@ -500,11 +703,14 @@ async function main() {
     server = await devServer(given, Number(process.env.MOTION_PORT ?? 8794), state?.dir)
     browser = await chromium.launch({ headless: true })
     for (const screen of SCREENS) {
+      await initialDisplay(browser, server.base, screen)
+      await initialDisplay(browser, server.base, screen, true)
       const content = await normal(browser, server.base, screen)
       await fallback(browser, server.base, screen, content, false)
       await fallback(browser, server.base, screen, content, true)
     }
-    console.log('✓ 入口/Contact の開始・共通時計・CSP・フォールバック')
+    await initialDisplay(browser, server.base, SCREENS[0], false, true)
+    console.log('✓ 入口/Contact の初期表示・群内同期・CSP・フォールバック')
   } finally {
     await browser?.close()
     await server?.stop()

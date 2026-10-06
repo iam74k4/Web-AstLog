@@ -5,6 +5,7 @@ import {
   findMovedItem,
   findPublishedItem,
   listPublishedMembers,
+  loadSiteSettings,
   loadTheme,
   publishedBlocks,
 } from '../../db/queries'
@@ -72,6 +73,35 @@ const itemFacts = (item: ItemView) =>
     item.tags.join('、'),
   )
 
+// 公開ページと認証済みプレビューが、作品の本文を同じ部品で描く。
+export function itemPage(item: ItemView, links: { backHref?: string; memberHref?: string } = {}) {
+  const note = [item.platformLabel ?? item.category, item.year].filter(Boolean).join(' · ')
+  const destinations = [
+    ...item.links,
+    ...(links.memberHref && item.memberName
+      ? [{ label: `担当 ${item.memberName}`, url: links.memberHref }]
+      : []),
+  ]
+  return {
+    description: item.summary || describe(itemFacts(item)),
+    node: (
+      <Screen id="item" label={item.title}>
+        {links.backHref ? <BackLink href={links.backHref} label="一覧に戻る" /> : null}
+        <SectionHead
+          title={item.title}
+          note={note || undefined}
+          h1
+          transition={itemTransition(item)}
+          icon={item.iconUrl}
+        />
+        <ItemDetail item={item} links={destinations} />
+        <ItemShots images={itemImages(item)} />
+        <ItemStory parts={itemStory(item)} />
+      </Screen>
+    ),
+  }
+}
+
 /*
   作品1件のページ（/apps/item/<slug>）。
 
@@ -83,7 +113,7 @@ const itemFacts = (item: ItemView) =>
   1つだけ。
 
   中身は一覧の行を開いたもの（ItemDetail。画像の無い作品は文の列だけ）と、画像が
-  2枚以上の作品の小節「Screenshots」（#screenshots。横に送る帯。ItemShots）と、本文の
+  2枚以上の作品の小節「Screenshots」（#screenshots。縦ギャラリー。ItemShots）と、本文の
   小節「Story」（#story。本文を書いた作品にだけ。ItemStory）。以前は本文を次の画面
   （…/story）に分け、作品同士を画面の底の左右の手でめくっていた。1ページにまとめたので、
   前の本文の URL は #story へ 301（story が true）。
@@ -99,11 +129,12 @@ export async function renderItem(
   story: boolean,
 ) {
   const db = drizzle(c.env.DB, { schema })
-  const [item, members, theme, blocks] = await Promise.all([
+  const [item, members, theme, blocks, site] = await Promise.all([
     findPublishedItem(db, slug),
     listPublishedMembers(db),
     loadTheme(db),
     publishedBlocks(db),
+    loadSiteSettings(db),
   ])
 
   /*
@@ -137,7 +168,7 @@ export async function renderItem(
   const solo = soloMember(members)
   const images = itemImages(item)
   // 目次はサイトのページのまま。このページに絞り込みは無いので、素の並びを聞く
-  const { pages } = await sitePages(db, blocks, members, NO_FILTER)
+  const { pages } = await sitePages(db, blocks, members, NO_FILTER, undefined, site)
   const links = sitePageLinks(pages, NO_FILTER, solo)
 
   /*
@@ -150,20 +181,14 @@ export async function renderItem(
 
   /*
     見出しと添え（SectionHead。アイコンがあれば見出しの左）の下は ItemDetail——一覧の行を
-    開いたもの（なぜ行の部品かは ItemDetail に書いてある）。その下に画像の帯（ItemShots）と
+    開いたもの（なぜ行の部品かは ItemDetail に書いてある）。その下に画像のギャラリー（ItemShots）と
     本文の小節（ItemStory）。
   */
-  const note = [item.platformLabel ?? item.category, item.year].filter(Boolean).join(' · ')
-  const destinations = [
-    ...item.links,
-    /*
-      担当を出す条件は一覧の行と同じ（showMemberOf）。サイトの中の行き先なので、
-      矢印は →・同じタブ（LinkRow が URL の頭の / で決める）
-    */
-    ...(showMemberOf(blocks, members) && item.memberName && item.memberSlug
-      ? [{ label: `担当 ${item.memberName}`, url: `/members/${item.memberSlug}` }]
-      : []),
-  ]
+  const page = itemPage(item, {
+    backHref: list ? `${list.href}#${itemCardId(item)}` : undefined,
+    memberHref:
+      showMemberOf(blocks, members) && item.memberSlug ? `/members/${item.memberSlug}` : undefined,
+  })
 
   return screenPage(c, {
     title: pageTitle(item.title),
@@ -173,32 +198,14 @@ export async function renderItem(
       一覧（Projects）に付く
     */
     nav: tableOfContents(links, 'projects'),
-    node: (
-      <Screen id="item" label={item.title}>
-        {list ? <BackLink href={`${list.href}#${itemCardId(item)}`} label="一覧に戻る" /> : null}
-        {/*
-          見出しは一覧の行の題と同じ名前でつなぐ（itemTransition）。一覧から開くと、
-          行の題がそのまま動いて見出しになる
-        */}
-        <SectionHead
-          title={item.title}
-          note={note || undefined}
-          h1
-          transition={itemTransition(item)}
-          icon={item.iconUrl}
-        />
-        <ItemDetail item={item} links={destinations} />
-        <ItemShots images={images} />
-        <ItemStory parts={parts} />
-      </Screen>
-    ),
+    node: page.node,
     /*
       説明文は要約（summary）のまま。説明の無い作品（公開の関門が説明を求める前に
       公開した作品）は、このページに出ている作品の事実——作品名・区分・
       プラットフォームか業界・年・タグ——から組む（itemFacts）。サイトの紹介文に
       戻すと、入口と同じ説明文の URL が並び、説明の無い作品どうしも同じ文になった
     */
-    description: item.summary || describe(itemFacts(item)),
+    description: page.description,
     /*
       この URL が何を名指ししているかを、貼った先にも検索にも1つだけ置く。
       サイトの名乗り（Person / Organization）はトップが持っているので、
@@ -218,7 +225,8 @@ export async function renderItem(
           : {}),
     },
     theme,
-    footer: <SiteIdentity solo={solo} />,
+    footer: <SiteIdentity site={site} solo={solo} />,
+    celestial: members.find((member) => member.id === item.memberId) ?? solo,
     adminPath: `/admin/items/${item.id}/edit`,
     // 貼られたときの札は、この作品の画像（あれば）
     image: itemOgImage(item),

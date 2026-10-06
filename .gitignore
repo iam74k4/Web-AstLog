@@ -1,6 +1,7 @@
 node_modules/
 .wrangler/
 .dev.vars
+/dist/
 
 # ワークツリーの実体。ここを追跡するとリポジトリが自分自身を取り込む
 .claude/worktrees/

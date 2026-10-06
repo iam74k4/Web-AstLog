@@ -8,6 +8,7 @@ import {
 import type * as schema from '../../db/schema'
 import { type ItemFilter, type KindCounts, totalOf } from '../../domain'
 import type { Page } from '../../lib/sequence'
+import { SITE, type SiteSettings } from '../../site'
 import { filterQuery } from '../../ui/components'
 import { renderBlock } from './blocks'
 import {
@@ -137,10 +138,12 @@ export async function sitePages(
   filter: ItemFilter,
   // 区分ごとの件数。呼ぶ側が絞り込みを読むのに先に引いていれば渡す（二度引かない）
   byKind?: KindCounts,
+  site: SiteSettings = SITE,
 ): Promise<{ pages: SitePage[]; counted: TopData }> {
   const counts = byKind ?? (await countPublishedByKind(db))
 
   const counted: TopData = {
+    site,
     members,
     kinds: kindsOf(counts),
     filter,

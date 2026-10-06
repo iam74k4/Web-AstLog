@@ -124,7 +124,7 @@
   --top-clear: calc(var(--top-h) + var(--sp-5));
 
   /*
-    上の帯のロゴ（ワードマーク ΛSTLOG。O がブラックホール）の字の高さ。字の幅は字の
+    上の帯のロゴ（ワードマーク ΛSTLOG。O は選択中の天体）の字の高さ。字の幅は字の
     高さの約 6.6 倍（15px で 99px）。ログイン画面のワードマークも同じ規則（.brand__word）。
     --hole-core はロゴの O の黒い円（影）の色で、地より一段深い黒。src/ui/logo.ts の
     LOGO_COLORS（素材のファイルに焼く色）と同じ値
@@ -147,8 +147,8 @@
   /*
     作品の画像の枠。どちらも「絵に合わせて伸び縮みさせない」ための段で、
     寸法の分からない画像でも、読み込む前から高さが決まっている（DB の寸法は
-    この列より前の画像には無いので、この2つの枠には使わない。使うのは共有カードと、
-    高さを決めて幅を絵の比から取る作品のページの帯 .strip）。
+    この列より前の画像には無いので、この2つの枠には使わない。寸法は共有カードと、
+    画像そのものの縦横比のために使う）。
 
     --thumb-ratio は一覧のサムネイルの縦横比。Mac の画面と同じ 16:10 で、画面の
     スクリーンショットがそのまま枠いっぱいに収まる（絵は切らない。.entry__thumb）。
@@ -164,18 +164,22 @@
   --shot-h: clamp(120px, min(30vw, 20svh), 280px);
 
   /*
-    作品のページの画像の帯（.strip。画像が2枚以上の作品）。--strip-h は帯の高さで、
-    絵の幅は絵の縦横比から取る（img の width / height）。可変部は幅と高さの小さいほう
-    ——電話では次の1枚の端がのぞく幅になり（横に送れると分かる）、背の低い窓では帯が
-    画面を食わない。--strip-ratio は寸法の分からない画像の枠の比（Mac の画面と同じ）。
+    作品のページのギャラリー（.gallery）。先頭を広く、続きは大小の列で見せる。
+    比は一覧と同じ --thumb-ratio。高さの上限だけ持つので、狭い画面では幅いっぱいに
+    収まり、広い画面の縦長の画像でも何画面ぶんも伸びない。絵は contain で切らない。
 
     --head-icon は作品のページの見出しの左のアイコンの大きさ（.head__icon）
   */
-  --strip-h: clamp(180px, min(48vw, 46svh), 440px);
-  --strip-ratio: 16 / 10;
-  /* 帯を送る手（::scroll-button。マウスの端末だけ）の地の濃さ。地の色をこれだけ混ぜる */
-  --strip-button-mix: 82%;
+  --gallery-lead-h: 680px;
+  --gallery-shot-h: 480px;
+  --gallery-shift: clamp(24px, 4vw, 64px);
   --head-icon: clamp(44px, 5vw, 64px);
+
+  /* The bodies share the black hole's subdued light. Narrow profiles keep the
+     decoration compact; identity symbols retain one readable size. */
+  --celestial-w: 580px;
+  --celestial-profile-w: clamp(200px, 52vw, 240px);
+  --celestial-symbol: 24px;
 
   /*
     横に送る帯（上の帯の目次と、狭い画面の絞り込み）の右端のぼかし。切れている
@@ -325,6 +329,37 @@
   --breathe-dur: 4s;
   --breathe-ticks: 40;
   --breathe-low: 0.82;
+  /* 天体の小さな浮遊・外周の光。画像は固定画素、更新は約100msごと。 */
+  --celestial-moon-dur: 14s;
+  --celestial-moon-ticks: 18;
+  --celestial-neptune-dur: 16s;
+  --celestial-neptune-ticks: 20;
+  --celestial-saturn-dur: 14s;
+  --celestial-saturn-ticks: 18;
+  --celestial-radiance-dur: 5s;
+  --celestial-radiance-ticks: 50;
+  --celestial-breathe-dur: 4s;
+  --celestial-breathe-ticks: 40;
+  --celestial-flow-dur: 10s;
+  --celestial-flow-ticks: 25;
+  --celestial-flow-offset: -5s;
+  --celestial-flow-beam-w: 40%;
+  --celestial-flow-beam: linear-gradient(100deg, transparent, var(--ink), transparent);
+  --celestial-flow-mask: linear-gradient(
+    to bottom,
+    transparent 42%,
+    #000 49%,
+    #000 56%,
+    transparent 63%
+  );
+  --celestial-corona-mask: radial-gradient(
+    circle closest-side,
+    transparent 59%,
+    #000 71%,
+    #000 85%,
+    transparent 98%
+  );
+  --celestial-corona-light: 0.2;
   /*
     軌道を流れる星（components.tsx の Flows）。後ろに引く尾の、星の側の濃さ（--flow-trail。
     後ろへ消える）と、十字の光芒の濃さ（--flow-glint）
@@ -700,6 +735,15 @@ body[data-site] > main {
   height: var(--brand-h);
   width: auto;
   overflow: visible;
+}
+
+.brand__word .logo-art {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.wordmark__fallback {
+  display: none;
 }
 
 /*
@@ -1343,7 +1387,7 @@ body[data-site] > main {
   （img の width / height）から決まる。影は不透明なので、奥を回る軌道はその後ろに隠れる。
   光だけが揺らぐ（「動き続ける」）。
 
-  色は字の白だけ——光は焼いた白、影は --hole-core（ロゴの O の .logo-core と同じ段）。見た目の
+  光は白銀、影は --hole-core（ロゴの O の .logo-core と同じ段）。見た目の
   プリセットのアクセント色では塗らない（ロゴの O と同じ1つのものに見せる）。
 */
 .hole {
@@ -1772,17 +1816,24 @@ body[data-site] > main {
   /* 初期化 helper が小さい装飾群を順に始める。印が無いJS無効時は通常のCSS動作。 */
   html[data-motion-staged]
   :is(
-    .orbit-flow,
-    .orbit-flow__tail,
     .cosmos__twinkle,
-    .cosmos__meteor,
-    .orbit-grain__dot,
     .orbit-spin,
     .orbit-unspin,
     .orbit-body,
     .hole__art,
-    .cosmos__nebula
+    .cosmos__nebula,
+    .brand__word .logo-art
   ):not([data-motion-ready]) {
+    /* 最初のフレームを保つ。animation:none では開始時に光や天体の大きさが跳ぶ。 */
+    /* biome-ignore lint/complexity/noImportantStyles: 開始済みの印が付くまで初期フレームで待つ */
+    animation-play-state: paused !important;
+  }
+
+  html[data-motion-staged]
+    :is(.orbit-flow, .orbit-flow__tail, .cosmos__meteor, .orbit-grain__dot):not(
+      [data-motion-ready]
+    ) {
+    /* 初めは見せない小さい粒のanimationは、各群の開始時にだけ作る。 */
     /* biome-ignore lint/complexity/noImportantStyles: 下の通常animationを開始済みの印が付くまで止める */
     animation: none !important;
   }
@@ -1983,6 +2034,396 @@ body[data-site] > main {
   font-size: var(--fs-display);
 }
 
+/* Keep the profile ornament compact before About on narrow screens. Wide screens
+   separate the artwork and profile text into two columns. */
+.hero--profile {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sp-5);
+}
+
+.profile-cover__copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  min-width: 0;
+}
+
+.hero--profile > .celestial--art {
+  width: min(100%, var(--celestial-profile-w));
+  justify-self: center;
+}
+
+/* A member's colour belongs to the sky and body, while links and buttons stay white. */
+.hero[data-accent] > :is(.hero__copy, .profile-cover__copy),
+.orbital[data-accent] > .contact {
+  --accent: var(--mono);
+}
+
+/* --- Member celestial bodies (cached transparent artwork; CSS motion only) --- */
+.celestial {
+  --celestial-tone: var(--accent);
+  position: relative;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.celestial[data-celestial-accent='mono'] {
+  --celestial-tone: var(--mono);
+}
+
+.celestial[data-celestial-accent='iris'] {
+  --celestial-tone: var(--iris);
+}
+
+.celestial[data-celestial-accent='violet'] {
+  --celestial-tone: var(--violet);
+}
+
+.celestial[data-celestial-accent='ember'] {
+  --celestial-tone: var(--ember);
+}
+
+.celestial[data-celestial-accent='mint'] {
+  --celestial-tone: var(--mint);
+}
+
+.celestial[data-celestial-accent='sky'] {
+  --celestial-tone: var(--sky);
+}
+
+.celestial[data-celestial-accent='rose'] {
+  --celestial-tone: var(--rose);
+}
+
+.celestial--art {
+  width: 100%;
+  aspect-ratio: 360 / 300;
+  isolation: isolate;
+}
+
+.celestial--art svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.celestial__guide {
+  position: absolute;
+  inset: 0;
+  fill: var(--ink-weak);
+  stroke: var(--line-strong);
+  stroke-width: 0.7;
+}
+
+.celestial__guide ellipse {
+  fill: none;
+}
+
+.celestial__halo {
+  position: absolute;
+  inset: 8%;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse,
+    color-mix(in srgb, var(--celestial-tone) 12%, transparent),
+    transparent 68%
+  );
+}
+
+/* Each image reserves the same stage before decoding; its transparent padding
+   preserves soft light without a rectangle over the underlying sky. */
+.celestial__image {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.celestial__black-hole {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+}
+
+.celestial__black-hole::before {
+  content: '';
+  position: absolute;
+  width: var(--celestial-hole-shadow);
+  aspect-ratio: 1;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--hole-core);
+}
+
+.celestial__black-hole img {
+  position: relative;
+  width: 100%;
+  height: auto;
+}
+
+/* The disk and its luminance mask stay still. A narrow light travels through
+   the existing bright texture; black pixels and the silhouette never move. */
+.blackhole-flow {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 100%;
+  translate: 0 -50%;
+  mask-image: var(--celestial-flow-mask);
+  pointer-events: none;
+}
+
+.blackhole-flow__texture {
+  position: absolute;
+  inset: 0;
+  mask-image: var(--blackhole-flow-art);
+  mask-mode: luminance;
+  mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+  overflow: hidden;
+}
+
+.blackhole-flow__beam {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  display: block;
+  width: var(--celestial-flow-beam-w);
+  background: var(--celestial-flow-beam);
+  opacity: 0;
+}
+
+/* The sun's opaque surface stays fixed; only a masked rim can expand. */
+.celestial__corona {
+  display: none;
+  position: absolute;
+  inset: 0;
+  mask-image: var(--celestial-corona-mask);
+  opacity: var(--celestial-corona-light);
+}
+
+.celestial__corona-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Fixed keyframe values avoid style recalculation of per-frame custom properties.
+   Percent travel scales down naturally with the phone and orbital-center stages. */
+@keyframes celestial-float {
+  0%,
+  50%,
+  100% {
+    transform: translate(0, 0);
+  }
+  12.5%,
+  37.5% {
+    transform: translate(0.24%, -1.26%);
+  }
+  25% {
+    transform: translate(0.36%, -1.8%);
+  }
+  62.5%,
+  87.5% {
+    transform: translate(-0.24%, 1.26%);
+  }
+  75% {
+    transform: translate(-0.36%, 1.8%);
+  }
+}
+
+@keyframes celestial-drift {
+  0%,
+  50%,
+  100% {
+    transform: translate(0, 0);
+  }
+  12.5%,
+  37.5% {
+    transform: translate(-0.38%, -1.54%);
+  }
+  25% {
+    transform: translate(-0.55%, -2.2%);
+  }
+  62.5%,
+  87.5% {
+    transform: translate(0.38%, 1.54%);
+  }
+  75% {
+    transform: translate(0.55%, 2.2%);
+  }
+}
+
+@keyframes celestial-rock {
+  0%,
+  50%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  12.5%,
+  37.5% {
+    transform: translate(0.22%, -1.12%) rotate(-0.53deg);
+  }
+  25% {
+    transform: translate(0.32%, -1.6%) rotate(-0.75deg);
+  }
+  62.5%,
+  87.5% {
+    transform: translate(-0.22%, 1.12%) rotate(0.53deg);
+  }
+  75% {
+    transform: translate(-0.32%, 1.6%) rotate(0.75deg);
+  }
+}
+
+@keyframes celestial-radiance {
+  from {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  to {
+    transform: scale(1.065);
+    opacity: 1;
+  }
+}
+
+@keyframes celestial-breathe {
+  from {
+    opacity: 0.82;
+  }
+}
+
+/* 小さい O では輪郭を読める濃さで保ち、光と大きさだけを穏やかに変える。 */
+@keyframes wordmark-radiance {
+  from {
+    transform: scale(1);
+    opacity: 0.82;
+  }
+  to {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+}
+
+@keyframes celestial-flow {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  25% {
+    transform: translateX(12.5%);
+    opacity: 0.2;
+  }
+  50% {
+    transform: translateX(125%);
+    opacity: 0.28;
+  }
+  75% {
+    transform: translateX(237.5%);
+    opacity: 0.2;
+  }
+  100% {
+    transform: translateX(350%);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .celestial[data-celestial-body='moon'] > .celestial__image,
+  .brand__word[data-celestial-body='moon'] .logo-art {
+    animation: celestial-float var(--celestial-moon-dur) steps(var(--celestial-moon-ticks)) infinite;
+  }
+  .celestial[data-celestial-body='neptune'] > .celestial__image,
+  .brand__word[data-celestial-body='neptune'] .logo-art {
+    animation: celestial-drift var(--celestial-neptune-dur) steps(var(--celestial-neptune-ticks))
+      infinite;
+  }
+  .celestial[data-celestial-body='saturn'] > .celestial__image,
+  .brand__word[data-celestial-body='saturn'] .logo-art {
+    animation: celestial-rock var(--celestial-saturn-dur) steps(var(--celestial-saturn-ticks))
+      infinite;
+  }
+  .celestial__black-hole > img,
+  .brand__word[data-celestial-body='black-hole'] .logo-art {
+    animation: celestial-breathe var(--celestial-breathe-dur) steps(var(--celestial-breathe-ticks))
+      infinite alternate;
+  }
+  .brand__word[data-celestial-body='sun'] .logo-art {
+    animation: wordmark-radiance var(--celestial-radiance-dur)
+      steps(var(--celestial-radiance-ticks)) infinite alternate;
+  }
+  .blackhole-flow,
+  .celestial__corona {
+    display: block;
+  }
+  .blackhole-flow__beam {
+    animation: celestial-flow var(--celestial-flow-dur) steps(var(--celestial-flow-ticks)) infinite;
+  }
+  .blackhole-flow__beam[data-flow-layer='1'] {
+    animation-delay: var(--celestial-flow-offset);
+  }
+  .celestial__corona-image,
+  .celestial[data-celestial-body='sun'] > .celestial__halo {
+    animation: celestial-radiance var(--celestial-radiance-dur)
+      steps(var(--celestial-radiance-ticks)) infinite alternate;
+  }
+}
+
+/* Unsupported masks keep the original artwork; never show a drifting duplicate. */
+@supports not (mask-image: linear-gradient(#000, #000)) {
+  .blackhole-flow,
+  .celestial__corona {
+    display: none;
+  }
+}
+
+/* Alpha-only masks would light the opaque black center. Keep the original
+   breathing artwork on engines without luminance masking. */
+@supports not (mask-mode: luminance) {
+  .blackhole-flow {
+    display: none;
+  }
+}
+
+.orbit-center {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.orbit-center .celestial__guide {
+  display: none;
+}
+
+.celestial--symbol {
+  display: inline-flex;
+  width: var(--celestial-symbol);
+  height: var(--celestial-symbol);
+  color: var(--celestial-tone);
+  vertical-align: middle;
+}
+
+.celestial--symbol svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+}
+
+.celestial--symbol[data-celestial-body='black-hole'] svg {
+  stroke: none;
+}
+
 /*
   個人ページの頭の名札（components.tsx の Nameplate）。Team のカードと同じ
   並び——顔・名前・肩書きと所在地——で、カードを押した先で同じ顔に着く。
@@ -2004,6 +2445,12 @@ body[data-site] > main {
   gap: var(--sp-1);
   min-width: 0;
   text-align: start;
+}
+
+.nameplate__heading {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
 }
 
 .nameplate .nameplate__name {
@@ -2140,6 +2587,12 @@ body[data-site] > main {
   font-size: var(--fs-display-sm);
 }
 
+/* A stacked profile already separates the ornament from About with main's gap.
+   Another chapter margin leaves a small body floating in an empty screen. */
+.hero--profile + section > .head--chapter {
+  margin-top: 0;
+}
+
 /*
   全体ページ（/all）の Profile の節（components.tsx の ProfileWhole）。名札・
   大見出し・About・Skills・Career を縦に並べる間隔だけを持つ。中の部品は
@@ -2185,60 +2638,96 @@ body[data-site] > main {
 }
 
 /*
-  作品の画像の帯（components.tsx の ItemShots。小節「Screenshots」）。説明の組から
-  Story と同じだけ離す。
-
-  帯は横にだけ送れる箱（ページは縦に読むまま。目次の帯と同じく、溢れは帯の中で送る）。
-  1枚ずつ左端に止まり（scroll-snap）、細いスクロールバーを見せる——ホイールしか無い
-  マウスでも、バーを掴めば送れる。高さは --strip-h、幅は絵の縦横比から（寸法の分からない
-  画像は --strip-ratio の枠）。帯より横に長い絵は帯の幅に縮めて収める（切らない）。
-  地は面の色（読み込むまでの枠が見える）。箱には入れず、角は立てたまま。
-
-  帯は右の余白へ --gutter だけはみ出し（本文の外の余白は --gutter より狭くならないので、
-  画面の外へは出ない）、そこで薄れる（目次と同じ --fade-right）。本文の幅にちょうど2枚
-  収まる画面（1440 の 16:10 がそう）でも、次の1枚の端が余白にのぞき、横に送れると分かる。
-  終わりの空き（padding）も同じ幅で、最後の1枚は本文の右端で止まる
+  作品の画像のギャラリー（components.tsx の ItemShots）。先頭の1枚が作品の顔、続く画像は
+  各画面の説明と一緒に読む。横へ送る箱を持たず、狭い画面では全幅の1列。
+  900 以上でだけ、大小の列と少しずらした上端を使って、同じ大きさの画像が並ぶ単調さを避ける。
+  枠は読み込む前から決まり、絵は常に切らずに収める。画像のリンクは原寸を別タブで開く。
 */
 .shots {
   margin-top: var(--sp-7);
 }
 
-.strip {
-  display: flex;
-  gap: var(--sp-4);
-  margin-inline-end: calc(var(--gutter) * -1);
-  padding-inline-end: var(--gutter);
-  padding-bottom: var(--sp-3);
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: thin;
-  scrollbar-color: var(--line-strong) transparent;
-  mask-image: var(--fade-right);
+.gallery {
+  display: grid;
+  gap: var(--sp-7);
+  min-width: 0;
 }
 
-.strip img {
-  flex: none;
-  width: auto;
-  max-width: 100%;
-  height: var(--strip-h);
-  object-fit: contain;
-  scroll-snap-align: start;
+.gallery__item {
+  position: relative;
+  min-width: 0;
+}
+
+.gallery__image {
+  display: block;
+  cursor: zoom-in;
+}
+
+.gallery__frame {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: var(--thumb-ratio);
+  max-height: var(--gallery-shot-h);
   background: var(--surface);
 }
 
-.strip img:not([width]) {
-  aspect-ratio: var(--strip-ratio);
+.gallery__item--lead .gallery__frame {
+  max-height: var(--gallery-lead-h);
 }
 
-/*
-  帯そのものにフォーカスが来たとき（Tab で止まり、矢印のキーで1枚ずつ送れる）。輪郭は帯の
-  内側に描き、そのあいだは右端のぼかしを外す——ぼかし（mask）は箱の外を描かないので、素の
-  輪郭（外へ --focus-offset 離す）は丸ごと消え、どこにフォーカスがあるか見えなかった
-*/
-.strip:focus-visible {
-  outline-offset: calc(var(--focus-ring) * -1);
-  mask-image: none;
+.gallery__image img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* キャプションまで同じリンクの面。キーボードの輪郭もその面を囲む */
+.gallery__image::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.gallery__image:focus-visible {
+  outline: none;
+}
+
+.gallery__image:focus-visible::after {
+  outline: var(--focus-ring) solid var(--accent);
+  outline-offset: var(--focus-offset);
+}
+
+.gallery__caption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--line);
+  padding-top: var(--sp-4);
+  margin-top: var(--sp-4);
+  font-size: var(--fs-meta);
+  line-height: 1.7;
+}
+
+.gallery__number {
+  color: var(--ink-weak);
+  font-variant-numeric: tabular-nums;
+}
+
+.gallery__description {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink-mid);
+  overflow-wrap: anywhere;
+}
+
+.gallery__open {
+  color: var(--ink-weak);
+  white-space: nowrap;
 }
 
 /* --- 節の中身の2つの箱 --- */
@@ -2829,6 +3318,12 @@ body[data-site] > main {
   font-weight: 600;
 }
 
+.member__name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
 .member--compact strong {
   font-size: var(--fs-sm);
   font-weight: 600;
@@ -3363,6 +3858,19 @@ body[data-site] > main {
 /* ============================================================ 900px 以上 */
 
 @media (min-width: 900px) {
+  .hero--profile {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
+    gap: var(--gutter);
+  }
+
+  .hero--profile > .celestial--art {
+    width: min(100%, var(--celestial-w));
+  }
+
+  .hero--profile + section > .head--chapter {
+    margin-top: var(--sp-7);
+  }
+
   /*
     入口は2列。左に見出しの列、右に作品の軌道図、底に件数の帯（2列にまたがる）。
     見出しの列と軌道図は、表紙の残りの高さの縦の真ん中に座る。
@@ -3452,6 +3960,28 @@ body[data-site] > main {
     画像は DOM では先（縦に積んだとき見出しのすぐ下に来るように）なので、
     列の番号で置き場所を決める。
   */
+  .gallery {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--sp-7);
+    row-gap: calc(var(--sp-7) * 2);
+    align-items: start;
+  }
+
+  .gallery__item {
+    grid-column: span 7;
+  }
+
+  .gallery__item:nth-child(4n + 3),
+  .gallery__item:nth-child(4n + 4) {
+    grid-column: span 5;
+    margin-top: var(--gallery-shift);
+  }
+
+  .gallery__item--lead,
+  .gallery__item:last-child:nth-child(even) {
+    grid-column: 1 / -1;
+  }
+
   .detail--shot {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: var(--sp-6);
@@ -3664,58 +4194,8 @@ body[data-site] > main {
     color: var(--ink);
   }
 
-  /*
-    作品の画像の帯（.strip）を送る手。マウスの端末だけ——ホイールしか無いマウスでは横に
-    送る手が分かりにくい（指と、横に送れるトラックパッドは帯をそのまま送れる）。CSS の
-    ::scroll-button で、JavaScript は置かない。押すと帯が1画面ぶん送られて次の1枚に止まり、
-    端まで送ると消える（:disabled）。帯の縦の真ん中の、本文の左右の端の内側に置く
-    （右の手は、帯が右の余白へはみ出したぶんだけ内へ。.strip の注記）。知らない
-    ブラウザは規則ごと捨て、帯をそのまま送ってもらう（列に並べない。:has と同じ理由）
-  */
-  .strip {
-    anchor-name: --strip;
-  }
-
-  .strip::scroll-button(*) {
-    position: fixed;
-    position-anchor: --strip;
-    top: anchor(center);
-    z-index: 1;
-    display: grid;
-    place-items: center;
-    width: var(--tap);
-    height: var(--tap);
-    translate: 0 -50%;
-    border: 1px solid var(--line-strong);
-    border-radius: 50%;
-    background: color-mix(in srgb, var(--bg) var(--strip-button-mix), transparent);
+  .gallery__item:hover .gallery__open {
     color: var(--ink);
-    font-size: var(--fs-lg);
-    cursor: pointer;
-    transition: opacity var(--dur-fast) var(--ease);
-  }
-
-  .strip::scroll-button(*):disabled {
-    opacity: 0;
-    cursor: default;
-  }
-
-  /* 送る手のフォーカスもサイトの輪郭（素の :focus-visible は疑似要素に届かず、ブラウザの輪郭になる） */
-  .strip::scroll-button(*):focus-visible {
-    outline: var(--focus-ring) solid var(--accent);
-    outline-offset: var(--focus-offset);
-  }
-
-  /* biome-ignore lint/correctness/noUnknownTypeSelector: ::scroll-button の引数（left）は向きの語で、要素の型ではない（Biome の CSS の読み方がまだ知らない） */
-  .strip::scroll-button(left) {
-    content: '←' / '前の画像';
-    left: calc(anchor(left) + var(--sp-4));
-  }
-
-  /* biome-ignore lint/correctness/noUnknownTypeSelector: ::scroll-button の引数（right）は向きの語で、要素の型ではない（Biome の CSS の読み方がまだ知らない） */
-  .strip::scroll-button(right) {
-    content: '→' / '次の画像';
-    right: calc(anchor(right) + var(--gutter) + var(--sp-4));
   }
 }
 
@@ -3761,6 +4241,7 @@ body[data-site] > main {
   .system,
   .orbits,
   .cosmos,
+  .celestial--art,
   .hero--orbit > .hero__copy::before,
   .orbital > .contact::before {
     display: none;
@@ -3776,6 +4257,11 @@ body[data-site] > main {
   .orbital {
     grid-template-rows: 1fr;
   }
+
+  .hero--profile {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
 }
 
 /*
@@ -3790,9 +4276,17 @@ body[data-site] > main {
     display: none;
   }
 
+  .brand__word[data-celestial-body] .logo-art {
+    animation: none;
+  }
+
   .logo-core {
     fill: Canvas;
     stroke: currentColor;
+  }
+
+  .wordmark__fallback {
+    display: inline;
   }
 }
 
@@ -4056,6 +4550,8 @@ body[data-site] > main {
   .system,
   .orbits,
   .cosmos,
+  .celestial--art,
+  .celestial--symbol,
   .hero--orbit > .hero__copy::before,
   .orbital > .contact::before {
     display: none;
@@ -4065,12 +4561,15 @@ body[data-site] > main {
     break-inside: avoid;
   }
 
-  /* 画像の帯は紙では送れないので、折り返して全部を刷る（折り返せば帯の幅に収まり、溢れない） */
-  .strip {
-    flex-wrap: wrap;
+  .gallery__item {
+    break-inside: avoid;
   }
 
-  .strip img {
-    break-inside: avoid;
+  .gallery__open {
+    display: none;
+  }
+
+  .hero--profile {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
