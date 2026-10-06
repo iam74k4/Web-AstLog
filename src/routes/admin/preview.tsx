@@ -181,6 +181,7 @@ function renderSnapshot(
         label="全体"
         nav={nav}
         theme={saved.theme}
+        celestial={soloMember(saved.members)}
         footer={footer(saved)}
         publicHref="/all"
         whole
@@ -222,6 +223,7 @@ function renderSnapshot(
       nav={options.unsaved ? [] : previewNav(saved)}
       theme={saved.theme}
       footer={footer(saved)}
+      celestial={soloMember(saved.members)}
       publicHref={screen === 'hero' ? '/' : `/${screen}`}
       {...options}
     >
@@ -303,6 +305,7 @@ function memberResponse(
       nav={options.unsaved ? [] : previewNav(saved)}
       theme={saved.theme}
       footer={footer(memberContext)}
+      celestial={member}
       {...options}
     >
       {page.node}
@@ -335,6 +338,9 @@ function itemResponse(
       nav={options.unsaved ? [] : previewNav(saved)}
       theme={saved.theme}
       footer={footer(saved)}
+      celestial={
+        saved.members.find((member) => member.id === item.memberId) ?? soloMember(saved.members)
+      }
       {...options}
     >
       {page.node}
@@ -386,6 +392,7 @@ export async function validationFailure(
       nav={[]}
       theme={saved.theme}
       footer={footer(saved)}
+      celestial={soloMember(saved.members)}
     >
       <Screen id="preview-errors" label="入力の確認">
         <SectionHead title="入力を確認してください" h1 />
@@ -563,6 +570,7 @@ export async function renderBlockPreview(
       nav={options.unsaved ? [] : previewNav(saved)}
       theme={saved.theme}
       footer={footer(saved)}
+      celestial={soloMember(saved.members)}
     >
       {page.node}
     </PreviewLayout>,

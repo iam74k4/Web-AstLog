@@ -3,13 +3,14 @@
   ここから直に SVG を描く。素材のファイル（public/assets の astlog-wordmark.svg・favicon.svg と、
   favicon・iPhone のホーム画面の PNG）は scripts/logo/export.mjs がここから書き出す。
 
-  ロゴは「字で組む ΛSTLOG の O をブラックホールにしたもの」。横棒の無い A（Λ）と、
+  ロゴは「字で組む ΛSTLOG の O を天体にしたもの」。横棒の無い A（Λ）と、
   線の太さをそろえた幾何の大文字で、宇宙機関の字の系譜。O の位置には、入口と締めの軌道図の
   真ん中と同じブラックホールの絵（BLACKHOLE_ART）を、影の半径が HOLE.core になる大きさで
   置く——持ち主の「AstLog の o もブラックホールのデザインに合わせて」。前は黒い円・光の縁・
   後ろを通る横線の記号で、入口の
   絵と別のものに見えた。線で描き直した姿（輪のある玉）は、大きく描くと土星に見えた。印だけの
-  とき（favicon・404・管理画面・作品の星図）も、同じ絵を1つで使う。
+  とき（favicon・404・管理画面）も、同じ絵を1つで使う。ページのワードマークは
+  選択中の天体に連動する。文字と中心は共通、画像の余白に応じた寸法は wordmarkArt が決める。
 
   - Λ だけは塗りの形で描く。線で描くと足の切り口が脚に直角になり、片方の角が
     字の底より下へ出る。塗りなら足を水平に切れる
@@ -23,10 +24,12 @@
   字の高さ 20 の格子（原点は左下、上が負）。JSX を持たない（scripts から読むため）。
 */
 
+import type { CelestialBody } from '../celestial'
+
 const round = (value: number) => Math.round(value * 1000) / 1000
 
-// 現画像の明るい翼が L と G につながらないよう、O の左右の字間を広げる。
-const SHIFT = 14
+// 旧素材の光の翼が L と G に触れない字間。
+const SHIFT = 2.2
 
 // 字の箱（上の帯・ログイン画面のワードマークは、この箱の高さで置く）
 const BOX = { top: -20.31, bottom: 0.31, width: round(131.67 + 2 * SHIFT) }
@@ -34,7 +37,7 @@ const BOX = { top: -20.31, bottom: 0.31, width: round(131.67 + 2 * SHIFT) }
 export const WORDMARK = {
   viewBox: `0 ${BOX.top} ${BOX.width} ${round(BOX.bottom - BOX.top)}`,
   lambda: 'M0 0L9.2 -20.3L18.4 0L15.55 0L9.2 -14L2.85 0Z',
-  // S・T・L と G（O はブラックホールなので線に含めない）
+  // S・T・L と G（O は天体なので線に含めない）
   strokes: `M35.94 -16.61A5.3 4.5 0 0 0 25.96 -14.5A5.3 4.5 0 0 0 31.26 -10A5.3 4.5 0 0 1 36.56 -5.5A5.3 4.5 0 0 1 26.58 -3.39M44.66 -18.7H60.26M52.46 -18.7V0M67.68 -20V-1.3H78.78M${round(128.46 + 2 * SHIFT)} -15.54A9 9 0 1 0 ${round(130.37 + 2 * SHIFT)} -10H${round(122.45 + 2 * SHIFT)}`,
   stroke: 2.6,
 } as const
@@ -49,12 +52,23 @@ export const HOLE = {
   core: 7.2,
 } as const
 
+// 透明余白と土星の環を含めた光学補正。小さい O でも各天体の輪郭を読める大きさにする。
+export const wordmarkArt = (body: Exclude<CelestialBody, 'black-hole'>) => {
+  const size = round(HOLE.core * { sun: 4.4, moon: 4.4, neptune: 4.8, saturn: 6 }[body])
+  return {
+    x: round(HOLE.cx - size / 2),
+    y: round(HOLE.cy - size / 2),
+    width: size,
+    height: size,
+  }
+}
+
 /*
-  ほかの天体の表紙と質感をそろえたブラックホールの絵。入口と締めの軌道図の真ん中
+  旧デザインの滑らかな白い光を持つブラックホール（0b42d90 の素材を復元）。入口と締めの軌道図の真ん中
   （components.tsx の Hole）、プロフィールの表紙（CelestialArt）、ロゴの O（HoleArt）が
   同じ1枚を使う。favicon とワードマークの素材も scripts/logo/export.mjs がこの絵から作る。
 
-  外側の光は透過で、中央の黒い影は絵にも入っている。表示側でも影の黒い円を下に敷く——
+  絵は光だけの透過素材で、中央の影は表示側が黒い円を下に敷く——
   絵の濃さを揺らしても、影の後ろの軌道を透かさないため。width / height は透明余白を含む絵の
   画素、lightWidth は可視光（alpha が約2%以上）の横幅、shadow は中央の影の半径（いずれも画素）。
   画像の中央を影の中心として配置し、img と holeArt の寸法には余白を含む width / height を使う。
@@ -65,11 +79,11 @@ export const HOLE = {
   （test/public.test.ts がファイルの寸法と版を突き合わせる）
 */
 export const BLACKHOLE_ART = {
-  src: '/assets/blackhole.webp?v=8c794528',
-  width: 1672,
-  height: 941,
-  lightWidth: 1544,
-  shadow: 184,
+  src: '/assets/blackhole.webp?v=c48dd421',
+  width: 1024,
+  height: 576,
+  lightWidth: 785,
+  shadow: 127,
 } as const
 
 // 影の半径が core になるように置いた絵の箱（中心 (cx, cy) のまわり。字の格子の単位）
@@ -117,8 +131,8 @@ const holeSvg = (cx: number, cy: number, art: string) => {
 const svg = (viewBox: string, body: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}"><title>AstLog</title>${body}</svg>\n`
 
-// 光の見える上下の広がり（影の半径に対して。alpha > 5 の実測上1.62・下1.56に少し余裕を足す）
-const LIGHT_REACH = { up: 1.65, down: 1.6 }
+// 光の見える上下の広がり（影の半径に対して。alpha > 5 の実測上1.898・下1.465）
+const LIGHT_REACH = { up: 1.9, down: 1.5 }
 
 // ワードマークのファイル。暗い地に貼る素材で、枠は光が上下に出るぶん広い
 export const wordmarkSvg = (art: string) => {

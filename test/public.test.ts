@@ -422,6 +422,11 @@ describe('名乗り', () => {
       expect(response.headers.get('content-security-policy'), body).toContain("script-src 'none'")
       const html = await response.text()
       const main = mainOf(html)
+      const wordmark = html.match(/<svg class="brand__word"[\s\S]*?<\/svg>/)?.[0] ?? ''
+      expect(wordmark, body).toContain(`data-celestial-body="${body}"`)
+      expect(wordmark, body).toContain(
+        body === 'black-hole' ? BLACKHOLE_ART.src : CELESTIAL_ART[body].src,
+      )
       expect(main, body).toContain(`data-celestial-body="${body}"`)
       expect(html, body).toMatch(/<link rel="stylesheet" href="\/app\.css\?v=[^"]+"/)
       expect(html, body).toContain('/preview.css?v=')
@@ -439,6 +444,58 @@ describe('名乗り', () => {
     }
     expect(await db().select().from(schema.members)).toEqual([member])
     expect(await env.MEDIA.get('site:version')).toBe(version)
+  })
+
+  it('1人のサイトは全ページのワードマークのOが選択中の天体に連動する', async () => {
+    const member = await seedMember()
+    const item = await seedItem({ memberId: member.id, type: 'app', slug: 'wordmark-solo' })
+    for (const body of CELESTIAL_BODY_KEYS) {
+      await db()
+        .update(schema.members)
+        .set({ celestialBody: body })
+        .where(eq(schema.members.id, member.id))
+      await touch()
+      for (const path of [
+        '/',
+        '/projects',
+        '/contact',
+        '/all',
+        `/members/${member.slug}`,
+        `/apps/item/${item.slug}`,
+      ]) {
+        const html = await okText(path)
+        const wordmark = html.match(/<svg class="brand__word"[\s\S]*?<\/svg>/)?.[0] ?? ''
+        expect(wordmark, `${body} ${path}`).toContain(`data-celestial-body="${body}"`)
+        expect(wordmark).toContain(
+          body === 'black-hole' ? BLACKHOLE_ART.src : CELESTIAL_ART[body].src,
+        )
+        expect(wordmark).toContain(`viewBox="${WORDMARK.viewBox}"`)
+      }
+    }
+  })
+
+  it('複数人のサイトでは共通ロゴはブラックホール、プロフィールと作品は公開の持ち主の天体', async () => {
+    const member = await seedMember({ celestialBody: 'moon' })
+    await seedMember({ slug: 'second', celestialBody: 'sun' })
+    const draft = await seedMember({ slug: 'draft', celestialBody: 'saturn', published: 0 })
+    const item = await seedItem({ memberId: member.id, type: 'app', slug: 'wordmark-member' })
+    const hiddenOwnerItem = await seedItem({
+      slug: 'hidden-owner',
+      memberId: draft.id,
+      type: 'app',
+    })
+    for (const [path, body] of [
+      ['/', 'black-hole'],
+      ['/all', 'black-hole'],
+      [`/members/${member.slug}`, 'moon'],
+      ['/members/second', 'sun'],
+      [`/apps/item/${item.slug}`, 'moon'],
+      [`/apps/item/${hiddenOwnerItem.slug}`, 'black-hole'],
+    ]) {
+      const html = await okText(path as string)
+      const wordmark = html.match(/<svg class="brand__word"[\s\S]*?<\/svg>/)?.[0] ?? ''
+      expect(wordmark, path).toContain(`data-celestial-body="${body}"`)
+    }
   })
 
   it('上の帯のロゴはワードマークと、リンクの名前の字。絵は読み上げに出さない', async () => {
@@ -1381,8 +1438,8 @@ describe('締めのページ（Contact）', () => {
     /*
       黒い円・光の縁・横線の記号を大きく描いていたころは、星雲の中で日食かレンズのフレアに
       見えた（持ち主の「ブラックホールが違和感」）。入口と締めは共通の静的画像
-      （src/ui/logo.ts の BLACKHOLE_ART）を、影の半径が枠の hole になる大きさで置く。絵には黒い影も
-      入っているが、濃さが揺らいでも奥の軌道を透かさないよう黒い円を絵の下に敷く。
+      （src/ui/logo.ts の BLACKHOLE_ART）を、影の半径が枠の hole になる大きさで置く。絵は光だけの透過素材で、
+      濃さが揺らいでも奥の軌道を透かさないよう黒い円を絵の下に敷く。
       ロゴの O も同じ絵にした（持ち主の
       「AstLog の o もブラックホールのデザインに合わせて」）——記号の O が残ると、入口の
       ブラックホールと別のものに見える

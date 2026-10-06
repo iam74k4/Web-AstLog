@@ -174,6 +174,7 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
           }),
         },
     theme,
+    celestial: member,
     // 足元はサイトのもの。個人ページだけのものに入れ替えると、別のサイトへ飛んだように見える
     footer: <SiteIdentity site={site} solo={solo} />,
     adminPath: `/admin/members/${member.id}/edit`,

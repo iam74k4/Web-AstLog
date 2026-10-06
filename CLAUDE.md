@@ -86,8 +86,8 @@ CSS の版は `Stylesheets` が Worker に同梱した文字列から作る（`w
 **公開の実行 script は装飾開始 helper 1本だけ。** `src/ui/motion.ts` の `MOTION_START` と
 exact SHA-256（`MOTION_CSP`）で許す。外部 script・任意の inline は増やさない。内容と導線は SSR、
 絞り込みはリンクと query（`?kind=` `?member=`）、管理は HTML フォームと 303。JSON API も SPA も無い。
-load の1200ms後から小さい装飾群を350ms間隔で始め、共通の時計にそろえる。開始済みの印は残し、
-全群の開始後は処理を終える。JS 無効時は通常の CSS 動作、動きを減らす設定では helper も動かさない。
+DOM構築の1200ms後から群ごと350ms間隔で始める。星屑と天体は同時、時計は群内で同期。
+初期フレームで待機し、開始済みの印を残して終える。JS無効時はCSS動作、reduceでは動かさない。
 管理・エラーは `script-src 'none'`。JSON-LD はデータ（`test/headers.test.ts` が許可範囲を確かめる）。
 
 **畳んだ欄はエラー時に開く**（`FormDetails`）。URL・メールは `inputmode` とサーバー検証を使う
@@ -331,7 +331,7 @@ Team に戻る。人数は数えて告知しない。
 間を広げる**（散らすと隣と交わる）。天体は画面の上の軌道の長さで黄金角ずつ（奥に詰めない。同じ軌道の次は
 `ROUND_SPREAD` 先）。
 
-**ブラックホールは image_gen の透過素材**（`BLACKHOLE_ART`）。README参照。`hero`は比較用（`dist/`）。
+**ブラックホールは旧素材**（`BLACKHOLE_ART`）。ほかの天体も白い光が黒い影へ溶ける質感に揃える。自然な濃淡は残し、細部を抑える。均一な球や幾何学的な穴に単純化しない。詳細はREADME。`hero`は比較用（`dist/`）。
 **軌道面は水平で、`ELEVATION`（26°）から透視で見る**（`CAMERA`。手前は広がり奥は
 詰まる。どの距離も同じ大きさでは的か図面に、低い角度ではレコード盤に、半端な傾きは曲がって見えた）。
 奥の半分（`far`）はブラックホールの後ろ、手前（`near`）は前に描く（`orbitHalves`）。
@@ -368,13 +368,14 @@ GitHub の手）。メールの手はアドレスそのものを大きな字に�
 同じことを言うだけ）——`.sr-only` の `h1`「Contact」で残す。`/all` では目に見える見出しを置く。
 `contactLead` は `/contact` の description にも使う。
 
-**ロゴは字で組む ΛSTLOG で、O は入口と同じブラックホールの絵**（`Wordmark`・`HoleArt`。持ち主の
-「o も合わせて」）。絵（`BLACKHOLE_ART`）は入口・締め・
-ロゴで1枚を使い、影の黒い円（`--hole-core`）を下に敷く。記号に描き直さない（記号の O は入口と
-別物に、輪のある玉は土星に見えた）。印だけのとき（404・管理画面の `HoleMark`、favicon）は O を1つで。
-favicon と apple-touch-icon は地の色の正方形に載せた同じ1枚（`iconSvg`）。素材は `scripts/logo/export.mjs`
-が書き（SVG は絵を data URI で抱える）、黒い地で透明に戻さない（光が白い）。強制色では O を字の色の輪に
-替える。形の正と字の組み方は `src/ui/logo.ts`（GitHub の顔は render.py の `avatar`）。
+**ロゴは ΛSTLOG、O は選択中の天体。** 1人のサイトはその人、プロフィール・作品は公開の持ち主、
+未指定・複数人の共通ページはブラックホール。プレビューは編集中の天体を使う。
+本文と同じ版つき素材を読み、文字の幅・O の中心は固定。CSS で O の画像だけを動かし、
+影・他の文字・小記号は静止。helper は初期フレームから始め、reduce では止める。
+ブラックホールは `BLACKHOLE_ART` と黒い円（`--hole-core`）を重ねる。強制色では全天体を字の色の輪に替える。
+`HoleMark`・配布素材・favicon は静止したブラックホール。
+形は `src/ui/logo.ts`。`scripts/logo/export.mjs` が SVG・PNG を書く。SVG は絵を data URI で抱え、
+favicon・apple-touch-icon は黒い地を敷く。GitHub の顔は render.py の `avatar`。
 
 前の入口の月の記録は `docs/moon.md`。
 

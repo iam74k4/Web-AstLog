@@ -1946,30 +1946,39 @@ describe('入口の軌道図', () => {
   })
 
   it('装飾の開始待ちはhelperの印がある通常motionだけ。JS無効時のCSSとreduced-motionを妨げない', () => {
-    const gate = rulesOf(sheet).find(
-      (rule) =>
-        rule.selectors.some((selector) => selector.startsWith('html[data-motion-staged]')) &&
-        rule.decls.some(([property]) => property === 'animation'),
-    )
-    expect(gate?.context).toEqual(['@media (prefers-reduced-motion: no-preference)'])
-    expect(gate?.decls).toContainEqual(['animation', 'none !important'])
-    const selector = gate?.selectors.join(', ') ?? ''
-    expect(selector).toContain(':not([data-motion-ready])')
-    for (const part of [
-      '.orbit-flow',
-      '.orbit-flow__tail',
-      '.cosmos__twinkle',
-      '.cosmos__meteor',
-      '.orbit-grain__dot',
-      '.orbit-spin',
-      '.orbit-unspin',
-      '.orbit-body',
-      '.hole__art',
-      '.cosmos__nebula',
-    ]) {
-      expect(selector, part).toContain(part)
+    const gates = [
+      {
+        property: 'animation-play-state',
+        value: 'paused !important',
+        parts: [
+          '.cosmos__twinkle',
+          '.orbit-spin',
+          '.orbit-unspin',
+          '.orbit-body',
+          '.hole__art',
+          '.cosmos__nebula',
+          '.brand__word .logo-art',
+        ],
+      },
+      {
+        property: 'animation',
+        value: 'none !important',
+        parts: ['.orbit-flow', '.orbit-flow__tail', '.cosmos__meteor', '.orbit-grain__dot'],
+      },
+    ]
+    for (const { property, value, parts } of gates) {
+      const gate = rulesOf(sheet).find(
+        (rule) =>
+          rule.selectors.some((selector) => selector.startsWith('html[data-motion-staged]')) &&
+          rule.decls.some(([name]) => name === property),
+      )
+      expect(gate?.context).toEqual(['@media (prefers-reduced-motion: no-preference)'])
+      expect(gate?.decls).toContainEqual([property, value])
+      const selector = gate?.selectors.join(', ') ?? ''
+      expect(selector.replace(/\s+/g, '')).toContain(':not([data-motion-ready])')
+      for (const part of parts) expect(selector, part).toContain(part)
+      expect(selector).not.toMatch(/hero__copy|phrase|tally|nameplate/)
     }
-    expect(selector).not.toMatch(/hero__copy|phrase|tally|nameplate/)
     const hidden = rulesOf(sheet).find((rule) =>
       rule.selectors.includes('html[data-motion-staged] .orbit-flow:not([data-motion-ready])'),
     )
@@ -2062,6 +2071,7 @@ describe('プロフィールと表紙の天体の動き', () => {
     'celestial-radiance',
     'celestial-breathe',
     'celestial-flow',
+    'wordmark-radiance',
   ]
   const moving = () =>
     rulesOf(sheet).filter((rule) =>
@@ -2195,12 +2205,15 @@ describe('プロフィールと表紙の天体の動き', () => {
     expect(blockAt(sheet, '@supports not (mask-mode: luminance)')).toContain('display: none')
   })
 
-  it('黒い影・小さな記号・ガイド・ロゴは新しい継続動作の対象にしない', () => {
+  it('黒い影・小さな記号・ガイドは静止し、ロゴはOの画像だけを動かす', () => {
     for (const rule of moving()) {
       const selectors = rule.selectors.join(', ')
       expect(selectors).not.toMatch(
-        /\.hole::before|\.celestial__black-hole::before|\.celestial--symbol\b|\.celestial__guide\b|\.logo-(art|core)\b|\.brand-word\b/,
+        /\.hole::before|\.celestial__black-hole::before|\.celestial--symbol\b|\.celestial__guide\b|\.logo-core\b/,
       )
+      for (const selector of rule.selectors.filter((value) => value.includes('.logo-art'))) {
+        expect(selector).toMatch(/^\.brand__word\[data-celestial-body=['"][\w-]+['"]\] \.logo-art$/)
+      }
     }
     for (const selector of ['.hole::before {', '.celestial__black-hole::before {']) {
       expect(bodyOf(sheet, selector), selector).toContain('background: var(--hole-core)')

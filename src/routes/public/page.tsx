@@ -2,6 +2,7 @@ import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import { getCookie } from 'hono/cookie'
 import type { Child } from 'hono/jsx'
+import type { CelestialMember } from '../../celestial'
 import * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
 import { getSessionUser, SESSION_COOKIE } from '../../lib/auth'
@@ -104,6 +105,7 @@ export async function screenPage(
     */
     jsonLd?: unknown
     theme: Theme
+    celestial?: CelestialMember
     footer: Child
     // このページの中身を直す管理画面（adminHref が、ログインしている人にだけ出す）
     adminPath: string
@@ -120,6 +122,7 @@ export async function screenPage(
       jsonLd={page.jsonLd}
       nav={page.nav}
       theme={page.theme}
+      celestial={page.celestial}
       footer={page.footer}
       admin={await adminHref(c, page.adminPath)}
       image={page.image}
