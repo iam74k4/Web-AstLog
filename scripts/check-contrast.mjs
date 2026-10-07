@@ -669,14 +669,15 @@ async function main() {
             minDelta: STARS_MIN_DELTA,
           },
         }
-        // The Astra cover intentionally replaces the orbit drawing. Verify
-        // the actual bitmap and the sparse starfield, not the hidden SVGs.
+        // Measure the foreground ASCII alone. The intentionally faint bitmap
+        // glow covers more pixels and would dominate a combined median, masking
+        // a missing ASCII picture. Keep that glow in both screenshots.
         const parts = cover
           ? {
               art: {
-                label: 'Astra の天体画',
-                drawn: await drawnWithout('.astra-art'),
-                why: '表紙の画像が描かれていない',
+                label: 'ASCII の天体画',
+                drawn: await drawnWithout('.ascii-celestial'),
+                why: '表紙のASCII文字が描かれていない',
                 minDelta: NEBULA_MIN_DELTA,
               },
               stars: legacyParts.stars,

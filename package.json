@@ -20,6 +20,7 @@
     "check:contrast": "node scripts/check-contrast.mjs",
     "check:motion": "node scripts/check-motion.mjs",
     "check:celestial-motion": "node scripts/check-celestial-motion.mjs",
+    "check:ascii-animation": "node scripts/check-ascii-animation.mjs",
     "check:restore": "node scripts/check-restore.mjs",
     "check:ids": "node scripts/check-ids.mjs",
     "check:admin": "node scripts/check-admin.mjs",

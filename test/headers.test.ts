@@ -3,6 +3,7 @@ import assetHeaders from 'virtual:repo:public/_headers'
 import { beforeEach, describe, expect, it } from 'vitest'
 import app from '../src/index'
 import { ADMIN_BEHAVIOR, ADMIN_CSP } from '../src/ui/admin-behavior'
+import { ASCII_ART } from '../src/ui/ascii-art'
 import { MOTION_CSP, MOTION_START } from '../src/ui/motion'
 import { get, okText, resetDb, seedItem, seedMember, signIn, uncachedEnv } from './helpers'
 
@@ -232,6 +233,9 @@ describe('応答のヘッダ', () => {
       '/assets/blackhole.webp',
       '/assets/astra-black-hole.webp',
       '/assets/astra-nebula-v2.webp',
+      ...Object.values(ASCII_ART).flatMap((art) =>
+        [art.motion, art.still].map((url) => url.split('?')[0] ?? url),
+      ),
       ...['moon', 'saturn', 'neptune', 'sun'].map((body) => `/assets/astra-${body}.webp`),
       ...['sun', 'moon', 'neptune', 'saturn'].map((body) => `/assets/celestial-${body}-v2.webp`),
       ...['iris', 'violet', 'ember', 'mint', 'sky', 'rose'].map(

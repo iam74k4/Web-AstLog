@@ -54,6 +54,32 @@
 /assets/astra-sun.webp
   Cache-Control: public, max-age=31536000, immutable
 
+# ASCII text animations and reduced-motion posters use content-hashed URLs.
+/assets/ascii-black-hole.svg
+  Cache-Control: public, max-age=31536000, immutable
+/assets/ascii-black-hole-still.svg
+  Cache-Control: public, max-age=31536000, immutable
+/assets/ascii-saturn.svg
+  Cache-Control: public, max-age=31536000, immutable
+/assets/ascii-saturn-still.svg
+  Cache-Control: public, max-age=31536000, immutable
+/assets/ascii-neptune.svg
+  Cache-Control: public, max-age=31536000, immutable
+/assets/ascii-neptune-still.svg
+  Cache-Control: public, max-age=31536000, immutable
+/assets/ascii-moon.svg
+  Cache-Control: public, max-age=31536000, immutable
+/assets/ascii-moon-still.svg
+  Cache-Control: public, max-age=31536000, immutable
+/assets/ascii-sun.svg
+  Cache-Control: public, max-age=31536000, immutable
+/assets/ascii-sun-still.svg
+  Cache-Control: public, max-age=31536000, immutable
+/assets/ascii-nebula.svg
+  Cache-Control: public, max-age=31536000, immutable
+/assets/ascii-nebula-still.svg
+  Cache-Control: public, max-age=31536000, immutable
+
 # メンバーの天体も内容の SHA-256 を版に付けて読む（src/ui/celestial-art.ts）。
 # 同じパスに絵を更新しても、HTML の URL が変わり前の写しは使われない。
 /assets/celestial-sun-v2.webp

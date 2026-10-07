@@ -29,6 +29,7 @@ import { ITEM_KINDS } from '../src/domain'
 import { sniffImage } from '../src/lib/image'
 import { CONTACT_FRAME, cosmosMap, HERO_FRAME, NEBULA, orbitMap } from '../src/lib/orbits'
 import { publicRoutes } from '../src/routes/public/routes'
+import { ASCII_ART } from '../src/ui/ascii-art'
 import { ASTRA_CONTACT_ART, ASTRA_COVER_ART, CELESTIAL_ART } from '../src/ui/celestial-art'
 import { itemHref, LinkList, LinkRow, splitPhrases } from '../src/ui/components'
 import { BLACKHOLE_ART, HOLE, holeArt, iconSvg, WORDMARK, wordmarkSvg } from '../src/ui/logo'
@@ -1610,8 +1611,20 @@ describe('締めのページ（Contact）', () => {
       expect(contact).toContain(`class="astra-art astra-art--${contactKind}" src="${contactSrc}"`)
       expect(home.match(/class="astra-art /g)).toHaveLength(1)
       expect(contact.match(/class="astra-art /g)).toHaveLength(1)
+      for (const [html, kind] of [
+        [home, body],
+        [contact, contactKind],
+      ] as const) {
+        const ascii = ASCII_ART[kind]
+        expect(html).toContain(`<picture class="ascii-celestial" data-kind="${kind}">`)
+        expect(html).toContain(
+          `<source media="(prefers-reduced-motion: no-preference)" srcset="${ascii.motion}"/>`,
+        )
+        expect(html).toContain(`class="ascii-celestial__art" src="${ascii.still}"`)
+      }
       expect(contact).toContain('<h1 class="contact__title">Contact</h1>')
     }
+    expect(await okText('/all')).not.toContain('class="ascii-celestial"')
   })
 
   it('作品が0件でも、ブラックホールは粒を吸い込み、光が揺らぐ', async () => {
@@ -1850,12 +1863,13 @@ describe('ページの URL', () => {
     expect(system).not.toMatch(/system__(labels|label|number|name)/)
     expect(system.slice(0, system.indexOf('</div>'))).not.toContain('<a ')
     /*
-      読む素材はブラックホールの1枚で、基本画像と光を通す固定maskも同じ版つきURLを使う
+      表紙の素材は背景とASCIIの画像、軌道図は同じ版つきブラックホールを共有する
       （飾りなので alt は空）。軌道と天体はページに直に描く SVG で、色は app.css が
       --accent と --ink から敷くので、**見た目プリセットで軌道図の色も変わる**
     */
     expect(home.match(/<img\b[^>]*>/g)).toEqual([
       '<img class="astra-art astra-art--hole" src="/assets/astra-black-hole.webp?v=34a75e33" width="1586" height="992" alt="" aria-hidden="true" decoding="sync" fetchpriority="high"/>',
+      `<img class="ascii-celestial__art" src="${ASCII_ART['black-hole'].still}" width="1586" height="992" alt="" aria-hidden="true" decoding="sync" fetchpriority="high"/>`,
       `<img class="hole__art" src="${BLACKHOLE_ART.src}" width="${BLACKHOLE_ART.width}" height="${BLACKHOLE_ART.height}" alt="" decoding="async"/>`,
     ])
     expect(home).not.toMatch(/(?:stroke|fill)="#/)

@@ -30,6 +30,7 @@ import {
   orbitMap,
 } from '../lib/orbits'
 import { isContactEmail, SITE, type SiteSettings } from '../site'
+import { ASCII_ART } from './ascii-art'
 import { BlackholeFlow } from './BlackholeFlow'
 import { CelestialArt, CelestialSymbol, celestialTheme } from './Celestial'
 import { ASTRA_CONTACT_ART, ASTRA_COVER_ART } from './celestial-art'
@@ -378,6 +379,7 @@ export const Hero = ({
   >
     {orbit ? <Cosmos map={cosmosMap()} id="hero-cosmos" place="hero" /> : null}
     {orbit ? <AstraArt body={normalizeCelestial(celestial).body} place="home" /> : null}
+    {orbit ? <AsciiCelestial body={normalizeCelestial(celestial).body} place="home" /> : null}
     {orbit ? <AsciiSky /> : null}
     {children}
   </header>
@@ -399,6 +401,28 @@ const AstraArt = ({ body, place }: { body: CelestialBody; place: 'home' | 'conta
       decoding="sync"
       fetchPriority="high"
     />
+  )
+}
+
+// Each SVG contains baked text frames, so no geometry or animation loop runs in
+// the page. The poster source also works in script-free member previews.
+const AsciiCelestial = ({ body, place }: { body: CelestialBody; place: 'home' | 'contact' }) => {
+  const kind = body === 'black-hole' && place === 'contact' ? 'nebula' : body
+  const art = ASCII_ART[kind]
+  return (
+    <picture class="ascii-celestial" data-kind={kind}>
+      <source media="(prefers-reduced-motion: no-preference)" srcset={art.motion} />
+      <img
+        class="ascii-celestial__art"
+        src={art.still}
+        width="1586"
+        height="992"
+        alt=""
+        aria-hidden="true"
+        decoding="sync"
+        fetchPriority="high"
+      />
+    </picture>
   )
 }
 
@@ -2282,6 +2306,7 @@ export const Contact = ({
     {whole ? <SectionHead title="Contact" /> : <h1 class="contact__title">Contact</h1>}
     {whole ? null : <Cosmos map={cosmosMap()} id="contact-cosmos" place="contact" />}
     {!whole ? <AstraArt body={normalizeCelestial(member).body} place="contact" /> : null}
+    {!whole ? <AsciiCelestial body={normalizeCelestial(member).body} place="contact" /> : null}
     {!whole ? <AsciiSky /> : null}
     {whole ? null : <ContactOrbits counts={counts} member={member} />}
     <div class="contact">

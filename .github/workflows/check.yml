@@ -115,5 +115,8 @@ jobs:
       - name: 天体とワードマークの連動
         run: npm run check:celestial-motion
 
+      - name: ASCII天体のコマ変化・JSなし・動きを減らす設定
+        run: npm run check:ascii-animation
+
       - name: 管理画面の入力・競合・プレビュー・スマホ表示
         run: npm run check:admin

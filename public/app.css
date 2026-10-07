@@ -18,6 +18,8 @@
 
 :root {
   --admin-shell-width: 1240px;
+  --ascii-backdrop: 0.24;
+  --ascii-stars: 0.45;
   --admin-preview-width: 1280px;
   --admin-preview-height: 88svh;
   --admin-art-size: 96px;
@@ -4252,6 +4254,7 @@ body[data-site] > main {
   .orbits,
   .cosmos,
   .ascii-sky,
+  .ascii-celestial,
   .celestial--art,
   .hero--orbit > .hero__copy::before,
   .orbital > .contact::before {
@@ -4313,6 +4316,7 @@ body[data-site] > main {
   .orbits,
   .cosmos,
   .ascii-sky,
+  .ascii-celestial,
   .hero--orbit > .hero__copy::before,
   .orbital > .contact::before {
     display: none;
@@ -4521,6 +4525,23 @@ body[data-site] > main {
   user-select: none;
 }
 
+.ascii-celestial {
+  grid-area: art;
+  display: block;
+  width: 100%;
+  height: clamp(280px, 82vw, 460px);
+  pointer-events: none;
+  user-select: none;
+  mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
+}
+
+.ascii-celestial__art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 /* The cover's ASCII field is type, not an image: stepped character frames and
    three drifting text streams sit between the art and every heading/action. */
 .ascii-sky {
@@ -4537,6 +4558,7 @@ body[data-site] > main {
   font-weight: 500;
   line-height: 1;
   color: var(--ink);
+  opacity: var(--ascii-stars);
 }
 
 .orbital > .ascii-sky {
@@ -4647,6 +4669,7 @@ body[data-site] > main {
   width: 100%;
   height: clamp(280px, 82vw, 460px);
   object-fit: cover;
+  opacity: var(--ascii-backdrop);
   /* Generated covers have subtly different near-black edges. Fade the canvas
      itself so it reads as one sky rather than a rectangular image panel. */
   mask-image:
@@ -4735,8 +4758,12 @@ body[data-site] > main {
   height: clamp(280px, 82vw, 460px);
   object-fit: cover;
   object-position: right center;
-  opacity: 0.78;
+  opacity: var(--ascii-backdrop);
   mask-image: radial-gradient(ellipse 60% 73% at 42% 50%, #000 45%, transparent 100%);
+}
+
+.orbital > .ascii-celestial .ascii-celestial__art {
+  object-position: right center;
 }
 
 .orbital:has(> .astra-art) .contact__mail {
@@ -4753,6 +4780,21 @@ body[data-site] > main {
 }
 
 @media (min-width: 900px) {
+  .ascii-celestial {
+    position: absolute;
+    top: 48%;
+    right: 0;
+    width: min(74vw, 1000px);
+    height: auto;
+    aspect-ratio: 1586 / 992;
+    transform: translateY(-50%);
+    mask-image: linear-gradient(to right, transparent 28%, #000 50%);
+  }
+
+  .orbital > .ascii-celestial {
+    top: 50%;
+  }
+
   .ascii-sky,
   .orbital > .ascii-sky {
     left: 72%;
@@ -4883,6 +4925,7 @@ body[data-site] > main {
   .orbits,
   .cosmos,
   .ascii-sky,
+  .ascii-celestial,
   .astra-art,
   .celestial--art,
   .celestial--symbol,
