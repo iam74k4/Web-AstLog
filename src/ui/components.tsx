@@ -378,7 +378,6 @@ export const Hero = ({
   >
     {orbit ? <Cosmos map={cosmosMap()} id="hero-cosmos" place="hero" /> : null}
     {orbit ? <AstraArt body={normalizeCelestial(celestial).body} place="home" /> : null}
-    {orbit ? <AsciiSky /> : null}
     {children}
   </header>
 )
@@ -401,66 +400,6 @@ const AstraArt = ({ body, place }: { body: CelestialBody; place: 'home' | 'conta
     />
   )
 }
-
-// The cover's ASCII field is complete in SSR. Glyphs change frame while three
-// uneven rings and short character streams turn around the art; no client script
-// or second image is needed. Text and actions stay above this decorative layer.
-const ASCII_RINGS = [
-  { name: 'inner', count: 15, radius: 25, offset: 8 },
-  { name: 'middle', count: 21, radius: 35, offset: 17 },
-  { name: 'outer', count: 27, radius: 44, offset: 25 },
-] as const
-const ASCII_GLYPHS = ['.', ':', '+', '*'] as const
-const ASCII_STREAM = '....:..+..*.'
-const asciiPosition = (angle: number, radius: number) => {
-  const mobileVw = Math.round(radius * 0.96 * 100) / 100
-  const mobilePx = Math.round(radius * 3.9 * 100) / 100
-  const desktopVw = Math.round(radius * 0.54 * 100) / 100
-  const desktopPx = Math.round(radius * 7 * 100) / 100
-  return `--angle:${angle}deg;--r-mobile:min(${mobileVw}vw,${mobilePx}px);--r-desktop:min(${desktopVw}vw,${desktopPx}px)`
-}
-
-const AsciiSky = () => (
-  <div class="ascii-sky" aria-hidden="true">
-    {ASCII_RINGS.map((ring) => (
-      <div class={`ascii-sky__orbit ascii-sky__orbit--${ring.name}`} key={ring.name}>
-        {Array.from({ length: ring.count }, (_, index) => {
-          const angle =
-            Math.round(
-              (((index * 360) / ring.count + ring.offset + ((index % 3) - 1) * 7) % 360) * 100,
-            ) / 100
-          const radius = ring.radius + ((index % 4) - 1.5) * 2
-          const frames = Array.from(
-            { length: ASCII_GLYPHS.length + 1 },
-            (_, frame) => ASCII_GLYPHS[(index + ring.offset + frame) % ASCII_GLYPHS.length],
-          ).join('')
-          return (
-            <span
-              class="ascii-sky__star"
-              key={index}
-              style={`${asciiPosition(angle, radius)};opacity:${index % 5 === 0 ? 0.82 : 0.56}`}
-            >
-              <span class="ascii-sky__glyph" style={`--phase:-${(index % 7) * 0.48}s`}>
-                <span class="ascii-sky__frames">{frames}</span>
-              </span>
-            </span>
-          )
-        })}
-      </div>
-    ))}
-    <div class="ascii-sky__stream-orbit">
-      {[0, 120, 240].map((angle, index) => (
-        <span
-          class="ascii-sky__stream"
-          key={angle}
-          style={`${asciiPosition(angle, 42)};--phase:-${index * 1.6}s`}
-        >
-          <span class="ascii-sky__track">{ASCII_STREAM + ASCII_STREAM}</span>
-        </span>
-      ))}
-    </div>
-  </div>
-)
 
 /*
   文を句読点（、。！？）の直後でだけ折れるようにする。
@@ -2282,7 +2221,6 @@ export const Contact = ({
     {whole ? <SectionHead title="Contact" /> : <h1 class="contact__title">Contact</h1>}
     {whole ? null : <Cosmos map={cosmosMap()} id="contact-cosmos" place="contact" />}
     {!whole ? <AstraArt body={normalizeCelestial(member).body} place="contact" /> : null}
-    {!whole ? <AsciiSky /> : null}
     {whole ? null : <ContactOrbits counts={counts} member={member} />}
     <div class="contact">
       <p class="contact__lead">

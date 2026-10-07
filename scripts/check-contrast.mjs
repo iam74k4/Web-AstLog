@@ -186,6 +186,8 @@ const MOTION_FRAMES = [
   { of: 'breathe', at: 0.1 },
   { of: 'breathe', at: 0.42 },
   { of: 'meteor', selector: '.cosmos__meteor', at: 0.03 },
+  { of: 'cover-drift', at: 0.5 },
+  { of: 'cover-light', at: 0.5 },
 ]
 
 // MOTION_FRAMES を、ページの CSS の実周期から時刻（ms）に開く
@@ -245,7 +247,7 @@ const holdOrbits = () => {
   let end = 0
   for (const animation of document.getAnimations()) {
     const timing = animation.effect.getComputedTiming()
-    if (animation.animationName?.startsWith('orbit-')) {
+    if (/^(orbit|cover)-/.test(animation.animationName)) {
       animation.pause()
       end = Math.max(end, timing.endTime)
     } else if (Number.isFinite(timing.endTime)) {
@@ -260,7 +262,7 @@ const holdOrbits = () => {
 const seekOrbits = (at) => {
   if (!Number.isFinite(at) || at <= 0) throw new Error(`動きを送る時刻が不正: ${at}ms`)
   for (const animation of document.getAnimations()) {
-    if (animation.animationName?.startsWith('orbit-')) animation.currentTime = at
+    if (/^(orbit|cover)-/.test(animation.animationName)) animation.currentTime = at
   }
 }
 
