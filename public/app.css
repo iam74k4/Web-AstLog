@@ -29,7 +29,14 @@
   --cover-contact-wide-opacity: 0.72;
   --cover-mobile-height: clamp(280px, 82vw, 460px);
   --cover-art-ratio: 1.5987903226;
-  --infall-star-size: clamp(1.5px, 0.24cqi, 2.4px);
+  --disk-turn-dur: 24s;
+  --disk-inner-dur: 16s;
+  --disk-strength: 0.55;
+  --disk-x: 66.2%;
+  --disk-y: 53.9%;
+  --disk-width: 37.83%;
+  --disk-tilt: -26deg;
+  --disk-flatten: 0.38;
   --admin-shell-width: 1240px;
   --admin-preview-width: 1280px;
   --admin-preview-height: 88svh;
@@ -4525,7 +4532,7 @@ body[data-site] > main {
 }
 
 .astra-art,
-.astra-infall {
+.astra-disk {
   --cover-opacity: var(--cover-home-opacity);
   display: block;
   width: 100%;
@@ -4536,15 +4543,16 @@ body[data-site] > main {
   transform-origin: 68% 50%;
 }
 
-.astra-infall {
+.astra-disk {
   display: none;
   position: relative;
   overflow: clip;
   aspect-ratio: var(--cover-art-ratio);
+  mix-blend-mode: screen;
 }
 
 /* Match object-fit:cover, including the horizontally cropped phone artwork. */
-.astra-infall__canvas {
+.astra-disk__canvas {
   position: absolute;
   left: 50%;
   top: 50%;
@@ -4552,18 +4560,56 @@ body[data-site] > main {
   aspect-ratio: var(--cover-art-ratio);
   transform: translate(-50%, -50%);
   container-type: inline-size;
+  /* Preserve the original shadow even when the disk texture passes behind it. */
+  mask-image: radial-gradient(ellipse 7% 8% at 65.9% 48.1%, transparent 88%, #000 110%);
 }
 
-.astra-infall__star {
+.astra-disk__plane {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: var(--infall-star-size);
-  height: var(--infall-star-size);
+  left: var(--disk-x);
+  top: var(--disk-y);
+  width: var(--disk-width);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%) rotate(var(--disk-tilt)) scaleY(var(--disk-flatten));
+  opacity: var(--disk-strength);
+}
+
+.astra-disk__ring {
+  position: absolute;
+  inset: 0;
   border-radius: 50%;
-  background: linear-gradient(to right, transparent, var(--ink));
-  transform-origin: right center;
-  opacity: 0;
+  overflow: clip;
+  mask-image: radial-gradient(closest-side, transparent 50%, #000 64%, #000 78%, transparent 100%);
+}
+
+.astra-disk__ring--inner {
+  mask-image: radial-gradient(closest-side, transparent 24%, #000 40%, #000 49%, transparent 64%);
+}
+
+.astra-disk__rotor {
+  position: absolute;
+  inset: 0;
+}
+
+.astra-disk__texture {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(100% * 100 / 37.83);
+  aspect-ratio: var(--cover-art-ratio);
+  background: var(--disk-art) center / 100% 100%;
+  transform-origin: var(--disk-x) var(--disk-y);
+  transform: translate(-66.2%, -53.9%) scaleY(calc(1 / var(--disk-flatten)))
+    rotate(calc(-1 * var(--disk-tilt)));
+}
+
+@keyframes cover-disk {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Move only the decorative image. Independent transform properties preserve
@@ -4595,16 +4641,19 @@ body[data-site] > main {
 
 @media (prefers-reduced-motion: no-preference) {
   .astra-art,
-  .astra-infall {
+  .astra-disk {
     animation:
       cover-drift var(--cover-drift-dur) ease-in-out infinite,
       cover-light var(--cover-light-dur) ease-in-out infinite;
   }
-  .astra-infall {
+  .astra-disk {
     display: block;
   }
-  .astra-infall__star {
-    animation: var(--motion) var(--dur) linear var(--delay) infinite;
+  .astra-disk__rotor {
+    animation: cover-disk var(--disk-turn-dur) linear infinite;
+  }
+  .astra-disk__ring--inner .astra-disk__rotor {
+    animation-duration: var(--disk-inner-dur);
   }
 }
 
@@ -4617,7 +4666,7 @@ body[data-site] > main {
 }
 
 .hero--orbit:has(> .astra-art) > .astra-art,
-.hero--orbit:has(> .astra-art) > .astra-infall {
+.hero--orbit:has(> .astra-art) > .astra-disk {
   grid-area: art;
   width: 100%;
   height: var(--cover-mobile-height);
@@ -4740,7 +4789,7 @@ body[data-site] > main {
   }
 
   .hero--orbit:has(> .astra-art) > .astra-art,
-  .hero--orbit:has(> .astra-art) > .astra-infall {
+  .hero--orbit:has(> .astra-art) > .astra-disk {
     position: absolute;
     top: 48%;
     right: 0;
@@ -4750,11 +4799,11 @@ body[data-site] > main {
     transform: translateY(-50%);
   }
 
-  .astra-infall__canvas {
+  .astra-disk__canvas {
     width: 100%;
   }
 
-  .hero--orbit:has(> .astra-art) > .astra-infall {
+  .hero--orbit:has(> .astra-art) > .astra-disk {
     mask-image: linear-gradient(to right, transparent 28%, #000 48%, #000 88%, transparent);
   }
 
@@ -4790,7 +4839,7 @@ body[data-site] > main {
 
 @media (forced-colors: active), (prefers-contrast: more), (max-height: 400px) {
   .astra-art,
-  .astra-infall {
+  .astra-disk {
     display: none;
   }
 }
@@ -4853,7 +4902,7 @@ body[data-site] > main {
   .orbits,
   .cosmos,
   .astra-art,
-  .astra-infall,
+  .astra-disk,
   .celestial--art,
   .celestial--symbol,
   .hero--orbit > .hero__copy::before,

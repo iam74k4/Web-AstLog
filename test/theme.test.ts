@@ -10,7 +10,7 @@ import { db, form, get, okText, resetDb, seedItem, seedMember, signIn } from './
 
 // 着いたあとも動き続ける animation の名前。粒と流れる星の固定名は部品が --motion で渡す。
 const LASTING =
-  /orbit-(swirl|unswirl|sway|breathe|drift|twinkle|meteor)\b|celestial-(float|drift|rock|radiance|breathe|flow)\b|cover-(drift|light)\b|var\(--motion\)/
+  /orbit-(swirl|unswirl|sway|breathe|drift|twinkle|meteor)\b|celestial-(float|drift|rock|radiance|breathe|flow)\b|cover-(drift|light|disk)\b|var\(--motion\)/
 
 beforeEach(resetDb)
 
@@ -1811,12 +1811,7 @@ describe('入口の軌道図', () => {
       expect(value, rule.selectors.join(', ')).toMatch(LASTING)
       if (value.includes('var(--motion)')) {
         for (const selector of rule.selectors) {
-          expect([
-            '.orbit-grain__dot',
-            '.orbit-flow',
-            '.orbit-flow__tail',
-            '.astra-infall__star',
-          ]).toContain(selector)
+          expect(['.orbit-grain__dot', '.orbit-flow', '.orbit-flow__tail']).toContain(selector)
         }
       }
       expect(rule.context, rule.selectors.join(', ')).toEqual([

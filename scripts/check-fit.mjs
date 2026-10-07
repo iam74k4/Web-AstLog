@@ -323,7 +323,7 @@ const measure = ([typeface, cfg]) => {
       箱そのものは、画面の中に居て祖先に切られていないことを測る（自分で中身を切って
       いるのは決まりどおりなので、下の「自分の中身を切っている箱」には数えない）
     */
-    const backdrop = el.matches('.cosmos, .orbit-dust, .astra-infall[aria-hidden="true"]')
+    const backdrop = el.matches('.cosmos, .orbit-dust, .astra-disk[aria-hidden="true"]')
     if (backdrop) skipped.add(el)
     if (rect.width === 0 || rect.height === 0 || style.visibility === 'hidden') continue
     if (rect.right > innerWidth + slack || rect.left < -slack) {

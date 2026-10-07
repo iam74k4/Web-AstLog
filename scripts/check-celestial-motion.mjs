@@ -635,13 +635,13 @@ async function checkCell(browser, base, token, body, screen, view) {
       assert.equal((await animations(page)).length, 0, '隠した軌道に motion が残る')
       await page.emulateMedia({ reducedMotion: 'reduce' })
       assert.equal(await page.evaluate(() => document.getAnimations().length), 0)
-      assert.equal(await page.locator('.astra-infall:visible').count(), 0)
+      assert.equal(await page.locator('.astra-disk:visible').count(), 0)
       await page.emulateMedia({ reducedMotion: 'no-preference', media: 'print' })
       assert.equal(await art.isVisible(), false, '印刷で表紙画像が残る')
-      assert.equal(await page.locator('.astra-infall:visible').count(), 0)
+      assert.equal(await page.locator('.astra-disk:visible').count(), 0)
       await page.emulateMedia({ media: 'screen', forcedColors: 'active' })
       assert.equal(await art.isVisible(), false, '強制色で表紙画像が残る')
-      assert.equal(await page.locator('.astra-infall:visible').count(), 0)
+      assert.equal(await page.locator('.astra-disk:visible').count(), 0)
       assert.deepEqual(errors, [])
       const fallback = await contextFor(browser, base, token, view, {
         javaScriptEnabled: false,

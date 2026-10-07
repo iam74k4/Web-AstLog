@@ -18,7 +18,6 @@ import {
   type StoryPart,
   totalOf,
 } from '../domain'
-import { ACCRETION, accretionStars } from '../lib/accretion'
 import { initials, isHttpsUrl, isSafeUrl, type SkillGroup, skillRows } from '../lib/format'
 import { motionFrames, orbitFlows, orbitHalfClip } from '../lib/orbit-motion'
 import {
@@ -384,34 +383,27 @@ export const Hero = ({
   </header>
 )
 
-const Accretion = () => {
-  const stars = accretionStars()
-  const fixed = (value: number) => Number(value.toFixed(4))
-  const motion = stars
-    .map(
-      (star, index) =>
-        `@keyframes cover-infall-${index}{${star.frames
-          .map(
-            ({ at, x, y, turn, stretch, opacity, steps }) =>
-              `${fixed(at * 100)}%{transform:translate(${fixed((x / ACCRETION.width) * 100)}cqi,${fixed((y / ACCRETION.width) * 100)}cqi) rotate(${fixed(turn)}deg) scaleX(${fixed(stretch)});opacity:${fixed(opacity)};${steps ? `animation-timing-function:steps(${steps});` : ''}}`,
-          )
-          .join('')}}`,
-    )
-    .join('')
-  return (
-    <div class="astra-infall" aria-hidden="true">
-      <style>{raw(motion)}</style>
-      <div class="astra-infall__canvas">
-        {stars.map((star, index) => (
-          <span
-            class="astra-infall__star"
-            style={`--motion:cover-infall-${index};--dur:${star.duration}s;--delay:${star.delay.toFixed(4)}s`}
-          />
+// Deproject the existing luminous disk into its own plane, rotate its texture,
+// then project it back. The central shadow and surrounding nebula do not spin.
+const Accretion = () => (
+  <div
+    class="astra-disk"
+    aria-hidden="true"
+    style={`--disk-art:url("${ASTRA_COVER_ART['black-hole']}")`}
+  >
+    <div class="astra-disk__canvas">
+      <div class="astra-disk__plane">
+        {['outer', 'inner'].map((ring) => (
+          <div class={`astra-disk__ring astra-disk__ring--${ring}`}>
+            <div class="astra-disk__rotor">
+              <div class="astra-disk__texture" />
+            </div>
+          </div>
         ))}
       </div>
     </div>
-  )
-}
+  </div>
+)
 
 // Every celestial body uses one layout; only its decorative image changes.
 // The heading, links and project count stay as real HTML above the image.
