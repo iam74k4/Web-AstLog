@@ -4556,7 +4556,9 @@ body[data-site] > main {
   opacity: 0.35;
 }
 
-:is(.hero--orbit, .orbital):has(> .astra-art) > :is(.hero__copy, .contact)::before {
+/* Contact's existing text veil must remain: Linux font rasterization brings the
+   mail action close to the 4.5:1 contrast floor where the image overlaps it. */
+.hero--orbit:has(> .astra-art) > .hero__copy::before {
   display: none;
 }
 
