@@ -10,7 +10,7 @@ import { db, form, get, okText, resetDb, seedItem, seedMember, signIn } from './
 
 // 着いたあとも動き続ける animation の名前。粒と流れる星の固定名は部品が --motion で渡す。
 const LASTING =
-  /orbit-(swirl|unswirl|sway|breathe|drift|twinkle|meteor)\b|celestial-(float|drift|rock|radiance|breathe|flow)\b|var\(--motion\)/
+  /orbit-(swirl|unswirl|sway|breathe|drift|twinkle|meteor)\b|celestial-(float|drift|rock|radiance|breathe|flow)\b|ascii-(cycle|stream)\b|var\(--motion\)/
 
 beforeEach(resetDb)
 
@@ -933,7 +933,7 @@ describe('部品の作法', () => {
     expect(bodyOf(sheet, '.orbital:has(> .astra-art) > .contact {')).toContain('grid-area: content')
   })
 
-  it('ASCIIの星は表紙の上で2方向に周回し、字と操作より後ろに置く', () => {
+  it('ASCIIの星と軌跡は文字を切り替えながら周回し、字と操作より後ろに置く', () => {
     const sky = bodyOf(sheet, '.ascii-sky {')
     expect(sky).toContain('pointer-events: none')
     expect(sky).toContain('font-family: var(--font-mono)')
@@ -944,7 +944,9 @@ describe('部品の作法', () => {
     )
     for (const selector of [
       '.ascii-sky__orbit--inner',
+      '.ascii-sky__orbit--middle',
       '.ascii-sky__orbit--outer',
+      '.ascii-sky__stream-orbit',
       '.ascii-sky__glyph',
     ]) {
       const animation = moving.find(
@@ -957,6 +959,24 @@ describe('部品の作法', () => {
       expect(animation?.decls.find(([name]) => name === 'animation')?.[1], selector).toMatch(
         /orbit-(?:swirl|unswirl)/,
       )
+    }
+    for (const [selector, name] of [
+      ['.ascii-sky__frames', 'ascii-cycle'],
+      ['.ascii-sky__track', 'ascii-stream'],
+    ] as const) {
+      const animation = moving.find(
+        (rule) =>
+          rule.selectors.includes(selector) &&
+          rule.decls.some(([property]) => property === 'animation'),
+      )
+      expect(animation?.context, selector).toEqual([
+        '@media (prefers-reduced-motion: no-preference)',
+      ])
+      expect(
+        animation?.decls.find(([property]) => property === 'animation')?.[1],
+        selector,
+      ).toContain(name)
+      expect(blockAt(sheet, `@keyframes ${name}`)).not.toContain('var(')
     }
     for (const marker of [
       '@media (forced-colors: active), (prefers-contrast: more)',

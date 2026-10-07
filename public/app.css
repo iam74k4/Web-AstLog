@@ -4521,8 +4521,8 @@ body[data-site] > main {
   user-select: none;
 }
 
-/* ASCII is a typographic star layer, not a second image. The rings rotate over
-   the cover; their sparse glyphs stay behind every heading and action. */
+/* The cover's ASCII field is type, not an image: stepped character frames and
+   three drifting text streams sit between the art and every heading/action. */
 .ascii-sky {
   position: absolute;
   left: 50%;
@@ -4543,7 +4543,8 @@ body[data-site] > main {
   top: 68%;
 }
 
-.ascii-sky__orbit {
+.ascii-sky__orbit,
+.ascii-sky__stream-orbit {
   position: absolute;
   left: 50%;
   top: 50%;
@@ -4562,21 +4563,74 @@ body[data-site] > main {
 
 .ascii-sky__glyph {
   display: block;
+  width: 1ch;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.ascii-sky__frames {
+  display: block;
+  width: max-content;
+}
+
+.ascii-sky__stream {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 12ch;
+  overflow: hidden;
+  white-space: nowrap;
+  --radius: var(--r-mobile);
+  opacity: 0.68;
+  transform: rotate(var(--angle)) translateX(var(--radius)) rotate(90deg) translate(-50%, -50%);
+}
+
+.ascii-sky__track {
+  display: block;
+  width: max-content;
+}
+
+@keyframes ascii-cycle {
+  to {
+    transform: translateX(-4ch);
+  }
+}
+
+@keyframes ascii-stream {
+  to {
+    transform: translateX(-12ch);
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .ascii-sky__orbit--inner {
-    animation: orbit-swirl 42s linear infinite;
+    animation: orbit-swirl 24s linear infinite;
+  }
+
+  .ascii-sky__orbit--middle {
+    animation: orbit-unswirl 38s linear infinite;
   }
 
   .ascii-sky__orbit--outer {
-    animation: orbit-unswirl 64s linear infinite;
+    animation: orbit-swirl 56s linear infinite;
+  }
+
+  .ascii-sky__stream-orbit {
+    animation: orbit-unswirl 30s linear infinite;
   }
 
   .ascii-sky__glyph {
     animation:
-      orbit-swirl 12s linear infinite,
-      orbit-twinkle 6.4s steps(8) var(--phase) infinite;
+      orbit-swirl 10s linear infinite,
+      orbit-twinkle 5.6s steps(8) var(--phase) infinite;
+  }
+
+  .ascii-sky__frames {
+    animation: ascii-cycle 3.2s steps(4, end) var(--phase) infinite;
+  }
+
+  .ascii-sky__track {
+    animation: ascii-stream 4.8s steps(12, end) var(--phase) infinite;
   }
 }
 
@@ -4705,9 +4759,12 @@ body[data-site] > main {
     top: 50%;
     width: min(54vw, 700px);
     font-size: var(--fs-md);
+    /* A turning ASCII star must never pass behind the left-column headline. */
+    mask-image: linear-gradient(to right, transparent 20%, #000 36%);
   }
 
-  .ascii-sky__star {
+  .ascii-sky__star,
+  .ascii-sky__stream {
     --radius: var(--r-desktop);
   }
 
