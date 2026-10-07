@@ -319,10 +319,11 @@ const measure = ([typeface, cfg]) => {
       中の星雲は図より大きく置いて星空の箱で切り取るのが決まり（app.css の .cosmos__nebula）。
       光の粒（.orbit-dust）も同じ。無限の動きを外すと、円は枠の原点へ戻り、中心をそろえる負の
       margin のぶんだけ枠から出る（opacity: 0）。装飾の内部の切り取りを、本文の切れと数えない。
-      どちらも箱そのものは、画面の中に居て祖先に切られていないことを測る（自分で中身を切って
+      表紙の吸い込み層も画像の object-fit:cover と同じ切り取り。内部の位置は cover-motion で測る。
+      箱そのものは、画面の中に居て祖先に切られていないことを測る（自分で中身を切って
       いるのは決まりどおりなので、下の「自分の中身を切っている箱」には数えない）
     */
-    const backdrop = el.matches('.cosmos, .orbit-dust')
+    const backdrop = el.matches('.cosmos, .orbit-dust, .astra-infall[aria-hidden="true"]')
     if (backdrop) skipped.add(el)
     if (rect.width === 0 || rect.height === 0 || style.visibility === 'hidden') continue
     if (rect.right > innerWidth + slack || rect.left < -slack) {
