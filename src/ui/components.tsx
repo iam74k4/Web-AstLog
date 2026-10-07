@@ -402,14 +402,23 @@ const AstraArt = ({ body, place }: { body: CelestialBody; place: 'home' | 'conta
   )
 }
 
-// ASCII glyphs sit above the cover art, while the heading and actions remain
-// above them. Two sparse, uneven rings give the stars motion without a canvas,
-// network request, or client-side script. Their initial frame is valid HTML.
+// The cover's ASCII field is complete in SSR. Glyphs change frame while three
+// uneven rings and short character streams turn around the art; no client script
+// or second image is needed. Text and actions stay above this decorative layer.
 const ASCII_RINGS = [
-  { name: 'inner', count: 12, radius: 27, offset: 8 },
-  { name: 'outer', count: 17, radius: 42, offset: 25 },
+  { name: 'inner', count: 15, radius: 25, offset: 8 },
+  { name: 'middle', count: 21, radius: 35, offset: 17 },
+  { name: 'outer', count: 27, radius: 44, offset: 25 },
 ] as const
-const ASCII_GLYPHS = ['+', '.', '*', ':'] as const
+const ASCII_GLYPHS = ['.', ':', '+', '*'] as const
+const ASCII_STREAM = '....:..+..*.'
+const asciiPosition = (angle: number, radius: number) => {
+  const mobileVw = Math.round(radius * 0.96 * 100) / 100
+  const mobilePx = Math.round(radius * 3.9 * 100) / 100
+  const desktopVw = Math.round(radius * 0.54 * 100) / 100
+  const desktopPx = Math.round(radius * 7 * 100) / 100
+  return `--angle:${angle}deg;--r-mobile:min(${mobileVw}vw,${mobilePx}px);--r-desktop:min(${desktopVw}vw,${desktopPx}px)`
+}
 
 const AsciiSky = () => (
   <div class="ascii-sky" aria-hidden="true">
@@ -421,24 +430,35 @@ const AsciiSky = () => (
               (((index * 360) / ring.count + ring.offset + ((index % 3) - 1) * 7) % 360) * 100,
             ) / 100
           const radius = ring.radius + ((index % 4) - 1.5) * 2
-          const mobileVw = Math.round(radius * 0.96 * 100) / 100
-          const mobilePx = Math.round(radius * 3.9 * 100) / 100
-          const desktopVw = Math.round(radius * 0.54 * 100) / 100
-          const desktopPx = Math.round(radius * 7 * 100) / 100
+          const frames = Array.from(
+            { length: ASCII_GLYPHS.length + 1 },
+            (_, frame) => ASCII_GLYPHS[(index + ring.offset + frame) % ASCII_GLYPHS.length],
+          ).join('')
           return (
             <span
               class="ascii-sky__star"
               key={index}
-              style={`--angle:${angle}deg;--r-mobile:min(${mobileVw}vw,${mobilePx}px);--r-desktop:min(${desktopVw}vw,${desktopPx}px);opacity:${index % 5 === 0 ? 0.7 : 0.42}`}
+              style={`${asciiPosition(angle, radius)};opacity:${index % 5 === 0 ? 0.82 : 0.56}`}
             >
-              <span class="ascii-sky__glyph" style={`--phase:-${(index % 7) * 0.8}s`}>
-                {ASCII_GLYPHS[(index + ring.offset) % ASCII_GLYPHS.length]}
+              <span class="ascii-sky__glyph" style={`--phase:-${(index % 7) * 0.48}s`}>
+                <span class="ascii-sky__frames">{frames}</span>
               </span>
             </span>
           )
         })}
       </div>
     ))}
+    <div class="ascii-sky__stream-orbit">
+      {[0, 120, 240].map((angle, index) => (
+        <span
+          class="ascii-sky__stream"
+          key={angle}
+          style={`${asciiPosition(angle, 42)};--phase:-${index * 1.6}s`}
+        >
+          <span class="ascii-sky__track">{ASCII_STREAM + ASCII_STREAM}</span>
+        </span>
+      ))}
+    </div>
   </div>
 )
 

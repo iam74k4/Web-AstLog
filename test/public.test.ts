@@ -1179,20 +1179,23 @@ describe('星空と星雲', () => {
       expect(cosmos, path).toContain('class="cosmos__glint"')
       expect(cosmos, path).toContain('<div class="cosmos__nebula" aria-hidden="true"></div>')
       expect(cosmos, path).toContain('<div class="cosmos__meteors"')
-      // カバーの前面に、文字だけの2つの周回層を重ねる。画像やJSが無くても字は残る。
+      // カバーに文字だけの周回層と流れる軌跡を重ねる。JSなしでも1コマ目が残る。
       expect(main, path).toContain('<div class="ascii-sky" aria-hidden="true">')
       expect(
-        main.match(/class="ascii-sky__orbit ascii-sky__orbit--(?:inner|outer)"/g),
+        main.match(/class="ascii-sky__orbit ascii-sky__orbit--(?:inner|middle|outer)"/g),
         path,
-      ).toHaveLength(2)
-      expect(main.match(/class="ascii-sky__glyph"/g), path).toHaveLength(29)
+      ).toHaveLength(3)
+      expect(main.match(/class="ascii-sky__glyph"/g), path).toHaveLength(63)
+      const frames = [...main.matchAll(/class="ascii-sky__frames">([^<]+)<\/span>/g)].map(
+        (match) => match[1] ?? '',
+      )
+      expect(frames, path).toHaveLength(63)
+      expect(frames.every((frame) => /^[.:+*]{5}$/.test(frame) && frame[0] === frame[4])).toBe(true)
+      expect(main.match(/class="ascii-sky__stream"/g), path).toHaveLength(3)
       expect(
-        [...main.matchAll(/class="ascii-sky__glyph"[^>]*>([^<]+)<\/span>/g)].map(
-          (match) => match[1],
-        ),
+        [...main.matchAll(/class="ascii-sky__track">([^<]+)<\/span>/g)].map((match) => match[1]),
         path,
-      ).toHaveLength(29)
-      expect(main, path).not.toMatch(/class="ascii-sky__glyph"[^>]*>[^+.*:<]/)
+      ).toEqual(Array(3).fill('....:..+..*.....:..+..*.'))
       // 星雲は焼いた素材を CSS の背景で読む。画面いっぱいのフィルタをページに置かない
       expect(cosmos, path).not.toMatch(/<feTurbulence|<feDisplacementMap|<filter\b/)
       // HTML に外部の画像を持ち込まない。背景素材の実在と版は下で見る

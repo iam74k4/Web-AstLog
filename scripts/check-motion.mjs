@@ -800,36 +800,50 @@ async function coverMotion(browser, base, screen, phone = false, slowImage = fal
     assert.ok(state.art && state.heading && state.links > 0, `${name}: 表紙/内容が描かれない`)
     assert.ok(state.stars > 0 && state.active === state.stars, `${name}: 星空が動いていない`)
     const ascii = await page.evaluate(() => {
-      const rings = [...document.querySelectorAll('.ascii-sky__orbit')]
+      const rings = [...document.querySelectorAll('.ascii-sky__orbit, .ascii-sky__stream-orbit')]
       const glyphs = [...document.querySelectorAll('.ascii-sky__glyph')]
-      const movement = rings.map((ring) => {
-        const animation = ring.getAnimations()[0]
+      const sample = (element, fraction) => {
+        const animation = element?.getAnimations()[0]
         if (!(animation instanceof CSSAnimation)) return null
         const at = animation.currentTime
         animation.pause()
         animation.currentTime = 0
-        const start = getComputedStyle(ring).transform
-        animation.currentTime = animation.effect.getTiming().duration / 8
-        const turn = getComputedStyle(ring).transform
+        const start = getComputedStyle(element).transform
+        animation.currentTime = animation.effect.getTiming().duration * fraction
+        const turn = getComputedStyle(element).transform
         const overflow = document.documentElement.scrollWidth - innerWidth
         animation.currentTime = at
         animation.play()
         return { name: animation.animationName, start, turn, overflow }
-      })
+      }
       return {
-        rings: movement,
+        rings: rings.map((ring) => sample(ring, 1 / 8)),
         glyphs: glyphs.length,
-        characters: glyphs.map((glyph) => glyph.textContent),
+        characters: [...document.querySelectorAll('.ascii-sky__frames')].map(
+          (frame) => frame.textContent,
+        ),
         spinning: glyphs.filter((glyph) => glyph.getAnimations().length === 2).length,
+        frame: sample(document.querySelector('.ascii-sky__frames'), 1 / 4),
+        stream: sample(document.querySelector('.ascii-sky__track'), 1 / 12),
+        tracks: document.querySelectorAll('.ascii-sky__track').length,
       }
     })
-    assert.equal(ascii.rings.length, 2, `${name}: ASCII軌道が2層でない`)
-    assert.equal(ascii.glyphs, 29, `${name}: ASCIIの星が欠けている`)
+    assert.equal(ascii.rings.length, 4, `${name}: ASCII軌道と文字の流れが欠けている`)
+    assert.equal(ascii.glyphs, 63, `${name}: ASCIIの星が欠けている`)
     assert.ok(
-      ascii.characters.every((char) => /^[+.*:]$/.test(char)),
-      `${name}: ASCII以外の星がある`,
+      ascii.characters.every((char) => /^[.:+*]{5}$/.test(char) && char[0] === char[4]),
+      `${name}: 星の文字フレームが不正`,
     )
-    assert.equal(ascii.spinning, 29, `${name}: 星の自転・明滅が動いていない`)
+    assert.equal(ascii.spinning, 63, `${name}: 星の自転・明滅が動いていない`)
+    assert.equal(ascii.tracks, 3, `${name}: ASCIIの流れが欠けている`)
+    for (const [motion, label] of [
+      [ascii.frame, '文字の切り替え'],
+      [ascii.stream, '文字の流れ'],
+    ]) {
+      assert.ok(motion, `${name}: ${label}がない`)
+      assert.notEqual(motion.start, motion.turn, `${name}: ${label}が動いていない`)
+      assert.ok(motion.overflow <= 1, `${name}: ${label}が横へはみ出す`)
+    }
     for (const ring of ascii.rings) {
       assert.ok(
         ring && ['orbit-swirl', 'orbit-unswirl'].includes(ring.name),
@@ -864,8 +878,16 @@ async function coverFallback(browser, base, screen, reduced) {
       heading: document.querySelector('main h1')?.textContent.trim(),
       links: document.querySelectorAll('main a[href]').length,
       ascii: document.querySelectorAll('.ascii-sky__glyph').length,
-      asciiMotion: [...document.querySelectorAll('.ascii-sky__orbit')].filter((node) =>
+      asciiMotion: [
+        ...document.querySelectorAll('.ascii-sky__orbit, .ascii-sky__stream-orbit'),
+      ].filter((node) =>
         node.getAnimations().some((animation) => animation instanceof CSSAnimation),
+      ).length,
+      frames: [...document.querySelectorAll('.ascii-sky__frames')].filter(
+        (node) => node.getAnimations().length === 1,
+      ).length,
+      streams: [...document.querySelectorAll('.ascii-sky__track')].filter(
+        (node) => node.getAnimations().length === 1,
       ).length,
       active: [...document.querySelectorAll('.cosmos__twinkle')].filter((node) =>
         node
@@ -879,13 +901,17 @@ async function coverFallback(browser, base, screen, reduced) {
     }))
     assert.ok(state.heading && state.links > 0, `${screen.name}/${name}: 内容/リンクがない`)
     assert.ok(await art.isVisible(), `${screen.name}/${name}: 表紙が見えない`)
-    assert.equal(state.ascii, 29, `${screen.name}/${name}: 静止時のASCIIが欠けている`)
+    assert.equal(state.ascii, 63, `${screen.name}/${name}: 静止時のASCIIが欠けている`)
     if (reduced) {
       assert.equal(state.asciiMotion, 0, `${screen.name}/${name}: reduced-motionでASCIIが回る`)
+      assert.equal(state.frames, 0, `${screen.name}/${name}: reduced-motionで文字が変わる`)
+      assert.equal(state.streams, 0, `${screen.name}/${name}: reduced-motionで軌跡が流れる`)
       assert.equal(await page.evaluate(() => document.getAnimations().length), 0)
     } else {
       assert.ok(state.active > 0, `${screen.name}/${name}: CSS の星が動いていない`)
-      assert.equal(state.asciiMotion, 2, `${screen.name}/${name}: JSなしでASCIIが回らない`)
+      assert.equal(state.asciiMotion, 4, `${screen.name}/${name}: JSなしでASCIIが回らない`)
+      assert.equal(state.frames, 63, `${screen.name}/${name}: JSなしで文字が変わらない`)
+      assert.equal(state.streams, 3, `${screen.name}/${name}: JSなしで軌跡が流れない`)
     }
     await page.emulateMedia({ media: 'print' })
     assert.equal(await art.isVisible(), false, `${screen.name}/${name}: 印刷で表紙が見える`)
