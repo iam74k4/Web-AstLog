@@ -378,6 +378,7 @@ export const Hero = ({
   >
     {orbit ? <Cosmos map={cosmosMap()} id="hero-cosmos" place="hero" /> : null}
     {orbit ? <AstraArt body={normalizeCelestial(celestial).body} place="home" /> : null}
+    {orbit ? <AsciiSky /> : null}
     {children}
   </header>
 )
@@ -400,6 +401,46 @@ const AstraArt = ({ body, place }: { body: CelestialBody; place: 'home' | 'conta
     />
   )
 }
+
+// ASCII glyphs sit above the cover art, while the heading and actions remain
+// above them. Two sparse, uneven rings give the stars motion without a canvas,
+// network request, or client-side script. Their initial frame is valid HTML.
+const ASCII_RINGS = [
+  { name: 'inner', count: 12, radius: 27, offset: 8 },
+  { name: 'outer', count: 17, radius: 42, offset: 25 },
+] as const
+const ASCII_GLYPHS = ['+', '.', '*', ':'] as const
+
+const AsciiSky = () => (
+  <div class="ascii-sky" aria-hidden="true">
+    {ASCII_RINGS.map((ring) => (
+      <div class={`ascii-sky__orbit ascii-sky__orbit--${ring.name}`} key={ring.name}>
+        {Array.from({ length: ring.count }, (_, index) => {
+          const angle =
+            Math.round(
+              (((index * 360) / ring.count + ring.offset + ((index % 3) - 1) * 7) % 360) * 100,
+            ) / 100
+          const radius = ring.radius + ((index % 4) - 1.5) * 2
+          const mobileVw = Math.round(radius * 0.96 * 100) / 100
+          const mobilePx = Math.round(radius * 3.9 * 100) / 100
+          const desktopVw = Math.round(radius * 0.54 * 100) / 100
+          const desktopPx = Math.round(radius * 7 * 100) / 100
+          return (
+            <span
+              class="ascii-sky__star"
+              key={index}
+              style={`--angle:${angle}deg;--r-mobile:min(${mobileVw}vw,${mobilePx}px);--r-desktop:min(${desktopVw}vw,${desktopPx}px);opacity:${index % 5 === 0 ? 0.7 : 0.42}`}
+            >
+              <span class="ascii-sky__glyph" style={`--phase:-${(index % 7) * 0.8}s`}>
+                {ASCII_GLYPHS[(index + ring.offset) % ASCII_GLYPHS.length]}
+              </span>
+            </span>
+          )
+        })}
+      </div>
+    ))}
+  </div>
+)
 
 /*
   文を句読点（、。！？）の直後でだけ折れるようにする。
@@ -2221,6 +2262,7 @@ export const Contact = ({
     {whole ? <SectionHead title="Contact" /> : <h1 class="contact__title">Contact</h1>}
     {whole ? null : <Cosmos map={cosmosMap()} id="contact-cosmos" place="contact" />}
     {!whole ? <AstraArt body={normalizeCelestial(member).body} place="contact" /> : null}
+    {!whole ? <AsciiSky /> : null}
     {whole ? null : <ContactOrbits counts={counts} member={member} />}
     <div class="contact">
       <p class="contact__lead">

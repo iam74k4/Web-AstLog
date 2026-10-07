@@ -933,6 +933,42 @@ describe('部品の作法', () => {
     expect(bodyOf(sheet, '.orbital:has(> .astra-art) > .contact {')).toContain('grid-area: content')
   })
 
+  it('ASCIIの星は表紙の上で2方向に周回し、字と操作より後ろに置く', () => {
+    const sky = bodyOf(sheet, '.ascii-sky {')
+    expect(sky).toContain('pointer-events: none')
+    expect(sky).toContain('font-family: var(--font-mono)')
+    expect(sky).toContain('z-index: 0')
+    expect(bodyOf(sheet, '.orbital:has(> .astra-art) > .contact__title {')).toContain('z-index: 1')
+    const moving = rulesOf(sheet).filter((rule) =>
+      rule.selectors.some((selector) => selector.startsWith('.ascii-sky__')),
+    )
+    for (const selector of [
+      '.ascii-sky__orbit--inner',
+      '.ascii-sky__orbit--outer',
+      '.ascii-sky__glyph',
+    ]) {
+      const animation = moving.find(
+        (rule) =>
+          rule.selectors.includes(selector) && rule.decls.some(([name]) => name === 'animation'),
+      )
+      expect(animation?.context, selector).toEqual([
+        '@media (prefers-reduced-motion: no-preference)',
+      ])
+      expect(animation?.decls.find(([name]) => name === 'animation')?.[1], selector).toMatch(
+        /orbit-(?:swirl|unswirl)/,
+      )
+    }
+    for (const marker of [
+      '@media (forced-colors: active), (prefers-contrast: more)',
+      '@media (max-height: 400px)',
+      '@media print',
+    ]) {
+      expect(ruleWith(blockAt(sheet, marker), 'display: none').selector, marker).toContain(
+        '.ascii-sky',
+      )
+    }
+  })
+
   it('入口と締めの星系は同じ継続動作だけ。層全体を動かす登場は持たない', () => {
     /*
       入口と締めで続くのは、同じ動き続けるもの（星屑と天体の公転・流れる星・吸い込まれる粒・
@@ -1419,6 +1455,7 @@ describe('文字の段', () => {
         '.entry__index',
         '.entry__meta li:lang(en)',
         '.contact__sub :lang(en)',
+        '.ascii-sky',
       ].sort(),
     )
     // 年と期間は「2024 — 現在」と和文を含むので、等幅にせず数字の幅だけそろえる

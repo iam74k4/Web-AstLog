@@ -4251,6 +4251,7 @@ body[data-site] > main {
   .system,
   .orbits,
   .cosmos,
+  .ascii-sky,
   .celestial--art,
   .hero--orbit > .hero__copy::before,
   .orbital > .contact::before {
@@ -4311,6 +4312,7 @@ body[data-site] > main {
   .system,
   .orbits,
   .cosmos,
+  .ascii-sky,
   .hero--orbit > .hero__copy::before,
   .orbital > .contact::before {
     display: none;
@@ -4519,6 +4521,65 @@ body[data-site] > main {
   user-select: none;
 }
 
+/* ASCII is a typographic star layer, not a second image. The rings rotate over
+   the cover; their sparse glyphs stay behind every heading and action. */
+.ascii-sky {
+  position: absolute;
+  left: 50%;
+  top: 62%;
+  z-index: 0;
+  width: min(96vw, 390px);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.orbital > .ascii-sky {
+  top: 68%;
+}
+
+.ascii-sky__orbit {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  transform-origin: 0 0;
+}
+
+.ascii-sky__star {
+  position: absolute;
+  left: 0;
+  top: 0;
+  --radius: var(--r-mobile);
+  transform: rotate(var(--angle)) translateX(var(--radius)) translate(-50%, -50%);
+}
+
+.ascii-sky__glyph {
+  display: block;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ascii-sky__orbit--inner {
+    animation: orbit-swirl 42s linear infinite;
+  }
+
+  .ascii-sky__orbit--outer {
+    animation: orbit-unswirl 64s linear infinite;
+  }
+
+  .ascii-sky__glyph {
+    animation:
+      orbit-swirl 12s linear infinite,
+      orbit-twinkle 6.4s steps(8) var(--phase) infinite;
+  }
+}
+
 .hero--orbit:has(> .astra-art) {
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto auto;
@@ -4599,6 +4660,8 @@ body[data-site] > main {
 
 .orbital:has(> .astra-art) > .contact__title {
   grid-area: title;
+  position: relative;
+  z-index: 1;
   font-family: var(--font-display);
   font-size: var(--fs-display-xl);
   font-weight: 500;
@@ -4636,6 +4699,18 @@ body[data-site] > main {
 }
 
 @media (min-width: 900px) {
+  .ascii-sky,
+  .orbital > .ascii-sky {
+    left: 72%;
+    top: 50%;
+    width: min(54vw, 700px);
+    font-size: var(--fs-md);
+  }
+
+  .ascii-sky__star {
+    --radius: var(--r-desktop);
+  }
+
   .hero--orbit:has(> .astra-art) {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: 1fr auto;
@@ -4750,6 +4825,7 @@ body[data-site] > main {
   .system,
   .orbits,
   .cosmos,
+  .ascii-sky,
   .astra-art,
   .celestial--art,
   .celestial--symbol,

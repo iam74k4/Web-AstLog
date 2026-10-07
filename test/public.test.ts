@@ -1179,6 +1179,20 @@ describe('星空と星雲', () => {
       expect(cosmos, path).toContain('class="cosmos__glint"')
       expect(cosmos, path).toContain('<div class="cosmos__nebula" aria-hidden="true"></div>')
       expect(cosmos, path).toContain('<div class="cosmos__meteors"')
+      // カバーの前面に、文字だけの2つの周回層を重ねる。画像やJSが無くても字は残る。
+      expect(main, path).toContain('<div class="ascii-sky" aria-hidden="true">')
+      expect(
+        main.match(/class="ascii-sky__orbit ascii-sky__orbit--(?:inner|outer)"/g),
+        path,
+      ).toHaveLength(2)
+      expect(main.match(/class="ascii-sky__glyph"/g), path).toHaveLength(29)
+      expect(
+        [...main.matchAll(/class="ascii-sky__glyph"[^>]*>([^<]+)<\/span>/g)].map(
+          (match) => match[1],
+        ),
+        path,
+      ).toHaveLength(29)
+      expect(main, path).not.toMatch(/class="ascii-sky__glyph"[^>]*>[^+.*:<]/)
       // 星雲は焼いた素材を CSS の背景で読む。画面いっぱいのフィルタをページに置かない
       expect(cosmos, path).not.toMatch(/<feTurbulence|<feDisplacementMap|<filter\b/)
       // HTML に外部の画像を持ち込まない。背景素材の実在と版は下で見る
@@ -1192,6 +1206,7 @@ describe('星空と星雲', () => {
     expect(mainOf(await okText('/works/item/w'))).not.toContain('class="cosmos')
     // 全体ページ（印刷・Ctrl-F の宛先）にも敷かない
     expect(mainOf(await okText('/all'))).not.toContain('class="cosmos')
+    expect(mainOf(await okText('/all'))).not.toContain('class="ascii-sky"')
   })
 
   it('静止星は SVG、瞬く星と流星は HTML に置き、同じ視野・太さ・明るさ・動きを保つ', async () => {
