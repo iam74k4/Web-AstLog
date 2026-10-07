@@ -2,7 +2,11 @@ import { env } from 'cloudflare:test'
 import wordmarkFile from 'virtual:asset:astlog-wordmark.svg'
 import faviconFile from 'virtual:asset:favicon.svg'
 import astraHole from 'virtual:asset-base64:astra-black-hole.webp'
+import astraMoon from 'virtual:asset-base64:astra-moon.webp'
 import astraNebula from 'virtual:asset-base64:astra-nebula-v2.webp'
+import astraNeptune from 'virtual:asset-base64:astra-neptune.webp'
+import astraSaturn from 'virtual:asset-base64:astra-saturn.webp'
+import astraSun from 'virtual:asset-base64:astra-sun.webp'
 import blackholeArt from 'virtual:asset-base64:blackhole.webp'
 import celestialMoon from 'virtual:asset-base64:celestial-moon-v2.webp'
 import celestialNeptune from 'virtual:asset-base64:celestial-neptune-v2.webp'
@@ -25,7 +29,7 @@ import { ITEM_KINDS } from '../src/domain'
 import { sniffImage } from '../src/lib/image'
 import { CONTACT_FRAME, cosmosMap, HERO_FRAME, NEBULA, orbitMap } from '../src/lib/orbits'
 import { publicRoutes } from '../src/routes/public/routes'
-import { CELESTIAL_ART } from '../src/ui/celestial-art'
+import { ASTRA_CONTACT_ART, ASTRA_COVER_ART, CELESTIAL_ART } from '../src/ui/celestial-art'
 import { itemHref, LinkList, LinkRow, splitPhrases } from '../src/ui/components'
 import { BLACKHOLE_ART, HOLE, holeArt, iconSvg, WORDMARK, wordmarkSvg } from '../src/ui/logo'
 import { MOTION_START } from '../src/ui/motion'
@@ -330,6 +334,8 @@ describe('名乗り', () => {
         .set({ celestialBody: body })
         .where(eq(schema.members.id, member.id))
       await touch()
+      pages.push(await okText(`/?celestial=${body}`))
+      pages.push(await okText(`/contact?celestial=${body}`))
       pages.push(await okText(`/members/${member.slug}?celestial=${body}`))
     }
     // CSS はコメントを落として読む（コメントに書いた素材の名前を、読む素材と数えない）
@@ -1544,12 +1550,15 @@ describe('締めのページ（Contact）', () => {
     expect(bytes.length).toBeLessThan(200_000)
   })
 
-  it('Astra の表紙画像は Home と Contact で使い分け、中身の版を URL に持つ', async () => {
-    await seedMember()
-    const pages = [await okText('/'), await okText('/contact')]
-    for (const [index, kind, file, base64] of [
-      [0, 'hole', 'astra-black-hole.webp', astraHole],
-      [1, 'nebula', 'astra-nebula-v2.webp', astraNebula],
+  it('5天体の表紙は同じ骨格で使い分け、画像の版を URL に持つ', async () => {
+    const member = await seedMember()
+    for (const [file, base64] of [
+      ['astra-black-hole.webp', astraHole],
+      ['astra-nebula-v2.webp', astraNebula],
+      ['astra-moon.webp', astraMoon],
+      ['astra-saturn.webp', astraSaturn],
+      ['astra-neptune.webp', astraNeptune],
+      ['astra-sun.webp', astraSun],
     ] as const) {
       const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))
       expect(sniffImage(bytes)?.type).toBe('image/webp')
@@ -1559,10 +1568,31 @@ describe('締めのページ（Contact）', () => {
         .map((byte) => byte.toString(16).padStart(2, '0'))
         .join('')
         .slice(0, 8)
-      expect(pages[index]).toContain(
-        `class="astra-art astra-art--${kind}" src="/assets/${file}?v=${version}"`,
+      const src = `/assets/${file}?v=${version}`
+      if (file === 'astra-nebula-v2.webp') expect(ASTRA_CONTACT_ART).toBe(src)
+      else {
+        const body = file === 'astra-black-hole.webp' ? 'black-hole' : file.slice(6, -5)
+        expect(ASTRA_COVER_ART[body as keyof typeof ASTRA_COVER_ART]).toBe(src)
+      }
+    }
+    for (const body of CELESTIAL_BODY_KEYS) {
+      await db()
+        .update(schema.members)
+        .set({ celestialBody: body })
+        .where(eq(schema.members.id, member.id))
+      await touch()
+      const home = await okText(`/?cover=${body}`)
+      const contact = await okText(`/contact?cover=${body}`)
+      const homeKind = body === 'black-hole' ? 'hole' : body
+      const contactKind = body === 'black-hole' ? 'nebula' : body
+      const contactSrc = body === 'black-hole' ? ASTRA_CONTACT_ART : ASTRA_COVER_ART[body]
+      expect(home).toContain(
+        `class="astra-art astra-art--${homeKind}" src="${ASTRA_COVER_ART[body]}"`,
       )
-      expect(pages[1 - index]).not.toContain(`class="astra-art astra-art--${kind}"`)
+      expect(contact).toContain(`class="astra-art astra-art--${contactKind}" src="${contactSrc}"`)
+      expect(home.match(/class="astra-art /g)).toHaveLength(1)
+      expect(contact.match(/class="astra-art /g)).toHaveLength(1)
+      expect(contact).toContain('<h1 class="contact__title">Contact</h1>')
     }
   })
 

@@ -146,7 +146,8 @@ export function renderBlock(
         }
       }
       /*
-        入口。左に大見出しとリード文と一覧への1本、右に作品の軌道図、底に件数の帯。
+        入口。5天体共通で左に大見出しとリード文と一覧への1本、右に天体の画像、
+        底に件数の帯。旧軌道図は DOM に残るが表紙では非表示。
 
         大見出しは1人のサイトならその人の大見出し（members.headline。無ければ名前）、
         2人以上ならサイトの一言。名前を真ん中に据えた前の入口は、持ち主が「ださい。
@@ -155,8 +156,8 @@ export function renderBlock(
 
         一覧への1本と件数の帯は、一覧（Projects）のページがあって作品があるときだけ
         （data.ts の bandOf。0件の知らせだけのページへ送らない）。件数の帯のいちばん古い年
-        （Since）は、公開中の作品の年を DB で集約した値（site.ts の pageRows）から。軌道図は
-        件数だけから描く（天体に作品の札は添えない。作品へは「一覧で見る →」から）。
+        （Since）は、公開中の作品の年を DB で集約した値（site.ts の pageRows）から。
+        作品へは「一覧で見る →」から。
       */
       const statement = solo ? solo.headline || solo.name : site.tagline
       const eyebrow = solo ? [solo.role, solo.location].filter(Boolean) : []

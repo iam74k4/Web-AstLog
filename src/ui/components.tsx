@@ -3,7 +3,7 @@ import type { Child } from 'hono/jsx'
 import adminCss from '../../public/admin.css'
 import appCss from '../../public/app.css'
 import previewCss from '../../public/preview.css'
-import { type CelestialMember, normalizeCelestial } from '../celestial'
+import { type CelestialBody, type CelestialMember, normalizeCelestial } from '../celestial'
 import type { Item, Member } from '../db/schema'
 import {
   ITEM_KIND_KEYS,
@@ -32,6 +32,7 @@ import {
 import { isContactEmail, SITE, type SiteSettings } from '../site'
 import { BlackholeFlow } from './BlackholeFlow'
 import { CelestialArt, CelestialSymbol, celestialTheme } from './Celestial'
+import { ASTRA_CONTACT_ART, ASTRA_COVER_ART } from './celestial-art'
 import { GithubIcon, MailIcon, PencilIcon, Wordmark } from './icons'
 import { BLACKHOLE_ART } from './logo'
 
@@ -297,14 +298,14 @@ export const SectionHead = ({
 
 /*
   読み上げのためだけに置く見出し（.sr-only）。目に見える見出しを持たないページが
-  使う——締めの Contact（ボタンの言葉が見出しの代わり）と、見出しを空けた
-  メモ（段落がページの全部）。
+  使う——見出しを空けたメモ（段落がページの全部）。Contact の単独ページは
+  目に見える h1 を持つ。
 
   ページは h1 をちょうど1つ持つ決まり（CLAUDE.md「1ページ = 1ドキュメント」、
   WCAG 1.3.1）。見出しの無いページは、見出しで移動する人にとって「何も無い」
   ページになる。全体ページ（/all）では節の見出しの段（h2）。
 
-  目に見える見出しを置かない理由は呼ぶ側にある（Contact・メモの注記）。ここは
+  目に見える見出しを置かない理由は呼ぶ側にある（メモの注記）。ここは
   見出しの段と見えなさだけを持つ。
 */
 export const HiddenHeading = ({ text, h1 }: { text: string; h1?: boolean }) =>
@@ -322,10 +323,9 @@ export const HiddenHeading = ({ text, h1 }: { text: string; h1?: boolean }) =>
   region は読み上げに現れないので、見出しを持たない箱（ひとこと・帯）には
   付けない。渡す文字列は見出しと同じ変数から取ること。
 
-  orbital は「軌道図を置く締めの節」（Contact。ContactOrbits）。見出しの錨（節は
-  上揃え）を持たない表紙で、図を上の帯の罫線に寄せ、字は残りの高さの真ん中
-  （900 以上は表紙の底）に置く（app.css の「締めの軌道図」と .contact。表紙の高さは
-  「ページの外枠」の main > .orbital）。
+  orbital は Contact の表紙。単独ページでは5天体共通の見出し・連絡先・画像の
+  区画を使い、/all では通常の節見出しを使う。旧 ContactOrbits は DOM に残るが、
+  表紙では CSS で非表示にする。
 */
 export const Screen = ({
   id,
@@ -357,9 +357,9 @@ export const Screen = ({
   profile は個人ページの頭（名札・大見出し）。すぐ下に About・Skills・Career の
   本文が続く読み物の頭で、本文の列と同じ左の軸に立てる。
 
-  orbit は入口の表紙（.hero--orbit）。左に大見出しの列、右に作品の軌道図
-  （OrbitSystem）、底に件数の帯（Tally）を区画に並べる（app.css の「入口」）。
-  そのまわりの画面いっぱいに星空（Cosmos）を敷く。
+  orbit は入口の表紙（.hero--orbit）。5天体共通で、大見出し・リード・CTA、
+  右側の天体画像、底の件数の帯（Tally）を並べる。旧 OrbitSystem は DOM に残るが
+  表紙では非表示。背景の星空（Cosmos）は控えめに残す。
 */
 export const Hero = ({
   profile,
@@ -377,29 +377,29 @@ export const Hero = ({
     data-accent={celestialTheme(celestial)}
   >
     {orbit ? <Cosmos map={cosmosMap()} id="hero-cosmos" place="hero" /> : null}
-    {orbit && normalizeCelestial(celestial).body === 'black-hole' ? <AstraArt kind="hole" /> : null}
+    {orbit ? <AstraArt body={normalizeCelestial(celestial).body} place="home" /> : null}
     {children}
   </header>
 )
 
-// The black-hole cover is shared by the entrance and closing page. It is purely
-// decorative: the heading, links and project count stay as real HTML above it.
-const AstraArt = ({ kind }: { kind: 'hole' | 'nebula' }) => (
-  <img
-    class={`astra-art astra-art--${kind}`}
-    src={
-      kind === 'hole'
-        ? '/assets/astra-black-hole.webp?v=34a75e33'
-        : '/assets/astra-nebula-v2.webp?v=2cf6e359'
-    }
-    width="1586"
-    height="992"
-    alt=""
-    aria-hidden="true"
-    decoding="sync"
-    fetchPriority="high"
-  />
-)
+// Every celestial body uses one layout; only its decorative image changes.
+// The heading, links and project count stay as real HTML above the image.
+const AstraArt = ({ body, place }: { body: CelestialBody; place: 'home' | 'contact' }) => {
+  const nebula = body === 'black-hole' && place === 'contact'
+  const kind = nebula ? 'nebula' : body === 'black-hole' ? 'hole' : body
+  return (
+    <img
+      class={`astra-art astra-art--${kind}`}
+      src={nebula ? ASTRA_CONTACT_ART : ASTRA_COVER_ART[body]}
+      width="1586"
+      height="992"
+      alt=""
+      aria-hidden="true"
+      decoding="sync"
+      fetchPriority="high"
+    />
+  )
+}
 
 /*
   文を句読点（、。！？）の直後でだけ折れるようにする。
@@ -2182,26 +2182,25 @@ export const OwnSocials = ({ member, site = SITE }: { member: Member; site?: Sit
 /*
   連絡先のページ。サイトの並びの最後で、入口と対になる締め。
 
-  ページに出すのは軌道図と、誘う1文（サイト設定の contactLead）と、メールと GitHub の手。
-  軌道図は入口と同じ星系を、帯の真ん中に置く（ContactOrbits）。字は図の下に置き、
-  図の上には乗せない。
+  単独ページでは入口と同じ版面に、天体ごとの画像、誘う1文（サイト設定の
+  contactLead）、メールと GitHub の手を置く。ブラックホールだけ締めは星雲画像。
+  字は画像より前に置き、リンクの可読性を保つ。
 
   - 誘いの1文は、何の相談なら送ってよいかを言う唯一の言葉なので、大きく置く
-    （句読点の塊を1行ずつ。入口の大見出しと同じ Phrases）。目に見える見出しは
-    置かない（「Contact」と書いても目次と同じことを言うだけ）
+    （句読点の塊を1行ずつ。入口の大見出しと同じ Phrases）
   - メールの手はアドレスそのものを大きな字にしたリンク（押すとメールを書く画面が開く）。
     アドレスは字で読めるので、紙に刷っても宛先が残る。操作の言葉「メールを送る」を
     添える（読み上げの名前にも入る。見た目の字を含む——WCAG 2.5.3）
   - GitHub は外へ出る脇の道なので、小さな札で添える（↗ は外へ出る・別タブの印）
-  - ブラックホール版は見える h1「Contact」、ほかの天体は読み上げ用の h1。ページは h1 を
+  - どの天体も見える h1「Contact」。ページは h1 を
     ちょうど1つ持つ（WCAG 1.3.1）。全体ページ（/all）では、ほかの節と同じ
     見出しを目に見える形で置く
   - このページでは足元の GitHub / メールを出さない（SiteIdentity の contact。同じ
     行き先が1つのページに2つ並ぶ）
 
   whole は「全体ページ（/all）の1節として描くか」。全体ページでは見出しを目に見える
-  h2 で置き、軌道図は置かない（印刷・Ctrl-F・翻訳の宛先）。counts は軌道図に載せる
-  作品の件数（入口と同じ星系にする）。
+  h2 で置き、画像・旧軌道図は置かない（印刷・Ctrl-F・翻訳の宛先）。単独ページの
+  旧軌道図は検証用に DOM に残し、表紙では非表示にする。
 */
 export const Contact = ({
   lead = SITE.contactLead,
@@ -2219,15 +2218,9 @@ export const Contact = ({
   member?: Member
 }) => (
   <Screen id="contact" label="Contact" orbital={!whole} celestial={whole ? undefined : member}>
-    {whole ? (
-      <SectionHead title="Contact" />
-    ) : normalizeCelestial(member).body === 'black-hole' ? (
-      <h1 class="contact__title">Contact</h1>
-    ) : (
-      <HiddenHeading text="Contact" h1 />
-    )}
+    {whole ? <SectionHead title="Contact" /> : <h1 class="contact__title">Contact</h1>}
     {whole ? null : <Cosmos map={cosmosMap()} id="contact-cosmos" place="contact" />}
-    {!whole && normalizeCelestial(member).body === 'black-hole' ? <AstraArt kind="nebula" /> : null}
+    {!whole ? <AstraArt body={normalizeCelestial(member).body} place="contact" /> : null}
     {whole ? null : <ContactOrbits counts={counts} member={member} />}
     <div class="contact">
       <p class="contact__lead">

@@ -898,35 +898,39 @@ describe('部品の作法', () => {
     expect(sheet).not.toContain('.head h2 {')
     expect(bodyOf(sheet, '.head :is(h1, h2) {')).toContain('font-size: var(--fs-display-xl)')
 
-    /*
-      Contact の見出しは、ページごとの URL では読み上げ用の .sr-only、全体ページでは
-      .head（SectionHead）。専用の見出しの規則は持たない——持つと、ページに出ない
-      h1 に大きさを与えるだけの規則が残る
-    */
-    expect(sheet).not.toMatch(/\.contact (h1|h2|:is\(h1, h2\))/)
+    // 5天体の締めでは見える h1。全体ページだけ従来の SectionHead を使う。
+    expect(bodyOf(sheet, '.orbital:has(> .astra-art) > .contact__title {')).toContain(
+      'font-size: var(--fs-display-xl)',
+    )
   })
 
-  it('締めの画面（Contact）は箱に入れず、軌道図の下に字を置く', () => {
+  it('締めの画面（Contact）は箱を作らず、5天体で同じ配置を使う', () => {
     // 箱（枠・面・影）だったころは、広い画面の真ん中に小さな枠が浮いて周りが空いていた
     const contact = bodyOf(sheet, '.contact {')
     expect(contact).not.toMatch(/\bborder|background|box-shadow/)
-
-    // 軌道図は字の上の行。列の真ん中に置き、幅の上限と縦横比は :root の段
-    const orbits = bodyOf(sheet, '.orbits {')
-    expect(orbits).toContain('align-self: stretch')
-    expect(orbits).toContain('justify-self: center')
-    // 幅は列いっぱい・上限・画面の高さの割合から決まる幅の小さいほう（背の低い窓で字を押し出さない）
-    expect(orbits).toContain(
-      'width: min(100%, var(--contact-w), calc(var(--contact-h) * var(--contact-ratio)))',
+    const coverRules = rulesOf(sheet).filter((rule) =>
+      rule.selectors.includes('.orbital:has(> .astra-art)'),
     )
-    expect(bodyOf(sheet, ':root {')).toMatch(/--contact-h: calc\(var\(--cover-h\) \* 0\.\d+\);/)
-    expect(orbits).toContain('aspect-ratio: var(--contact-ratio)')
-    expect(orbits).not.toContain('position: absolute')
-    // 表紙の中で、図の行と字の行。余りは字の上（1fr）が受け、900 以上で字は底に寄る
-    expect(bodyOf(sheet, '.orbital {')).toContain('grid-template-rows: auto 1fr')
-    expect(bodyOf(blockAt(sheet, '@media (min-width: 900px)'), '.orbital > .contact {')).toContain(
-      'align-self: end',
-    )
+    expect(
+      coverRules.some(
+        (rule) =>
+          rule.context.length === 0 &&
+          rule.decls.some(
+            ([name, value]) =>
+              name === 'grid-template-areas' && value === "'title' 'content' 'art'",
+          ),
+      ),
+    ).toBe(true)
+    expect(
+      coverRules.some(
+        (rule) =>
+          rule.context.includes('@media (min-width: 900px)') &&
+          rule.decls.some(
+            ([name, value]) => name === 'grid-template-areas' && value === "'title' 'content'",
+          ),
+      ),
+    ).toBe(true)
+    expect(bodyOf(sheet, '.orbital:has(> .astra-art) > .contact {')).toContain('grid-area: content')
   })
 
   it('入口と締めの星系は同じ継続動作だけ。層全体を動かす登場は持たない', () => {

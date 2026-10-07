@@ -15,7 +15,8 @@ import { importTs } from './lib/ts-import.mjs'
 
 const { CELESTIAL_BODY_KEYS } = await importTs('src/celestial.ts')
 const { BLACKHOLE_ART } = await importTs('src/ui/logo.ts')
-const { CELESTIAL_ART } = await importTs('src/ui/celestial-art.ts')
+const { ASTRA_CONTACT_ART, ASTRA_COVER_ART, CELESTIAL_ART } =
+  await importTs('src/ui/celestial-art.ts')
 const { HERO_FRAME, CONTACT_FRAME } = await importTs('src/lib/orbits.ts')
 const SCOPE = '.celestial--art, .hole'
 const EXPECTED = {
@@ -616,12 +617,19 @@ async function checkCell(browser, base, token, body, screen, view) {
       ''
     assert.match(scriptPolicy, /^'sha256-[^']+'$/)
     await ready(page)
-    if (body === 'black-hole' && screen.key !== 'profile') {
-      // Astra Minimal replaces the orbit-centered animation on these two
-      // covers. The black-hole wordmark still moves; the cover image is static.
-      await wordmark(page, body)
+    if (screen.key !== 'profile') {
+      // All five bodies share one static-cover layout. The wordmark still
+      // animates independently, while the hidden orbit drawing does not.
+      const brand = await wordmark(page, body)
       const art = page.locator('.astra-art')
       assert.ok(await art.isVisible(), 'Astra の表紙画像が見えない')
+      assert.equal(
+        await art.getAttribute('src'),
+        body === 'black-hole' && screen.key === 'contact'
+          ? ASTRA_CONTACT_ART
+          : ASTRA_COVER_ART[body],
+        'ページと天体の表紙画像が一致しない',
+      )
       assert.equal((await animations(page)).length, 0, '隠した軌道に motion が残る')
       await page.emulateMedia({ reducedMotion: 'reduce' })
       assert.equal(await page.evaluate(() => document.getAnimations().length), 0)
@@ -647,7 +655,7 @@ async function checkCell(browser, base, token, body, screen, view) {
         screen: screen.key,
         viewport: view.key,
         names: ['astra-static-cover'],
-        wordmark: { body, animation: 'celestial-breathe' },
+        wordmark: brand,
         print: true,
         forcedColors: true,
         javaScriptDisabled: true,

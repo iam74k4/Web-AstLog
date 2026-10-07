@@ -4503,9 +4503,8 @@ body[data-site] > main {
   }
 }
 
-/* Astra Minimal cover: one quiet image, with the content and navigation still
-   set in the site's shared type scale. Other celestial bodies retain their own
-   orbit artwork until their matching covers are designed. */
+/* Astra Minimal cover: one quiet image per celestial body, with content and
+   navigation set in the site's shared type scale and spacing. */
 .hero--orbit:has(> .astra-art),
 .orbital:has(> .astra-art) {
   position: relative;
@@ -4533,6 +4532,12 @@ body[data-site] > main {
   width: 100%;
   height: clamp(280px, 82vw, 460px);
   object-fit: cover;
+  /* Generated covers have subtly different near-black edges. Fade the canvas
+     itself so it reads as one sky rather than a rectangular image panel. */
+  mask-image:
+    linear-gradient(to right, transparent, #000 16%, #000 88%, transparent),
+    linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
+  mask-composite: intersect;
 }
 
 .hero--orbit:has(> .astra-art) > .hero__copy {
