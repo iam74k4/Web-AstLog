@@ -3,7 +3,7 @@ import type { Child } from 'hono/jsx'
 import adminCss from '../../public/admin.css'
 import appCss from '../../public/app.css'
 import previewCss from '../../public/preview.css'
-import { type CelestialMember, normalizeCelestial } from '../celestial'
+import { type CelestialBody, type CelestialMember, normalizeCelestial } from '../celestial'
 import type { Item, Member } from '../db/schema'
 import {
   ITEM_KIND_KEYS,
@@ -32,6 +32,7 @@ import {
 import { isContactEmail, SITE, type SiteSettings } from '../site'
 import { BlackholeFlow } from './BlackholeFlow'
 import { CelestialArt, CelestialSymbol, celestialTheme } from './Celestial'
+import { ASTRA_CONTACT_ART, ASTRA_COVER_ART } from './celestial-art'
 import { GithubIcon, MailIcon, PencilIcon, Wordmark } from './icons'
 import { BLACKHOLE_ART } from './logo'
 
@@ -377,29 +378,29 @@ export const Hero = ({
     data-accent={celestialTheme(celestial)}
   >
     {orbit ? <Cosmos map={cosmosMap()} id="hero-cosmos" place="hero" /> : null}
-    {orbit && normalizeCelestial(celestial).body === 'black-hole' ? <AstraArt kind="hole" /> : null}
+    {orbit ? <AstraArt body={normalizeCelestial(celestial).body} place="home" /> : null}
     {children}
   </header>
 )
 
-// The black-hole cover is shared by the entrance and closing page. It is purely
-// decorative: the heading, links and project count stay as real HTML above it.
-const AstraArt = ({ kind }: { kind: 'hole' | 'nebula' }) => (
-  <img
-    class={`astra-art astra-art--${kind}`}
-    src={
-      kind === 'hole'
-        ? '/assets/astra-black-hole.webp?v=34a75e33'
-        : '/assets/astra-nebula-v2.webp?v=2cf6e359'
-    }
-    width="1586"
-    height="992"
-    alt=""
-    aria-hidden="true"
-    decoding="sync"
-    fetchPriority="high"
-  />
-)
+// Every celestial body uses one layout; only its decorative image changes.
+// The heading, links and project count stay as real HTML above the image.
+const AstraArt = ({ body, place }: { body: CelestialBody; place: 'home' | 'contact' }) => {
+  const nebula = body === 'black-hole' && place === 'contact'
+  const kind = nebula ? 'nebula' : body === 'black-hole' ? 'hole' : body
+  return (
+    <img
+      class={`astra-art astra-art--${kind}`}
+      src={nebula ? ASTRA_CONTACT_ART : ASTRA_COVER_ART[body]}
+      width="1586"
+      height="992"
+      alt=""
+      aria-hidden="true"
+      decoding="sync"
+      fetchPriority="high"
+    />
+  )
+}
 
 /*
   文を句読点（、。！？）の直後でだけ折れるようにする。
@@ -2193,7 +2194,7 @@ export const OwnSocials = ({ member, site = SITE }: { member: Member; site?: Sit
     アドレスは字で読めるので、紙に刷っても宛先が残る。操作の言葉「メールを送る」を
     添える（読み上げの名前にも入る。見た目の字を含む——WCAG 2.5.3）
   - GitHub は外へ出る脇の道なので、小さな札で添える（↗ は外へ出る・別タブの印）
-  - ブラックホール版は見える h1「Contact」、ほかの天体は読み上げ用の h1。ページは h1 を
+  - どの天体も見える h1「Contact」。ページは h1 を
     ちょうど1つ持つ（WCAG 1.3.1）。全体ページ（/all）では、ほかの節と同じ
     見出しを目に見える形で置く
   - このページでは足元の GitHub / メールを出さない（SiteIdentity の contact。同じ
@@ -2219,15 +2220,9 @@ export const Contact = ({
   member?: Member
 }) => (
   <Screen id="contact" label="Contact" orbital={!whole} celestial={whole ? undefined : member}>
-    {whole ? (
-      <SectionHead title="Contact" />
-    ) : normalizeCelestial(member).body === 'black-hole' ? (
-      <h1 class="contact__title">Contact</h1>
-    ) : (
-      <HiddenHeading text="Contact" h1 />
-    )}
+    {whole ? <SectionHead title="Contact" /> : <h1 class="contact__title">Contact</h1>}
     {whole ? null : <Cosmos map={cosmosMap()} id="contact-cosmos" place="contact" />}
-    {!whole && normalizeCelestial(member).body === 'black-hole' ? <AstraArt kind="nebula" /> : null}
+    {!whole ? <AstraArt body={normalizeCelestial(member).body} place="contact" /> : null}
     {whole ? null : <ContactOrbits counts={counts} member={member} />}
     <div class="contact">
       <p class="contact__lead">

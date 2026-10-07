@@ -4503,9 +4503,8 @@ body[data-site] > main {
   }
 }
 
-/* Astra Minimal cover: one quiet image, with the content and navigation still
-   set in the site's shared type scale. Other celestial bodies retain their own
-   orbit artwork until their matching covers are designed. */
+/* Astra Minimal cover: one quiet image per celestial body, with content and
+   navigation set in the site's shared type scale and spacing. */
 .hero--orbit:has(> .astra-art),
 .orbital:has(> .astra-art) {
   position: relative;
