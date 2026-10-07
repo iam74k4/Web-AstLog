@@ -377,8 +377,28 @@ export const Hero = ({
     data-accent={celestialTheme(celestial)}
   >
     {orbit ? <Cosmos map={cosmosMap()} id="hero-cosmos" place="hero" /> : null}
+    {orbit && normalizeCelestial(celestial).body === 'black-hole' ? <AstraArt kind="hole" /> : null}
     {children}
   </header>
+)
+
+// The black-hole cover is shared by the entrance and closing page. It is purely
+// decorative: the heading, links and project count stay as real HTML above it.
+const AstraArt = ({ kind }: { kind: 'hole' | 'nebula' }) => (
+  <img
+    class={`astra-art astra-art--${kind}`}
+    src={
+      kind === 'hole'
+        ? '/assets/astra-black-hole.webp?v=34a75e33'
+        : '/assets/astra-nebula-v2.webp?v=2cf6e359'
+    }
+    width="1586"
+    height="992"
+    alt=""
+    aria-hidden="true"
+    decoding="sync"
+    fetchPriority="high"
+  />
 )
 
 /*
@@ -2173,7 +2193,7 @@ export const OwnSocials = ({ member, site = SITE }: { member: Member; site?: Sit
     アドレスは字で読めるので、紙に刷っても宛先が残る。操作の言葉「メールを送る」を
     添える（読み上げの名前にも入る。見た目の字を含む——WCAG 2.5.3）
   - GitHub は外へ出る脇の道なので、小さな札で添える（↗ は外へ出る・別タブの印）
-  - 見出しは読み上げ用の h1「Contact」（HiddenHeading）。ページは h1 を
+  - ブラックホール版は見える h1「Contact」、ほかの天体は読み上げ用の h1。ページは h1 を
     ちょうど1つ持つ（WCAG 1.3.1）。全体ページ（/all）では、ほかの節と同じ
     見出しを目に見える形で置く
   - このページでは足元の GitHub / メールを出さない（SiteIdentity の contact。同じ
@@ -2199,8 +2219,15 @@ export const Contact = ({
   member?: Member
 }) => (
   <Screen id="contact" label="Contact" orbital={!whole} celestial={whole ? undefined : member}>
-    {whole ? <SectionHead title="Contact" /> : <HiddenHeading text="Contact" h1 />}
+    {whole ? (
+      <SectionHead title="Contact" />
+    ) : normalizeCelestial(member).body === 'black-hole' ? (
+      <h1 class="contact__title">Contact</h1>
+    ) : (
+      <HiddenHeading text="Contact" h1 />
+    )}
     {whole ? null : <Cosmos map={cosmosMap()} id="contact-cosmos" place="contact" />}
+    {!whole && normalizeCelestial(member).body === 'black-hole' ? <AstraArt kind="nebula" /> : null}
     {whole ? null : <ContactOrbits counts={counts} member={member} />}
     <div class="contact">
       <p class="contact__lead">

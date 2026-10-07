@@ -1,5 +1,5 @@
 /*
-  軌道図のまわりで、文字が読めるか（WCAG 1.4.3）を実際にブラウザで測る。
+  表紙の天体画や軌道図のまわりで、文字が読めるか（WCAG 1.4.3）を実際にブラウザで測る。
 
   軌道図が出るのはサイトの並びの最初と最後——入口（左に大見出しの列、右に作品の
   軌道図、底に件数の帯）と、締めの Contact（同じ星系を上に置く。字は誘いの
@@ -39,9 +39,10 @@
     npm run check:contrast
 */
 
+import { readFile } from 'node:fs/promises'
 import process from 'node:process'
 import { chromium } from 'playwright'
-import { devServer } from './lib/dev-server.mjs'
+import { devServer, scratchState } from './lib/dev-server.mjs'
 import { keysOf } from './lib/theme.mjs'
 import { DESIGN_SIZES, SHORT_WIDE } from './lib/viewports.mjs'
 
@@ -126,15 +127,16 @@ const SCREENS = [
     name: '締め',
     path: '/contact',
     panel: 'main > .orbital',
-    // 画面に出る字は誘いの1文とメールと GitHub の手（見出しは読み上げ用の .sr-only で、描かれない）
+    // ブラックホール版は Contact の見出しも見せる。ほかの天体は従来の読み上げ用見出し。
     targets: [
+      { selector: '.contact__title', name: 'Contact の見出し' },
       { selector: '.contact__lead', name: 'リード文', required: true },
       { selector: '.contact__address', name: 'メールのアドレス', required: true },
       { selector: '.contact__go', name: '「メールを送る」', required: true },
       { selector: '.contact__sub', name: 'GitHub', required: true },
     ],
     // どれも面を持たないので丸ごと隠す
-    hide: 'main > .orbital :is(.contact__lead, .contact__address, .contact__go, .contact__sub)',
+    hide: 'main > .orbital :is(.contact__title, .contact__lead, .contact__address, .contact__go, .contact__sub)',
     ink: null,
     minPixels: {
       lines: LINES_CONTACT,
@@ -474,11 +476,24 @@ const worstIn = ([dataUrl, targets]) => {
 }
 
 async function main() {
-  // CONTRAST_BASE を渡したときだけ、そこに向けて測る（手元の dev を使いたいとき）
-  const { base, stop } = await devServer(
-    process.env.CONTRAST_BASE,
-    Number(process.env.CONTRAST_PORT ?? 8789),
-  )
+  // CI と同じ公開内容を使い捨て D1 へ入れる。手元のローカル D1 は触らない。
+  const state = process.env.CONTRAST_BASE
+    ? null
+    : await scratchState('contrast', [
+        await readFile(new URL('../seed.sql', import.meta.url), 'utf8'),
+      ])
+  let server
+  try {
+    server = await devServer(
+      process.env.CONTRAST_BASE,
+      Number(process.env.CONTRAST_PORT ?? 8789),
+      state?.dir,
+    )
+  } catch (error) {
+    await state?.cleanup()
+    throw error
+  }
+  const { base, stop } = server
 
   const accents = keysOf('ACCENTS')
   const browser = await chromium.launch()
@@ -494,7 +509,7 @@ async function main() {
   const LABELS = {
     lines: '軌道の線と星屑',
     bodies: '天体',
-    art: 'ブラックホール',
+    art: '天体画',
     nebula: '星雲',
     stars: '星空の星',
   }
@@ -561,7 +576,7 @@ async function main() {
   const poses = (screen) => 1 + (screen.motion ? MOTION_FRAMES.length : 0)
   const grid = VIEWPORTS.length * accents.length
   console.log(
-    `軌道図のまわりで文字が読めるか — ${VIEWPORTS.length}ビューポート × ${accents.length}アクセント × (${SCREENS.map((screen) => `${screen.name} ${poses(screen)}姿`).join(' + ')}) = ${grid * SCREENS.reduce((sum, screen) => sum + poses(screen), 0)}通り（止まった姿 + 動きの途中 ${MOTION_FRAMES.length}コマ）`,
+    `表紙のまわりで文字が読めるか — ${VIEWPORTS.length}ビューポート × ${accents.length}アクセント × (${SCREENS.map((screen) => `${screen.name} ${poses(screen)}姿`).join(' + ')}) = ${grid * SCREENS.reduce((sum, screen) => sum + poses(screen), 0)}通り（止まった姿 + 動きの途中 ${MOTION_FRAMES.length}コマ）`,
   )
 
   try {
@@ -608,7 +623,8 @@ async function main() {
           await page.evaluate((node) => node.remove(), hide)
           return decoder.evaluate(drawnBy, [shown, hidden])
         }
-        const parts = {
+        const cover = await page.locator('.astra-art').isVisible()
+        const legacyParts = {
           lines: {
             label: '軌道の線と星屑',
             /*
@@ -653,10 +669,23 @@ async function main() {
             minDelta: STARS_MIN_DELTA,
           },
         }
+        // The Astra cover intentionally replaces the orbit drawing. Verify
+        // the actual bitmap and the sparse starfield, not the hidden SVGs.
+        const parts = cover
+          ? {
+              art: {
+                label: 'Astra の天体画',
+                drawn: await drawnWithout('.astra-art'),
+                why: '表紙の画像が描かれていない',
+                minDelta: NEBULA_MIN_DELTA,
+              },
+              stars: legacyParts.stars,
+            }
+          : legacyParts
         for (const [part, { label, drawn, why, minDelta = ORBIT_MIN_DELTA }] of Object.entries(
           parts,
         )) {
-          const floor = screen.minPixels[part]
+          const floor = cover && part === 'art' ? 1000 : screen.minPixels[part]
           if (drawn.pixels < floor) {
             failures.push(
               `${where} — ${label}が ${drawn.pixels} 画素しか描いていない（下限 ${floor}）。${why}`,
@@ -719,7 +748,8 @@ async function main() {
     }
   } finally {
     await browser.close()
-    stop()
+    await stop()
+    await state?.cleanup()
   }
 
   if (failures.length > 0) {
@@ -736,6 +766,7 @@ async function main() {
     `✓ ${checked} 通り。基準を割った行 0（いちばん惜しいのは ${tightest.where} で ${tightest.ratio.toFixed(2)}:1）`,
   )
   for (const [key, dim] of dimmest) {
+    if (!Number.isFinite(dim.pixels)) continue
     const [name, part] = key.split(':')
     const label = LABELS[part]
     console.log(
