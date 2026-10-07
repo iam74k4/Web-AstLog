@@ -1595,6 +1595,10 @@ describe('締めのページ（Contact）', () => {
       expect(contact).toContain(`class="astra-art astra-art--${contactKind}" src="${contactSrc}"`)
       expect(home.match(/class="astra-art /g)).toHaveLength(1)
       expect(contact.match(/class="astra-art /g)).toHaveLength(1)
+      expect(home.match(/class="astra-infall__star"/g) ?? []).toHaveLength(
+        body === 'black-hole' ? 18 : 0,
+      )
+      expect(contact).not.toContain('class="astra-infall"')
       expect(contact).toContain('<h1 class="contact__title">Contact</h1>')
     }
   })

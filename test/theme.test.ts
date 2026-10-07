@@ -1811,7 +1811,12 @@ describe('入口の軌道図', () => {
       expect(value, rule.selectors.join(', ')).toMatch(LASTING)
       if (value.includes('var(--motion)')) {
         for (const selector of rule.selectors) {
-          expect(['.orbit-grain__dot', '.orbit-flow', '.orbit-flow__tail']).toContain(selector)
+          expect([
+            '.orbit-grain__dot',
+            '.orbit-flow',
+            '.orbit-flow__tail',
+            '.astra-infall__star',
+          ]).toContain(selector)
         }
       }
       expect(rule.context, rule.selectors.join(', ')).toEqual([

@@ -27,6 +27,9 @@
   --cover-home-opacity: 1;
   --cover-contact-opacity: 0.78;
   --cover-contact-wide-opacity: 0.72;
+  --cover-mobile-height: clamp(280px, 82vw, 460px);
+  --cover-art-ratio: 1.5987903226;
+  --infall-star-size: clamp(1.5px, 0.24cqi, 2.4px);
   --admin-shell-width: 1240px;
   --admin-preview-width: 1280px;
   --admin-preview-height: 88svh;
@@ -4521,7 +4524,8 @@ body[data-site] > main {
   isolation: isolate;
 }
 
-.astra-art {
+.astra-art,
+.astra-infall {
   --cover-opacity: var(--cover-home-opacity);
   display: block;
   width: 100%;
@@ -4530,6 +4534,36 @@ body[data-site] > main {
   user-select: none;
   opacity: var(--cover-opacity);
   transform-origin: 68% 50%;
+}
+
+.astra-infall {
+  display: none;
+  position: relative;
+  overflow: clip;
+  aspect-ratio: var(--cover-art-ratio);
+}
+
+/* Match object-fit:cover, including the horizontally cropped phone artwork. */
+.astra-infall__canvas {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, calc(var(--cover-mobile-height) * var(--cover-art-ratio)));
+  aspect-ratio: var(--cover-art-ratio);
+  transform: translate(-50%, -50%);
+  container-type: inline-size;
+}
+
+.astra-infall__star {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--infall-star-size);
+  height: var(--infall-star-size);
+  border-radius: 50%;
+  background: linear-gradient(to right, transparent, var(--ink));
+  transform-origin: right center;
+  opacity: 0;
 }
 
 /* Move only the decorative image. Independent transform properties preserve
@@ -4560,10 +4594,17 @@ body[data-site] > main {
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .astra-art {
+  .astra-art,
+  .astra-infall {
     animation:
       cover-drift var(--cover-drift-dur) ease-in-out infinite,
       cover-light var(--cover-light-dur) ease-in-out infinite;
+  }
+  .astra-infall {
+    display: block;
+  }
+  .astra-infall__star {
+    animation: var(--motion) var(--dur) linear var(--delay) infinite;
   }
 }
 
@@ -4575,10 +4616,11 @@ body[data-site] > main {
   row-gap: var(--sp-7);
 }
 
-.hero--orbit:has(> .astra-art) > .astra-art {
+.hero--orbit:has(> .astra-art) > .astra-art,
+.hero--orbit:has(> .astra-art) > .astra-infall {
   grid-area: art;
   width: 100%;
-  height: clamp(280px, 82vw, 460px);
+  height: var(--cover-mobile-height);
   object-fit: cover;
   /* Generated covers have subtly different near-black edges. Fade the canvas
      itself so it reads as one sky rather than a rectangular image panel. */
@@ -4697,7 +4739,8 @@ body[data-site] > main {
     align-self: center;
   }
 
-  .hero--orbit:has(> .astra-art) > .astra-art {
+  .hero--orbit:has(> .astra-art) > .astra-art,
+  .hero--orbit:has(> .astra-art) > .astra-infall {
     position: absolute;
     top: 48%;
     right: 0;
@@ -4705,6 +4748,14 @@ body[data-site] > main {
     height: auto;
     object-fit: contain;
     transform: translateY(-50%);
+  }
+
+  .astra-infall__canvas {
+    width: 100%;
+  }
+
+  .hero--orbit:has(> .astra-art) > .astra-infall {
+    mask-image: linear-gradient(to right, transparent 28%, #000 48%, #000 88%, transparent);
   }
 
   .orbital:has(> .astra-art) {
@@ -4738,7 +4789,8 @@ body[data-site] > main {
 }
 
 @media (forced-colors: active), (prefers-contrast: more), (max-height: 400px) {
-  .astra-art {
+  .astra-art,
+  .astra-infall {
     display: none;
   }
 }
@@ -4801,6 +4853,7 @@ body[data-site] > main {
   .orbits,
   .cosmos,
   .astra-art,
+  .astra-infall,
   .celestial--art,
   .celestial--symbol,
   .hero--orbit > .hero__copy::before,
