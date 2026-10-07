@@ -2,6 +2,7 @@ import { and, asc, eq, ne, type SQL, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { type Context, Hono } from 'hono'
 import { MAX_CHARS, publishErrors } from '../../blocks'
+import { EDIT_CONFLICT, editMatches, guardEdit, isEditConflict, nextUpdatedAt } from '../../db/edit'
 import { type Db, itemOrder } from '../../db/queries'
 import * as schema from '../../db/schema'
 import {
@@ -33,6 +34,7 @@ import {
   FormDetails,
   FormKey,
   FormSection,
+  FormVersion,
   PublishToggle,
   Select,
 } from '../../ui/AdminForm'
@@ -83,7 +85,7 @@ itemRoutes.get('/items', async (c) => {
   const rows = await db(c).query.items.findMany({
     where: eq(schema.items.type, type),
     orderBy: itemOrder,
-    with: { member: true, platform: true },
+    with: { member: true, platform: true, shots: { orderBy: shotOrder, limit: 1 } },
   })
 
   return c.html(
@@ -129,7 +131,26 @@ itemRoutes.get('/items', async (c) => {
       ) : (
         <ul class="rows">
           {rows.map((item) => (
-            <li class="row" key={item.id}>
+            <li class="row row--project" key={item.id}>
+              {item.imageUrl || item.shots[0]?.url ? (
+                <img
+                  class="row__thumb"
+                  src={item.imageUrl ?? item.shots[0]?.url}
+                  alt=""
+                  width={112}
+                  height={70}
+                  loading="lazy"
+                />
+              ) : item.iconUrl ? (
+                <img
+                  class="row__thumb row__thumb--icon"
+                  src={item.iconUrl}
+                  alt=""
+                  width={112}
+                  height={70}
+                  loading="lazy"
+                />
+              ) : null}
               <span class="row__main">
                 <strong>{item.title}</strong>
                 {/*
@@ -208,6 +229,7 @@ type ItemFormData = {
   formKey?: string | null
   // 入力エラーで描き直すとき、送られてきた内容をそのまま返すために使う
   submitted?: Record<string, string>
+  version?: string
   errors?: Record<string, string>
 }
 
@@ -333,7 +355,7 @@ const LINK_ROWS = 3
 
 /*
   ほかの画像（スクリーンショット）の上限と、1度の保存で足せる空いた欄の数。上限は
-  作品のページの横の帯で送って見られる枚数として（1枚 1MB まで）。JavaScript が無いので
+  作品のページの縦ギャラリーに並べる枚数として（1枚 1MB まで）。JavaScript が無いので
   欄を足す手が無く、もっと足すなら保存して開き直す（リンクの欄と同じ）
 */
 const MAX_SHOTS = 8
@@ -397,7 +419,7 @@ const StoryFields = ({
   欄の名前に画像の id を入れる（readShotEdits）——送った欄だけを読み、欄の無い画像は
   いまのまま残す。
 
-  作品のページでは、メインの画像のあとに並び順で横に並べる（components.tsx の
+  作品のページでは、メインの画像のあとに並び順で縦ギャラリーに並べる（components.tsx の
   ItemShots）。代替テキストは公開するときに1枚ずつ要る（publishErrors）。
 */
 const ShotFields = ({
@@ -470,12 +492,24 @@ const ShotFields = ({
         />
       </div>
     ))}
-    {errors?.newShot ? <span class="field__error">{errors.newShot}</span> : null}
-    {errors?.shotOrder ? <span class="field__error">{errors.shotOrder}</span> : null}
-    {errors?.shots ? <span class="field__error">{errors.shots}</span> : null}
+    {errors?.newShot ? (
+      <span class="field__error" id="field-newShot-error">
+        {errors.newShot}
+      </span>
+    ) : null}
+    {errors?.shotOrder ? (
+      <span class="field__error" id="field-shotOrder-error">
+        {errors.shotOrder}
+      </span>
+    ) : null}
+    {errors?.shots ? (
+      <span class="field__error" id="field-shots-error">
+        {errors.shots}
+      </span>
+    ) : null}
     <span class="field__hint">
-      作品のページで、メインの画像のあとに横に並べる（横に送って見る）。並び順は小さいほど先 ·
-      1枚ずつ {IMAGE_LABELS}（1MB まで） · 公開するときは1枚ずつ代替テキストが必須 ·{' '}
+      作品のページでは、Screenshots の縦ギャラリーに並びます。並び順は小さいほど先 · 1枚ずつ{' '}
+      {IMAGE_LABELS}（1MB まで） · 公開するときは1枚ずつ代替テキストが必須 ·{' '}
       {slots
         ? `${MAX_SHOTS} 枚まで。もっと足すときは、保存してから開き直すと空いた欄が出る`
         : `${MAX_SHOTS} 枚に達している。足すときは、外してから保存する`}
@@ -502,7 +536,13 @@ const ItemForm = (props: ItemFormData) => {
   const unordered = d.year !== '' && yearFrom(d.year) === null
 
   return (
-    <AdminLayout title={item ? item.title : '新しい項目'} active="items" account={props.account}>
+    <AdminLayout
+      title={item ? item.title : '新しい項目'}
+      active="items"
+      account={props.account}
+      errors={props.errors}
+      latestHref={item ? `/admin/items/${item.id}/edit` : undefined}
+    >
       <div class="admin-head">
         <div class="admin-head__title">
           <span class="crumbs">
@@ -533,9 +573,7 @@ const ItemForm = (props: ItemFormData) => {
           </div>
         ) : null}
       </div>
-      <p class="form-note">
-        入力中の内容と選んだ画像は「保存前にプレビュー」で別のタブに表示できます。プレビューでは保存されず、公開状態も変わりません。
-      </p>
+      <p class="form-note">入力中の内容と選んだ画像は、保存前にプレビューで確認できます。</p>
 
       {/* 画像を受け取るので multipart。アバターのフォーム（MemberForm）と同じ */}
       <form
@@ -546,6 +584,7 @@ const ItemForm = (props: ItemFormData) => {
       >
         <input type="hidden" name="type" value={props.type} />
         <FormKey value={props.formKey} />
+        <FormVersion value={props.version ?? item?.updatedAt ?? 'new'} />
         <FormSection
           title="基本情報"
           note="タイトルだけでも下書きとして保存できます。公開するときは説明文も必要です。"
@@ -583,6 +622,7 @@ const ItemForm = (props: ItemFormData) => {
         </FormSection>
         <FormDetails
           title="画像を追加する"
+          status={`${(item?.imageUrl ? 1 : 0) + (item?.shots.length ?? 0)} 枚`}
           note="メイン画像・アイコン・スクリーンショット（任意）"
           errors={props.errors}
           fields={['image', 'imageAlt', 'icon', 'newShot', 'shots', 'shotOrder']}
@@ -595,7 +635,11 @@ const ItemForm = (props: ItemFormData) => {
               name="image"
               accept={IMAGE_ACCEPT}
             />
-            {props.errors?.image ? <span class="field__error">{props.errors.image}</span> : null}
+            {props.errors?.image ? (
+              <span class="field__error" id="field-image-error">
+                {props.errors.image}
+              </span>
+            ) : null}
             <span class="field__hint">
               {item?.imageUrl
                 ? `選ぶと差し替わる。空なら今のまま · ${IMAGE_LABELS}（1MB まで）`
@@ -617,7 +661,7 @@ const ItemForm = (props: ItemFormData) => {
           {item?.imageUrl ? (
             <div class="field field--wide">
               {/*
-                見本は説明の組の絵と同じ枠。ほかの画像があると作品のページでは横の帯の
+                見本は説明の組の絵と同じ枠。ほかの画像があると作品のページでは縦ギャラリーの
                 先頭に出るので、どこに出るかは枠ではなく役目（作品の顔）で言う
               */}
               <span class="field__label">いまのメインの画像（一覧のサムネイル・共有カード）</span>
@@ -641,7 +685,11 @@ const ItemForm = (props: ItemFormData) => {
               name="icon"
               accept={IMAGE_ACCEPT}
             />
-            {props.errors?.icon ? <span class="field__error">{props.errors.icon}</span> : null}
+            {props.errors?.icon ? (
+              <span class="field__error" id="field-icon-error">
+                {props.errors.icon}
+              </span>
+            ) : null}
             <span class="field__hint">
               {item?.iconUrl
                 ? `選ぶと差し替わる。空なら今のまま · ${IMAGE_LABELS}（1MB まで）`
@@ -715,7 +763,11 @@ const ItemForm = (props: ItemFormData) => {
                 </div>
               )
             })}
-            {props.errors?.links ? <span class="field__error">{props.errors.links}</span> : null}
+            {props.errors?.links ? (
+              <span class="field__error" id="field-links-error">
+                {props.errors.links}
+              </span>
+            ) : null}
             <span class="field__hint">
               ラベルと URL は両方入れる。URL は https:// か mailto: か / から ·
               もっと足すときは、保存してから開き直すと空いた行が出る
@@ -996,7 +1048,7 @@ export function readItemForm(
       metricNote: str(form.get('metricNote')) || null,
       sortOrder: sortOrder.value,
       published: bool(form.get('published')),
-      updatedAt: new Date().toISOString(),
+      updatedAt: existing ? nextUpdatedAt(existing.updatedAt) : new Date().toISOString(),
     },
   }
 }
@@ -1428,6 +1480,7 @@ itemRoutes.post('/items', async (c) => {
       database.batch([
         database.insert(schema.items).values({
           ...values,
+          createdAt: values.updatedAt,
           ...imageColumns(imageUrl, picked.image),
           iconUrl,
           formKey: sent,
@@ -1481,7 +1534,7 @@ async function saveItem(
     where: eq(schema.itemShots.itemId, id),
     orderBy: shotOrder,
   })
-  const back = (errors: Record<string, string>) =>
+  const back = (errors: Record<string, string>, status: 400 | 409 = 400) =>
     c.html(
       <ItemForm
         account={c.get('account')}
@@ -1489,12 +1542,14 @@ async function saveItem(
         members={context.members}
         platforms={context.platforms}
         item={{ ...existing, tags: [], links: [], shots: existingShots }}
+        version={String(form.get('_version') ?? '')}
         submitted={submittedItem(form)}
         errors={imageNotKept(form, IMAGE_FIELDS, errors)}
       />,
-      400,
+      status,
     )
 
+  if (!editMatches(form, existing, again)) return back({ _version: EDIT_CONFLICT }, 409)
   const picked = await pickImage(form, 'image')
   const icon = await pickImage(form, 'icon')
   // アイコンも画像と同じ: 選べば差し替え、「外す」なら無し、どちらでもなければいまのまま
@@ -1567,6 +1622,10 @@ async function saveItem(
   try {
     await commitWithImage(c.env.MEDIA, [imageUrl, iconUrl, ...shotUrls], () =>
       database.batch([
+        guardEdit(
+          database,
+          sql`EXISTS (SELECT 1 FROM items WHERE id = ${id} AND updated_at = ${existing.updatedAt})`,
+        ),
         database
           .update(schema.items)
           .set({ ...values, ...image, ...iconColumn })
@@ -1577,6 +1636,7 @@ async function saveItem(
       ]),
     )
   } catch (error) {
+    if (isEditConflict(error)) return back({ _version: EDIT_CONFLICT }, 409)
     if (uniqueViolation(error, 'items.slug')) return back({ slug: SLUG_TAKEN })
     throw error
   }
@@ -1621,6 +1681,12 @@ itemRoutes.get('/items/:id/delete', async (c) => {
           タグ {item.tags.length} 件とリンク {item.links.length} 件
           {images ? `、画像 ${images} 枚` : ''}
           も一緒に消えます。
+          {images ? (
+            <>
+              <br />
+              画像の復元用コピーは90日間保存されます。
+            </>
+          ) : null}
           <br />
           サイトから隠したいだけなら、編集で「公開する」を外すほうが安全です。
         </p>

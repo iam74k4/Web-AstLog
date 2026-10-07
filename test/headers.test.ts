@@ -2,6 +2,7 @@ import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:
 import assetHeaders from 'virtual:repo:public/_headers'
 import { beforeEach, describe, expect, it } from 'vitest'
 import app from '../src/index'
+import { ADMIN_BEHAVIOR, ADMIN_CSP } from '../src/ui/admin-behavior'
 import { MOTION_CSP, MOTION_START } from '../src/ui/motion'
 import { get, okText, resetDb, seedItem, seedMember, signIn, uncachedEnv } from './helpers'
 
@@ -24,10 +25,12 @@ const directives = (csp: string | null) =>
       .map(([name, ...values]) => [name, values.join(' ')]),
   )
 
-function expectPageHeaders(response: Response, label: string, motion = false) {
+function expectPageHeaders(response: Response, label: string, motion = false, admin = false) {
   const csp = directives(response.headers.get('content-security-policy'))
   // 公開 Layout の成功した HTML だけに、初期描画の補助1本のハッシュを許す
-  expect(csp['script-src'], label).toBe(motion ? `'${MOTION_CSP}'` : "'none'")
+  expect(csp['script-src'], label).toBe(
+    admin ? `'${ADMIN_CSP}'` : motion ? `'${MOTION_CSP}'` : "'none'",
+  )
   expect(csp['default-src'], label).toBe("'self'")
   expect(csp['object-src'], label).toBe("'none'")
   expect(csp['base-uri'], label).toBe("'none'")
@@ -108,6 +111,19 @@ describe('応答のヘッダ', () => {
     )
   })
 
+  it('管理画面の補助も配った全文の SHA-256 だけを許す', async () => {
+    const response = await (await signIn())('/admin/members/new')
+    const html = await response.text()
+    const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+    expect(scripts).toHaveLength(1)
+    const helper = scripts[0]?.[1]
+    expect(helper).toBe(ADMIN_BEHAVIOR)
+    if (helper === undefined) throw new Error('管理画面の補助が無い')
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(helper))
+    expect(ADMIN_CSP).toBe(`sha256-${btoa(String.fromCharCode(...new Uint8Array(digest)))}`)
+    expectPageHeaders(response, '管理', false, true)
+  })
+
   it('要求ヘッダで公開 Layout の内部印を偽っても、404 に実行許可は付かない', async () => {
     const response = await get('/no-such-page', { headers: { 'x-astlog-motion': 'staged' } })
     expect(response.status).toBe(404)
@@ -132,7 +148,7 @@ describe('応答のヘッダ', () => {
     ]) {
       const response = await fetchAs(path)
       expect(response.status, path).toBe(200)
-      expectPageHeaders(response, path)
+      expectPageHeaders(response, path, false, true)
       expect(response.headers.get('cache-control'), path).toBe('no-store')
     }
   })

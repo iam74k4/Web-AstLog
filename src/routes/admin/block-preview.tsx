@@ -1,4 +1,5 @@
 import { type Context, Hono } from 'hono'
+import { blockRowError } from '../../block-editor'
 import { blockType, blockValueErrors, isBlockKey, publishErrors } from '../../blocks'
 import type * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
@@ -29,7 +30,7 @@ async function previewBlockPost(c: Context<AppEnv>, askedId?: string) {
       ? readBlockForm(form)
       : { title: existing?.title ?? '', body: existing?.body ?? '', published: 0 }
   const editHref = existing ? `/admin/blocks/${id}/edit` : `/admin/blocks/new?type=${type.key}`
-  const errors = blockValueErrors(type, values)
+  const errors = blockRowError(form) ?? blockValueErrors(type, values)
   if (errors) return validationFailure(c, errors, editHref)
   const now = new Date().toISOString()
   const block: schema.Block = {

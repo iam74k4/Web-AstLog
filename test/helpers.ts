@@ -2,6 +2,7 @@ import { env, SELF } from 'cloudflare:test'
 import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { expect } from 'vitest'
+import { settingsVersion } from '../src/db/edit'
 import { saveSiteSettings } from '../src/db/queries'
 import * as schema from '../src/db/schema'
 import { createSession, SESSION_COOKIE } from '../src/lib/auth'
@@ -20,6 +21,7 @@ export const TEST_SITE = {
 // テストごとに素の状態から始める。前のテストの残りに引きずられないように
 export async function resetDb() {
   const database = db()
+  await database.delete(schema.editGuard)
   await database.delete(schema.itemSlugRedirects)
   await database.delete(schema.memberSlugRedirects)
   await database.delete(schema.itemLinks)
@@ -128,10 +130,45 @@ export const withCookie =
   毎回通すと、管理画面のどのテストも提供元の偽物に寄りかかることになる。
   認証の壁（クッキー → D1 のセッション）は、このクッキーで毎回通る。
 */
-export async function signIn() {
+export async function signIn(options: { rawForms?: boolean } = {}) {
   const owner = await ensureOwner()
   const { token } = await createSession(db(), owner.id)
-  return withCookie(`${SESSION_COOKIE}=${token}`)
+  const request = withCookie(`${SESSION_COOKIE}=${token}`)
+  return async (path: string, init: RequestInit = {}) => {
+    // 通常のフォーム検査は、その時点の編集版を送る。競合・版の欠落は rawForms で検査する。
+    if (
+      !options.rawForms &&
+      init.method === 'POST' &&
+      init.body instanceof FormData &&
+      !init.body.has('_version')
+    ) {
+      const body = new FormData()
+      for (const [key, value] of init.body) body.append(key, value)
+      const match = path.match(/^\/admin\/(items|members|blocks)(?:\/(\d+))?$/)
+      let version: string | undefined
+      if (match) {
+        const table =
+          match[1] === 'items'
+            ? schema.items
+            : match[1] === 'members'
+              ? schema.members
+              : schema.blocks
+        const id = match[2] ? Number(match[2]) : null
+        const key = body.get('formKey')
+        const rows = id
+          ? await db().select().from(table).where(eq(table.id, id))
+          : typeof key === 'string'
+            ? await db().select().from(table).where(eq(table.formKey, key))
+            : []
+        version = rows[0]?.updatedAt ?? 'new'
+      } else if (path === '/admin/site' || path === '/admin/appearance') {
+        version = await settingsVersion(db(), path === '/admin/site' ? 'site.' : 'theme.')
+      }
+      if (version !== undefined) body.set('_version', version)
+      init = { ...init, body }
+    }
+    return request(path, init)
+  }
 }
 
 export const get = (path: string, init: RequestInit = {}) =>

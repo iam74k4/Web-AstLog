@@ -109,6 +109,13 @@ jobs:
           npx wrangler d1 export astlog --remote -y --no-data --output="backup/schema-${GITHUB_SHA}.sql"
           npx wrangler d1 export astlog --remote -y --no-schema --output="backup/data-${GITHUB_SHA}.sql"
 
+      - name: 画像の写しを取り、D1 の写しが参照する全画像を検証する
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          node scripts/media-backup.mjs export --directory backup/media
+          node scripts/media-backup.mjs verify --directory backup/media --schema "backup/schema-${GITHUB_SHA}.sql" --data "backup/data-${GITHUB_SHA}.sql"
+
       # 中身はメンバーの連絡先・ログインの紐づけ（セッションは D1 にもハッシュでしか無い）を
       # 含み、リポジトリを読める人は誰でも落とせる。それでも Time Travel より長く置く——
       # 栞の期限（30日・無料なら7日）を過ぎてから壊れに気づいたときの、最後の控えなので。
@@ -116,7 +123,7 @@ jobs:
       # 上限を超えた値は上限に丸められる）
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: d1-backup-${{ github.run_id }}
+          name: site-backup-${{ github.run_id }}
           path: backup/
           retention-days: 90
           if-no-files-found: error

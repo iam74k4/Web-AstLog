@@ -1,5 +1,13 @@
 import { relations, sql } from 'drizzle-orm'
-import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import {
+  check,
+  index,
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core'
 import { BLOCK_KEYS, FIXED_BLOCK_KEYS } from '../blocks'
 import { DEFAULT_CELESTIAL } from '../celestial'
 import { ITEM_KIND_KEYS } from '../domain'
@@ -553,3 +561,10 @@ export type ItemShot = typeof itemShots.$inferSelect
 export type Platform = typeof platforms.$inferSelect
 export type User = typeof users.$inferSelect
 export type Block = typeof blocks.$inferSelect
+
+// 競合した D1 batch を原子的に中止するための1行。内容の履歴ではない。
+export const editGuard = sqliteTable(
+  'edit_guard',
+  { id: integer('id').primaryKey(), valid: integer('valid').notNull() },
+  (table) => [check('edit_version_matches', sql`${table.valid} = 1`)],
+)

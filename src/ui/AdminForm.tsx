@@ -36,6 +36,47 @@ const Feedback = (props: FieldFeedback) => (
 export const FormKey = ({ value }: { value?: string | null }) =>
   value ? <input type="hidden" name="formKey" value={value} /> : null
 
+export const FormVersion = ({ value }: { value: string }) => (
+  <input type="hidden" name="_version" value={value} />
+)
+
+export const FormErrors = ({
+  errors,
+  latestHref,
+}: {
+  errors?: Record<string, string> | null
+  latestHref?: string
+}) =>
+  errors && Object.keys(errors).length ? (
+    <section
+      class="form-errors"
+      role="alert"
+      aria-labelledby="form-errors-title"
+      tabindex={-1}
+      autofocus
+    >
+      <h2 id="form-errors-title">
+        {errors._version ? '保存が競合しています' : '保存できませんでした'}
+      </h2>
+      <ul>
+        {Object.entries(errors).map(([name, message]) => (
+          <li key={name}>
+            {name === '_version' ? (
+              <span id="field-_version-error">{message}</span>
+            ) : (
+              <a href={`#field-${name}-error`}>{message}</a>
+            )}
+          </li>
+        ))}
+      </ul>
+      {errors._version && latestHref ? (
+        <a class="btn btn--ghost" href={latestHref} target="_blank" rel="noreferrer">
+          最新の編集画面と比較する ↗
+        </a>
+      ) : null}
+    </section>
+  ) : null
+
 export const FormSection = (props: { title: string; note?: string; children?: Child }) => (
   <section class="form-section">
     <div class="form-section__head">
@@ -50,13 +91,19 @@ export const FormSection = (props: { title: string; note?: string; children?: Ch
 export const FormDetails = (props: {
   title: string
   note?: string
+  status?: string
+  defaultOpen?: boolean
   errors?: Record<string, string> | null
   fields: readonly string[]
   children?: Child
 }) => (
-  <details class="form-details" open={props.fields.some((field) => Boolean(props.errors?.[field]))}>
+  <details
+    class="form-details"
+    open={props.defaultOpen || props.fields.some((field) => Boolean(props.errors?.[field]))}
+  >
     <summary class="form-details__summary">
       {props.title}
+      {props.status ? <span class="form-details__status">{props.status}</span> : null}
       {props.note ? <span class="form-details__note">{props.note}</span> : null}
     </summary>
     <div class="form-grid">{props.children}</div>
@@ -116,6 +163,7 @@ export const Area = (props: {
     早くなるぶんには困らないので、そろえずにそのまま使う。
     保存してよいかを決めるのは、いつもサーバー側の検査のほう
   */
+  required?: boolean
   maxlength?: number
 }) => (
   <label class="field field--wide">
@@ -129,6 +177,7 @@ export const Area = (props: {
       aria-describedby={describedBy(props)}
       aria-invalid={props.error ? 'true' : undefined}
       rows={props.rows ?? 4}
+      required={props.required}
       maxlength={props.maxlength}
     >
       {props.value ?? ''}
@@ -217,7 +266,7 @@ export const FormActions = ({
           formtarget="_blank"
           formnovalidate
         >
-          保存前にプレビュー ↗
+          保存前にプレビュー
         </button>
       ) : null}
     </div>

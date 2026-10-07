@@ -53,6 +53,9 @@ jobs:
       - name: 写しから戻せるか
         run: npm run check:restore
 
+      - name: 削除画像の控えと復元を検証する
+        run: npm run check:media-restore
+
       # デプロイせずに、束ねられるところまで確かめる
       - name: ビルド
         run: npx wrangler deploy --dry-run
@@ -108,3 +111,9 @@ jobs:
 
       - name: 装飾の開始順・同期・CSP・動きを減らす設定
         run: npm run check:motion
+
+      - name: 天体とワードマークの連動
+        run: npm run check:celestial-motion
+
+      - name: 管理画面の入力・競合・プレビュー・スマホ表示
+        run: npm run check:admin

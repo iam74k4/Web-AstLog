@@ -1,15 +1,10 @@
-import { and, asc, count, eq, ne } from 'drizzle-orm'
+import { and, asc, count, eq, ne, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { MAX_CHARS, publishErrors } from '../../blocks'
-import {
-  CELESTIAL_ACCENTS,
-  CELESTIAL_BODIES,
-  DEFAULT_CELESTIAL,
-  isCelestialAccent,
-  isCelestialBody,
-} from '../../celestial'
+import { DEFAULT_CELESTIAL, isCelestialAccent, isCelestialBody } from '../../celestial'
+import { EDIT_CONFLICT, editMatches, guardEdit, isEditConflict, nextUpdatedAt } from '../../db/edit'
 import type { Db } from '../../db/queries'
 import * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
@@ -25,10 +20,11 @@ import {
   FormDetails,
   FormKey,
   FormSection,
+  FormVersion,
   PublishToggle,
-  Select,
 } from '../../ui/AdminForm'
 import { AdminLayout } from '../../ui/AdminLayout'
+import { CelestialChoices } from '../../ui/AdminVisuals'
 import { Avatar, StatusPill } from '../../ui/components'
 import { ExternalIcon, PencilIcon, TrashIcon } from '../../ui/icons'
 import { commitWithImage, discardImages, imageNotKept, pickImage, putImage } from './images'
@@ -139,6 +135,7 @@ const MemberForm = (props: {
   member?: schema.Member
   // 追加のフォームの一度きりの札（newFormKey）。編集では持たない
   formKey?: string | null
+  version?: string
   errors?: Record<string, string>
   values?: Record<string, string>
 }) => {
@@ -154,21 +151,14 @@ const MemberForm = (props: {
   const published = props.values ? Number(props.values.published === '1') : (member?.published ?? 0)
   const celestialBody = value('celestialBody', DEFAULT_CELESTIAL.body)
   const celestialAccent = value('celestialAccent', DEFAULT_CELESTIAL.accent)
-  const celestialOptions = (
-    options: readonly { key: string; label: string }[],
-    selected: string,
-  ) => {
-    const choices = options.map((option) => ({ value: option.key, label: option.label }))
-    return options.some((option) => option.key === selected)
-      ? choices
-      : [{ value: selected, label: `選べない値: ${selected}` }, ...choices]
-  }
 
   return (
     <AdminLayout
       title={member ? member.name : '新しいメンバー'}
       active="members"
       account={props.account}
+      errors={props.errors}
+      latestHref={member ? `/admin/members/${member.id}/edit` : undefined}
     >
       <div class="admin-head">
         <div class="admin-head__title">
@@ -198,9 +188,7 @@ const MemberForm = (props: {
           </div>
         ) : null}
       </div>
-      <p class="form-note">
-        入力中の内容は「保存前にプレビュー」で別のタブに表示できます。プレビューでは保存されず、公開状態も変わりません。
-      </p>
+      <p class="form-note">入力中の内容は、保存前にプレビューで確認できます。</p>
 
       <form
         method="post"
@@ -209,6 +197,7 @@ const MemberForm = (props: {
         class="form"
       >
         <FormKey value={props.formKey} />
+        <FormVersion value={props.version ?? member?.updatedAt ?? 'new'} />
         <FormSection title="基本情報" note="氏名だけでも下書きとして保存できます。">
           <Field
             label="氏名"
@@ -228,26 +217,12 @@ const MemberForm = (props: {
         </FormSection>
         <FormDetails
           title="天体と色"
+          defaultOpen
           note="プロフィールの表紙とメンバー一覧に反映。公開中が1人なら入口・Contactにも反映"
           errors={props.errors}
           fields={['celestialBody', 'celestialAccent']}
         >
-          <Select
-            label="天体"
-            name="celestialBody"
-            value={celestialBody}
-            options={celestialOptions(CELESTIAL_BODIES, celestialBody)}
-            error={props.errors?.celestialBody}
-            hint="保存前プレビューではプロフィールを確認できます。顔写真はそのまま残ります"
-          />
-          <Select
-            label="装飾色"
-            name="celestialAccent"
-            value={celestialAccent}
-            options={celestialOptions(CELESTIAL_ACCENTS, celestialAccent)}
-            error={props.errors?.celestialAccent}
-            hint="「サイトの色を使う」は、見た目で選んだ色に合わせます。文字やリンクの色は変わりません"
-          />
+          <CelestialChoices body={celestialBody} accent={celestialAccent} errors={props.errors} />
         </FormDetails>
         <FormDetails
           title="プロフィールを詳しく書く"
@@ -293,7 +268,11 @@ const MemberForm = (props: {
               name="avatar"
               accept={IMAGE_ACCEPT}
             />
-            {props.errors?.avatar ? <span class="field__error">{props.errors.avatar}</span> : null}
+            {props.errors?.avatar ? (
+              <span class="field__error" id="field-avatar-error">
+                {props.errors.avatar}
+              </span>
+            ) : null}
             <span class="field__hint">
               {member?.avatarUrl
                 ? `選ぶと差し替わる。空なら今のまま · ${IMAGE_LABELS}（1MB まで）`
@@ -433,7 +412,7 @@ export function readMemberForm(form: FormData, existing?: schema.Member) {
       celestialAccent,
       sortOrder: sortOrder.value,
       published: bool(form.get('published')),
-      updatedAt: new Date().toISOString(),
+      updatedAt: existing ? nextUpdatedAt(existing.updatedAt) : new Date().toISOString(),
     },
   }
 }
@@ -560,7 +539,9 @@ memberRoutes.post('/members', async (c) => {
     : null
   try {
     await commitWithImage(c.env.MEDIA, avatarUrl, () =>
-      database.insert(schema.members).values({ ...values, avatarUrl, formKey: sent }),
+      database
+        .insert(schema.members)
+        .values({ ...values, createdAt: values.updatedAt, avatarUrl, formKey: sent }),
     )
   } catch (error) {
     // 検査のあとに同じ札・同じ slug が先に書かれた（同時に来た2本の送信）
@@ -596,17 +577,19 @@ async function saveMember(
   const database = db(c)
   const { values, errors: unreadable, typed } = readMemberForm(form, member)
   const account = c.get('account')
-  const back = (errors: Record<string, string>) =>
+  const back = (errors: Record<string, string>, status: 400 | 409 = 400) =>
     c.html(
       <MemberForm
         account={account}
         member={member}
+        version={String(form.get('_version') ?? '')}
         errors={imageNotKept(form, 'avatar', errors)}
         values={{ ...asValues(values), ...typed }}
       />,
-      400,
+      status,
     )
 
+  if (!editMatches(form, member, again)) return back({ _version: EDIT_CONFLICT }, 409)
   const picked = await pickImage(form, 'avatar')
   const errors = mergeErrors(
     picked.error ? { avatar: picked.error } : null,
@@ -627,9 +610,17 @@ async function saveMember(
     .where(eq(schema.members.id, id))
   try {
     await commitWithImage(c.env.MEDIA, avatarUrl, () =>
-      database.batch([update, ...memberSlugMoves(database, id, member.slug, values.slug)]),
+      database.batch([
+        guardEdit(
+          database,
+          sql`EXISTS (SELECT 1 FROM members WHERE id = ${id} AND updated_at = ${member.updatedAt})`,
+        ),
+        update,
+        ...memberSlugMoves(database, id, member.slug, values.slug),
+      ]),
     )
   } catch (error) {
+    if (isEditConflict(error)) return back({ _version: EDIT_CONFLICT }, 409)
     if (uniqueViolation(error, 'members.slug')) return back({ slug: SLUG_TAKEN })
     throw error
   }
@@ -663,6 +654,12 @@ memberRoutes.get('/members/:id/delete', async (c) => {
       >
         <p>
           担当している項目 {n} 件は消えず、担当者が空になります。
+          {member.avatarUrl ? (
+            <>
+              <br />
+              画像の復元用コピーは90日間保存されます。
+            </>
+          ) : null}
           <br />
           サイトから隠したいだけなら、編集で「公開する」を外すほうが安全です。
         </p>

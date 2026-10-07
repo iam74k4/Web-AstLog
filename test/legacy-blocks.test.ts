@@ -5,6 +5,7 @@ import { listBlocks } from '../src/db/queries'
 import * as schema from '../src/db/schema'
 import app from '../src/index'
 import { createSession, SESSION_COOKIE } from '../src/lib/auth'
+import { findAdminBlock } from '../src/routes/admin/blocks'
 import { form, uncachedEnv } from './helpers'
 
 /*
@@ -59,8 +60,14 @@ async function open(path: string, init: RequestInit = {}, signed = true) {
   return response
 }
 
-const post = (path: string, values: Record<string, string> = {}) =>
-  open(path, { method: 'POST', body: form(values) })
+const post = async (path: string, values: Record<string, string> = {}) => {
+  const id = path.match(/^\/admin\/blocks\/(\d+)$/)?.[1]
+  const version = id ? (await findAdminBlock(database(), Number(id)))?.block.updatedAt : undefined
+  return open(path, {
+    method: 'POST',
+    body: form({ ...values, ...(version ? { _version: version } : {}) }),
+  })
+}
 
 async function oldRows() {
   const { results } = await d1()

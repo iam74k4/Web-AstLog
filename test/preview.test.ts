@@ -443,7 +443,7 @@ describe('保存前プレビューから編集を続ける案内', () => {
         body: form({ ...TEST_SITE, tagline: '保存前だけの紹介' }),
       }),
     )
-    expect(unsaved).toContain('編集を続けるには元のタブに戻ってください')
+    expect(unsaved).toContain('編集を続けるにはプレビューを閉じてください')
     expect(unsaved).not.toContain('編集画面を開く ↗')
     expect(unsaved).not.toContain('href="/admin/site"')
     expect(unsaved).toContain('保存前だけの紹介')
@@ -488,7 +488,7 @@ describe('保存前プレビューから編集を続ける案内', () => {
       expect(response.headers.get('cache-control')).toBe('private, no-store')
       const html = await response.text()
       expect(html).toContain('編集していたタブに戻り、入力を修正してください')
-      expect(html).toContain('編集を続けるには元のタブに戻ってください')
+      expect(html).toContain('編集を続けるにはプレビューを閉じてください')
       expect(html).not.toContain('編集画面を開く ↗')
       for (const message of messages) expect(html).toContain(message)
     }
