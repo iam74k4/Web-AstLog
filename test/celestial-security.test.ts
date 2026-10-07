@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:test'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { SITE_VERSION_KEY } from '../src/lib/page-cache'
+import { ADMIN_BEHAVIOR } from '../src/ui/admin-behavior'
 import { form, okText, resetDb, seedMember, signIn } from './helpers'
 
 beforeEach(resetDb)
@@ -80,7 +81,7 @@ describe('天体設定の入力とプレビューの独立監査', () => {
         const html = path.startsWith('/admin/preview')
           ? await privateText(response, 400)
           : await response.text()
-        expect(html).not.toContain('<script')
+        expect(html.replace(`<script>${ADMIN_BEHAVIOR}</script>`, '')).not.toContain('<script')
         expect(html).not.toContain('onmouseover="alert(1)"')
         expect(html).not.toContain('style="--accent:red"')
       }

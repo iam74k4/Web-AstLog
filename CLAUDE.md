@@ -88,12 +88,12 @@ exact SHA-256（`MOTION_CSP`）で許す。外部 script・任意の inline は�
 絞り込みはリンクと query（`?kind=` `?member=`）、管理は HTML フォームと 303。JSON API も SPA も無い。
 DOM構築の1200ms後から群ごと350ms間隔で始める。星屑と天体は同時、時計は群内で同期。
 初期フレームで待機し、開始済みの印を残して終える。JS無効時はCSS動作、reduceでは動かさない。
-管理・エラーは `script-src 'none'`。JSON-LD はデータ（`test/headers.test.ts` が許可範囲を確かめる）。
+管理は `src/ui/admin-behavior.ts` の固定ハッシュだけを許す。見本・プレビューダイアログ・エラー導線の補助で、保存は標準フォーム。JSON-LD はデータ。ログイン・公開のエラー・プレビューは実行script無し。
 
 **畳んだ欄はエラー時に開く**（`FormDetails`）。URL・メールは `inputmode` とサーバー検証を使う
 （閉じた欄ではブラウザが修正先へフォーカスできない）。必須欄は畳まず `required` も使う。
 
-**プレビューは認証内で保存せず描く。** `/admin/preview` は公開部品を共用し、別タブへのPOSTは200。
+**プレビューは認証内で保存せず描く。** `/admin/preview` は公開部品を共用し、POSTは200。通常は同じ画面のダイアログ、JS無効時は別タブ。
 `no-store`・`noindex`・script無し、`touchSiteOnWrite` の前に登録する。全体は公開中だけ。
 選んだ画像は検査後に応答内へ閉じ込め、KVに置かない。
 
@@ -133,8 +133,8 @@ DOM構築の1200ms後から群ごと350ms間隔で始める。星屑と天体は
 **一覧の行は書いたぶんを全部出す。** 説明を行数で切らず、タグと行き先も畳まない（一覧は
 縦に読む）。長さは説明の上限（100 字の2文。`MAX_CHARS.itemSummary`）で受ける。
 
-**画像の置き場は KV の2つだけ**（顔は `avatars/`、作品は `items/`）。KV にはほかに写しの版の
-1行（`site:version`）だけが同居し、`/images/*` からは読めない。キーは
+**公開画像は KV の2区画**（`avatars/`・`items/`）。削除時は `archive/<元キー>` へ90日控えを置く。
+控えと `site:version` は `/images/*` から読めない。キーは
 `<置き場>/<slug>-<乱数8桁>.<拡張子>` で、付けるのは `src/routes/admin/images.ts` の `putImage`
 だけ。取り込みの検査は `pickImage` の1本。**画像があるのに代替テキストが空なら、公開として
 保存させない**（`publishErrors`。ほかの画像も1枚ずつ）。
@@ -145,8 +145,7 @@ DOM構築の1200ms後から群ごと350ms間隔で始める。星屑と天体は
 SVG と HEIC は理由を添えて 400。**画像の URL はフォームから受け取らない。**
 
 **KV と D1 は順序で守る。** 新しい画像を KV に置く → D1 を書く（落ちたら置いた画像を全部消して
-投げ直す。`commitWithImage`）→ 通ってから前の画像を `removeImage`。検査は全部 KV に置く前。
-削除は D1 → KV。逆にすると、無い画像を指す行か、どこからも指されない画像が残る。
+投げ直す。`commitWithImage`）→ 前の画像の控えを作ってから原本を消す。控えに失敗したら原本を残す。検査は KV に置く前。削除も D1 → 控え → 原本。
 
 **URL の検査は保存と描画の2か所。** 保存で弾き、描く部品の中でもう一度見る（検査より前に
 入った行を落とす）。作品のリンクは `isSafeUrl`（`https?://`・`mailto:`・`/`。制御文字は不可）、
@@ -443,9 +442,8 @@ favicon・apple-touch-icon は黒い地を敷く。GitHub の顔は render.py �
 `childWrites`）。新しい子の行は親を slug で引く。**複数行の INSERT は束縛変数の上限（1文に
 100 個）を超えないように分ける。** KV の画像は batch の外で、順序で守る。
 
-**追加のフォームは一度きりの札を持つ（`form_key`）**（JavaScript が無く、押したボタンを止められない）。
-**同じ札の2度目の送信は、1度目がその札で作った行への保存**（`saveItem` / `saveMember` /
-`saveBlock`）で、公開の関門も通す。知らせは実際に起きたことを言う。
+**編集は `_version` を照合する。** 競合は入力を残して409。`src/db/edit.ts` の検査を batch の先頭に置き、子の書き換えまで原子的に止める。設定は値と日時のスナップショットで比較。
+**追加は `form_key` で重複を防ぐ。** 再送による更新はまだ編集されていない行だけ。公開の関門も通す。
 
 **決まった中身のブロック（hero / projects / team / contact）は1つずつ。3か所で守る**——部分一意
 索引 `blocks_fixed_once`（`FIXED_BLOCK_KEYS` から作る）、書く側の1文（`src/db/queries.ts` の
@@ -532,12 +530,8 @@ URL を動かすなら前の URL は転送で残す（貼られたリンクを�
   新しいコード」（流し忘れ）も起きる。先のリリースで読む側を広げ（`src/blocks.ts` の
   `LEGACY_BLOCK_KEYS`）、`test/deploy.test.ts` の「前の DB ＋ 今のコード」のように、書き換えの
   前後で同じ HTML になることを確かめる。前の形を外してよいのは、どの環境にも当たったあと
-- **例外は `0006_oauth_identities`**（と `0007_hash_sessions`）。パスワードのログインをやめた
-  リリースで、`users` の `email` と `password_hash` を同じリリースで落とした——読む側だけを先に
-  出すと、もう使わない秘密（パスワードのハッシュ）が D1 と deploy の写しに残り続けるため。代わりに、
-  流したあとで前の版へ rollback すると管理画面が 500 になる。戻すなら D1 も deploy が残した移行前の
-  栞まで戻し、そのあいだの書き込みは消える（README の「前の版の Worker へ戻すときの注意」）。
-  列を落とす移行を足すときは、同じ注意を README に書く
+- `0006_oauth_identities`・`0007_hash_sessions` は例外として同時に旧認証列を落とした。
+  それより前の Worker へ戻すなら D1 も移行前へ戻す（README）。
 - **`seed.sql` はローカルの開発・検査専用で、中身を全部消す。** `db:seed:local` だけが
   流す。本番への seed 経路は作らず、内容は管理画面から登録する。作品の検査画像は
   `scripts/fixtures/media/` に置き、ローカルの KV にだけ投入する（public/ に含めない）。
@@ -556,7 +550,7 @@ URL を動かすなら前の URL は転送で残す（貼られたリンクを�
   **commit の SHA で固定**し、行末にタグ名を残す（`test/deploy.test.ts` が形を見る）
 - **本番の写しは定義と中身の2本で取る**（`--no-data` と `--no-schema`）。1本の export は、子の表の
   行が親の CREATE TABLE より前に来て空の D1 に戻せない。戻せることは `npm run check:restore` が
-  毎回確かめる。artifact は Time Travel の期限より長く置く
+  毎回確かめる。画像も `scripts/media-backup.mjs` で控えを取り、取得済み D1 の参照とSHA-256を照合する。復元は `check:media-restore`、管理の実操作は `check:admin`。artifact は90日保持
 
 ## 気をつける場所
 
@@ -572,8 +566,7 @@ URL を動かすなら前の URL は転送で残す（貼られたリンクを�
 
 **応答のヘッダ**は `src/index.tsx` のミドルウェア1本が、全部の応答（公開・管理・404・500・
 リダイレクト・robots・sitemap）に掛ける。ルートごとに書くと、足したルートだけが素で出る。
-- CSP（中身は `src/index.tsx`）は公開 HTML に開始 helper の exact hash だけを許し、ほかは
-  `script-src 'none'`。style の
+- CSP（中身は `src/index.tsx`）は公開・管理それぞれの固定 helper の exact hash だけを許す。プレビューは同一オリジン内の埋め込みを許すが script は許さない。style の
   `'unsafe-inline'` は `style` 属性で渡す値（軌道図の置き場所・件数の数え上げ・ページの
   切り替えの名前・アバターの寸法）のため。外のサイトの画像・書体・スクリプトを読むなら、
   ここを一緒に直す（直さないと黙って読み込まれない）。CSP を変えたら、全公開

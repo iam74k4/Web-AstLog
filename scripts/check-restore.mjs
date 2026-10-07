@@ -62,6 +62,7 @@ INSERT INTO sessions (id, user_id, expires_at) VALUES ('${'0'.repeat(64)}', 1, '
 INSERT INTO item_slug_redirects (old_slug, item_id) SELECT 'old-' || slug, id FROM items WHERE slug IS NOT NULL LIMIT 1;
 INSERT INTO member_slug_redirects (old_slug, member_id) SELECT 'old-' || slug, id FROM members LIMIT 1;
 INSERT OR REPLACE INTO settings (key, value) VALUES ('layout', 'rail');
+INSERT INTO edit_guard (id, valid) VALUES (1, 1);
 `
 
 const query = async (sql, cwd, persistTo) => {

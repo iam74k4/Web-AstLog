@@ -4,14 +4,19 @@ import { CELESTIAL_ACCENTS, CELESTIAL_BODIES, DEFAULT_CELESTIAL } from '../src/c
 import * as schema from '../src/db/schema'
 import { SITE_VERSION_KEY } from '../src/lib/page-cache'
 import { readMemberForm } from '../src/routes/admin/members'
+import { ADMIN_BEHAVIOR } from '../src/ui/admin-behavior'
 import { db, form, okText, resetDb, seedMember, signIn } from './helpers'
 
 beforeEach(resetDb)
 
-const select = (html: string, name: string) =>
-  html.match(new RegExp(`<select\\b[^>]*name="${name}"[^>]*>[\\s\\S]*?<\\/select>`))?.[0] ?? ''
+const choices = (html: string, name: string) =>
+  (html.match(/<input\b[^>]*>/g) ?? []).filter((input) => input.includes(`name="${name}"`)).join('')
 const chosen = (html: string, name: string, value: string) =>
-  expect(select(html, name)).toMatch(new RegExp(`<option\\b[^>]*value="${value}"[^>]*\\bselected`))
+  expect(
+    choices(html, name)
+      .split('<input')
+      .find((input) => input.includes(`value="${value}"`)),
+  ).toContain('checked')
 const celestialGroup = (html: string) =>
   (html.match(/<details\b[^>]*>[\s\S]*?<\/details>/g) ?? []).find((part) =>
     part.includes('>天体と色<'),
@@ -27,17 +32,16 @@ describe('メンバーごとの天体と装飾色', () => {
     chosen(html, 'celestialBody', DEFAULT_CELESTIAL.body)
     chosen(html, 'celestialAccent', DEFAULT_CELESTIAL.accent)
     for (const option of CELESTIAL_BODIES)
-      expect(select(html, 'celestialBody')).toContain(`value="${option.key}"`)
+      expect(choices(html, 'celestialBody')).toContain(`value="${option.key}"`)
     for (const option of CELESTIAL_ACCENTS)
-      expect(select(html, 'celestialAccent')).toContain(`value="${option.key}"`)
+      expect(choices(html, 'celestialAccent')).toContain(`value="${option.key}"`)
     const group = celestialGroup(html)
-    expect(group).not.toMatch(/^<details[^>]*\bopen\b/)
+    expect(group).toMatch(/^<details[^>]*\bopen\b/)
     expect(group).toContain(
       'プロフィールの表紙とメンバー一覧に反映。公開中が1人なら入口・Contactにも反映',
     )
-    expect(group).toContain(
-      '保存前プレビューではプロフィールを確認できます。顔写真はそのまま残ります',
-    )
+    expect(group).toContain('celestial-choices__grid')
+    expect(group.match(/<img /g)).toHaveLength(5)
     expect(group).toContain('文字やリンクの色は変わりません')
     expect(group).not.toContain('name="avatar"')
   })
@@ -149,7 +153,7 @@ describe('メンバーごとの天体と装飾色', () => {
         expect(response.status, `${path}: ${JSON.stringify(values)}`).toBe(400)
         const html = await response.text()
         expect(html).toContain('選び直してください')
-        expect(html).not.toContain('<script')
+        expect(html.replace(`<script>${ADMIN_BEHAVIOR}</script>`, '')).not.toContain('<script')
       }
     }
     expect(await db().select().from(schema.members)).toEqual([])
@@ -174,7 +178,7 @@ describe('メンバーごとの天体と装飾色', () => {
     expect(celestialGroup(html)).toMatch(/^<details[^>]*\bopen\b/)
     chosen(html, 'celestialBody', 'neptune')
     chosen(html, 'celestialAccent', 'infrared')
-    expect(select(html, 'celestialAccent')).toContain('選べない値: infrared')
+    expect(html).toContain('選べない値: infrared')
     expect(await db().select().from(schema.members)).toEqual([member])
   })
 
@@ -205,7 +209,7 @@ describe('メンバーごとの天体と装飾色', () => {
     expect(html).toContain('data-celestial-body="sun"')
     expect(html).toContain('data-celestial-accent="ember"')
     expect(html).toContain(member.avatarUrl)
-    expect(html).toContain('編集を続けるには元のタブに戻ってください')
+    expect(html).toContain('編集を続けるにはプレビューを閉じてください')
     expect(html).not.toContain('<script')
     expect(await db().select().from(schema.members)).toEqual([member])
     expect(await mediaNames()).toEqual(keys)

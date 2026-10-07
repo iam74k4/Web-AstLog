@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { EDIT_CONFLICT, isEditConflict, settingsVersion } from '../../db/edit'
 import { loadTheme, saveTheme } from '../../db/queries'
 import type { AppEnv } from '../../env'
 import { str } from '../../lib/format'
@@ -12,8 +13,9 @@ import {
   type Theme,
   type ThemeKey,
 } from '../../theme'
-import { FormActions, Select } from '../../ui/AdminForm'
+import { FormActions, FormVersion, Select } from '../../ui/AdminForm'
 import { AdminLayout } from '../../ui/AdminLayout'
+import { DesignSample } from '../../ui/AdminVisuals'
 import { db } from './request'
 
 export const appearanceRoutes = new Hono<AppEnv>()
@@ -47,10 +49,19 @@ const PresetChoice = (props: { group: ThemeKey; option: PresetOption; current: s
 const AppearancePage = (props: {
   account: string
   theme: Theme
+  version: string
+  errors?: Record<string, string>
   flash?: string | null
   error?: string
 }) => (
-  <AdminLayout title="見た目" active="appearance" account={props.account} flash={props.flash}>
+  <AdminLayout
+    title="見た目"
+    active="appearance"
+    account={props.account}
+    flash={props.flash}
+    errors={props.errors}
+    latestHref="/admin/appearance"
+  >
     <div class="admin-head">
       <div class="admin-head__title">
         <span class="crumbs">サイト全体</span>
@@ -62,7 +73,7 @@ const AppearancePage = (props: {
     </div>
 
     <p class="form-note">
-      色と書体を選び、保存前にプレビューでサイト全体を別のタブで確認できます。プレビューでは保存されません。保存すると公開中のサイトに反映します。
+      色と書体を選ぶと、見本が変わります。実際のサイトは保存前にプレビューで確認できます。保存すると公開中のサイトに反映されます。プレビューは保存されません。
     </p>
 
     {props.error ? <p class="banner banner--error">{props.error}</p> : null}
@@ -75,6 +86,8 @@ const AppearancePage = (props: {
       data-accent={props.theme.accent}
       data-typeface={props.theme.typeface}
     >
+      <FormVersion value={props.version} />
+      <DesignSample />
       {THEME_GROUPS.map((group) => (
         <fieldset class="presets" key={group.key}>
           <legend class="presets__legend">
@@ -113,11 +126,13 @@ const AppearancePage = (props: {
 )
 
 appearanceRoutes.get('/appearance', async (c) => {
+  const version = await settingsVersion(db(c), 'theme.')
   const theme = await loadTheme(db(c))
   return c.html(
     <AppearancePage
       account={c.get('account')}
       theme={theme}
+      version={version}
       flash={c.req.query('saved') ? '保存しました' : null}
     />,
   )
@@ -125,6 +140,7 @@ appearanceRoutes.get('/appearance', async (c) => {
 
 appearanceRoutes.post('/appearance', async (c) => {
   const form = await c.req.formData()
+  const version = String(form.get('_version') ?? '')
   const picked: Partial<Record<ThemeKey, string>> = {}
   for (const key of THEME_KEYS) picked[key] = str(form.get(key))
 
@@ -137,12 +153,30 @@ appearanceRoutes.post('/appearance', async (c) => {
       <AppearancePage
         account={c.get('account')}
         theme={await loadTheme(db(c))}
+        version={version}
         error="選べない見た目です。もう一度選び直してください"
       />,
       400,
     )
   }
 
-  await saveTheme(db(c), normalizeTheme(picked))
+  const theme = normalizeTheme(picked)
+  const conflict = () =>
+    c.html(
+      <AppearancePage
+        account={c.get('account')}
+        theme={theme}
+        version={version}
+        errors={{ _version: EDIT_CONFLICT }}
+      />,
+      409,
+    )
+  if (version !== (await settingsVersion(db(c), 'theme.'))) return conflict()
+  try {
+    await saveTheme(db(c), theme, version)
+  } catch (error) {
+    if (isEditConflict(error)) return conflict()
+    throw error
+  }
   return c.redirect('/admin/appearance?saved=1', 303)
 })

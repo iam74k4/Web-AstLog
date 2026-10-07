@@ -36,7 +36,7 @@ workers.dev とプレビュー URL は無効。公開はデプロイ後で、購
 `package.json` の overrides で固定し、型・テスト・ビルドと Drizzle の schema export を確認する。**内容と導線は JavaScript なしで成立する**。
 公開ページは装飾を順に動かし始める inline helper 1本だけを持ち、`<script src>` は0本。
 絞り込みとページの移動は URL とサーバー、管理画面は HTML フォームと 303 で動く。
-全部の応答に CSP（公開 HTML は helper の exact SHA-256 だけ、ほかは `script-src 'none'`）と
+全部の応答に CSP（公開・管理 HTML は各 helper の exact SHA-256 だけ、それ以外は `script-src 'none'`）と
 `X-Content-Type-Options: nosniff`・`Referrer-Policy: strict-origin-when-cross-origin`
 を付ける。任意の script は許さない。管理画面は `Cache-Control: no-store`。
 付けているのは `src/index.tsx` のミドルウェアと、Worker を通らない `public/` の
@@ -181,13 +181,24 @@ npx wrangler d1 execute astlog --remote --command "DELETE FROM sessions"
 管理画面の概要（`/admin`）から、次にする設定と公開/下書きの件数を確認できる。
 Members・Projects のフォームは基本情報を先に書き、本文・画像・URL・並び順などは必要なときに開く。
 保存済みのメンバー・作品・ブロックは、下書きのまま管理者専用プレビューで表示を確認できる。
-各編集フォームの「保存前にプレビュー」で、入力中の文章・選んだ画像・見た目を別タブに表示する。
+![管理画面の概要](docs/admin-overview.png)
+
+![画像から天体を選べる編集画面](docs/admin-member-editor.png)
+
+概要では公開/下書き件数と最近編集した作品を確認できる。作品一覧にはサムネイルと操作名を表示する。
+保存操作はスクロール中も下部に残り、入力エラーは先頭の一覧から該当欄へ移れる。
+同じ内容を複数のタブで編集した場合、古い版の保存は409で止めて入力を残す。「最新の編集画面と比較する」から新しいタブで最新を開き、必要な変更を反映する。
+構成の数字・リンク・年表・取り組みは項目ごとに入力する。見た目は選んだ色と書体を実際の見本へ反映し、サイト設定の紹介文・問い合わせ文は複数行で編集できる。
+天体の選択見本は原画から作る192pxの画像（5枚合計約34KB）。原画を差し替えたら `node scripts/export-admin-art.mjs` と `npm run format` で再生成する。
+`npm run check:admin` で3寸法の主要画面、キーボード、競合、保存前プレビュー、JS無効時の操作を検証する。
+
+各編集フォームの「保存前にプレビュー」で、入力中の文章・選んだ画像・見た目を同じ画面のダイアログに表示する。閉じると入力とフォーカスが戻る。JS無効時は別タブで開く。
 保存・公開はせず、元のフォームも残る。サイト設定と見た目は入口・作品・Profile / Team・連絡先・全体から確認先を選べる。
 Profile / Team は公開中が1人ならプロフィール、複数なら一覧を表示する。未保存プレビューの全体リンクは保存済み内容を別タブで開く。
 全体プレビューは現在公開中のデータを使う。プレビューは認証・送り元検査・
 `no-store`・`noindex` で守り、公開ページのキャッシュの版を変えない。
 
-Members の「天体と色」で、ブラックホール・土星・海王星・月・太陽とアクセント色を選べる。
+Members の「天体と色」は画像付きの選択肢。ブラックホール・土星・海王星・月・太陽とアクセント色を選べる。
 「保存前にプレビュー」で、写真を残したプロフィールの天体を確認する。
 公開中が1人なら入口と Contact の中心にも反映される。新規・未設定はブラックホールとサイトの色。
 色は装飾に使い、本文の読みやすさと書体は共通のまま。
@@ -353,10 +364,10 @@ Worker を出して `/admin` にログインしたら、サイト設定・プロ
 1. main から実行しているか、`wrangler.toml` の id が入っているかを見る（違えば止まる。
    ただし main だけを通す守りは、下の environment の設定のほう）
 2. check と同じ門を通す（型・lint・テスト・`check:restore`・ビルド・`check:fit`・
-   `check:contrast`。`check.yml` をそのまま呼ぶ）
+   `check:contrast`・`check:motion`・`check:celestial-motion`・`check:admin`・`check:media-restore`。`check.yml` をそのまま呼ぶ）
 3. 本番 D1 の写し（`wrangler d1 export` の定義 `schema-<sha>.sql` と中身
    `data-<sha>.sql` の2本）と Time Travel の栞（`bookmark.json`）を取り、
-   artifact `d1-backup-<run id>` に残す（90日）
+   画像の実体・メタデータ・SHA-256を含む `media/` とともに、artifact `site-backup-<run id>` に残す（90日）。取得済み D1 の全画像参照と控えの一致を確かめ、欠落があれば移行前に止める
 4. **マイグレーションを流す**（`wrangler d1 migrations apply --remote`。当てた移行は D1 に
    記録されていて、未適用のものだけが当たる。何も無ければ何もしない）
 5. `wrangler deploy`
@@ -379,13 +390,17 @@ Worker を出して `/admin` にログインしたら、サイト設定・プロ
    足す。承認と同じく GitHub の側で効く——deploy.yml の「main から実行しているか」は、
    実行したブランチ自身の YAML に書いてあるので、そのブランチで消せる（分かりやすく
    止めるための1段で、守りではない）
-4. `CLOUDFLARE_API_TOKEN`（D1 の編集・Workers のデプロイができるトークン）を、この
+4. `CLOUDFLARE_API_TOKEN`（対象アカウントの D1・Workers Scripts・Workers KV Storage の編集と、デプロイに必要な設定権限を持つトークン）を、この
    environment の **Environment secrets にだけ**置く。**リポジトリの secret
    （Settings → Secrets and variables → Actions → Repository secrets）には置かない**——
    そこに置くと、environment を外した workflow をどのブランチにでも書けば、承認も
    ブランチの制限も通らずに読める。前にリポジトリの secret に置いていたなら、
    environment の側に置き直してからリポジトリの側を消す
-5. Settings → Branches で `main` をブランチ保護する（直接の push を止め、check を必須に）
+5. Settings → Branches で `main` を保護する。PR、最新の `check` / `fit` 成功、会話の解決を必須にし、管理者にも適用。強制 push と削除は禁止。1人運用のためレビュー人数は0（本番の承認は production 側）。
+
+設定内容は `node scripts/setup-production.mjs` で表示し、`--apply` で適用できる。
+GitHub 連携に Administration / Environments の書き込み権限が必要。403 の場合は設定できていない。
+トークンはスクリプトに渡さず、production の Environment secrets にだけ置く。
 
 deploy.yml の中でも、トークンは wrangler を呼ぶ step にだけ渡し（`npm ci` や action からは
 読めない。deploy の job の `npm ci` は `--ignore-scripts`）、`permissions: contents: read`、
@@ -396,7 +411,8 @@ https://github.com/actions/<名前>` で引き直し、行末のタグ名も直�
 
 手元から出すなら `npm run db:migrate && npm run deploy`（どちらも先に id の番兵を通る）。
 門は通らないので、先に `npm run typecheck` `npm run lint` `npm test`
-`npm run check:restore` `npm run check:fit` `npm run check:contrast` を自分で通すこと。
+`npm run check:restore` `npm run check:media-restore` `npm run check:fit` `npm run check:contrast`
+`npm run check:motion` `npm run check:celestial-motion` `npm run check:admin` を自分で通すこと。
 写しも自分で取る（下の「戻す」の2本の `d1 export`）。
 
 ### 公開ページの写し
@@ -429,7 +445,7 @@ https://github.com/actions/<名前>` で引き直し、行末のタグ名も直�
 
 コードは `npx wrangler rollback`（前の版の Worker に戻す）。D1 は戻らないので、
 移行が中身や列を変えていたら、D1 も移行の前へ戻す（下の「前の版の Worker へ戻すときの
-注意」）。D1 を戻したら `npm run site:touch`（公開ページの写しの版を上げる。上の
+注意」）。D1 を戻したら、下記の画像復元を済ませてから `npm run site:touch`（公開ページの写しの版を上げる。上の
 「公開ページの写し」）。
 
 Time Travel で戻すのがふつう。deploy が残した artifact の `bookmark.json` の
@@ -469,6 +485,20 @@ npx wrangler d1 export astlog --remote --no-schema --output=data.sql
 
 写しにはメンバーの連絡先とログインの紐づけ（セッションの id は D1 にもハッシュでしか
 無い）が入るので、置き場所に気をつけること。
+
+**画像も一緒に戻す。** D1 / Time Travel は KV を戻さない。差し替え・削除画像は非公開の `archive/` に90日保持し、デプロイの控えにも含める。通常の画像URLからは控えを読めない。控えを作れない場合は原本を残してエラーを記録する。
+
+D1 を復元して、`wrangler.toml` の DB が復元先を指すことを確認してから実行する。復元中は管理画面での更新を止める。
+
+```bash
+# artifact の media/ を指定する。D1 が参照する画像だけを元の公開キーへ復元し、実体のSHAを照合する
+node scripts/media-backup.mjs restore --directory backup/media
+npm run site:touch
+```
+
+Time Travel の時点に合う artifact が無い場合は、削除画像の控えが90日で消える前に `node scripts/media-backup.mjs export --directory backup/media` で現在の KV（控えを含む）を取り出してから同じ手順で戻す。参照画像が欠落・破損していたら、書き込む前に止まる。改修前に削除された画像や保持期限切れの画像は復元できない。
+手元のバックアップにも `media-backup.mjs export` と `verify --schema schema.sql --data data.sql` を加える。
+`npm run check:media-restore` がバイナリ・メタデータ・削除画像・破損拒否を検証する。
 
 **前の版の Worker へ戻すときの注意。** 移行を流したあとの D1 の上で、その移行より前の
 コードが動くと壊れるものがある。前の版へ `wrangler rollback` するなら、D1 もその版の
@@ -654,6 +684,10 @@ src/
     AdminDashboard.tsx 概要の設定案内と状態
     PreviewLayout.tsx プレビューの案内と公開ページの外枠
     AdminForm.tsx    管理画面のフォームの部品（欄・公開のトグル・確認）
+    AdminVisuals.tsx 天体の選択・ブロックの見本・表示位置の案内
+    AdminBlockFields.tsx ブロックの項目別入力
+    admin-behavior.ts 保存前プレビューと見本の最小補助・CSPの固定ハッシュ
+    admin-art.ts    管理用の縮小画像の版（export-admin-art が生成）
     components.tsx   画面を組む部品。main の直接の子は Screen / Hero だけが作る
                      外枠はどれも HtmlDocument で <html> を開く（DOCTYPE を出す）
     icons.tsx        インライン SVG（ロゴの Wordmark / HoleMark もここで描く）
@@ -687,6 +721,11 @@ scripts/
   check-fit.mjs      npm run check:fit の中身。ブラウザでレイアウトを測る（seed と、上限ちょうどの fixture）。
                      入口のブラックホールが焦点に座るかも測る
   check-contrast.mjs npm run check:contrast の中身。軌道図のまわりの文字を画素で測る
+  check-admin.mjs   3寸法の管理画面・実フォーム・競合・プレビュー・縮小画像を検証
+  check-media-restore.mjs 削除画像の控えと復元の実証
+  media-backup.mjs  KV画像・メタデータの控え、D1の写しとの照合、復元
+  setup-production.mjs production環境とmain保護の設定内容・適用
+  export-admin-art.mjs 原画から管理用の縮小画像を生成
   check-restore.mjs  npm run check:restore の中身。deploy の写し（定義と中身の2本）を空の D1 に戻して突き合わせる
   check-ids.mjs      本番に触れる前の番兵。wrangler.toml の id がプレースホルダなら止める
   seed-local.mjs     ローカルにだけ検査用のデータと画像を入れる

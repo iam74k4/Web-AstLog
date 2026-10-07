@@ -1,6 +1,7 @@
 import { newToken } from '../../lib/auth'
 import { toSlug } from '../../lib/format'
 import { IMAGE_LABELS, type SniffedImage, sniffImage } from '../../lib/image'
+import { archiveImage } from '../../lib/media-retention'
 
 const IMAGE_MAX_BYTES = 1_000_000
 
@@ -86,7 +87,16 @@ export async function removeImage(kv: KVNamespace, url: string | null | undefine
   保存を 500 にしない。1枚の失敗で残りを消し損ねない（作品は1度の保存で何枚も外せる）
 */
 export async function discardImages(kv: KVNamespace, urls: readonly (string | null | undefined)[]) {
-  for (const url of urls) await removeImage(kv, url).catch((error) => console.error(error))
+  for (const url of urls) {
+    if (!url || !/^\/images\/(avatars|items)\//.test(url)) continue
+    try {
+      // 控えが取れなければ原本を消さない。公開URLからは外し、控えは別の名前で期限付きにする。
+      await archiveImage(kv, url.replace('/images/', ''))
+      await removeImage(kv, url)
+    } catch (error) {
+      console.error('media-retirement-failed', error)
+    }
+  }
 }
 
 /*

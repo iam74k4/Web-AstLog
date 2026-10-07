@@ -1,4 +1,7 @@
+import { timeInJapan } from '../lib/format'
 import { AdminLayout } from './AdminLayout'
+import { ADMIN_ART } from './admin-art'
+import { StatusPill } from './components'
 
 export type DashboardCounts = {
   published: number
@@ -30,6 +33,13 @@ const CountSummary = ({ counts }: { counts: DashboardCounts }) => (
 
 export const AdminDashboard = (props: {
   account: string
+  recent?: {
+    id: number
+    title: string
+    imageUrl: string | null
+    published: number
+    updatedAt: string
+  }[]
   next: DashboardAction
   members: DashboardCounts
   apps: DashboardCounts
@@ -52,19 +62,53 @@ export const AdminDashboard = (props: {
       </div>
     </div>
 
-    <section class="dashboard-preview" aria-labelledby="dashboard-preview-title">
-      <div>
-        <h2 id="dashboard-preview-title">保存した内容を、サイトで確認する</h2>
-        <p>公開中の内容をまとめて確認できます。下書きは各編集画面から確認できます。</p>
+    <section
+      class="dashboard-preview dashboard-observatory"
+      aria-labelledby="dashboard-preview-title"
+    >
+      <div class="dashboard-observatory__copy">
+        <span class="crumbs">あなたのサイト</span>
+        <h2 id="dashboard-preview-title">つくったものを、届けよう。</h2>
+        <p>公開状況を確認して、続きの編集へ。</p>
+        <div class="dashboard-preview__actions">
+          <a class="btn btn--primary" href="/admin/items/new?type=app">
+            ＋ 作品を追加
+          </a>
+          <a class="btn btn--ghost" href="/admin/preview" target="_blank" rel="noreferrer">
+            全体をプレビュー ↗
+          </a>
+        </div>
       </div>
-      <div class="dashboard-preview__actions">
-        <a class="btn btn--primary" href="/admin/preview" target="_blank" rel="noreferrer">
-          全体をプレビュー ↗
-        </a>
-        <a class="btn btn--ghost" href="/" target="_blank" rel="noreferrer">
-          公開サイトを開く ↗
-        </a>
-      </div>
+      <img
+        src={ADMIN_ART['black-hole'].src}
+        alt=""
+        width={160}
+        height={160}
+        class="dashboard-observatory__art"
+      />
+      <dl class="dashboard-metrics">
+        <div>
+          <dt>公開中の作品</dt>
+          <dd>
+            {props.apps.published + props.works.published}
+            <small>件</small>
+          </dd>
+        </div>
+        <div>
+          <dt>下書きの作品</dt>
+          <dd>
+            {props.apps.drafts + props.works.drafts}
+            <small>件</small>
+          </dd>
+        </div>
+        <div>
+          <dt>公開ページ</dt>
+          <dd>
+            {props.pages}
+            <small>ページ</small>
+          </dd>
+        </div>
+      </dl>
     </section>
 
     <section class="dashboard-next" aria-labelledby="dashboard-next-title">
@@ -83,6 +127,29 @@ export const AdminDashboard = (props: {
       </a>
     </section>
 
+    {props.recent?.length ? (
+      <section class="dashboard-recent" aria-labelledby="dashboard-recent-title">
+        <div class="dashboard-settings__head">
+          <h2 id="dashboard-recent-title">最近編集した作品</h2>
+          <a href="/admin/items">作品一覧 →</a>
+        </div>
+        <div class="dashboard-recent__grid">
+          {props.recent.map((item) => (
+            <a class="dashboard-recent__item" href={`/admin/items/${item.id}/edit`} key={item.id}>
+              {item.imageUrl ? (
+                <img src={item.imageUrl} alt="" width={112} height={70} loading="lazy" />
+              ) : null}
+              <span>
+                <strong>{item.title}</strong>
+                <small>{timeInJapan(item.updatedAt)}</small>
+              </span>
+              <StatusPill published={item.published} />
+            </a>
+          ))}
+        </div>
+      </section>
+    ) : null}
+
     <section class="dashboard-settings" aria-labelledby="dashboard-settings-title">
       <div class="dashboard-settings__head">
         <h2 id="dashboard-settings-title">設定する場所</h2>
@@ -96,7 +163,6 @@ export const AdminDashboard = (props: {
               {props.siteSaved ? '保存済み' : props.siteStarted ? '一部保存済み' : '既定の文章'}
             </span>
           </div>
-          <p>入口の紹介文と、公開するメール・GitHub を編集します。</p>
           <span class="dashboard-card__status">
             公開する連絡先: {props.hasContact ? '設定あり' : '未設定（掲載しません）'}
           </span>
@@ -107,7 +173,6 @@ export const AdminDashboard = (props: {
           <div class="dashboard-card__head">
             <h3>プロフィール・チーム</h3>
           </div>
-          <p>名前、紹介文、写真、経歴などを編集します。1人でも使えます。</p>
           <CountSummary counts={props.members} />
           {props.members.published > 0 && !props.profilesShown ? (
             <span class="dashboard-card__status">プロフィール・チームは目次から外れています</span>
@@ -126,7 +191,6 @@ export const AdminDashboard = (props: {
           <div class="dashboard-card__head">
             <h3>作品・業務の実績</h3>
           </div>
-          <p>個人開発と業務の実績を、画像や説明とともに登録します。</p>
           <dl class="dashboard-projects">
             <div>
               <dt>個人開発</dt>
@@ -162,7 +226,6 @@ export const AdminDashboard = (props: {
                     : '設定あり'}
             </span>
           </div>
-          <p>サイトに出すページを選び、順番を変えたり文章のページを足したりします。</p>
           <span class="dashboard-card__status">目次に表示: {props.pages} ページ</span>
           {props.blockCount > 0 ? (
             <span class="dashboard-card__status">
@@ -176,7 +239,6 @@ export const AdminDashboard = (props: {
           <div class="dashboard-card__head">
             <h3>色と書体</h3>
           </div>
-          <p>サイト全体のアクセントと文字を選びます。今のままでも使えます。</p>
           <span class="dashboard-card__status">{props.appearance}</span>
           <span class="dashboard-card__action">見た目を開く →</span>
         </a>

@@ -33,7 +33,7 @@ export const PreviewLayout = (props: PreviewLayoutProps) => (
             <strong>プレビュー · {props.label}</strong>
             <span>
               {props.unsaved
-                ? '編集中の内容です。このプレビューでは保存されません。編集を続けるには元のタブに戻ってください。'
+                ? '編集中の内容です。このプレビューでは保存されません。編集を続けるにはプレビューを閉じてください。'
                 : props.draft
                   ? '保存済みの下書きです。サイトには公開されません。'
                   : '公開中の保存済みデータを表示しています。'}

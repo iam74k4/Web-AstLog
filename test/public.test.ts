@@ -318,7 +318,10 @@ describe('名乗り', () => {
     const member = await seedMember()
     await seedItem({ type: 'app' })
     const html = await okText('/')
-    const pages = [html]
+    const signed = await signIn()
+    const admin = await signed('/admin/members/new')
+    expect(admin.status).toBe(200)
+    const pages = [html, await admin.text()]
     for (const body of CELESTIAL_BODY_KEYS) {
       await db()
         .update(schema.members)

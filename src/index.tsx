@@ -4,6 +4,7 @@ import { pageCache } from './lib/page-cache'
 import { adminRoutes } from './routes/admin/index'
 import { publicRoutes } from './routes/public/routes'
 import { SITE } from './site'
+import { ADMIN_CSP } from './ui/admin-behavior'
 import { ColorSchemeMeta, FaviconLinks, HtmlDocument, Stylesheets } from './ui/components'
 import { HoleMark } from './ui/icons'
 import { MOTION_CSP } from './ui/motion'
@@ -18,7 +19,7 @@ const app = new Hono<AppEnv>()
   注入口（受け入れる前に上がった SVG・javascript: の href・本文の抜け）が
   1つ見つかっても、ここがあればスクリプトは走らない。
   - 原則 script-src 'none'。公開 Layout の成功した HTML だけ、装飾の開始を分散する
-    MOTION_START の SHA-256 を許す。管理画面・エラー・転送では許さない。JSON-LD
+    MOTION_START の SHA-256 を許す。管理画面は ADMIN_BEHAVIOR の SHA-256 だけを許す。JSON-LD
     （type="application/ld+json"）は実行されないデータなので、none でも止まらない
   - style-src に 'unsafe-inline'——軌道図の天体の大きさ（--scale）と軌道の濃さ（--reach）、
     件数の数え上げの値（--to）、ブラックホールの置き場所と大きさ（--hole-x …）、
@@ -28,7 +29,7 @@ const app = new Hono<AppEnv>()
     O の光の絵（と軌道図の真ん中の絵）は同じオリジンの /assets/blackhole.webp
   - form-action 'self'——管理画面のフォームはどれも同じオリジンへ送る。
     OAuth の入口はフォームではなく GET のリンクなので、ここに掛からない
-  - frame-ancestors 'none'——どのページもほかのサイトの枠に入れさせない
+  - frame-ancestors 'none'——ほかのサイトの枠に入れさせない。プレビューのみ同一オリジンの枠を許す
 
   /images/* は自分の CSP（default-src 'none'; sandbox）を持っている。画像の
   ふりをした文書を開かせないための、こちらより狭い約束なので**上書きしない**
@@ -76,10 +77,17 @@ app.use(async (c, next) => {
     headers.set(
       'content-security-policy',
       preview
-        ? PAGE_CSP.replace("img-src 'self'", "img-src 'self' data:")
-        : motion
-          ? MOTION_PAGE_CSP
-          : PAGE_CSP,
+        ? PAGE_CSP.replace("img-src 'self'", "img-src 'self' data:").replace(
+            "frame-ancestors 'none'",
+            "frame-ancestors 'self'",
+          )
+        : admin &&
+            c.req.path !== '/admin/login' &&
+            /^text\/html/.test(headers.get('content-type') ?? '')
+          ? PAGE_CSP.replace("script-src 'none'", `script-src '${ADMIN_CSP}'`)
+          : motion
+            ? MOTION_PAGE_CSP
+            : PAGE_CSP,
     )
   }
   headers.set('x-content-type-options', 'nosniff')

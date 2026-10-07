@@ -653,12 +653,12 @@ async function checkCell(browser, base, token, body, screen, view) {
 }
 
 async function previews(browser, base, token, files) {
-  const context = await contextFor(browser, base, token, VIEWS[0])
+  // 通常のダイアログは check-admin が測る。ここでは JS 無効時の標準フォームを測る。
+  const context = await contextFor(browser, base, token, VIEWS[0], { javaScriptEnabled: false })
   try {
     const editor = await context.newPage()
     const response = await editor.goto(`${base}/admin/members/1/edit`, { waitUntil: 'load' })
     assert.equal(response.status(), 200)
-    await editor.locator('summary').filter({ hasText: '天体と色' }).click()
     const before = fingerprint(files)
     const traceBefore = traceCounts(files)
     const editorUrl = editor.url()
@@ -673,14 +673,14 @@ async function previews(browser, base, token, files) {
           ]),
       )
     for (const body of CELESTIAL_BODY_KEYS) {
-      await editor.locator('[name="celestialBody"]').selectOption(body)
+      await editor.locator(`[name="celestialBody"][value="${body}"]`).check({ force: true })
       const popup = context.waitForEvent('page')
       const posted = context.waitForEvent('response', {
         predicate: (reply) =>
           reply.request().method() === 'POST' &&
           new URL(reply.url()).pathname === '/admin/preview/members/1',
       })
-      await editor.getByRole('button', { name: '保存前にプレビュー ↗', exact: true }).click()
+      await editor.getByRole('button', { name: '保存前にプレビュー', exact: true }).click()
       const page = await popup
       try {
         const response = await posted
@@ -705,7 +705,7 @@ async function previews(browser, base, token, files) {
           })
         }
         assert.equal(editor.url(), editorUrl)
-        assert.equal(await editor.locator('[name="celestialBody"]').inputValue(), body)
+        assert.equal(await editor.locator('[name="celestialBody"]:checked').inputValue(), body)
         assert.deepEqual(
           await editor
             .locator('form.form')

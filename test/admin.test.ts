@@ -1978,7 +1978,9 @@ describe('構成 — 自由文の長さ', () => {
   it('書き方は書く前に見える。行の数や字数の上限は出さない', async () => {
     const signed = await signIn()
     const html = await (await signed('/admin/blocks/new?type=now')).text()
-    expect(html).toContain('1行に1件。「何を | 補足」')
+    expect(html).toContain('内容を組み立てる')
+    expect(html).toContain('1件目の取り組み')
+    expect(html).toContain('1件目の補足')
     expect(html).not.toContain('1画面')
     // 見出しの上限は目次の1行の名前として出る
     expect(html).toContain(`${MAX_CHARS.blockHeading} 字まで（目次に1行で並ぶ）`)

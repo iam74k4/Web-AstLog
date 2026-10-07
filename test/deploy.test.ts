@@ -253,6 +253,10 @@ describe('本番へ出す道', () => {
     for (const at of [exported, bookmark, uploaded, migrated, deployed])
       expect(at).toBeGreaterThan(-1)
     expect(Math.max(exported, bookmark)).toBeLessThan(uploaded)
+    expect(deploy.indexOf('media-backup.mjs export')).toBeGreaterThan(exported)
+    expect(deploy.indexOf('media-backup.mjs verify')).toBeLessThan(uploaded)
+    expect(deploy).toContain('--schema')
+    expect(deploy).toContain('--data')
     expect(uploaded).toBeLessThan(migrated)
     expect(migrated).toBeLessThan(deployed)
   })
@@ -282,7 +286,7 @@ describe('本番へ出す道', () => {
     expect(head).not.toMatch(secret)
     expect(steps.length).toBeGreaterThan(5)
     for (const step of steps) {
-      const usesWrangler = /npx wrangler (?:d1|deploy)/.test(step)
+      const usesWrangler = /npx wrangler (?:d1|deploy)|node scripts\/media-backup\.mjs/.test(step)
       const checksToken = /\$CLOUDFLARE_API_TOKEN/.test(step)
       expect(secret.test(step), step).toBe(usesWrangler || checksToken)
     }

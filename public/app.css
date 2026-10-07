@@ -17,6 +17,16 @@
 */
 
 :root {
+  --admin-shell-width: 1240px;
+  --admin-preview-width: 1280px;
+  --admin-preview-height: 88svh;
+  --admin-art-size: 96px;
+  --admin-thumb-width: 112px;
+  --admin-thumb-height: 70px;
+  --admin-bar-space: 136px;
+  --admin-swatch-size: 18px;
+  --admin-sample-height: 100px;
+
   --font-sans:
     'Helvetica Neue', 'Hiragino Sans', 'Noto Sans JP', system-ui, -apple-system, sans-serif;
   /*

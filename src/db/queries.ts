@@ -4,6 +4,7 @@ import { blockType, DEFAULT_BLOCKS, LEGACY_BLOCK_KEYS } from '../blocks'
 import { ITEM_KIND_KEYS, type ItemKind, type ItemView, type KindCounts } from '../domain'
 import { normalizeSiteSettings, SITE_SETTING_KEYS, type SiteSettings } from '../site'
 import { normalizeTheme, THEME_KEYS, type Theme, type ThemeKey } from '../theme'
+import { guardEdit, settingsSnapshot } from './edit'
 import * as schema from './schema'
 
 export type Db = DrizzleD1Database<typeof schema>
@@ -270,15 +271,18 @@ export async function loadTheme(db: Db): Promise<Theme> {
   return normalizeTheme(raw)
 }
 
-export async function saveTheme(db: Db, theme: Theme) {
+export async function saveTheme(db: Db, theme: Theme, version?: string) {
   const updatedAt = new Date().toISOString()
-  await db
+  const write = db
     .insert(schema.settings)
     .values(THEME_KEYS.map((key) => ({ key: settingKey(key), value: theme[key], updatedAt })))
     .onConflictDoUpdate({
       target: schema.settings.key,
       set: { value: sql`excluded.value`, updatedAt },
     })
+  if (version !== undefined)
+    await db.batch([guardEdit(db, sql`${settingsSnapshot('theme.')} = ${version}`), write])
+  else await write
 }
 
 /* ------------------------------------------------------------- サイト設定 */
@@ -292,16 +296,19 @@ export async function loadSiteSettings(db: Db): Promise<SiteSettings> {
   return normalizeSiteSettings(raw)
 }
 
-export async function saveSiteSettings(db: Db, site: SiteSettings) {
+export async function saveSiteSettings(db: Db, site: SiteSettings, version?: string) {
   const updatedAt = new Date().toISOString()
   // 5項目を1文で書き、失敗時に文言と宛先だけが別々の版になるのを防ぐ。
-  await db
+  const write = db
     .insert(schema.settings)
     .values(SITE_SETTING_KEYS.map((key) => ({ key: `site.${key}`, value: site[key], updatedAt })))
     .onConflictDoUpdate({
       target: schema.settings.key,
       set: { value: sql`excluded.value`, updatedAt },
     })
+  if (version !== undefined)
+    await db.batch([guardEdit(db, sql`${settingsSnapshot('site.')} = ${version}`), write])
+  else await write
 }
 
 /* ------------------------------------------------------------- 構成 */

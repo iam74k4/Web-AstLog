@@ -68,7 +68,7 @@ describe('管理フォームの入力と説明', () => {
     expect(preview).toContain('formaction="/admin/preview/site"')
     expect(preview).toContain('formtarget="_blank"')
     expect(preview).toContain('formnovalidate')
-    expect(html).toContain('保存前にプレビュー ↗')
+    expect(html).toContain('保存前にプレビュー')
     expect(html).toContain('<button class="btn btn--primary" type="submit">保存</button>')
     expect(html.match(/<button[^>]*>/)?.[0]).toContain('class="btn btn--primary"')
   })

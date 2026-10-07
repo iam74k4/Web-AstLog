@@ -1,5 +1,6 @@
 import { eq, inArray, type SQL, sql } from 'drizzle-orm'
 import { type Context, Hono } from 'hono'
+import { blockRowError, readBlockBody, readBlockRows } from '../../block-editor'
 import {
   BLOCK_TYPES,
   type BlockType,
@@ -13,6 +14,7 @@ import {
   publishErrors,
   type SiteCounts,
 } from '../../blocks'
+import { EDIT_CONFLICT, editMatches, guardEdit, isEditConflict, nextUpdatedAt } from '../../db/edit'
 import {
   countPublishedItems,
   type Db,
@@ -26,8 +28,17 @@ import {
 import * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
 import { bool, str } from '../../lib/format'
-import { Area, Confirm, Field, FormActions, FormKey, PublishToggle } from '../../ui/AdminForm'
+import { BlockBodyFields } from '../../ui/AdminBlockFields'
+import {
+  Confirm,
+  Field,
+  FormActions,
+  FormKey,
+  FormVersion,
+  PublishToggle,
+} from '../../ui/AdminForm'
 import { AdminLayout } from '../../ui/AdminLayout'
+import { BlockIllustration } from '../../ui/AdminVisuals'
 import { StatusPill } from '../../ui/components'
 import { ExternalIcon, PencilIcon, TrashIcon } from '../../ui/icons'
 import { blockAdminPath } from '../public/page'
@@ -291,6 +302,7 @@ const BlocksPage = (props: {
           <ul class="catalog__grid">
             {available.map((type) => (
               <li class="catalog__item" key={type.key}>
+                <BlockIllustration type={type.key} />
                 <span class="catalog__label">{type.label}</span>
                 <span class="catalog__note">{type.note}</span>
                 {type.kind === 'fixed' ? (
@@ -339,6 +351,8 @@ const BlockForm = (props: {
   block?: schema.Block
   // 追加のフォームの一度きりの札（newFormKey）。編集では持たない
   formKey?: string | null
+  version?: string
+  rows?: string[][]
   values?: Record<string, string>
   errors?: Record<string, string>
   // フォームの上に出す知らせ（一覧の「公開する」を関門が止めて、ここへ送ってきたとき）
@@ -355,7 +369,13 @@ const BlockForm = (props: {
   const published = props.values ? Number(props.values.published === '1') : (block?.published ?? 0)
 
   return (
-    <AdminLayout title={type.label} active="blocks" account={props.account}>
+    <AdminLayout
+      title={type.label}
+      active="blocks"
+      account={props.account}
+      errors={props.errors}
+      latestHref={block ? `/admin/blocks/${block.id}/edit` : undefined}
+    >
       <div class="admin-head">
         <div class="admin-head__title">
           <span class="crumbs">構成 / {block ? '編集' : '追加'}</span>
@@ -374,17 +394,17 @@ const BlockForm = (props: {
       </div>
 
       {props.notice ? <p class="banner banner--error">{props.notice}</p> : null}
-      <p class="form-note">
-        入力中の内容は「保存前にプレビュー」で別タブに表示できます。プレビューでは保存・公開されません。
-      </p>
+      <p class="form-note">保存前にプレビューで、ページの完成形を確認できます。</p>
 
       <form
         method="post"
         action={block ? `/admin/blocks/${block.id}` : '/admin/blocks'}
         class="form"
       >
+        <BlockIllustration type={type.key} />
         <input type="hidden" name="type" value={type.key} />
         <FormKey value={props.formKey} />
+        <FormVersion value={props.version ?? block?.updatedAt ?? 'new'} />
         <div class="form-grid">
           {type.kind === 'free' ? (
             <>
@@ -399,11 +419,10 @@ const BlockForm = (props: {
                     : `空なら「${type.title || type.label}」 · ${MAX_CHARS.blockHeading} 字まで（目次に1行で並ぶ）`
                 }
               />
-              <Area
-                label={type.key === 'statement' ? '添え書き' : '中身'}
-                name="body"
-                value={value('body')}
-                rows={6}
+              <BlockBodyFields
+                type={type.key}
+                body={value('body')}
+                rows={props.rows}
                 hint={bodyHint(type)}
                 error={props.errors?.body}
               />
@@ -488,7 +507,7 @@ blockRoutes.get('/blocks/:id/edit', async (c) => {
 export function readBlockForm(form: FormData) {
   return {
     title: str(form.get('title')),
-    body: str(form.get('body')),
+    body: readBlockBody(form),
     published: bool(form.get('published')),
   }
 }
@@ -564,7 +583,7 @@ blockRoutes.post('/blocks', async (c) => {
   }
 
   if (values) {
-    const errors = blockSaveErrors(type, values)
+    const errors = blockRowError(form) ?? blockSaveErrors(type, values)
     if (errors) {
       return c.html(
         <BlockForm
@@ -572,6 +591,7 @@ blockRoutes.post('/blocks', async (c) => {
           type={type}
           formKey={formKey}
           values={asValues(values)}
+          rows={readBlockRows(form)}
           errors={errors}
         />,
         400,
@@ -652,7 +672,41 @@ async function saveBlock(
   where: SQL = eq(schema.blocks.id, block.id),
 ) {
   const id = block.id
-  const updatedAt = new Date().toISOString()
+  const updatedAt = nextUpdatedAt(block.updatedAt)
+  const form = await c.req.formData()
+  const back = (errors: Record<string, string>, status: 400 | 409) =>
+    c.html(
+      <BlockForm
+        account={c.get('account')}
+        type={type}
+        block={block}
+        version={String(form.get('_version') ?? '')}
+        values={asValues(values)}
+        rows={readBlockRows(form)}
+        errors={errors}
+      />,
+      status,
+    )
+  if (!editMatches(form, block, again)) return back({ _version: EDIT_CONFLICT }, 409)
+  const write = async (fixed: boolean) => {
+    const database = db(c)
+    try {
+      await database.batch([
+        guardEdit(
+          database,
+          sql`EXISTS (SELECT 1 FROM blocks WHERE id = ${id} AND updated_at = ${block.updatedAt})`,
+        ),
+        database
+          .update(schema.blocks)
+          .set(fixed ? { published: values.published, updatedAt } : { ...values, updatedAt })
+          .where(where),
+      ])
+      return null
+    } catch (error) {
+      if (isEditConflict(error)) return back({ _version: EDIT_CONFLICT }, 409)
+      throw error
+    }
+  }
   const done = () =>
     c.redirect(
       `/admin/blocks?saved=${savedParam(values.published)}${again ? '&again=1' : ''}#block-${id}`,
@@ -661,8 +715,7 @@ async function saveBlock(
 
   // 決まった中身のものは、出す・出さないしか変えられない
   if (type.kind === 'fixed') {
-    await db(c).update(schema.blocks).set({ published: values.published, updatedAt }).where(where)
-    return done()
+    return (await write(true)) ?? done()
   }
 
   /*
@@ -674,24 +727,11 @@ async function saveBlock(
     フォームが DB の本文で初期化されるので、「公開する」を外して保存しても同じ 400 で
     戻り、引っ込める手が削除しか残らない。
   */
-  const errors = blockSaveErrors(type, values)
-  if (errors) {
-    return c.html(
-      <BlockForm
-        account={c.get('account')}
-        type={type}
-        block={block}
-        values={asValues(values)}
-        errors={errors}
-      />,
-      400,
-    )
-  }
+  const errors = blockRowError(form) ?? blockSaveErrors(type, values)
+  if (errors) return back(errors, 400)
+  const conflict = await write(false)
+  if (conflict) return conflict
 
-  await db(c)
-    .update(schema.blocks)
-    .set({ ...values, updatedAt })
-    .where(where)
   return done()
 }
 

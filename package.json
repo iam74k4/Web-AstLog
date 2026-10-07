@@ -21,7 +21,9 @@
     "check:motion": "node scripts/check-motion.mjs",
     "check:celestial-motion": "node scripts/check-celestial-motion.mjs",
     "check:restore": "node scripts/check-restore.mjs",
-    "check:ids": "node scripts/check-ids.mjs"
+    "check:ids": "node scripts/check-ids.mjs",
+    "check:admin": "node scripts/check-admin.mjs",
+    "check:media-restore": "node scripts/check-media-restore.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",

@@ -31,7 +31,9 @@ describe('管理フォームの入力とプレビュー導線', () => {
       const response = await signed(path)
       expect(response.status).toBe(200)
       const html = await response.text()
-      expect(html.indexOf(`name="${firstField}"`)).toBeLessThan(html.indexOf('<details'))
+      expect(html.indexOf(`name="${firstField}"`)).toBeLessThan(
+        html.indexOf('<details class="form-details"'),
+      )
       expect(details(html, optionalTitle)).not.toMatch(/^<details[^>]*\bopen\b/)
       const advanced = details(html, '詳細設定')
       expect(advanced).toContain('name="slug"')
@@ -49,7 +51,7 @@ describe('管理フォームの入力とプレビュー導線', () => {
           expect(input).toContain(`inputmode="${mode}"`)
         }
       }
-      expect(html).toContain('プレビューでは保存されず、公開状態も変わりません')
+      expect(html).toContain('保存前にプレビューで')
       expect(html).toContain(
         `formaction="/admin/preview/${firstField === 'name' ? 'members' : 'items'}"`,
       )
@@ -84,7 +86,7 @@ describe('管理フォームの入力とプレビュー導線', () => {
       expect(formHtml).toContain(`href="/admin/preview/${kind}/${draft.id}"`)
       expect(formHtml).toContain('保存済み内容をプレビュー')
       expect(formHtml).toContain(`formaction="/admin/preview/${kind}/${draft.id}"`)
-      expect(formHtml).toContain('プレビューでは保存されず、公開状態も変わりません')
+      expect(formHtml).toContain('保存前にプレビューで')
     }
   })
 
@@ -140,7 +142,7 @@ describe('管理フォームの入力とプレビュー導線', () => {
       expect(html).toContain(`formaction="/admin/preview/${name}"`)
       expect(html).toContain('formtarget="_blank"')
       expect(html).toContain('formnovalidate')
-      expect(html).toContain('プレビューでは保存されません')
+      expect(html).toContain('プレビューは保存されません')
       expect(html).toContain('保存すると公開中のサイトに反映')
       expect(html).toContain('name="previewScreen"')
       for (const screen of ['hero', 'projects', 'contact', 'all']) {

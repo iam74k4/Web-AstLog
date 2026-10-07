@@ -1,4 +1,4 @@
-import { count, inArray, min } from 'drizzle-orm'
+import { count, desc, inArray, min } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { blockShown } from '../../blocks'
 import { defaultBlocks, listBlocks, loadSiteSettings, loadTheme } from '../../db/queries'
@@ -142,10 +142,16 @@ dashboardRoutes.get('/', async (c) => {
     }
   }
 
+  const recent = await database.query.items.findMany({
+    columns: { id: true, title: true, imageUrl: true, published: true, updatedAt: true },
+    orderBy: [desc(schema.items.updatedAt), desc(schema.items.id)],
+    limit: 4,
+  })
   return c.html(
     <AdminDashboard
       account={c.get('account')}
       next={next}
+      recent={recent}
       members={members}
       apps={apps}
       works={works}
