@@ -109,6 +109,8 @@ export async function assertCoverMotion(page, name) {
   for (const { frames } of disk.tracks) {
     assert.notEqual(frames[0], frames[1], `${name}: disk is static`)
     assert.notEqual(frames[1], frames[2], `${name}: disk does not rotate`)
+    const quarterTurn = frames[1].match(/-?[\d.e+]+/g).map(Number)
+    assert.ok(quarterTurn[1] > 0.99, `${name}: orbit runs against the marked arrows`)
     // A complete rotation returns to identity (allow CSS's floating point epsilon).
     for (const value of [frames[0], frames[3]]) {
       const values = value.match(/-?[\d.e+]+/g).map(Number)

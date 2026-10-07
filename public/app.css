@@ -31,12 +31,14 @@
   --cover-art-ratio: 1.5987903226;
   --disk-turn-dur: 24s;
   --disk-inner-dur: 16s;
-  --disk-strength: 0.55;
-  --disk-x: 66.2%;
-  --disk-y: 53.9%;
-  --disk-width: 37.83%;
+  --disk-strength: 0.7;
+  /* Outer light lane marked in the reference: its center is behind the shadow,
+     not on the bright foreground lip. Coordinates are in the original cover. */
+  --disk-x: 68.73%;
+  --disk-y: 45.36%;
+  --disk-diameter: 0.4288;
   --disk-tilt: -26deg;
-  --disk-flatten: 0.38;
+  --disk-flatten: 0.5;
   --admin-shell-width: 1240px;
   --admin-preview-width: 1280px;
   --admin-preview-height: 88svh;
@@ -4568,7 +4570,7 @@ body[data-site] > main {
   position: absolute;
   left: var(--disk-x);
   top: var(--disk-y);
-  width: var(--disk-width);
+  width: calc(100% * var(--disk-diameter));
   aspect-ratio: 1;
   transform: translate(-50%, -50%) rotate(var(--disk-tilt)) scaleY(var(--disk-flatten));
   opacity: var(--disk-strength);
@@ -4579,11 +4581,11 @@ body[data-site] > main {
   inset: 0;
   border-radius: 50%;
   overflow: clip;
-  mask-image: radial-gradient(closest-side, transparent 50%, #000 64%, #000 78%, transparent 100%);
+  mask-image: radial-gradient(closest-side, transparent 56%, #000 68%, #000 83%, transparent 100%);
 }
 
 .astra-disk__ring--inner {
-  mask-image: radial-gradient(closest-side, transparent 24%, #000 40%, #000 49%, transparent 64%);
+  mask-image: radial-gradient(closest-side, transparent 40%, #000 50%, #000 58%, transparent 70%);
 }
 
 .astra-disk__rotor {
@@ -4595,12 +4597,12 @@ body[data-site] > main {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: calc(100% * 100 / 37.83);
+  width: calc(100% / var(--disk-diameter));
   aspect-ratio: var(--cover-art-ratio);
   background: var(--disk-art) center / 100% 100%;
   transform-origin: var(--disk-x) var(--disk-y);
-  transform: translate(-66.2%, -53.9%) scaleY(calc(1 / var(--disk-flatten)))
-    rotate(calc(-1 * var(--disk-tilt)));
+  transform: translate(calc(-1 * var(--disk-x)), calc(-1 * var(--disk-y)))
+    scaleY(calc(1 / var(--disk-flatten))) rotate(calc(-1 * var(--disk-tilt)));
 }
 
 @keyframes cover-disk {
