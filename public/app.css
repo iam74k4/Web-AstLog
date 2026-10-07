@@ -413,8 +413,8 @@
     句読点で切った塊を --stagger ずつ遅らせて
     出す。曲線はばねと同じ1本（--ease-spring）で、量だけをここで決める
   */
-  --enter-shift: var(--sp-4);
-  --stagger: 90ms;
+  --enter-shift: var(--sp-3);
+  --stagger: 72ms;
 
   /*
     配色は黒基調の1つ（夜の地）。文字もボタンも白で組む——アクセントの既定は
@@ -4503,6 +4503,189 @@ body[data-site] > main {
   }
 }
 
+/* Astra Minimal cover: one quiet image, with the content and navigation still
+   set in the site's shared type scale. Other celestial bodies retain their own
+   orbit artwork until their matching covers are designed. */
+.hero--orbit:has(> .astra-art),
+.orbital:has(> .astra-art) {
+  position: relative;
+  isolation: isolate;
+}
+
+.astra-art {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+}
+
+.hero--orbit:has(> .astra-art) {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  grid-template-areas: 'copy' 'art' 'tally';
+  align-content: start;
+  row-gap: var(--sp-7);
+}
+
+.hero--orbit:has(> .astra-art) > .astra-art {
+  grid-area: art;
+  width: 100%;
+  height: clamp(280px, 82vw, 460px);
+  object-fit: cover;
+}
+
+.hero--orbit:has(> .astra-art) > .hero__copy {
+  z-index: 1;
+  gap: var(--sp-6);
+}
+
+/* This cover is fully composed at first paint. A staggered text reveal makes
+   the otherwise static artwork look like an empty page while it is decoding. */
+.hero--orbit:has(> .astra-art) :is(.hero__copy > *, .tally__cell, h1 .phrase) {
+  animation: none;
+}
+
+.hero--orbit:has(> .astra-art) > .system,
+.orbital:has(> .astra-art) > .orbits,
+:is(.hero--orbit, .orbital):has(> .astra-art) .cosmos__nebula {
+  display: none;
+}
+
+:is(.hero--orbit, .orbital):has(> .astra-art) > .cosmos {
+  opacity: 0.35;
+}
+
+:is(.hero--orbit, .orbital):has(> .astra-art) > :is(.hero__copy, .contact)::before {
+  display: none;
+}
+
+.hero--orbit:has(> .astra-art) .cta {
+  min-height: var(--tap);
+  align-self: flex-start;
+  margin-top: var(--sp-3);
+  padding: 0 0 var(--sp-2);
+  border-bottom: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.hero--orbit:has(> .astra-art) .tally {
+  position: relative;
+  z-index: 1;
+  max-width: 640px;
+}
+
+.hero--orbit:has(> .astra-art) .tally__num,
+.hero--orbit:has(> .astra-art) .tally__num::after {
+  animation: none;
+}
+
+.orbital:has(> .astra-art) {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  grid-template-areas: 'title' 'content' 'art';
+  align-content: start;
+  gap: var(--sp-7);
+}
+
+.orbital:has(> .astra-art) > .contact__title {
+  grid-area: title;
+  font-family: var(--font-display);
+  font-size: var(--fs-display-xl);
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.orbital:has(> .astra-art) > .contact {
+  grid-area: content;
+  z-index: 1;
+  align-self: start;
+  gap: var(--sp-6);
+}
+
+.orbital:has(> .astra-art) > .astra-art {
+  grid-area: art;
+  width: 100%;
+  height: clamp(280px, 82vw, 460px);
+  object-fit: cover;
+  object-position: right center;
+  opacity: 0.78;
+  mask-image: radial-gradient(ellipse 60% 73% at 42% 50%, #000 45%, transparent 100%);
+}
+
+.orbital:has(> .astra-art) .contact__mail {
+  gap: var(--sp-5);
+  border-color: var(--ink);
+}
+
+.orbital:has(> .astra-art) .contact__go {
+  font-size: var(--fs-md);
+}
+
+.orbital:has(> .astra-art) .contact__sub {
+  border-bottom: 1px solid var(--ink-mid);
+}
+
+@media (min-width: 900px) {
+  .hero--orbit:has(> .astra-art) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 1fr auto;
+    grid-template-areas: 'copy' 'tally';
+  }
+
+  .hero--orbit:has(> .astra-art) > .hero__copy {
+    width: min(52%, 680px);
+    align-self: center;
+  }
+
+  .hero--orbit:has(> .astra-art) > .astra-art {
+    position: absolute;
+    top: 48%;
+    right: 0;
+    width: min(74vw, 1000px);
+    height: auto;
+    object-fit: contain;
+    transform: translateY(-50%);
+  }
+
+  .orbital:has(> .astra-art) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 1fr auto;
+    grid-template-areas: 'title' 'content';
+  }
+
+  .orbital:has(> .astra-art) > .contact__title {
+    align-self: end;
+    max-width: 52%;
+  }
+
+  .orbital:has(> .astra-art) > .contact {
+    align-self: start;
+    justify-self: start;
+    max-width: 52%;
+    margin-bottom: clamp(56px, 10vh, 140px);
+  }
+
+  .orbital:has(> .astra-art) > .astra-art {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    width: min(74vw, 1000px);
+    height: auto;
+    object-fit: contain;
+    opacity: 0.72;
+    transform: translateY(-50%);
+  }
+}
+
+@media (forced-colors: active), (prefers-contrast: more), (max-height: 400px) {
+  .astra-art {
+    display: none;
+  }
+}
+
 @media print {
   /*
     紙は白い地で刷る。画面の黒い地のまま刷ると、白に近い字が白い紙に乗る（地の色は
@@ -4560,6 +4743,7 @@ body[data-site] > main {
   .system,
   .orbits,
   .cosmos,
+  .astra-art,
   .celestial--art,
   .celestial--symbol,
   .hero--orbit > .hero__copy::before,

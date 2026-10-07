@@ -616,6 +616,43 @@ async function checkCell(browser, base, token, body, screen, view) {
       ''
     assert.match(scriptPolicy, /^'sha256-[^']+'$/)
     await ready(page)
+    if (body === 'black-hole' && screen.key !== 'profile') {
+      // Astra Minimal replaces the orbit-centered animation on these two
+      // covers. The black-hole wordmark still moves; the cover image is static.
+      await wordmark(page, body)
+      const art = page.locator('.astra-art')
+      assert.ok(await art.isVisible(), 'Astra の表紙画像が見えない')
+      assert.equal((await animations(page)).length, 0, '隠した軌道に motion が残る')
+      await page.emulateMedia({ reducedMotion: 'reduce' })
+      assert.equal(await page.evaluate(() => document.getAnimations().length), 0)
+      await page.emulateMedia({ reducedMotion: 'no-preference', media: 'print' })
+      assert.equal(await art.isVisible(), false, '印刷で表紙画像が残る')
+      await page.emulateMedia({ media: 'screen', forcedColors: 'active' })
+      assert.equal(await art.isVisible(), false, '強制色で表紙画像が残る')
+      assert.deepEqual(errors, [])
+      const fallback = await contextFor(browser, base, token, view, {
+        javaScriptEnabled: false,
+      })
+      try {
+        const next = await fallback.newPage()
+        await next.goto(base + screen.path, { waitUntil: 'load' })
+        await ready(next)
+        assert.ok(await next.locator('.astra-art').isVisible(), 'JS 無効で表紙画像が消える')
+        assert.ok((await next.locator('main h1').textContent()).trim())
+      } finally {
+        await fallback.close()
+      }
+      return {
+        body,
+        screen: screen.key,
+        viewport: view.key,
+        names: ['astra-static-cover'],
+        wordmark: { body, animation: 'celestial-breathe' },
+        print: true,
+        forcedColors: true,
+        javaScriptDisabled: true,
+      }
+    }
     const result = await motion(page, body, screen)
     await stopped(page, { reducedMotion: 'reduce' })
     await page.emulateMedia({ reducedMotion: 'no-preference' })

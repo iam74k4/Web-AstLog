@@ -1,6 +1,8 @@
 import { env } from 'cloudflare:test'
 import wordmarkFile from 'virtual:asset:astlog-wordmark.svg'
 import faviconFile from 'virtual:asset:favicon.svg'
+import astraHole from 'virtual:asset-base64:astra-black-hole.webp'
+import astraNebula from 'virtual:asset-base64:astra-nebula-v2.webp'
 import blackholeArt from 'virtual:asset-base64:blackhole.webp'
 import celestialMoon from 'virtual:asset-base64:celestial-moon-v2.webp'
 import celestialNeptune from 'virtual:asset-base64:celestial-neptune-v2.webp'
@@ -321,7 +323,7 @@ describe('名乗り', () => {
     const signed = await signIn()
     const admin = await signed('/admin/members/new')
     expect(admin.status).toBe(200)
-    const pages = [html, await admin.text()]
+    const pages = [html, await okText('/contact'), await admin.text()]
     for (const body of CELESTIAL_BODY_KEYS) {
       await db()
         .update(schema.members)
@@ -1542,6 +1544,28 @@ describe('締めのページ（Contact）', () => {
     expect(bytes.length).toBeLessThan(200_000)
   })
 
+  it('Astra の表紙画像は Home と Contact で使い分け、中身の版を URL に持つ', async () => {
+    await seedMember()
+    const pages = [await okText('/'), await okText('/contact')]
+    for (const [index, kind, file, base64] of [
+      [0, 'hole', 'astra-black-hole.webp', astraHole],
+      [1, 'nebula', 'astra-nebula-v2.webp', astraNebula],
+    ] as const) {
+      const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))
+      expect(sniffImage(bytes)?.type).toBe('image/webp')
+      expect(bytes.length).toBeLessThan(500_000)
+      const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
+      const version = [...digest]
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join('')
+        .slice(0, 8)
+      expect(pages[index]).toContain(
+        `class="astra-art astra-art--${kind}" src="/assets/${file}?v=${version}"`,
+      )
+      expect(pages[1 - index]).not.toContain(`class="astra-art astra-art--${kind}"`)
+    }
+  })
+
   it('作品が0件でも、ブラックホールは粒を吸い込み、光が揺らぐ', async () => {
     await seedMember()
     const main = mainOf(await okText('/'))
@@ -1552,19 +1576,18 @@ describe('締めのページ（Contact）', () => {
     expect(main).not.toContain('class="orbit-spin"')
   })
 
-  it('ページに出すのは誘いの1文とメールと GitHub の手。見出しは読み上げのためにだけ置く', async () => {
+  it('Contact の見出し、誘いの1文、メールと GitHub の手を並べる', async () => {
     /*
       字を1つも置かなかったころは、ボタンが2つあるだけで、何の相談なら
       送ってよいのかを言う言葉がページのどこにも無かった（description にしか
-      無かった）。置く文はその1文だけで、目に見える見出しは描かない（目次の
-      「Contact」と同じことを言うだけ）。ページは h1 をちょうど1つ持つ決まり
-      （WCAG 1.3.1）なので、見出しは .sr-only で残す
+      無かった）。入口と対になるページとして、見出しを見せたうえで誘いの文を置く。
+      ページは h1 をちょうど1つ持つ決まり（WCAG 1.3.1）も保つ。
     */
     await seedMember()
 
     const main = mainOf(await okText('/contact'))
-    expect(main.match(/<h1[^>]*>/g)).toEqual(['<h1 class="sr-only">'])
-    expect(main).toContain('<h1 class="sr-only">Contact</h1>')
+    expect(main.match(/<h1[^>]*>/g)).toEqual(['<h1 class="contact__title">'])
+    expect(main).toContain('<h1 class="contact__title">Contact</h1>')
     const contact = main.slice(main.indexOf('<div class="contact">'))
     // ページに出る p はリードの1つだけ（札は置かない）
     expect(contact.match(/<p\b[^>]*>/g)).toEqual(['<p class="contact__lead">'])
@@ -1784,6 +1807,7 @@ describe('ページの URL', () => {
       --accent と --ink から敷くので、**見た目プリセットで軌道図の色も変わる**
     */
     expect(home.match(/<img\b[^>]*>/g)).toEqual([
+      '<img class="astra-art astra-art--hole" src="/assets/astra-black-hole.webp?v=34a75e33" width="1586" height="992" alt="" aria-hidden="true" decoding="sync" fetchpriority="high"/>',
       `<img class="hole__art" src="${BLACKHOLE_ART.src}" width="${BLACKHOLE_ART.width}" height="${BLACKHOLE_ART.height}" alt="" decoding="async"/>`,
     ])
     expect(home).not.toMatch(/(?:stroke|fill)="#/)

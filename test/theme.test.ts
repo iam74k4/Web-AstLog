@@ -942,6 +942,13 @@ describe('部品の作法', () => {
     for (const rule of moving) {
       const [, value] = rule.decls.find(([name]) => name === 'animation') ?? ['', '']
       if (lasting.test(value)) continue
+      // Astra covers remove the old entrance/count reveal so the content is
+      // complete on the first frame; this does not add a new animation.
+      if (
+        value === 'none' &&
+        rule.selectors.every((selector) => selector.includes(':has(> .astra-art)'))
+      )
+        continue
       if (
         /^none\s*!important$/.test(value) &&
         rule.selectors.some((selector) => selector.startsWith('html[data-motion-staged]'))

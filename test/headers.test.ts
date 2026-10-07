@@ -230,6 +230,8 @@ describe('応答のヘッダ', () => {
       '/admin.css',
       '/preview.css',
       '/assets/blackhole.webp',
+      '/assets/astra-black-hole.webp',
+      '/assets/astra-nebula-v2.webp',
       ...['sun', 'moon', 'neptune', 'saturn'].map((body) => `/assets/celestial-${body}-v2.webp`),
       ...['iris', 'violet', 'ember', 'mint', 'sky', 'rose'].map(
         (name) => `/assets/nebula-${name}.webp`,

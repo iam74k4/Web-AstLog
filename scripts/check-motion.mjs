@@ -323,7 +323,15 @@ async function initialDisplay(browser, base, screen, phone = false, slowImage = 
     })
   try {
     await page.addInitScript(() => {
-      const report = { checked: 0, expected: 0, firstReady: 0, loaded: false, failures: [] }
+      const report = {
+        checked: 0,
+        expected: 0,
+        domReady: 0,
+        firstReady: 0,
+        firstStarReady: 0,
+        loaded: false,
+        failures: [],
+      }
       window.__initialMotion = report
       addEventListener('load', () => {
         report.loaded = true
@@ -331,6 +339,7 @@ async function initialDisplay(browser, base, screen, phone = false, slowImage = 
       addEventListener(
         'DOMContentLoaded',
         async () => {
+          report.domReady = performance.now()
           // DOMContentLoaded は外部CSSの到着を待たない。装飾が描かれる初回の姿を測る。
           await Promise.all(
             [...document.querySelectorAll('link[rel="stylesheet"]')].map((link) =>
@@ -378,6 +387,7 @@ async function initialDisplay(browser, base, screen, phone = false, slowImage = 
                 report.failures.push('開始時にアニメーションの途中へ送った')
               report.checked += 1
               report.firstReady ||= performance.now()
+              if (target.matches('.cosmos__twinkle')) report.firstStarReady ||= performance.now()
             }
             if (!before.size) observer.disconnect()
           })
@@ -414,6 +424,14 @@ async function initialDisplay(browser, base, screen, phone = false, slowImage = 
     )
     const report = await page.evaluate(() => window.__initialMotion)
     assert.deepEqual(report.failures, [], `${name}: 初期表示から動作への切り替え`)
+    assert.ok(
+      report.firstReady - report.domReady < 800,
+      `${name}: 装飾の開始が初回描画から遅い (${Math.round(report.firstReady - report.domReady)}ms)`,
+    )
+    assert.ok(
+      report.firstStarReady - report.domReady < 800,
+      `${name}: heroの星の開始が初回描画から遅い (${Math.round(report.firstStarReady - report.domReady)}ms)`,
+    )
     console.log(`  ${name}: ${report.checked}要素の開始フレームに位置・明るさの段差なし`)
   } finally {
     releaseImage()
@@ -688,6 +706,147 @@ async function fallback(browser, base, screen, content, reduced) {
   }
 }
 
+// Astra Minimal uses a static cover image in place of the original orbit
+// drawing. The starfield and wordmark still use the motion helper, so verify
+// their real first frame and both CSS-only accessibility fallbacks.
+async function coverMotion(browser, base, screen, phone = false, slowImage = false) {
+  const viewport = phone ? { width: 390, height: 844 } : OPTIONS.viewport
+  const name = `${screen.name}/${phone ? 'phone' : 'PC'}${slowImage ? '/画像待機' : ''}`
+  const page = await browser.newPage({ ...OPTIONS, viewport })
+  const errors = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  let releaseImage = () => {}
+  if (slowImage) {
+    let release
+    const held = new Promise((resolve) => {
+      release = resolve
+    })
+    releaseImage = release
+    await page.route('**/assets/astra-*.webp*', async (route) => {
+      await held
+      await route.continue()
+    })
+  }
+  try {
+    await page.addInitScript(() => {
+      const report = { domReady: 0, firstStarReady: 0, loaded: false }
+      window.__coverMotion = report
+      addEventListener('load', () => {
+        report.loaded = true
+      })
+      addEventListener('DOMContentLoaded', () => {
+        report.domReady = performance.now()
+        const ready = () => document.querySelector('.cosmos__twinkle[data-motion-ready]')
+        if (ready()) {
+          report.firstStarReady = performance.now()
+          return
+        }
+        const observer = new MutationObserver(() => {
+          if (!ready()) return
+          report.firstStarReady = performance.now()
+          observer.disconnect()
+        })
+        observer.observe(document.documentElement, {
+          subtree: true,
+          attributes: true,
+          attributeFilter: ['data-motion-ready'],
+        })
+      })
+    })
+    const response = await page.goto(base + screen.path, { waitUntil: 'domcontentloaded' })
+    assert.equal(response?.status(), 200, `${name}: HTTP 200 でない`)
+    assert.match(
+      response.headers()['content-security-policy'] ?? '',
+      /script-src[^;]*'sha256-[^']+'?/,
+      `${name}: CSP に helper の許可がない`,
+    )
+    await page.waitForFunction(() => window.__coverMotion.firstStarReady > 0, undefined, {
+      timeout: 5_000,
+      polling: 50,
+    })
+    const timing = await page.evaluate(() => window.__coverMotion)
+    assert.ok(
+      timing.firstStarReady - timing.domReady < 800,
+      `${name}: heroの星の開始が遅い (${Math.round(timing.firstStarReady - timing.domReady)}ms)`,
+    )
+    if (slowImage) assert.equal(timing.loaded, false, `${name}: 画像の読み込み前に星が始まらない`)
+    releaseImage()
+    await page.locator('.astra-art').evaluate((image) => image.decode())
+    await page.screenshot({ animations: 'allow' })
+    const state = await page.evaluate(() => {
+      const art = document.querySelector('.astra-art')
+      const stars = [...document.querySelectorAll('.cosmos__twinkle')]
+      const heading = document.querySelector('main h1')
+      return {
+        art:
+          art instanceof HTMLImageElement &&
+          art.naturalWidth > 0 &&
+          art.getBoundingClientRect().width > 0,
+        heading: heading?.textContent.trim(),
+        links: document.querySelectorAll('main a[href]').length,
+        stars: stars.length,
+        active: stars.filter((node) =>
+          node
+            .getAnimations()
+            .some(
+              (animation) =>
+                animation instanceof CSSAnimation &&
+                animation.effect.getTiming().iterations === Infinity &&
+                animation.playState === 'running',
+            ),
+        ).length,
+      }
+    })
+    assert.ok(state.art && state.heading && state.links > 0, `${name}: 表紙/内容が描かれない`)
+    assert.ok(state.stars > 0 && state.active === state.stars, `${name}: 星空が動いていない`)
+    assert.deepEqual(errors, [], `${name}: 実行時エラー`)
+    await blockedInline(page, name)
+    console.log(
+      `  ${name}: 星 ${state.stars} 個が ${Math.round(timing.firstStarReady - timing.domReady)}ms で開始`,
+    )
+  } finally {
+    releaseImage()
+    await page.close()
+  }
+}
+
+async function coverFallback(browser, base, screen, reduced) {
+  const name = reduced ? 'reduced-motion' : 'JS 無効'
+  const { page, errors } = await open(
+    browser,
+    base,
+    screen,
+    reduced ? { reducedMotion: 'reduce' } : { javaScriptEnabled: false },
+  )
+  try {
+    const art = page.locator('.astra-art')
+    await art.evaluate((image) => image.decode())
+    const state = await page.evaluate(() => ({
+      heading: document.querySelector('main h1')?.textContent.trim(),
+      links: document.querySelectorAll('main a[href]').length,
+      active: [...document.querySelectorAll('.cosmos__twinkle')].filter((node) =>
+        node
+          .getAnimations()
+          .some(
+            (animation) =>
+              animation instanceof CSSAnimation &&
+              animation.effect.getTiming().iterations === Infinity,
+          ),
+      ).length,
+    }))
+    assert.ok(state.heading && state.links > 0, `${screen.name}/${name}: 内容/リンクがない`)
+    assert.ok(await art.isVisible(), `${screen.name}/${name}: 表紙が見えない`)
+    if (reduced) assert.equal(await page.evaluate(() => document.getAnimations().length), 0)
+    else assert.ok(state.active > 0, `${screen.name}/${name}: CSS の星が動いていない`)
+    await page.emulateMedia({ media: 'print' })
+    assert.equal(await art.isVisible(), false, `${screen.name}/${name}: 印刷で表紙が見える`)
+    assert.deepEqual(errors, [], `${screen.name}/${name}: 実行時エラー`)
+    console.log(`  ${screen.name}/${name}: 本文・リンク・星空と印刷を確認`)
+  } finally {
+    await page.close()
+  }
+}
+
 async function main() {
   const given = process.env.MOTION_BASE
   if (given)
@@ -702,6 +861,21 @@ async function main() {
     if (!given) state = await scratchState('motion', [await readFile(`${ROOT}seed.sql`, 'utf8')])
     server = await devServer(given, Number(process.env.MOTION_PORT ?? 8794), state?.dir)
     browser = await chromium.launch({ headless: true })
+    const cover = await browser.newPage()
+    await cover.goto(server.base)
+    const astra = await cover.locator('.astra-art').count()
+    await cover.close()
+    if (astra) {
+      for (const screen of SCREENS) {
+        await coverMotion(browser, server.base, screen)
+        await coverMotion(browser, server.base, screen, true)
+        await coverFallback(browser, server.base, screen, false)
+        await coverFallback(browser, server.base, screen, true)
+      }
+      await coverMotion(browser, server.base, SCREENS[0], false, true)
+      console.log('✓ Astra 表紙の星・初期表示・CSP・フォールバック')
+      return
+    }
     for (const screen of SCREENS) {
       await initialDisplay(browser, server.base, screen)
       await initialDisplay(browser, server.base, screen, true)
