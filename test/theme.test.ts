@@ -10,7 +10,7 @@ import { db, form, get, okText, resetDb, seedItem, seedMember, signIn } from './
 
 // 着いたあとも動き続ける animation の名前。粒と流れる星の固定名は部品が --motion で渡す。
 const LASTING =
-  /orbit-(swirl|unswirl|sway|breathe|drift|twinkle|meteor)\b|celestial-(float|drift|rock|radiance|breathe|flow)\b|ascii-(cycle|stream)\b|var\(--motion\)/
+  /orbit-(swirl|unswirl|sway|breathe|drift|twinkle|meteor)\b|celestial-(float|drift|rock|radiance|breathe|flow)\b|cover-(drift|light)\b|var\(--motion\)/
 
 beforeEach(resetDb)
 
@@ -933,60 +933,18 @@ describe('部品の作法', () => {
     expect(bodyOf(sheet, '.orbital:has(> .astra-art) > .contact {')).toContain('grid-area: content')
   })
 
-  it('ASCIIの星と軌跡は文字を切り替えながら周回し、字と操作より後ろに置く', () => {
-    const sky = bodyOf(sheet, '.ascii-sky {')
-    expect(sky).toContain('pointer-events: none')
-    expect(sky).toContain('font-family: var(--font-mono)')
-    expect(sky).toContain('z-index: 0')
-    expect(bodyOf(sheet, '.orbital:has(> .astra-art) > .contact__title {')).toContain('z-index: 1')
-    const moving = rulesOf(sheet).filter((rule) =>
-      rule.selectors.some((selector) => selector.startsWith('.ascii-sky__')),
+  it('表紙は文字の装飾を置かず、画像だけを動かしreduceでは静止する', () => {
+    expect(sheet).not.toMatch(/ascii-(?:sky|cycle|stream|celestial)/)
+    const moving = rulesOf(sheet).find(
+      (rule) =>
+        rule.selectors.includes('.astra-art') && rule.decls.some(([name]) => name === 'animation'),
     )
-    for (const selector of [
-      '.ascii-sky__orbit--inner',
-      '.ascii-sky__orbit--middle',
-      '.ascii-sky__orbit--outer',
-      '.ascii-sky__stream-orbit',
-      '.ascii-sky__glyph',
-    ]) {
-      const animation = moving.find(
-        (rule) =>
-          rule.selectors.includes(selector) && rule.decls.some(([name]) => name === 'animation'),
-      )
-      expect(animation?.context, selector).toEqual([
-        '@media (prefers-reduced-motion: no-preference)',
-      ])
-      expect(animation?.decls.find(([name]) => name === 'animation')?.[1], selector).toMatch(
-        /orbit-(?:swirl|unswirl)/,
-      )
-    }
-    for (const [selector, name] of [
-      ['.ascii-sky__frames', 'ascii-cycle'],
-      ['.ascii-sky__track', 'ascii-stream'],
-    ] as const) {
-      const animation = moving.find(
-        (rule) =>
-          rule.selectors.includes(selector) &&
-          rule.decls.some(([property]) => property === 'animation'),
-      )
-      expect(animation?.context, selector).toEqual([
-        '@media (prefers-reduced-motion: no-preference)',
-      ])
-      expect(
-        animation?.decls.find(([property]) => property === 'animation')?.[1],
-        selector,
-      ).toContain(name)
-      expect(blockAt(sheet, `@keyframes ${name}`)).not.toContain('var(')
-    }
-    for (const marker of [
-      '@media (forced-colors: active), (prefers-contrast: more)',
-      '@media (max-height: 400px)',
-      '@media print',
-    ]) {
-      expect(ruleWith(blockAt(sheet, marker), 'display: none').selector, marker).toContain(
-        '.ascii-sky',
-      )
-    }
+    expect(moving?.context).toEqual(['@media (prefers-reduced-motion: no-preference)'])
+    expect(moving?.decls.find(([name]) => name === 'animation')?.[1]).toContain('cover-drift')
+    expect(moving?.decls.find(([name]) => name === 'animation')?.[1]).toContain('cover-light')
+    expect(blockAt(sheet, '@keyframes cover-drift')).not.toContain('transform:')
+    expect(blockAt(sheet, '@keyframes cover-drift')).toContain('translate:')
+    expect(blockAt(sheet, '@keyframes cover-light')).toContain('opacity:')
   })
 
   it('入口と締めの星系は同じ継続動作だけ。層全体を動かす登場は持たない', () => {
@@ -1475,7 +1433,6 @@ describe('文字の段', () => {
         '.entry__index',
         '.entry__meta li:lang(en)',
         '.contact__sub :lang(en)',
-        '.ascii-sky',
       ].sort(),
     )
     // 年と期間は「2024 — 現在」と和文を含むので、等幅にせず数字の幅だけそろえる

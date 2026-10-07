@@ -1179,23 +1179,8 @@ describe('星空と星雲', () => {
       expect(cosmos, path).toContain('class="cosmos__glint"')
       expect(cosmos, path).toContain('<div class="cosmos__nebula" aria-hidden="true"></div>')
       expect(cosmos, path).toContain('<div class="cosmos__meteors"')
-      // カバーに文字だけの周回層と流れる軌跡を重ねる。JSなしでも1コマ目が残る。
-      expect(main, path).toContain('<div class="ascii-sky" aria-hidden="true">')
-      expect(
-        main.match(/class="ascii-sky__orbit ascii-sky__orbit--(?:inner|middle|outer)"/g),
-        path,
-      ).toHaveLength(3)
-      expect(main.match(/class="ascii-sky__glyph"/g), path).toHaveLength(63)
-      const frames = [...main.matchAll(/class="ascii-sky__frames">([^<]+)<\/span>/g)].map(
-        (match) => match[1] ?? '',
-      )
-      expect(frames, path).toHaveLength(63)
-      expect(frames.every((frame) => /^[.:+*]{5}$/.test(frame) && frame[0] === frame[4])).toBe(true)
-      expect(main.match(/class="ascii-sky__stream"/g), path).toHaveLength(3)
-      expect(
-        [...main.matchAll(/class="ascii-sky__track">([^<]+)<\/span>/g)].map((match) => match[1]),
-        path,
-      ).toEqual(Array(3).fill('....:..+..*.....:..+..*.'))
+      // 文字の装飾は置かず、天体画像と通常の星空だけを残す。
+      expect(main, path).not.toMatch(/ascii-(?:sky|celestial)/)
       // 星雲は焼いた素材を CSS の背景で読む。画面いっぱいのフィルタをページに置かない
       expect(cosmos, path).not.toMatch(/<feTurbulence|<feDisplacementMap|<filter\b/)
       // HTML に外部の画像を持ち込まない。背景素材の実在と版は下で見る

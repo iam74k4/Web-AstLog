@@ -17,6 +17,16 @@
 */
 
 :root {
+  --cover-lift: -6px;
+  --cover-turn: 0.75deg;
+  --cover-rest-scale: 0.975;
+  --cover-zoom: 0.987;
+  --cover-drift-dur: 36s;
+  --cover-light-dur: 14s;
+  --cover-dim: 0.94;
+  --cover-home-opacity: 1;
+  --cover-contact-opacity: 0.78;
+  --cover-contact-wide-opacity: 0.72;
   --admin-shell-width: 1240px;
   --admin-preview-width: 1280px;
   --admin-preview-height: 88svh;
@@ -4251,7 +4261,6 @@ body[data-site] > main {
   .system,
   .orbits,
   .cosmos,
-  .ascii-sky,
   .celestial--art,
   .hero--orbit > .hero__copy::before,
   .orbital > .contact::before {
@@ -4312,7 +4321,6 @@ body[data-site] > main {
   .system,
   .orbits,
   .cosmos,
-  .ascii-sky,
   .hero--orbit > .hero__copy::before,
   .orbital > .contact::before {
     display: none;
@@ -4514,123 +4522,48 @@ body[data-site] > main {
 }
 
 .astra-art {
+  --cover-opacity: var(--cover-home-opacity);
   display: block;
   width: 100%;
   height: auto;
   pointer-events: none;
   user-select: none;
+  opacity: var(--cover-opacity);
+  transform-origin: 68% 50%;
 }
 
-/* The cover's ASCII field is type, not an image: stepped character frames and
-   three drifting text streams sit between the art and every heading/action. */
-.ascii-sky {
-  position: absolute;
-  left: 50%;
-  top: 62%;
-  z-index: 0;
-  width: min(96vw, 390px);
-  aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-  font-weight: 500;
-  line-height: 1;
-  color: var(--ink);
-}
-
-.orbital > .ascii-sky {
-  top: 68%;
-}
-
-.ascii-sky__orbit,
-.ascii-sky__stream-orbit {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 0;
-  height: 0;
-  transform-origin: 0 0;
-}
-
-.ascii-sky__star {
-  position: absolute;
-  left: 0;
-  top: 0;
-  --radius: var(--r-mobile);
-  transform: rotate(var(--angle)) translateX(var(--radius)) translate(-50%, -50%);
-}
-
-.ascii-sky__glyph {
-  display: block;
-  width: 1ch;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.ascii-sky__frames {
-  display: block;
-  width: max-content;
-}
-
-.ascii-sky__stream {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 12ch;
-  overflow: hidden;
-  white-space: nowrap;
-  --radius: var(--r-mobile);
-  opacity: 0.68;
-  transform: rotate(var(--angle)) translateX(var(--radius)) rotate(90deg) translate(-50%, -50%);
-}
-
-.ascii-sky__track {
-  display: block;
-  width: max-content;
-}
-
-@keyframes ascii-cycle {
-  to {
-    transform: translateX(-4ch);
+/* Move only the decorative image. Independent transform properties preserve
+   the desktop anchor. A small inset keeps the tilted image inside its own area
+   without clipping Contact's text veil or the surrounding starfield. */
+@keyframes cover-drift {
+  0%,
+  100% {
+    translate: 0 0;
+    rotate: 0deg;
+    scale: var(--cover-rest-scale);
+  }
+  50% {
+    translate: 0 var(--cover-lift);
+    rotate: var(--cover-turn);
+    scale: var(--cover-zoom);
   }
 }
 
-@keyframes ascii-stream {
-  to {
-    transform: translateX(-12ch);
+@keyframes cover-light {
+  0%,
+  100% {
+    opacity: var(--cover-opacity);
+  }
+  50% {
+    opacity: calc(var(--cover-opacity) * var(--cover-dim));
   }
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .ascii-sky__orbit--inner {
-    animation: orbit-swirl 24s linear infinite;
-  }
-
-  .ascii-sky__orbit--middle {
-    animation: orbit-unswirl 38s linear infinite;
-  }
-
-  .ascii-sky__orbit--outer {
-    animation: orbit-swirl 56s linear infinite;
-  }
-
-  .ascii-sky__stream-orbit {
-    animation: orbit-unswirl 30s linear infinite;
-  }
-
-  .ascii-sky__glyph {
+  .astra-art {
     animation:
-      orbit-swirl 10s linear infinite,
-      orbit-twinkle 5.6s steps(8) var(--phase) infinite;
-  }
-
-  .ascii-sky__frames {
-    animation: ascii-cycle 3.2s steps(4, end) var(--phase) infinite;
-  }
-
-  .ascii-sky__track {
-    animation: ascii-stream 4.8s steps(12, end) var(--phase) infinite;
+      cover-drift var(--cover-drift-dur) ease-in-out infinite,
+      cover-light var(--cover-light-dur) ease-in-out infinite;
   }
 }
 
@@ -4735,7 +4668,7 @@ body[data-site] > main {
   height: clamp(280px, 82vw, 460px);
   object-fit: cover;
   object-position: right center;
-  opacity: 0.78;
+  --cover-opacity: var(--cover-contact-opacity);
   mask-image: radial-gradient(ellipse 60% 73% at 42% 50%, #000 45%, transparent 100%);
 }
 
@@ -4753,21 +4686,6 @@ body[data-site] > main {
 }
 
 @media (min-width: 900px) {
-  .ascii-sky,
-  .orbital > .ascii-sky {
-    left: 72%;
-    top: 50%;
-    width: min(54vw, 700px);
-    font-size: var(--fs-md);
-    /* A turning ASCII star must never pass behind the left-column headline. */
-    mask-image: linear-gradient(to right, transparent 20%, #000 36%);
-  }
-
-  .ascii-sky__star,
-  .ascii-sky__stream {
-    --radius: var(--r-desktop);
-  }
-
   .hero--orbit:has(> .astra-art) {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: 1fr auto;
@@ -4814,7 +4732,7 @@ body[data-site] > main {
     width: min(74vw, 1000px);
     height: auto;
     object-fit: contain;
-    opacity: 0.72;
+    --cover-opacity: var(--cover-contact-wide-opacity);
     transform: translateY(-50%);
   }
 }
@@ -4882,7 +4800,6 @@ body[data-site] > main {
   .system,
   .orbits,
   .cosmos,
-  .ascii-sky,
   .astra-art,
   .celestial--art,
   .celestial--symbol,

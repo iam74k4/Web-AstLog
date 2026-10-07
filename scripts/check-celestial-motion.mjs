@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { DatabaseSync } from 'node:sqlite'
 import { chromium } from 'playwright'
+import { assertCoverMotion } from './lib/cover-motion.mjs'
 import { devServer, ROOT, scratchState } from './lib/dev-server.mjs'
 import { importTs } from './lib/ts-import.mjs'
 
@@ -618,11 +619,12 @@ async function checkCell(browser, base, token, body, screen, view) {
     assert.match(scriptPolicy, /^'sha256-[^']+'$/)
     await ready(page)
     if (screen.key !== 'profile') {
-      // All five bodies share one static-cover layout. The wordmark still
+      // All five bodies share one image-motion layout. The wordmark still
       // animates independently, while the hidden orbit drawing does not.
       const brand = await wordmark(page, body)
       const art = page.locator('.astra-art')
       assert.ok(await art.isVisible(), 'Astra の表紙画像が見えない')
+      await assertCoverMotion(page, `${body}/${screen.key}/${view.key}`)
       assert.equal(
         await art.getAttribute('src'),
         body === 'black-hole' && screen.key === 'contact'
@@ -646,6 +648,7 @@ async function checkCell(browser, base, token, body, screen, view) {
         await next.goto(base + screen.path, { waitUntil: 'load' })
         await ready(next)
         assert.ok(await next.locator('.astra-art').isVisible(), 'JS 無効で表紙画像が消える')
+        await assertCoverMotion(next, `${body}/${screen.key}/${view.key}/JS無効`)
         assert.ok((await next.locator('main h1').textContent()).trim())
       } finally {
         await fallback.close()
