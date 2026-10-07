@@ -4532,6 +4532,12 @@ body[data-site] > main {
   width: 100%;
   height: clamp(280px, 82vw, 460px);
   object-fit: cover;
+  /* Generated covers have subtly different near-black edges. Fade the canvas
+     itself so it reads as one sky rather than a rectangular image panel. */
+  mask-image:
+    linear-gradient(to right, transparent, #000 16%, #000 88%, transparent),
+    linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
+  mask-composite: intersect;
 }
 
 .hero--orbit:has(> .astra-art) > .hero__copy {

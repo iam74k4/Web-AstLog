@@ -908,10 +908,28 @@ describe('部品の作法', () => {
     // 箱（枠・面・影）だったころは、広い画面の真ん中に小さな枠が浮いて周りが空いていた
     const contact = bodyOf(sheet, '.contact {')
     expect(contact).not.toMatch(/\bborder|background|box-shadow/)
-    const cover = bodyOf(sheet, '.orbital:has(> .astra-art) {')
-    expect(cover).toContain("grid-template-areas: 'title' 'content' 'art'")
-    const wide = bodyOf(blockAt(sheet, '@media (min-width: 900px)'), '.orbital:has(> .astra-art) {')
-    expect(wide).toContain("grid-template-areas: 'title' 'content'")
+    const coverRules = rulesOf(sheet).filter((rule) =>
+      rule.selectors.includes('.orbital:has(> .astra-art)'),
+    )
+    expect(
+      coverRules.some(
+        (rule) =>
+          rule.context.length === 0 &&
+          rule.decls.some(
+            ([name, value]) =>
+              name === 'grid-template-areas' && value === "'title' 'content' 'art'",
+          ),
+      ),
+    ).toBe(true)
+    expect(
+      coverRules.some(
+        (rule) =>
+          rule.context.includes('@media (min-width: 900px)') &&
+          rule.decls.some(
+            ([name, value]) => name === 'grid-template-areas' && value === "'title' 'content'",
+          ),
+      ),
+    ).toBe(true)
     expect(bodyOf(sheet, '.orbital:has(> .astra-art) > .contact {')).toContain('grid-area: content')
   })
 

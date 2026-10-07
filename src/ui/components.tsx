@@ -298,14 +298,14 @@ export const SectionHead = ({
 
 /*
   読み上げのためだけに置く見出し（.sr-only）。目に見える見出しを持たないページが
-  使う——締めの Contact（ボタンの言葉が見出しの代わり）と、見出しを空けた
-  メモ（段落がページの全部）。
+  使う——見出しを空けたメモ（段落がページの全部）。Contact の単独ページは
+  目に見える h1 を持つ。
 
   ページは h1 をちょうど1つ持つ決まり（CLAUDE.md「1ページ = 1ドキュメント」、
   WCAG 1.3.1）。見出しの無いページは、見出しで移動する人にとって「何も無い」
   ページになる。全体ページ（/all）では節の見出しの段（h2）。
 
-  目に見える見出しを置かない理由は呼ぶ側にある（Contact・メモの注記）。ここは
+  目に見える見出しを置かない理由は呼ぶ側にある（メモの注記）。ここは
   見出しの段と見えなさだけを持つ。
 */
 export const HiddenHeading = ({ text, h1 }: { text: string; h1?: boolean }) =>
@@ -323,10 +323,9 @@ export const HiddenHeading = ({ text, h1 }: { text: string; h1?: boolean }) =>
   region は読み上げに現れないので、見出しを持たない箱（ひとこと・帯）には
   付けない。渡す文字列は見出しと同じ変数から取ること。
 
-  orbital は「軌道図を置く締めの節」（Contact。ContactOrbits）。見出しの錨（節は
-  上揃え）を持たない表紙で、図を上の帯の罫線に寄せ、字は残りの高さの真ん中
-  （900 以上は表紙の底）に置く（app.css の「締めの軌道図」と .contact。表紙の高さは
-  「ページの外枠」の main > .orbital）。
+  orbital は Contact の表紙。単独ページでは5天体共通の見出し・連絡先・画像の
+  区画を使い、/all では通常の節見出しを使う。旧 ContactOrbits は DOM に残るが、
+  表紙では CSS で非表示にする。
 */
 export const Screen = ({
   id,
@@ -358,9 +357,9 @@ export const Screen = ({
   profile は個人ページの頭（名札・大見出し）。すぐ下に About・Skills・Career の
   本文が続く読み物の頭で、本文の列と同じ左の軸に立てる。
 
-  orbit は入口の表紙（.hero--orbit）。左に大見出しの列、右に作品の軌道図
-  （OrbitSystem）、底に件数の帯（Tally）を区画に並べる（app.css の「入口」）。
-  そのまわりの画面いっぱいに星空（Cosmos）を敷く。
+  orbit は入口の表紙（.hero--orbit）。5天体共通で、大見出し・リード・CTA、
+  右側の天体画像、底の件数の帯（Tally）を並べる。旧 OrbitSystem は DOM に残るが
+  表紙では非表示。背景の星空（Cosmos）は控えめに残す。
 */
 export const Hero = ({
   profile,
@@ -2183,13 +2182,12 @@ export const OwnSocials = ({ member, site = SITE }: { member: Member; site?: Sit
 /*
   連絡先のページ。サイトの並びの最後で、入口と対になる締め。
 
-  ページに出すのは軌道図と、誘う1文（サイト設定の contactLead）と、メールと GitHub の手。
-  軌道図は入口と同じ星系を、帯の真ん中に置く（ContactOrbits）。字は図の下に置き、
-  図の上には乗せない。
+  単独ページでは入口と同じ版面に、天体ごとの画像、誘う1文（サイト設定の
+  contactLead）、メールと GitHub の手を置く。ブラックホールだけ締めは星雲画像。
+  字は画像より前に置き、リンクの可読性を保つ。
 
   - 誘いの1文は、何の相談なら送ってよいかを言う唯一の言葉なので、大きく置く
-    （句読点の塊を1行ずつ。入口の大見出しと同じ Phrases）。目に見える見出しは
-    置かない（「Contact」と書いても目次と同じことを言うだけ）
+    （句読点の塊を1行ずつ。入口の大見出しと同じ Phrases）
   - メールの手はアドレスそのものを大きな字にしたリンク（押すとメールを書く画面が開く）。
     アドレスは字で読めるので、紙に刷っても宛先が残る。操作の言葉「メールを送る」を
     添える（読み上げの名前にも入る。見た目の字を含む——WCAG 2.5.3）
@@ -2201,8 +2199,8 @@ export const OwnSocials = ({ member, site = SITE }: { member: Member; site?: Sit
     行き先が1つのページに2つ並ぶ）
 
   whole は「全体ページ（/all）の1節として描くか」。全体ページでは見出しを目に見える
-  h2 で置き、軌道図は置かない（印刷・Ctrl-F・翻訳の宛先）。counts は軌道図に載せる
-  作品の件数（入口と同じ星系にする）。
+  h2 で置き、画像・旧軌道図は置かない（印刷・Ctrl-F・翻訳の宛先）。単独ページの
+  旧軌道図は検証用に DOM に残し、表紙では非表示にする。
 */
 export const Contact = ({
   lead = SITE.contactLead,

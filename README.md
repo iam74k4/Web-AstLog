@@ -28,8 +28,8 @@ workers.dev とプレビュー URL は無効。公開はデプロイ後で、購
 | DB | Drizzle ORM | スキーマは TypeScript が正、SQL は生成する |
 | 書式・lint | Biome | `src/` `test/` `public/` `scripts/` を見る |
 | テスト | Vitest（workerd 上で実行） | D1 も KV も本物で確かめる |
-| レイアウトの検査 | Playwright（`npm run check:fit`） | はみ出し・切り取り・上の帯の貼り付け・入口のブラックホールの置き場所を実際に測る |
-| 可読性の検査 | Playwright（`npm run check:contrast`） | 入口と締めの軌道図のまわりで文字が読めるかを画素で測る |
+| レイアウトの検査 | Playwright（`npm run check:fit`） | はみ出し・切り取り・上の帯の貼り付け・表紙の配置を実際に測る |
+| 可読性の検査 | Playwright（`npm run check:contrast`） | 入口と締めの天体画像のまわりで文字が読めるかを画素で測る |
 
 ランタイム依存は Hono と Drizzle だけ。
 開発ツールの間接依存（undici・sharp・旧 esbuild loader）は、セキュリティ修正版へ
@@ -200,7 +200,9 @@ Profile / Team は公開中が1人ならプロフィール、複数なら一覧�
 
 Members の「天体と色」は画像付きの選択肢。ブラックホール・土星・海王星・月・太陽とアクセント色を選べる。
 「保存前にプレビュー」で、写真を残したプロフィールの天体を確認する。
-公開中が1人なら入口と Contact の中心にも反映される。新規・未設定はブラックホールとサイトの色。
+公開中が1人なら入口と Contact の天体カバーにも反映される。新規・未設定はブラックホールとサイトの色。
+入口と Contact は5天体で共通のレイアウト・書体・余白を使い、天体の絵だけが切り替わる。
+ブラックホールの Contact には星雲を使う。旧軌道図は表紙では非表示。
 色は装飾に使い、本文の読みやすさと書体は共通のまま。
 ワードマークの「O」も選んだ天体に連動する。1人のサイトでは全ページ、プロフィール・作品では公開の持ち主の天体を使い、
 複数人の共通ページではブラックホールになる。保存前プレビューでも確認できる。
@@ -705,9 +707,12 @@ public/
   preview.css        管理プレビューの案内。公開の部品は app.css を使う
   _headers           静的なファイルに付けるヘッダ（Worker を通らないので、ここで付ける）
                      Workers Static Assets が読む規則で、ファイルとしては配られない
-                     3枚の CSS とブラックホール・星雲の絵は 1年・immutable（中身の版つきの URL
+                     3枚の CSS と天体カバー・星雲の絵は 1年・immutable（中身の版つきの URL
                      /app.css?v=… などで読むので、変えてデプロイすれば URL が変わる）
   assets/            共有ブラックホールの透過素材（blackhole.webp。0b42d90 の旧デザインを復元）。
+                     表紙は `astra-{black-hole,moon,saturn,neptune,sun}.webp`（1586×992）。
+                     ブラックホールの Contact は `astra-nebula-v2.webp` を使う。
+                     配置と URL の版は `src/ui/celestial-art.ts` の ASTRA_COVER_ART。
                      GitHub の Organization の顔（astlog-avatar.png）は scripts/blackhole/render.py の avatar。
                      星雲の透過 WebP（nebula-{iris,violet,ember,mint,sky,rose}.webp。1800×1000）——
                      scripts/nebula/render.mjs が焼く。mono と iris は同じ1枚を使う。
