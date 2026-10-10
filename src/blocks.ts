@@ -435,6 +435,8 @@ export type SiteCounts = {
   items: number
   // 公開中のメンバーの数
   members: number
+  // サイト設定に連絡先（メールか GitHub）があるか（src/site.ts の hasContact）
+  contact: boolean
 }
 
 /*
@@ -453,6 +455,8 @@ export type SiteCounts = {
     残して、外す手をページに置く。こちらは件数を絞り込む前で数える）
   - 1人のサイトの Team は、その人のプロフィールのページに置き換わって出る
     （src/routes/public/site.ts の pageList）
+  - Contact は、サイト設定に連絡先（メールか GitHub）が無ければ出ない。連絡の手が1つも
+    無いのに「こちらからお願いします」と誘うページになる（本番でそうなっていた）
 */
 export function blockShown(
   block: Pick<Block, 'type' | 'title' | 'body' | 'published'>,
@@ -463,8 +467,9 @@ export function blockShown(
 
   switch (type.key) {
     case 'hero':
-    case 'contact':
       return true
+    case 'contact':
+      return counts.contact
     case 'statement':
       return block.title !== ''
     case 'projects':

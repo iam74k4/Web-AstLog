@@ -1,6 +1,5 @@
 import { timeInJapan } from '../lib/format'
 import { AdminLayout } from './AdminLayout'
-import { ADMIN_ART } from './admin-art'
 import { StatusPill } from './components'
 
 export type DashboardCounts = {
@@ -79,13 +78,6 @@ export const AdminDashboard = (props: {
           </a>
         </div>
       </div>
-      <img
-        src={ADMIN_ART['black-hole'].src}
-        alt=""
-        width={160}
-        height={160}
-        class="dashboard-observatory__art"
-      />
       <dl class="dashboard-metrics">
         <div>
           <dt>公開中の作品</dt>

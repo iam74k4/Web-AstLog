@@ -73,17 +73,10 @@ async function snapshot(c: Context<AppEnv>) {
   const counts = Object.fromEntries(
     ITEM_KIND_KEYS.map((kind) => [kind, items.filter((item) => item.type === kind).length]),
   ) as KindCounts
-  const since = items.reduce<number | null>(
-    (oldest, item) =>
-      item.yearFrom !== null && (oldest === null || item.yearFrom < oldest)
-        ? item.yearFrom
-        : oldest,
-    null,
-  )
   const data: TopData = {
     site,
     members,
-    projects: { total: items.length, rows: items, since },
+    projects: { total: items.length, rows: items },
     counts,
     kinds: kindsOf(counts),
     filter: NO_FILTER,
@@ -181,7 +174,6 @@ function renderSnapshot(
         label="全体"
         nav={nav}
         theme={saved.theme}
-        celestial={soloMember(saved.members)}
         footer={footer(saved)}
         publicHref="/all"
         whole
@@ -203,11 +195,7 @@ function renderSnapshot(
       data: {
         ...saved.data,
         filter,
-        projects: {
-          ...saved.data.projects,
-          rows,
-          numbers: new Map(saved.items.map((item, index) => [item.id, index + 1])),
-        },
+        projects: { ...saved.data.projects, rows },
       },
     }
   }
@@ -223,7 +211,6 @@ function renderSnapshot(
       nav={options.unsaved ? [] : previewNav(saved)}
       theme={saved.theme}
       footer={footer(saved)}
-      celestial={soloMember(saved.members)}
       publicHref={screen === 'hero' ? '/' : `/${screen}`}
       {...options}
     >
@@ -305,7 +292,6 @@ function memberResponse(
       nav={options.unsaved ? [] : previewNav(saved)}
       theme={saved.theme}
       footer={footer(memberContext)}
-      celestial={member}
       {...options}
     >
       {page.node}
@@ -338,9 +324,6 @@ function itemResponse(
       nav={options.unsaved ? [] : previewNav(saved)}
       theme={saved.theme}
       footer={footer(saved)}
-      celestial={
-        saved.members.find((member) => member.id === item.memberId) ?? soloMember(saved.members)
-      }
       {...options}
     >
       {page.node}
@@ -392,7 +375,6 @@ export async function validationFailure(
       nav={[]}
       theme={saved.theme}
       footer={footer(saved)}
-      celestial={soloMember(saved.members)}
     >
       <Screen id="preview-errors" label="入力の確認">
         <SectionHead title="入力を確認してください" h1 />
@@ -432,6 +414,9 @@ async function memberPreviewPost(c: Context<AppEnv>, askedId?: string) {
     id: existing?.id ?? 0,
     formKey: existing?.formKey ?? null,
     createdAt: existing?.createdAt ?? '',
+    // もう読まない列（src/db/schema.ts の members の注記）。行の形を満たすためだけに持つ
+    celestialBody: existing?.celestialBody ?? 'black-hole',
+    celestialAccent: existing?.celestialAccent ?? 'inherit',
     ...values,
     avatarUrl: picked.image ? imageDataUrl(picked.image) : (existing?.avatarUrl ?? null),
   }
@@ -570,7 +555,6 @@ export async function renderBlockPreview(
       nav={options.unsaved ? [] : previewNav(saved)}
       theme={saved.theme}
       footer={footer(saved)}
-      celestial={soloMember(saved.members)}
     >
       {page.node}
     </PreviewLayout>,

@@ -5,25 +5,7 @@ import { mkdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { chromium } from 'playwright'
 import { devServer, ROOT, scratchState } from './lib/dev-server.mjs'
-import { importTs } from './lib/ts-import.mjs'
 
-const { ADMIN_ART } = await importTs('src/ui/admin-art.ts')
-const { BLACKHOLE_ART } = await importTs('src/ui/logo.ts')
-const { CELESTIAL_ART } = await importTs('src/ui/celestial-art.ts')
-const originals = { 'black-hole': BLACKHOLE_ART, ...CELESTIAL_ART }
-let artBytes = 0
-for (const [key, art] of Object.entries(ADMIN_ART)) {
-  assert.equal(art.source, originals[key].src, '原画を変えたら export-admin-art を実行する')
-  assert.ok(
-    Math.abs(art.width / art.height - originals[key].width / originals[key].height) < 0.01,
-    '縮小見本の縦横比が原画と違う',
-  )
-  const [path, version] = art.src.split('?v=')
-  const bytes = await readFile(join(ROOT, 'public', path))
-  assert.equal(createHash('sha256').update(bytes).digest('hex').slice(0, 8), version)
-  artBytes += bytes.length
-}
-assert.ok(artBytes < 64 * 1024, '管理用の選択見本が64KiBを超えている')
 const token = randomBytes(32).toString('hex')
 const hash = createHash('sha256').update(token).digest('hex')
 const fixture = `INSERT INTO users(id,role) VALUES(9001,'owner'); INSERT INTO sessions(id,user_id,expires_at) VALUES('${hash}',9001,'${new Date(Date.now() + 3_600_000).toISOString()}'); INSERT INTO user_identities(user_id,provider,subject,label) VALUES(9001,'github','check-admin','画面検査');`
@@ -114,23 +96,6 @@ try {
           '操作ラベルが枠からはみ出す',
         )
       }
-      if (path === '/admin/members/1/edit') {
-        const cards = page.locator('.celestial-choice')
-        assert.equal(await cards.count(), 5)
-        await cards.last().scrollIntoViewIfNeeded()
-        assert.ok(
-          await cards
-            .locator('img')
-            .evaluateAll((images) => images.every((img) => img.complete && img.naturalWidth > 0)),
-        )
-        // キーボードのラジオ操作と選択状態。
-        await page.locator('[name=celestialBody]:checked').focus()
-        await page.keyboard.press('ArrowRight')
-        assert.notEqual(
-          await page.locator('[name=celestialBody]:checked').inputValue(),
-          'black-hole',
-        )
-      }
       if (path === '/admin/items/1/edit') {
         const field = page.locator('[name=summary]')
         await field.focus()
@@ -182,12 +147,15 @@ try {
   const forced = await contextFor(390)
   const forcedPage = await forced.newPage()
   await forcedPage.emulateMedia({ forcedColors: 'active', reducedMotion: 'reduce' })
-  await go(forcedPage, '/admin/members/1/edit')
+  await go(forcedPage, '/admin/appearance')
   assert.ok(
     await forcedPage
-      .locator('.celestial-choice input, .accent-choice input')
-      .evaluateAll((inputs) => inputs.every((input) => getComputedStyle(input).opacity === '1')),
-    '強制色で選択状態が消える',
+      .locator('.preset input')
+      .evaluateAll(
+        (inputs) =>
+          inputs.length > 0 && inputs.every((input) => getComputedStyle(input).opacity === '1'),
+      ),
+    '強制色で見た目の選択状態が消える',
   )
   await forced.close()
   const context = await contextFor(390)

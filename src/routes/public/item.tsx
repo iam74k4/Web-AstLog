@@ -226,7 +226,6 @@ export async function renderItem(
     },
     theme,
     footer: <SiteIdentity site={site} solo={solo} />,
-    celestial: members.find((member) => member.id === item.memberId) ?? solo,
     adminPath: `/admin/items/${item.id}/edit`,
     // 貼られたときの札は、この作品の画像（あれば）
     image: itemOgImage(item),

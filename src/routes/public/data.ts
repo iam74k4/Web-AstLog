@@ -10,7 +10,7 @@ import {
   totalOf,
 } from '../../domain'
 import type { AppEnv } from '../../env'
-import type { SiteSettings } from '../../site'
+import { hasContact, SITE, type SiteSettings } from '../../site'
 
 /*
   公開ページを組むのに使う「サイトの今の姿」。どのページを描く側（top・member・item・
@@ -59,7 +59,7 @@ export const kindsOf = (counts: KindCounts): ItemKind[] =>
 export type BandData = { href: string; counts: KindCounts }
 
 /*
-  一覧への1本の行き先と件数（入口の Cta と Tally、個人ページの Band が読む）。
+  一覧への1本の行き先と件数（入口の Cta と、個人ページの Band が読む）。
 
   送る先は Projects のページ。その節を置いていないサイトでは、そもそも
   その URL が無い（404）ので、置いてあるかどうかも見る。項目が1件も無い
@@ -76,33 +76,19 @@ export const bandOf = (blocks: schema.Block[], counts: KindCounts, query = ''): 
   total は絞り込みを外したときの件数で、節を出すかどうかを決める
   （src/blocks.ts の blockShown）。行は絞り込んだあとの全件（Projects のページと
   全体ページ）。ほかのページを描くときは空——作品の行は、それを描くページでだけ引く
-  （site.ts の pageRows）。入口は公開中の作品のいちばん古い年（Since）だけを集約する。
-
-  numbers は絞り込んだ一覧の行の番号（作品の id → 絞り込む前の並びでの位置。1 から）。
-  番号は作品ごとに1つで、業務だけに絞っても 03 の作品は 03（絞り込みで番号が入れ替わると、
-  同じ作品が見る一覧ごとに別の番号になる）。絞り込まない一覧では持たず、行の順がそのまま
-  番号（rowNumber）。
+  （site.ts の pageRows）。
 */
 export type ItemListData = {
   total: number
   rows: ItemView[]
-  numbers?: ReadonlyMap<number, number>
-  since?: number | null
 }
-
-// 一覧の行の番号（1 から）。絞り込んだ一覧では、絞り込む前の並びでの位置
-export const rowNumber = (list: ItemListData, item: ItemView, order: number) =>
-  list.numbers?.get(item.id) ?? order + 1
 
 export type TopData = {
   site?: SiteSettings
   members: schema.Member[]
   // Projects（個人開発と業務を1つにした一覧）
   projects: ItemListData
-  /*
-    公開中の作品の区分ごとの件数（絞り込みを見ない、サイト全体の数）。入口と締めの
-    軌道図に載せる天体の数（src/lib/orbits.ts の orbitMap）
-  */
+  // 公開中の作品の区分ごとの件数（絞り込みを見ない、サイト全体の数）
   counts: KindCounts
   // 区分の絞り込みに並べるぶん（公開中の項目が実在する区分だけ）
   kinds: ItemKind[]
@@ -110,8 +96,7 @@ export type TopData = {
   // 一覧の行に担当者を出すか（showMemberOf）
   showMember: boolean
   /*
-    入口（Hero のページ）に置く一覧への1本（「一覧で見る →」）と件数の帯（Tally）の
-    もと。件数は絞り込みを見ないサイト全体の数（入口で見せたいのは「ここに何件あるか」）。
+    入口（Hero のページ）に置く一覧への1本（「一覧で見る →」）のもと。
     全体ページ（/all）では null——全部が同じ文書に並ぶので、送り出す先が無い。
   */
   band: BandData | null
@@ -127,6 +112,7 @@ export type TopData = {
 export const siteCountsOf = (data: TopData): SiteCounts => ({
   items: data.projects.total,
   members: data.members.length,
+  contact: hasContact(data.site ?? SITE),
 })
 
 /*
@@ -134,8 +120,7 @@ export const siteCountsOf = (data: TopData): SiteCounts => ({
   区分もメンバーもそこに効く（scopeOf）。
 
   目次の行き先に絞り込みを付けるか（site.ts の pageQuery）、DB から絞り込んだ行を
-  引くか（pageRows。入口だけは件数の帯の Since のために絞り込まずに年を集約する）は、どちらも
-  この1本に聞く。効かないページに付けると、中身は1文字も変わらないのに URL だけが
+  引くか（pageRows）は、どちらもこの1本に聞く。効かないページに付けると、中身は1文字も変わらないのに URL だけが
   増える（/contact?member=… のたぐい）。
 */
 export const filterApplies = (key: string) => key === 'projects'

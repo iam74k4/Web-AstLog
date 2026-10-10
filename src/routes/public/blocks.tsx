@@ -18,7 +18,6 @@ import {
   Note,
   NowList,
   Numbers,
-  OrbitSystem,
   OwnSocials,
   Phrases,
   ProfileWhole,
@@ -26,10 +25,10 @@ import {
   ScreenSection,
   SectionHead,
   Statement,
-  Tally,
   Timeline,
 } from '../../ui/components'
-import { rowNumber, siteCountsOf, soloMember, type TopData } from './data'
+import { siteCountsOf, soloMember, type TopData } from './data'
+import { memberHref } from './member-page'
 import {
   describe,
   excerpt,
@@ -146,21 +145,23 @@ export function renderBlock(
         }
       }
       /*
-        入口。5天体共通で左に大見出しとリード文と一覧への1本、右に天体の画像、
-        底に件数の帯。旧軌道図は DOM に残るが表紙では非表示。
+        入口。札・大見出し・リード文・押し手を左の軸に積む。絵も件数の帯も置かない——
+        最初の画面の主役は字で、件数（「07 Projects」「Since 2024」）は数の少なさを
+        目立たせるだけだった。
 
         大見出しは1人のサイトならその人の大見出し（members.headline。無ければ名前）、
         2人以上ならサイトの一言。名前を真ん中に据えた前の入口は、持ち主が「ださい。
-        Profile で出る」と外した——名乗りは足元（SiteIdentity）と Profile が受ける。
-        大見出しの上の札は「職種 — 所在地」（採る側が最初に探すもの）。
+        Profile で出る」と外した——名前は大見出しの上の札（「名前・職種・所在地」）と
+        足元（SiteIdentity）が受ける。札は採る側が最初に探すもの。
 
-        一覧への1本と件数の帯は、一覧（Projects）のページがあって作品があるときだけ
-        （data.ts の bandOf。0件の知らせだけのページへ送らない）。件数の帯のいちばん古い年
-        （Since）は、公開中の作品の年を DB で集約した値（site.ts の pageRows）から。
-        作品へは「一覧で見る →」から。
+        一覧への1本は、一覧（Projects）のページがあって作品があるときだけ（data.ts の
+        bandOf。0件の知らせだけのページへ送らない）。プロフィールへの1本は、1人のサイトで
+        その人のページが並びにあるときだけ（data.profile）。一覧が主で、プロフィールは
+        枠線だけの2本目（Cta の quiet）。
       */
       const statement = solo ? solo.headline || solo.name : site.tagline
-      const eyebrow = solo ? [solo.role, solo.location].filter(Boolean) : []
+      const eyebrow = solo ? [solo.name, solo.role, solo.location].filter(Boolean) : []
+      const profile = data.profile
       return {
         id,
         slug: id,
@@ -170,19 +171,24 @@ export function renderBlock(
         // 入口はサイトそのもののページ。名乗りと同じ文をそのまま出す
         description: describe(siteDescription(solo, site)),
         node: (
-          <Hero orbit celestial={solo ?? undefined}>
-            <div class="hero__copy">
-              {eyebrow.length ? <Eyebrow parts={eyebrow} /> : null}
-              <h1>
-                <Phrases text={statement} />
-              </h1>
-              <p class="hero__lead">
-                <Phrases text={site.heroLead} />
-              </p>
-              {band ? <Cta href={band.href}>一覧で見る</Cta> : null}
-            </div>
-            <OrbitSystem counts={data.counts} member={solo ?? undefined} />
-            {band ? <Tally counts={band.counts} since={projects.since ?? null} /> : null}
+          <Hero cover>
+            {eyebrow.length ? <Eyebrow parts={eyebrow} /> : null}
+            <h1>
+              <Phrases text={statement} />
+            </h1>
+            <p class="hero__lead">
+              <Phrases text={site.heroLead} />
+            </p>
+            {band || profile ? (
+              <div class="hero__actions">
+                {band ? <Cta href={band.href}>一覧で見る</Cta> : null}
+                {profile ? (
+                  <Cta href={memberHref(profile.slug)} quiet={Boolean(band)}>
+                    プロフィール
+                  </Cta>
+                ) : null}
+              </div>
+            ) : null}
           </Hero>
         ),
       }
@@ -254,18 +260,10 @@ export function renderBlock(
             }
           >
             {projects.rows.length ? (
-              /*
-                番号付きの行を縦に並べる（索引）。番号は公開中の全件の並びでの位置で、
-                絞り込んでも絞り込む前の番号のまま（rowNumber。同じ作品がどの絞り込みでも同じ番号）
-              */
+              // 行を縦に並べる（索引）。並びは新しい順（src/db/queries.ts の itemOrder）
               <div class="entries">
-                {projects.rows.map((item, order) => (
-                  <ItemRow
-                    key={item.id}
-                    item={item}
-                    number={rowNumber(projects, item, order)}
-                    showMember={showMember}
-                  />
+                {projects.rows.map((item) => (
+                  <ItemRow key={item.id} item={item} showMember={showMember} />
                 ))}
               </div>
             ) : (
@@ -359,14 +357,7 @@ export function renderBlock(
         title: 'Contact',
         description: describe(site.contactLead),
         node: (
-          <Contact
-            lead={site.contactLead}
-            email={site.email}
-            github={site.github}
-            counts={data.counts}
-            whole={whole}
-            member={soloMember(members) ?? undefined}
-          />
+          <Contact lead={site.contactLead} email={site.email} github={site.github} whole={whole} />
         ),
       }
 

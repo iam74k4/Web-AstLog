@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import * as schema from '../src/db/schema'
 import app from '../src/index'
 import { CACHE_STATE_HEADER } from '../src/lib/page-cache'
-import { db, resetDb, seedItem, seedMember, uncachedEnv } from './helpers'
+import { db, resetDb, seedMember, uncachedEnv } from './helpers'
 
 beforeEach(resetDb)
 
@@ -34,8 +34,8 @@ async function uncachedHero(query = '') {
   return { html: await response.text(), statements }
 }
 
-describe('入口の年の取得', () => {
-  it('絞り込みを無視して年を集約し、作品の本文・関連行を取得しない', async () => {
+describe('入口の取得', () => {
+  it('絞り込みを付けて来ても、作品の行も本文も関連行も引かない（区分ごとの件数だけ）', async () => {
     const first = await seedMember({ slug: 'first' })
     const second = await seedMember({ slug: 'second' })
     await db()
@@ -54,19 +54,14 @@ describe('入口の年の取得', () => {
       ])
 
     const { html, statements } = await uncachedHero('?kind=app&member=first')
-    expect(html).toContain('<dt lang="en">Since</dt><dd class="tally__year">2010</dd>')
+    // 一覧への1本は出る（作品がある）。件数の帯は持たない
+    expect(html).toContain('一覧で見る')
+    expect(html).not.toContain('class="tally')
     const itemQueries = statements.filter((sql) => /\bfrom\s+"items"(?:\s|$)/i.test(sql))
-    expect(itemQueries.some((sql) => /\bmin\(/i.test(sql))).toBe(true)
+    expect(itemQueries.length).toBeGreaterThan(0)
     for (const sql of itemQueries) {
-      expect(sql).not.toMatch(/"body"|"story_\w+"|"item_(tags|links|shots)"|json_array/i)
+      expect(sql).toMatch(/\bcount\(/i)
+      expect(sql).not.toMatch(/"body"|"story_\w+"|"item_(tags|links|shots)"|json_array|\bmin\(/i)
     }
-  })
-
-  it('最小年が 0 のときは、従来どおり Since を表示しない', async () => {
-    await seedItem({ year: '0000' })
-    await seedItem({ year: '2026' })
-    const { html } = await uncachedHero()
-    expect(html).toContain('class="tally"')
-    expect(html).not.toContain('class="tally__year"')
   })
 })

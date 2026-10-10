@@ -1,5 +1,5 @@
 /*
-  検査用に dev サーバを立てる。check-fit.mjs と check-contrast.mjs の共通部分。
+  検査用に dev サーバを立てる。check-fit.mjs と check-admin.mjs の共通部分。
 
   2本に写してあったころは、SIGTERM の届け方（下記）のような「一度踏んだ罠」の
   直しが片方にしか入らない危険が常にあった。実際コメントには
@@ -110,7 +110,7 @@ const listening = (port) =>
 
   persistTo を渡すと、その置き場の D1 と KV で立てる（scratchState が作ったもの）。
 
-  given（FIT_BASE / CONTRAST_BASE）を渡したときは、そこに向けて測るだけで
+  given（FIT_BASE など）を渡したときは、そこに向けて測るだけで
   何も起動しない——手元で `npm run dev` を動かしたまま測りたいとき用。
   そのときの stop() は何もしない関数なので、呼ぶ側は立てたかどうかを
   覚えておかなくてよい（`dev?.stop()` の ? を忘れる余地を残さない）。
@@ -118,8 +118,8 @@ const listening = (port) =>
   **測るのは自分が立てたサーバだけ。** ポートが塞がっていると wrangler は
   「Address already in use」ですぐ終わるが、待つ側（waitForServer）は誰の返事でも
   受けるので、そのポートを持っている**別のサーバ**（別のワークツリーの dev や検査）を
-  測って緑を出していた——月を壊した作業ツリーの check:contrast が、相手の無傷の
-  画面を測って「✓ 360 通り」を出したことがある。そこで2つ止める。
+  測って緑を出していた——画面を壊した作業ツリーの検査が、相手の無傷の画面を測って
+  「✓ 360 通り」を出したことがある。そこで2つ止める。
   - 立てる前に、そのポートで誰も待ち受けていないことを確かめる（使われていれば止まる）
   - 準備ができる前に wrangler が終わったら、返事を待たずに止まる（確かめたあとで
     取られた・移行を忘れた、など）
@@ -136,7 +136,7 @@ export async function devServer(given, port, persistTo) {
   if (await listening(port)) {
     throw new Error(
       `ポート ${port} はもう使われている。別のサーバを測らないよう、ここで止める` +
-        '（空いているポートを FIT_PORT / CONTRAST_PORT で渡すか、使っているプロセスを止める）',
+        '（空いているポートを FIT_PORT / ADMIN_PORT で渡すか、使っているプロセスを止める）',
     )
   }
 

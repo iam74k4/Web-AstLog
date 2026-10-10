@@ -84,7 +84,7 @@ INSERT INTO items (id, type, member_id, platform_key, title, slug, year, summary
   (2, 'app', 1, 'ios', 'AllTasks', 'alltasks', '2026', 'Apple リマインダー・Microsoft To Do・Google ToDo を1つの受信箱にまとめるタスクアプリ。3つのサービスを横断して1画面で扱えるようにしている。', 1, 20),
   (3, 'app', 1, 'cli', 'AI Agent Config', 'ai-agent-config', '2026', 'Cursor / Claude Code / Copilot でばらつくルールを1か所に集約し、1コマンドで各環境へ配る設定ツール。本業の AI 活用を自分の環境にも通すためにつくった。', 1, 30),
   (4, 'app', 1, 'server', 'Discord Bot', 'discord-bot', '2026', '機能追加がコマンド単位で完結する153ファイルのモジュール構成。VC 録音と SQLite 永続化を備え、Railway へ継続デプロイしている。', 1, 40),
-  (5, 'app', 1, 'web', 'AstLog', 'astlog', '2026', 'Cloudflare Workers で動くこのポートフォリオ。本文と導線をサーバーで描画し、入口の軌道図とページの切り替えを CSS で組んでいる。', 1, 50);
+  (5, 'app', 1, 'web', 'AstLog', 'astlog', '2026', 'Cloudflare Workers で動くこのポートフォリオ。本文と導線をサーバーで描画し、JavaScript なしで読める。', 1, 50);
 
 -- 5 は前の Portfolio（スクロールしない SPA のサイト。リポジトリはもう無い）を、このサイトに
 -- 差し替えたもの。前の slug（/apps/item/portfolio）は転送表に残し、貼られたリンクを殺さない

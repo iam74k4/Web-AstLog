@@ -1,6 +1,11 @@
 import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
-import { listPublishedItemKeys, listPublishedMembers, publishedBlocks } from '../../db/queries'
+import {
+  listPublishedItemKeys,
+  listPublishedMembers,
+  loadSiteSettings,
+  publishedBlocks,
+} from '../../db/queries'
 import * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
 import { SITE } from '../../site'
@@ -52,14 +57,15 @@ export async function sitemapXml(c: Context<AppEnv>) {
   const db = drizzle(c.env.DB, { schema })
   // 作品は URL を組むぶん（区分・slug）だけ。一覧の行の子（タグ・リンク・担当・
   // プラットフォーム）は要らないので、全件ぶんを引かない
-  const [members, blocks, items] = await Promise.all([
+  const [members, blocks, items, site] = await Promise.all([
     listPublishedMembers(db),
     publishedBlocks(db),
     listPublishedItemKeys(db),
+    loadSiteSettings(db),
   ])
 
   // 絞り込みを付けない素のサイト。?kind= 付きの URL は正ではないので載せない
-  const { pages } = await sitePages(db, blocks, members, NO_FILTER)
+  const { pages } = await sitePages(db, blocks, members, NO_FILTER, undefined, site)
 
   const paths = [
     /*

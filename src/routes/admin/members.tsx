@@ -3,7 +3,6 @@ import type { BatchItem } from 'drizzle-orm/batch'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { MAX_CHARS, publishErrors } from '../../blocks'
-import { DEFAULT_CELESTIAL, isCelestialAccent, isCelestialBody } from '../../celestial'
 import { EDIT_CONFLICT, editMatches, guardEdit, isEditConflict, nextUpdatedAt } from '../../db/edit'
 import type { Db } from '../../db/queries'
 import * as schema from '../../db/schema'
@@ -24,7 +23,6 @@ import {
   PublishToggle,
 } from '../../ui/AdminForm'
 import { AdminLayout } from '../../ui/AdminLayout'
-import { CelestialChoices } from '../../ui/AdminVisuals'
 import { Avatar, StatusPill } from '../../ui/components'
 import { ExternalIcon, PencilIcon, TrashIcon } from '../../ui/icons'
 import { commitWithImage, discardImages, imageNotKept, pickImage, putImage } from './images'
@@ -149,8 +147,6 @@ const MemberForm = (props: {
     送られて、引っ込めたはずのページが公開のまま残った
   */
   const published = props.values ? Number(props.values.published === '1') : (member?.published ?? 0)
-  const celestialBody = value('celestialBody', DEFAULT_CELESTIAL.body)
-  const celestialAccent = value('celestialAccent', DEFAULT_CELESTIAL.accent)
 
   return (
     <AdminLayout
@@ -215,15 +211,6 @@ const MemberForm = (props: {
             hint={`個人ページの一番上。言い切りで · ${MAX_CHARS.memberHeadline} 字まで`}
           />
         </FormSection>
-        <FormDetails
-          title="天体と色"
-          defaultOpen
-          note="プロフィールの表紙とメンバー一覧に反映。公開中が1人なら入口・Contactにも反映"
-          errors={props.errors}
-          fields={['celestialBody', 'celestialAccent']}
-        >
-          <CelestialChoices body={celestialBody} accent={celestialAccent} errors={props.errors} />
-        </FormDetails>
         <FormDetails
           title="プロフィールを詳しく書く"
           note="紹介文・スキル・経歴・所在地・画像（任意）"
@@ -377,19 +364,7 @@ export function readMemberForm(form: FormData, existing?: schema.Member) {
   const name = str(form.get('name'))
   const slug = readSlug(str(form.get('slug')), existing?.slug, name) ?? `member-${newToken(3)}`
   const sortOrder = readSortOrder(form, existing?.sortOrder)
-  // 古いフォームに欄がなければ維持する。送られたキーは完全一致で検査する。
-  const celestialValue = (field: 'celestialBody' | 'celestialAccent', fallback: string) => {
-    if (!form.has(field)) return existing?.[field] ?? fallback
-    const value = form.get(field)
-    return typeof value === 'string' ? value : ''
-  }
-  const celestialBody = celestialValue('celestialBody', DEFAULT_CELESTIAL.body)
-  const celestialAccent = celestialValue('celestialAccent', DEFAULT_CELESTIAL.accent)
   const errors: Record<string, string> = { ...sortOrder.error }
-  if (form.has('celestialBody') && !isCelestialBody(celestialBody))
-    errors.celestialBody = '天体を選び直してください'
-  if (form.has('celestialAccent') && !isCelestialAccent(celestialAccent))
-    errors.celestialAccent = '装飾色を選び直してください'
 
   return {
     form,
@@ -408,8 +383,6 @@ export function readMemberForm(form: FormData, existing?: schema.Member) {
       careerText: str(form.get('careerText')),
       github: str(form.get('github')) || null,
       email: str(form.get('email')) || null,
-      celestialBody,
-      celestialAccent,
       sortOrder: sortOrder.value,
       published: bool(form.get('published')),
       updatedAt: existing ? nextUpdatedAt(existing.updatedAt) : new Date().toISOString(),

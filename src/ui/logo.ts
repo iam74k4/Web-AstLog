@@ -1,160 +1,92 @@
 /*
-  AstLog のロゴの形（ここが正）。ページのロゴは src/ui/icons.tsx の Wordmark / HoleMark が
+  AstLog のロゴの形（ここが正）。ページのロゴは src/ui/icons.tsx の Wordmark / Mark が
   ここから直に SVG を描く。素材のファイル（public/assets の astlog-wordmark.svg・favicon.svg と、
-  favicon・iPhone のホーム画面の PNG）は scripts/logo/export.mjs がここから書き出す。
+  favicon・iPhone のホーム画面・共有カードの PNG）は scripts/logo/export.mjs がここから書き出す。
 
-  ロゴは「字で組む ΛSTLOG の O を天体にしたもの」。横棒の無い A（Λ）と、
-  線の太さをそろえた幾何の大文字で、宇宙機関の字の系譜。O の位置には、入口と締めの軌道図の
-  真ん中と同じブラックホールの絵（BLACKHOLE_ART）を、影の半径が HOLE.core になる大きさで
-  置く——持ち主の「AstLog の o もブラックホールのデザインに合わせて」。前は黒い円・光の縁・
-  後ろを通る横線の記号で、入口の
-  絵と別のものに見えた。線で描き直した姿（輪のある玉）は、大きく描くと土星に見えた。印だけの
-  とき（favicon・404・管理画面）も、同じ絵を1つで使う。ページのワードマークは
-  選択中の天体に連動する。文字と中心は共通、画像の余白に応じた寸法は wordmarkArt が決める。
+  ロゴは「字で組む ΛSTLOG」。横棒の無い A（Λ）と、線の太さをそろえた幾何の大文字で、
+  宇宙機関の字の系譜。O は他の字と同じ太さの輪——前は O の位置に天体の絵を置き、選んだ
+  天体に合わせて動かしていたが、サイトを装飾より中身が先に読める形へ簡素にしたときに外した
+  （絵は画像の読み込みを待つあいだ O が欠け、小さい帯では光の翼が隣の字に触れていた）。
 
   - Λ だけは塗りの形で描く。線で描くと足の切り口が脚に直角になり、片方の角が
     字の底より下へ出る。塗りなら足を水平に切れる
-  - 丸い字（S・G）と尖った頂（Λ）は字の高さから少しはみ出させる（0.3）。
+  - 丸い字（S・O・G）と尖った頂（Λ）は字の高さから少しはみ出させる（0.3）。
     そろえると、丸と尖りのほうが小さく見える
-  - 字間は字の高さの 0.34 を土台に、組み合わせごとに目で詰める。O の左右は光の翼の
-    ぶんだけ少し開ける（SHIFT）
-  - 光は字の外へはみ出す（ページでは字の箱は字だけで決め、SVG は overflow を見せる。
-    ファイルは枠の外を切るので、枠を光のぶん広げる）
+  - 字間は字の高さの 0.34 を土台に、組み合わせごとに目で詰める
 
   字の高さ 20 の格子（原点は左下、上が負）。JSX を持たない（scripts から読むため）。
 */
 
-import type { CelestialBody } from '../celestial'
-
 const round = (value: number) => Math.round(value * 1000) / 1000
 
-// 旧素材の光の翼が L と G に触れない字間。
-const SHIFT = 2.2
-
 // 字の箱（上の帯・ログイン画面のワードマークは、この箱の高さで置く）
-const BOX = { top: -20.31, bottom: 0.31, width: round(131.67 + 2 * SHIFT) }
+const BOX = { top: -20.31, bottom: 0.31, width: 131.67 }
+
+// O の輪。半径は G の弧と同じ 9（線の太さの半分ぶん、字の高さからはみ出す）
+const O = { cx: 93.97, cy: -10, r: 9 }
 
 export const WORDMARK = {
   viewBox: `0 ${BOX.top} ${BOX.width} ${round(BOX.bottom - BOX.top)}`,
   lambda: 'M0 0L9.2 -20.3L18.4 0L15.55 0L9.2 -14L2.85 0Z',
-  // S・T・L と G（O は天体なので線に含めない）
-  strokes: `M35.94 -16.61A5.3 4.5 0 0 0 25.96 -14.5A5.3 4.5 0 0 0 31.26 -10A5.3 4.5 0 0 1 36.56 -5.5A5.3 4.5 0 0 1 26.58 -3.39M44.66 -18.7H60.26M52.46 -18.7V0M67.68 -20V-1.3H78.78M${round(128.46 + 2 * SHIFT)} -15.54A9 9 0 1 0 ${round(130.37 + 2 * SHIFT)} -10H${round(122.45 + 2 * SHIFT)}`,
+  // S・T・L・O・G。O は2つの半円の弧で閉じる（circle を別に持つと、素材の SVG と形が分かれる）
+  strokes: `M35.94 -16.61A5.3 4.5 0 0 0 25.96 -14.5A5.3 4.5 0 0 0 31.26 -10A5.3 4.5 0 0 1 36.56 -5.5A5.3 4.5 0 0 1 26.58 -3.39M44.66 -18.7H60.26M52.46 -18.7V0M67.68 -20V-1.3H78.78M${round(O.cx - O.r)} ${O.cy}A${O.r} ${O.r} 0 1 0 ${round(O.cx + O.r)} ${O.cy}A${O.r} ${O.r} 0 1 0 ${round(O.cx - O.r)} ${O.cy}ZM128.46 -15.54A9 9 0 1 0 130.37 -10H122.45`,
   stroke: 2.6,
 } as const
 
 /*
-  O の位置のブラックホール（字の高さ 20 の格子）。core は影の黒い円の半径で、前の O の
-  内側の空きと同じ大きさ。絵はこの影の大きさに合わせて置く（holeArt）
+  印だけのとき（favicon・404・管理画面の頭）は Λ を1つで使う。字の中でいちばん形が立ち、
+  16px のタブでも潰れない。MARK_HALF は印の枠（正方形）の半分の幅
 */
-export const HOLE = {
-  cx: round(93.97 + SHIFT),
-  cy: -10,
-  core: 7.2,
-} as const
-
-// 透明余白と土星の環を含めた光学補正。小さい O でも各天体の輪郭を読める大きさにする。
-export const wordmarkArt = (body: Exclude<CelestialBody, 'black-hole'>) => {
-  const size = round(HOLE.core * { sun: 4.4, moon: 4.4, neptune: 4.8, saturn: 6 }[body])
-  return {
-    x: round(HOLE.cx - size / 2),
-    y: round(HOLE.cy - size / 2),
-    width: size,
-    height: size,
-  }
-}
-
-/*
-  旧デザインの滑らかな白い光を持つブラックホール（0b42d90 の素材を復元）。入口と締めの軌道図の真ん中
-  （components.tsx の Hole）、プロフィールの表紙（CelestialArt）、ロゴの O（HoleArt）が
-  同じ1枚を使う。favicon とワードマークの素材も scripts/logo/export.mjs がこの絵から作る。
-
-  絵は光だけの透過素材で、中央の影は表示側が黒い円を下に敷く——
-  絵の濃さを揺らしても、影の後ろの軌道を透かさないため。width / height は透明余白を含む絵の
-  画素、lightWidth は可視光（alpha が約2%以上）の横幅、shadow は中央の影の半径（いずれも画素）。
-  画像の中央を影の中心として配置し、img と holeArt の寸法には余白を含む width / height を使う。
-
-  URL には版（?v= はファイルの SHA-256 の頭8桁）を付け、public/_headers が1年・immutable で
-  配る。上の帯のロゴがどのページでも読むので、既定（毎回確かめる）のままだと、ページを移る
-  たびに O の光が1往復ぶん消えてから灯る。差し替えたら実寸・影の半径・版を合わせる
-  （test/public.test.ts がファイルの寸法と版を突き合わせる）
-*/
-export const BLACKHOLE_ART = {
-  src: '/assets/blackhole.webp?v=c48dd421',
-  width: 1024,
-  height: 576,
-  lightWidth: 785,
-  shadow: 127,
-} as const
-
-// 影の半径が core になるように置いた絵の箱（中心 (cx, cy) のまわり。字の格子の単位）
-export const holeArt = (cx: number, cy: number, core: number = HOLE.core) => {
-  const width = round((BLACKHOLE_ART.width / BLACKHOLE_ART.shadow) * core)
-  const height = round((BLACKHOLE_ART.height / BLACKHOLE_ART.shadow) * core)
-  return { x: round(cx - width / 2), y: round(cy - height / 2), width, height }
-}
-
-/*
-  印だけのときの枠（O を真ん中に置く正方形）。MARK_HALF はその半分の幅。光の翼の淡い端
-  は枠の外へ出して見せる（icons.tsx の HoleMark の overflow）——枠を翼に
-  合わせると、影が小さな点になる
-*/
-export const MARK_HALF = 19
+const LAMBDA_BOX = { width: 18.4, height: 20.3 }
+export const MARK_HALF = 14
 export const MARK_VIEWBOX = `${-MARK_HALF} ${-MARK_HALF} ${2 * MARK_HALF} ${2 * MARK_HALF}`
+// Λ の箱の中心を枠の中心へ（字の格子は原点が左下）
+export const MARK_TRANSFORM = `translate(${-LAMBDA_BOX.width / 2} ${round(LAMBDA_BOX.height / 2)})`
 
 /*
-  アイコン（favicon・iPhone のホーム画面）の枠の半分。印の枠より詰め、光の翼の端は枠で
-  切る——16px のタブで影と光が潰れない大きさにするため（±19 のままだと影は 3px の点）
-*/
-const ICON_HALF = 16
-
-/*
-  素材のファイルの文字・地・下敷きの影に焼き込む色。ファイルは貼る先の字の色を継げない
-  （currentColor が効くのはページに直に描いた SVG だけで、<img> や favicon では黒になる）ので、サイトと
-  同じ黒基調の色を決め打つ。app.css の :root の --ink・--bg・--hole-core と同じ値
+  素材のファイルの文字と地に焼き込む色。ファイルは貼る先の字の色を継げない
+  （currentColor が効くのはページに直に描いた SVG だけで、<img> や favicon では黒になる）ので、
+  サイトと同じ黒基調の色を決め打つ。app.css の :root の --ink・--bg と同じ値
   （test/theme.test.ts が突き合わせる）
 */
-export const LOGO_COLORS = { ink: '#f2f2f4', ground: '#0c0c0e', core: '#000' } as const
-
-/*
-  素材のファイルの中身（scripts/logo/export.mjs が書き、test/public.test.ts が
-  ここと突き合わせる）。ファイルはページの外で開かれ、/assets の絵を読みに行けないので、
-  絵を data URI で埋め込む（art は小さく描き直した WebP の base64。export.mjs が作る）
-*/
-const holeSvg = (cx: number, cy: number, art: string) => {
-  const box = holeArt(cx, cy)
-  return (
-    `<circle cx="${cx}" cy="${cy}" r="${HOLE.core}" fill="${LOGO_COLORS.core}"/>` +
-    `<image href="data:image/webp;base64,${art}" x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}"/>`
-  )
-}
+export const LOGO_COLORS = { ink: '#ededef', ground: '#0a0a0b' } as const
 
 const svg = (viewBox: string, body: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}"><title>AstLog</title>${body}</svg>\n`
 
-// 光の見える上下の広がり（影の半径に対して。alpha > 5 の実測上1.898・下1.465）
-const LIGHT_REACH = { up: 1.9, down: 1.5 }
+const wordmarkPaths = (ink: string) =>
+  `<path d="${WORDMARK.lambda}" fill="${ink}"/>` +
+  `<path d="${WORDMARK.strokes}" fill="none" stroke="${ink}" stroke-width="${WORDMARK.stroke}"/>`
 
-// ワードマークのファイル。暗い地に貼る素材で、枠は光が上下に出るぶん広い
-export const wordmarkSvg = (art: string) => {
-  const top = Math.min(BOX.top, round(HOLE.cy - HOLE.core * LIGHT_REACH.up))
-  const bottom = Math.max(BOX.bottom, round(HOLE.cy + HOLE.core * LIGHT_REACH.down))
+// ワードマークのファイル。暗い地に貼る素材
+export const wordmarkSvg = () => svg(WORDMARK.viewBox, wordmarkPaths(LOGO_COLORS.ink))
+
+/*
+  アイコン（favicon.svg と、favicon・iPhone のホーム画面の PNG）。どれも同じ1枚で、
+  地の色の正方形に Λ を載せる——白い字が明るいタブに溶けず、サイトと同じ姿で見えるように
+*/
+export const iconSvg = () => {
+  const edge = 2 * MARK_HALF
   return svg(
-    `0 ${top} ${BOX.width} ${round(bottom - top)}`,
-    holeSvg(HOLE.cx, HOLE.cy, art) +
-      `<path d="${WORDMARK.lambda}" fill="${LOGO_COLORS.ink}"/>` +
-      `<path d="${WORDMARK.strokes}" fill="none" stroke="${LOGO_COLORS.ink}" stroke-width="${WORDMARK.stroke}"/>`,
+    MARK_VIEWBOX,
+    `<rect x="${-MARK_HALF}" y="${-MARK_HALF}" width="${edge}" height="${edge}" fill="${LOGO_COLORS.ground}"/>` +
+      `<path d="${WORDMARK.lambda}" transform="${MARK_TRANSFORM}" fill="${LOGO_COLORS.ink}"/>`,
   )
 }
 
 /*
-  アイコン（favicon.svg と、favicon・iPhone のホーム画面の PNG）。どれも同じ1枚で、
-  地の色の正方形に印を載せる——明るい光が白いタブに溶けず、サイトと同じ姿で見えるように
+  共有カード（og:image。1200×630）の SVG。サイトの1枚で、個人の名前や顔は焼き込まない
+  （空の DB で個人の情報を公開しない。人の名前はページの <title> と本文が言う）。
+  ワードマークを左に大きく、下にサイトの所在（astlog.dev）を置く。字は輪郭で描くので、
+  書き出す環境の書体に左右されない——所在だけはワードマークと同じ線の字ではないので、
+  scripts/logo/export.mjs が HTML の字として重ねて撮る
 */
-export const iconSvg = (art: string) => {
-  const edge = 2 * ICON_HALF
+export const CARD = { width: 1200, height: 630, pad: 96, wordmarkHeight: 72 } as const
+export const cardSvg = () => {
+  const scale = round(CARD.wordmarkHeight / (BOX.bottom - BOX.top))
   return svg(
-    `${-ICON_HALF} ${-ICON_HALF} ${edge} ${edge}`,
-    `<rect x="${-ICON_HALF}" y="${-ICON_HALF}" width="${edge}" height="${edge}" fill="${LOGO_COLORS.ground}"/>` +
-      holeSvg(0, 0, art),
+    `0 0 ${CARD.width} ${CARD.height}`,
+    `<rect width="${CARD.width}" height="${CARD.height}" fill="${LOGO_COLORS.ground}"/>` +
+      `<g transform="translate(${CARD.pad} ${round(CARD.height / 2 + CARD.wordmarkHeight / 2 - BOX.bottom * scale)}) scale(${scale})">${wordmarkPaths(LOGO_COLORS.ink)}</g>`,
   )
 }

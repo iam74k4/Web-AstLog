@@ -72,21 +72,20 @@ describe('古い編集を上書きしない', () => {
     expect((await db().select().from(schema.items))[0]?.title).toBe(item.title)
   })
 
-  it('メンバーの競合・版の欠落では写真や天体を変えない', async () => {
+  it('メンバーの競合・版の欠落では名前も写真も変えない', async () => {
     const member = await seedMember({ avatarUrl: '/images/avatars/retain.jpg' })
     const signed = await signIn({ rawForms: true })
     expect(
       (
         await signed(`/admin/members/${member.id}`, {
           method: 'POST',
-          body: form({ name: '最新', celestialBody: 'sun', _version: member.updatedAt }),
+          body: form({ name: '最新', _version: member.updatedAt }),
         })
       ).status,
     ).toBe(303)
     for (const version of [member.updatedAt, undefined]) {
       const body = form({
         name: '古い入力',
-        celestialBody: 'moon',
         removeAvatar: '1',
         ...(version ? { _version: version } : {}),
       })
@@ -96,7 +95,6 @@ describe('古い編集を上書きしない', () => {
     }
     expect((await db().select().from(schema.members))[0]).toMatchObject({
       name: '最新',
-      celestialBody: 'sun',
       avatarUrl: member.avatarUrl,
     })
   })

@@ -28,15 +28,16 @@ workers.dev とプレビュー URL は無効。公開はデプロイ後で、購
 | DB | Drizzle ORM | スキーマは TypeScript が正、SQL は生成する |
 | 書式・lint | Biome | `src/` `test/` `public/` `scripts/` を見る |
 | テスト | Vitest（workerd 上で実行） | D1 も KV も本物で確かめる |
-| レイアウトの検査 | Playwright（`npm run check:fit`） | はみ出し・切り取り・上の帯の貼り付け・表紙の配置を実際に測る |
-| 可読性の検査 | Playwright（`npm run check:contrast`） | 入口と締めの天体画像のまわりで文字が読めるかを画素で測る |
+| レイアウトの検査 | Playwright（`npm run check:fit`） | はみ出し・切り取り・上の帯の貼り付け・見出しの錨を実際に測る |
+| 管理画面の検査 | Playwright（`npm run check:admin`） | 実フォームの入力・競合・プレビュー・スマホ表示を実際に操作して測る |
 
 ランタイム依存は Hono と Drizzle だけ。
 開発ツールの間接依存（undici・sharp・旧 esbuild loader）は、セキュリティ修正版へ
 `package.json` の overrides で固定し、型・テスト・ビルドと Drizzle の schema export を確認する。**内容と導線は JavaScript なしで成立する**。
-公開ページは装飾を順に動かし始める inline helper 1本だけを持ち、`<script src>` は0本。
+公開ページは実行する script を1本も持たない（JSON-LD はデータ）。装飾の絵も動きも置かず、
+字と罫線だけで組む——入口の HTML は約 4.5KB。
 絞り込みとページの移動は URL とサーバー、管理画面は HTML フォームと 303 で動く。
-全部の応答に CSP（公開・管理 HTML は各 helper の exact SHA-256 だけ、それ以外は `script-src 'none'`）と
+全部の応答に CSP（管理画面の HTML は補助1本の exact SHA-256 だけ、それ以外は `script-src 'none'`）と
 `X-Content-Type-Options: nosniff`・`Referrer-Policy: strict-origin-when-cross-origin`
 を付ける。任意の script は許さない。管理画面は `Cache-Control: no-store`。
 付けているのは `src/index.tsx` のミドルウェアと、Worker を通らない `public/` の
@@ -183,13 +184,10 @@ Members・Projects のフォームは基本情報を先に書き、本文・画�
 保存済みのメンバー・作品・ブロックは、下書きのまま管理者専用プレビューで表示を確認できる。
 ![管理画面の概要](docs/admin-overview.png)
 
-![画像から天体を選べる編集画面](docs/admin-member-editor.png)
-
 概要では公開/下書き件数と最近編集した作品を確認できる。作品一覧にはサムネイルと操作名を表示する。
 保存操作はスクロール中も下部に残り、入力エラーは先頭の一覧から該当欄へ移れる。
 同じ内容を複数のタブで編集した場合、古い版の保存は409で止めて入力を残す。「最新の編集画面と比較する」から新しいタブで最新を開き、必要な変更を反映する。
 構成の数字・リンク・年表・取り組みは項目ごとに入力する。見た目は選んだ色と書体を実際の見本へ反映し、サイト設定の紹介文・問い合わせ文は複数行で編集できる。
-天体の選択見本は原画から作る192pxの画像（5枚合計約34KB）。原画を差し替えたら `node scripts/export-admin-art.mjs` と `npm run format` で再生成する。
 `npm run check:admin` で3寸法の主要画面、キーボード、競合、保存前プレビュー、JS無効時の操作を検証する。
 
 各編集フォームの「保存前にプレビュー」で、入力中の文章・選んだ画像・見た目を同じ画面のダイアログに表示する。閉じると入力とフォーカスが戻る。JS無効時は別タブで開く。
@@ -198,29 +196,11 @@ Profile / Team は公開中が1人ならプロフィール、複数なら一覧�
 全体プレビューは現在公開中のデータを使う。プレビューは認証・送り元検査・
 `no-store`・`noindex` で守り、公開ページのキャッシュの版を変えない。
 
-Members の「天体と色」は画像付きの選択肢。ブラックホール・土星・海王星・月・太陽とアクセント色を選べる。
-「保存前にプレビュー」で、写真を残したプロフィールの天体を確認する。
-公開中が1人なら入口と Contact の天体カバーにも反映される。新規・未設定はブラックホールとサイトの色。
-入口と Contact は5天体で共通のレイアウト・書体・余白を使い、天体の絵だけが切り替わる。
-ブラックホールの Contact には星雲を使う。旧軌道図は表紙では非表示。
-表紙は文字の星・文字列エフェクトを置かず、元の天体画像と通常の星空だけを使う。
-天体画像には36秒の小さな浮遊・傾きと14秒の柔らかな光の呼吸をCSSだけで付け、見出し・連絡先・リンクは動かさない。
-動きを減らす設定では静止し、印刷・高コントラストでは装飾を消す。
-色は装飾に使い、本文の読みやすさと書体は共通のまま。
-ワードマークの「O」も選んだ天体に連動する。1人のサイトでは全ページ、プロフィール・作品では公開の持ち主の天体を使い、
-複数人の共通ページではブラックホールになる。保存前プレビューでも確認できる。
-大きな天体にはCSSだけの動きがある。ブラックホールは中心を固定して円盤の光を流し、
-太陽は球体を固定して外周の光だけを揺らす。月・海王星は浮遊し、土星は小さく傾く。
-ロゴの O は光の揺らぎや小さな浮遊で動き、文字の位置・名札の記号・favicon は静止。
-OSの動きを減らす設定では止まり、強制色では O を輪で描く。保存前プレビューにも同じCSSを使う。
-`npm run check:celestial-motion` で5天体・PC/スマホ・保存前プレビュー・停止設定を検証する。
-
-![選択中の天体に連動する AstLog のワードマーク](docs/wordmark-design.png)
-
 管理画面の「サイト設定」（`/admin/site`）でサイトの一言・入口の紹介文・Contact の案内文・
 公開するメールアドレス・GitHub URL を編集する。保存した値は D1 の `settings` の `site.*` に入り、
 公開ページと説明文・構造化データに反映される。メールと GitHub は空にすると掲載しない。
-どちらも未設定なら Contact に「連絡先を準備しています」と出る。
+どちらも未設定なら Contact のページは作らない（目次にも sitemap にも出ない。送る手の無い
+ページを置かない）。どちらかを入れると、次の表示から Contact が並びの最後に出る。
 
 空の D1 には個人のプロフィール・作品・メール・GitHub を入れない。メンバーと作品はそれぞれの
 管理画面から追加する。ローカルの `seed.sql` は見本用で、本番の初期設定には使わない。
@@ -234,11 +214,12 @@ npm run typecheck # src/ と test/ の両方を見る
 npm run lint      # 警告も落とす（--error-on-warnings）。直すなら npm run format
 npm test          # workerd 上で D1・KV ごと動かす
 npm run check:fit # レイアウト——はみ出し・切り取り・上の帯の貼り付け（ブラウザで実測）
-npm run check:contrast # 軌道図のまわりで文字が読めるか（ブラウザで実測）
+npm run check:admin # 管理画面の実フォーム——入力・競合・プレビュー・スマホ表示（ブラウザで実測）
 npm run check:restore  # deploy が残す D1 の写しを、空の D1 に戻せるか
+npm run check:media-restore # 削除画像の控えから戻せるか
 ```
 
-`check:fit` と `check:contrast` の2つだけは毛色が違う。`npm test` は workerd の中で動くので版面を組む
+`check:fit` と `check:admin` の2つだけは毛色が違う。`npm test` は workerd の中で動くので版面を組む
 エンジンが居らず、レイアウトを1行も測れない。そこで `wrangler dev` を自分で立て、
 3書体 × 3ビューポート（390x844 / 768x1024 / 1440x900。電話と板の2つは指＝
 `pointer: coarse` で）× 訪問者とログインした姿（上の帯に「管理画面」が出る）×
@@ -250,13 +231,11 @@ npm run check:restore  # deploy が残す D1 の写しを、空の D1 に戻せ�
 測るのは箱の位置そのもの——`html` / `body` がページを止めていないか（`overflow` が
 `visible`）、**横にはみ出さないか**（ページの `scrollWidth` と、見えている要素の左右）、
 **切られた要素が無いか**（`overflow: hidden` / `clip` の祖先の外へ出た要素も、自分の字を
-切っている箱も。行止めと1行で省く札と、入口と締めの星空 `.cosmos` の中——星雲を星空の箱で
-切り取るのが決まり——は除く）、`h1` がちょうど1つか、上の帯が本文の上・足元が
+切っている箱も。行止めと1行で省く札は除く）、`h1` がちょうど1つか、上の帯が本文の上・足元が
 本文の下に居るか、**帯の貼り付け**（本文の下に画面3つぶんの空きを足して一番下まで送っても
 目次といまの印が画面の中にあり、帯が本文より手前に描かれ、地が透けていないか）、
 **送った先**（`main` の中の id へ送ると、上端が帯の下端より下に来るか）、押す的
-（目次の行き先）が `--tap` 以上か、**見出しの錨**（どのページでも節の見出しが同じ高さに居るか）、**入口の軌道図**
-（ブラックホールが焦点に座って絵が読めているか）。あわせて、
+（目次の行き先）が `--tap` 以上か、**見出しの錨**（どのページでも節の見出しが同じ高さに居るか）。あわせて、
 **目次の印**（いまのページの行き先）が帯の見えている幅の中にあるか——帯の最初の位置は
 読み込んだときに決まるので、ここだけはページごとに開き直して測る。
 
@@ -274,8 +253,8 @@ seed を先に流さなくてよい）。
 
 ```
 ✓ seed（1人のサイト）: 198 通り（11 URL × 3書体 × 3寸法 × 2姿）。横のはみ出し 0・
-  切られた要素 0・h1 はどれも1つ・一番下まで送っても目次が見え、送った先は帯の下・
-  ブラックホールは焦点に座る。いちばん長いページ 3239px（sans 390x844 指 /projects）。
+  切られた要素 0・h1 はどれも1つ・一番下まで送っても目次が見え、送った先は帯の下。
+  いちばん長いページ 3279px（sans 768x1024 指 /apps/item/appmixer）。
   見出しの錨のずれ 最大 0px。目次の印 30 ページが帯の中（うち 0 ページは送って開いた）。
   /all は 9 通りとも横に動かない
 ```
@@ -290,36 +269,17 @@ seed を先に流さなくてよい）。
 中身しだいで「送れないから試せない」ページを作らないため。fixture の中身が公開の関門
 （`publishErrors`）を通らないと、作る時点で止まる（公開できない中身を測らない）。
 
-`check:contrast` も同じ理由でブラウザが要る。入口では
-軌道の線とブラックホールの光が字のそばを通る（前の入口の月では、リード文が明るい縁に載って
-**1.00:1** ——その字は背景と同じ明るさで、完全に消えていた）。4寸法（電話と板は指で）×
-7アクセント（モノクロと6色）＝28通りをページごとに描き、入口（大見出し・札・リード文・一覧への
-押し手・件数）と締め（Contact の1文・アドレス・「メールを送る」・GitHub）の字の行ボックスの
-下の画素を読んで WCAG 1.4.3 に照らす。星系は入口も締めも初めから完成形で表示し、
-星屑と天体が回り、粒が落ち、星が流れ、
-ブラックホールの光が揺らぎ、星雲が漂い続けるので、その途中の3コマも同じ28通りで測る（入口 28 × 4姿 + 締め 28 × 4姿＝
-224通り。途中の姿では、まだ出ていない字は測らない）。あわせて
-**軌道図が出ていること**も見る（軌道の線と星屑、天体の光、ブラックホール、星雲、星空の星を別々に消した
-絵との差分で、描いている画素数と、地からの離れ（明るさの差）に床を置く。床は天体の光・ブラックホールが
-18/255、もともと淡い軌道の線と星屑・星雲・細かい星が 4/255。まとめて消すと、ブラックホールや星雲だけで
-床を越えて、軌道が消えても通る）。成功行の下に、それぞれの「いちばん少ない」姿の画素数が出る。入口と締めの星空は字の後ろで消える
-決まりなので、字の下の画素はこの検査がそのまま見張る。
-**文字を消した地だけを撮る**のが肝で、合成後の画面をそのまま読むと
-グリフ自身を背景として数えてしまい、どの組も 1.00:1 になって検査が意味を失う。撮った絵は CSP の
-無い空のページで読む（測るページはサイトの CSP のまま。外すと、本物の CSP が止めるものまで描いた姿で緑になる）。
-
 ```bash
 npx playwright install chromium   # 一度だけ
 FIT_ONLY=many,solo npm run check:fit                     # 中身を絞って測る（seed / blocks / many / solo）
 FIT_BASE=http://localhost:8787 npm run check:fit        # 立てっぱなしの dev に向けて測る（その D1 のまま・訪問者の姿だけ）
-CONTRAST_BASE=http://localhost:8787 npm run check:contrast
 ```
 
-`check:contrast` は手元の D1（`--local` の既定の置き場）をそのまま読むので、新しい
-ワークツリーでは `npm run db:migrate:local` と `npm run db:seed:local` を先に通すこと。
+`check:admin` は使い捨ての D1 と KV に見本を入れ、3寸法の主要画面・キーボード・競合（409）・
+保存前プレビュー・JS 無効時の操作を、実際にフォームを送って確かめる。
 
-2つとも `wrangler dev` を自分で立てる（ポートは `FIT_PORT` / `CONTRAST_PORT`。既定は
-8788 / 8789）。**そのポートを誰かが使っていたら、立てずに止まる**。wrangler は
+2つとも `wrangler dev` を自分で立てる（ポートは `FIT_PORT` / `ADMIN_PORT`。既定は
+8788 / 8816）。**そのポートを誰かが使っていたら、立てずに止まる**。wrangler は
 「Address already in use」ですぐ終わるのに、待つ側がそのポートの別のサーバ（別の
 ワークツリーの dev や検査）の返事を受け、相手の画面を測って緑を出していたため。
 いくつものワークツリーで並べて回すときは、ポートを分けること。準備ができる前に
@@ -331,7 +291,7 @@ wrangler が終わったときも同じく止まる（`scripts/lib/dev-server.mj
 当たった移行の記録が元と同じかを突き合わせる。手元の D1 には触らない。
 
 push すると GitHub Actions が同じものを走らせる（`check` と `fit` の2つの job。
-`check:restore` は `check` の job で）。
+`check:restore` と `check:media-restore` は `check` の job、`check:admin` は `fit` の job で）。
 
 ## 本番に出す
 
@@ -368,8 +328,8 @@ Worker を出して `/admin` にログインしたら、サイト設定・プロ
 
 1. main から実行しているか、`wrangler.toml` の id が入っているかを見る（違えば止まる。
    ただし main だけを通す守りは、下の environment の設定のほう）
-2. check と同じ門を通す（型・lint・テスト・`check:restore`・ビルド・`check:fit`・
-   `check:contrast`・`check:motion`・`check:celestial-motion`・`check:admin`・`check:media-restore`。`check.yml` をそのまま呼ぶ）
+2. check と同じ門を通す（型・lint・テスト・`check:restore`・`check:media-restore`・ビルド・
+   `check:fit`・`check:admin`。`check.yml` をそのまま呼ぶ）
 3. 本番 D1 の写し（`wrangler d1 export` の定義 `schema-<sha>.sql` と中身
    `data-<sha>.sql` の2本）と Time Travel の栞（`bookmark.json`）を取り、
    画像の実体・メタデータ・SHA-256を含む `media/` とともに、artifact `site-backup-<run id>` に残す（90日）。取得済み D1 の全画像参照と控えの一致を確かめ、欠落があれば移行前に止める
@@ -416,8 +376,8 @@ https://github.com/actions/<名前>` で引き直し、行末のタグ名も直�
 
 手元から出すなら `npm run db:migrate && npm run deploy`（どちらも先に id の番兵を通る）。
 門は通らないので、先に `npm run typecheck` `npm run lint` `npm test`
-`npm run check:restore` `npm run check:media-restore` `npm run check:fit` `npm run check:contrast`
-`npm run check:motion` `npm run check:celestial-motion` `npm run check:admin` を自分で通すこと。
+`npm run check:restore` `npm run check:media-restore` `npm run check:fit` `npm run check:admin`
+を自分で通すこと。
 写しも自分で取る（下の「戻す」の2本の `d1 export`）。
 
 ### 公開ページの写し
@@ -651,9 +611,8 @@ src/
     format.ts        テキストの解釈とフォーム値の受け取り（と、配列を束に分ける chunk）
     page-cache.ts    公開ページの写し（Cache API）と、その版（KV の site:version）の上げ方
     sequence.ts      サイトのページの並びから目次と印を組む（tableOfContents。重なりは例外）
-    orbits.ts        入口と締めの軌道図の形（件数から軌道と天体と動き続けるものを置く orbitMap・
-                     軌道の奥と手前の半分 orbitHalves・見る角度 ELEVATION と傾き TILT・まわりの星空 cosmosMap と
-                     星雲の塊 nebulaMap・入口と締めの枠 HERO_FRAME / CONTACT_FRAME）
+    image.ts         受け取る画像の種類（IMAGE_FORMATS。中身の先頭のバイトで決める）
+    media-retention.ts 消した画像の控え（archive/）を残す期間
   routes/
     public/          公開ページ
       routes.ts      URL の登録だけ（登録順の決まり。catch-all は最後）
@@ -689,67 +648,46 @@ src/
     AdminDashboard.tsx 概要の設定案内と状態
     PreviewLayout.tsx プレビューの案内と公開ページの外枠
     AdminForm.tsx    管理画面のフォームの部品（欄・公開のトグル・確認）
-    AdminVisuals.tsx 天体の選択・ブロックの見本・表示位置の案内
+    AdminVisuals.tsx 見た目の見本・ブロックの見本・表示位置の案内
     AdminBlockFields.tsx ブロックの項目別入力
     admin-behavior.ts 保存前プレビューと見本の最小補助・CSPの固定ハッシュ
-    admin-art.ts    管理用の縮小画像の版（export-admin-art が生成）
     components.tsx   画面を組む部品。main の直接の子は Screen / Hero だけが作る
                      外枠はどれも HtmlDocument で <html> を開く（DOCTYPE を出す）
-    icons.tsx        インライン SVG（ロゴの Wordmark / HoleMark もここで描く）
-    celestial.ts     メンバーの天体・色の選択肢、入力検査と安全な既定値
-    logo.ts          ロゴの形と素材に焼く色の正（ΛSTLOG の O はブラックホールの絵
-                     BLACKHOLE_ART。軌道図の真ん中も同じ1枚。JSX を持たない）
-    motion.ts        装飾を順に動かし始める helper と、それだけを許可する CSP の SHA-256
+    icons.tsx        インライン SVG（ロゴの Wordmark / Mark もここで描く）
+    logo.ts          ロゴの形と素材に焼く色の正（字で組む ΛSTLOG。印は Λ。JSX を持たない）
 public/
   app.css            全画面のスタイル。値は :root のトークンだけで決める
                      色・書体のプリセットもここ（[data-accent] / [data-typeface]）
-                     末尾の「ページの外枠」が表紙の高さと貼り付く上の帯を作る。
+                     末尾の「ページの外枠」が足元の位置と貼り付く上の帯を作る。
                      ページを移るときの切り替え（@view-transition）もここ
   admin.css          管理画面だけの規則。管理画面は app.css のあとにこれを読み、
                      公開ページは読まない（:root は持たず、app.css の段を読む）
   preview.css        管理プレビューの案内。公開の部品は app.css を使う
   _headers           静的なファイルに付けるヘッダ（Worker を通らないので、ここで付ける）
                      Workers Static Assets が読む規則で、ファイルとしては配られない
-                     3枚の CSS と天体カバー・星雲の絵は 1年・immutable（中身の版つきの URL
+                     3枚の CSS は 1年・immutable（中身の版つきの URL
                      /app.css?v=… などで読むので、変えてデプロイすれば URL が変わる）
-  assets/            共有ブラックホールの透過素材（blackhole.webp。0b42d90 の旧デザインを復元）。
-                     表紙は `astra-{black-hole,moon,saturn,neptune,sun}.webp`（1586×992）。
-                     ブラックホールの Contact は `astra-nebula-v2.webp` を使う。
-                     配置と URL の版は `src/ui/celestial-art.ts` の ASTRA_COVER_ART。
-                     GitHub の Organization の顔（astlog-avatar.png）は scripts/blackhole/render.py の avatar。
-                     星雲の透過 WebP（nebula-{iris,violet,ember,mint,sky,rose}.webp。1800×1000）——
-                     scripts/nebula/render.mjs が焼く。mono と iris は同じ1枚を使う。
-                     favicon（favicon.svg・favicon-32.png・apple-touch-icon.png）とページの外で使う
-                     ワードマーク（astlog-wordmark.svg）——scripts/logo/export.mjs が src/ui/logo.ts と
-                     その絵から書く。サイトの共有カードにも astlog-avatar.png を使う。
+  assets/            ロゴの素材だけ。favicon（favicon.svg・favicon-32.png・apple-touch-icon.png）・
+                     ページの外で使うワードマーク（astlog-wordmark.svg）・共有カード（astlog-card.png。
+                     1200×630）——どれも scripts/logo/export.mjs が src/ui/logo.ts から書く。
+                     版を持たないので既定のキャッシュ（毎回確かめる）のまま。
                      ※ ここに robots.txt や sitemap.xml を置かないこと。
                        public/ は Worker より先に配られるので、置くと
                        Worker が組み立てているほうが静かに届かなくなる
 scripts/
-  check-fit.mjs      npm run check:fit の中身。ブラウザでレイアウトを測る（seed と、上限ちょうどの fixture）。
-                     入口のブラックホールが焦点に座るかも測る
-  check-contrast.mjs npm run check:contrast の中身。軌道図のまわりの文字を画素で測る
+  check-fit.mjs      npm run check:fit の中身。ブラウザでレイアウトを測る（seed と、上限ちょうどの fixture）
   check-admin.mjs   3寸法の管理画面・実フォーム・競合・プレビュー・縮小画像を検証
   check-media-restore.mjs 削除画像の控えと復元の実証
   media-backup.mjs  KV画像・メタデータの控え、D1の写しとの照合、復元
   setup-production.mjs production環境とmain保護の設定内容・適用
-  export-admin-art.mjs 原画から管理用の縮小画像を生成
   check-restore.mjs  npm run check:restore の中身。deploy の写し（定義と中身の2本）を空の D1 に戻して突き合わせる
   check-ids.mjs      本番に触れる前の番兵。wrangler.toml の id がプレースホルダなら止める
   seed-local.mjs     ローカルにだけ検査用のデータと画像を入れる
   fixtures/media/    検査用の作品画像とプロフィール素材。本番には配らない
   touch-site.mjs     公開ページの写しの版を上げる（npm run site:touch / db:seed:local の最後）
-  blackhole/         render.py。旧素材との比較用の物理レンダー（numpy と Pillow）。hero は
-                     dist/blackhole-physical.webp に書き、配信中の素材を上書きしない。
-                     avatar は従来どおり GitHub の顔を public/assets に書く
-  logo/              export.mjs。ロゴの素材（SVG と favicon・iPhone のホーム画面の PNG）を src/ui/logo.ts
-                     から書く（node scripts/logo/export.mjs。SVG は O の絵を小さくして data URI で
-                     抱える。PNG は Playwright の Chromium で撮る）
-  nebula/            render.mjs。nebulaMap と app.css の色・4層の濃さから星雲6枚を焼き、
-                     SHA-256 の頭8桁を使った CSS の素材 URL（?v=…）も更新する
-  moon/              前の入口の月（記録として残す。いまのサイトでは使っていない）。
-                     render.py が Blender で焼き、pack.py が配信用に詰めていた（docs/moon.md）
-  lib/               check-fit と check-contrast の共通部分。dev サーバの立て方と使い捨ての D1（dev-server.mjs）、
+  logo/              export.mjs。ロゴの素材（SVG と favicon・iPhone のホーム画面・共有カードの PNG）を
+                     src/ui/logo.ts から書く（node scripts/logo/export.mjs。PNG は Playwright の Chromium で撮る）
+  lib/               check-fit と check-admin の共通部分。dev サーバの立て方と使い捨ての D1（dev-server.mjs）、
                      src/theme.ts の読み方（theme.mjs）、設計サイズ（viewports.mjs）。写しを2本持たない
                      wrangler.toml の id の読み方（wrangler-ids.mjs）も
                      fit-fixture.mjs は check:fit の上限ちょうどの中身を src/blocks.ts の
@@ -764,56 +702,3 @@ seed.sql             ローカルの開発・画面検査用の見本（全部�
 ```
 
 書き方の約束は `CLAUDE.md` に置いてある。
-
-### 共有ブラックホール素材の更新
-
-![旧ブラックホールの白い光に揃えた5種類の天体](docs/celestial-design.png)
-
-`blackhole.webp` は `0b42d90` の旧デザインを復元した透過素材（SHA-256: `c48dd421`）。
-滑らかな白い光と黒い影を基準に、ほかの天体も光が暗部へ溶ける質感に揃える。
-太陽の淡いガスの流れ、月の自然な濃淡、惑星の大気の帯は残し、細かな模様の主張を抑える。
-ブラックホールを選んだ表紙・入口・Contact・ロゴの O は
-`src/ui/logo.ts` の `BLACKHOLE_ART` から同じ1枚を読む。
-
-1. ブラックホールを復元する場合は `git show 0b42d90:public/assets/blackhole.webp` から取り出す。
-   太陽・月・海王星・土星は、この旧ブラックホールを暗い背景に重ねた参照画像から
-   image_gen（`transparent_background=true`）で個別に生成した素材。白〜灰色、滑らかな陰影、
-   柔らかな縁の光を使う。表面を均一な球や幾何学的な穴に単純化せず、自然な広い濃淡を残す。
-   写真のような細かい粒状感や鋭い輪郭は抑え、土星の輪もにじむ白い光の帯にする。
-   天体の本体が約半幅（土星は輪が約8割幅）に収まるよう余白をとった1254×1254の
-   WebP（quality 88）で `celestial-*-v2.webp` に保存し、`src/ui/celestial-art.ts` の版も更新する。
-2. 実ファイルの幅・高さ・中央の影の半径を `BLACKHOLE_ART` の `width`・`height`・`shadow` に
-   合わせ、`src` の `?v=` をそのファイルの SHA-256 の頭8桁に更新する。
-   alpha 約2%の可視光域を実測し、`lightWidth`（横幅）と `LIGHT_REACH`（影半径に対する
-   上下の広がり）も合わせる。透明な余白を光の幅として数えない。
-3. `node scripts/logo/export.mjs` でワードマーク・favicon・Appleアイコンも更新し、
-   小さいロゴと入口・Contact・表紙の焦点、影、光の広がりを確認する。
-
-`python3 scripts/blackhole/render.py hero` は比較用の物理レンダーを `dist/` に書く。
-配信素材の再生成には使わない。GitHub の顔は従来の `avatar` 出力を使う。
-
-星雲の形（`src/lib/orbits.ts` の `NEBULA_LOBES`）、色（`app.css` の `--nebula-a` / `-b` / `-c`・
-`--ink`・`--bg`）、4層の濃さ（`--nebula-light` / `-cloud` / `-veil` / `-dust`）を変えたら、
-`node scripts/nebula/render.mjs` で素材と URL の版をそろえて更新する。生成には Playwright の
-Chromium が要る（初回は上の `npx playwright install chromium`）。元の3600×2000の形と模様を
-1800×1000の透過 WebP へ焼き、ページでは完成形の箱ごと漂わせる。形・色・濃さの正は
-既存の TS / CSS に置き、配信ページでは大きなノイズのフィルタを計算しない。
-底のフェードも星空全体への mask ではなく、下端の帯だけに静止した地の色を重ねる。
-瞬く星と流星は小さい HTML の点・筋を動かし、星空全体を描き直す処理を避ける。
-
-吸い込まれる粒と流れる星は小さい HTML を動かす。65点を元にした固定 CSS 座標の各区間を
-整数の1/60秒へそろえ、区間ごとの `steps()` で位置と濃さを60回/秒（`MOTION_RATE`）まで更新する。
-星屑・天体・瞬きはその6刻みの100ms（`TICK` / `BODY_TICK`）、星雲の漂いは片道40秒を400段、
-ブラックホールの光は片道4秒を40段に分ける。
-星屑は総数600粒まで。奥と手前の外側 SVG に坂の1/4・3/4の代表濃さを掛け、奥ほど淡くする。
-内外とも mask を掛けず、層全体を描き直す処理を避ける。公転・半面・画面 px の太さは保つ。
-背景や星系の層全体に登場アニメーションは掛けず、初めから完成形で出す。入口の文字・名札・件数は
-不透明度と移動だけで浮かび、件数は600ms後に数え始める。ぼかしを掛けて描き直す処理を避ける。
-装飾の継続動作は DOMContentLoaded の1200ms後から小さい群ごと350msずつずらして始める。
-画像の load は待たず、見えている装飾は最初のフレームで待機する。星屑と天体は同じ群で開始し、
-奥・手前や回転の打ち消しは群内で同じ時計に合わせる。後の群を過去の開始時刻へ送らず、
-位置や明るさが跳ぶのを防ぐ。開始済みの印を残して処理を終える。JS 無効時は通常の CSS 動作。
-`npm run check:motion` はPC/スマホの開始直前・直後と画像の遅延も検査する。
-動きを減らす設定では止まった完成形になり、印刷では星系と星空を出さない。
-再生成後は `npm test` と `npm run check:fit`・`npm run check:contrast` を通し、通常表示の Edge でも
-動きと見た目を確かめる（アクセラレーションを切った環境も含む）。

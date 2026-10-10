@@ -4,7 +4,7 @@ import { blockShown } from '../../blocks'
 import { defaultBlocks, listBlocks, loadSiteSettings, loadTheme } from '../../db/queries'
 import * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
-import { SITE_SETTING_KEYS } from '../../site'
+import { hasContact, SITE_SETTING_KEYS } from '../../site'
 import { THEME_CHOICES } from '../../theme'
 import { AdminDashboard, type DashboardAction, type DashboardCounts } from '../../ui/AdminDashboard'
 import { db } from './request'
@@ -68,16 +68,16 @@ dashboardRoutes.get('/', async (c) => {
   const items = countsOf(itemRows)
   const siteSaved = siteRows.length === SITE_SETTING_KEYS.length
   const effectiveBlocks = blocks.length ? blocks : defaultBlocks()
-  const pages = effectiveBlocks.filter((block) =>
-    blockShown(block, { members: members.published, items: items.published }),
-  ).length
+  // 公開ページに出るかの数（公開ページ・構成と同じ blockShown を読む）
+  const counts = {
+    members: members.published,
+    items: items.published,
+    contact: hasContact(site),
+  }
+  const pages = effectiveBlocks.filter((block) => blockShown(block, counts)).length
   const blockDrafts = blocks.filter((block) => block.published !== 1).length
   const shown = (type: string) =>
-    effectiveBlocks.some(
-      (block) =>
-        block.type === type &&
-        blockShown(block, { members: members.published, items: items.published }),
-    )
+    effectiveBlocks.some((block) => block.type === type && blockShown(block, counts))
 
   let next: DashboardAction
   if (pages === 0) {
