@@ -192,8 +192,7 @@ Contact の軌道、ページの見出し（h1 の `SectionHead`。`.head--page`
 - 見出しの星は1ページに1つ（h1 だけ。章や `/all` の節にも付けると箇条書きの印に下がる）
 - 強制色（`@media (forced-colors: active)`）では全部外し、紙には背景を刷らない。どのページの
   main かの目印は `:where()` で詳細度を 0 にし、素の1本で外せるようにする
-- 上の帯のロゴには衛星を付けない（等倍の画面で O が Ó に読めた）。衛星つきの O
-  （`src/ui/logo.ts` の `ORBIT_O`）は共有カードだけ。衛星の角度は右上 45° の1つ
+- 衛星の角度は右上 45° の1つ（ロゴの O・顔・404 の印）
 - 決まりは `test/theme.test.ts` の「天体の飾り」が見て、字と重ならないかは `check:fit` が測る
 
 ### 一覧と画面の組み方
@@ -345,12 +344,14 @@ GitHub の手）。HTML に絵は置かない（字の無い右下の軌道は m
 （紙に刷っても宛先が字で残る。`/all` も同じ手）。`/all` では節見出しを置く。
 `contactLead` は `/contact` の description にも使う。
 
-**ロゴは字で組む ΛSTLOG**（横棒の無い A と、線の太さをそろえた幾何の大文字。O は同じ太さの輪）。
+**ロゴは字で組む ΛSTLOG**（横棒の無い A と、線の太さをそろえた幾何の大文字。O は同じ太さの輪を
+軌道に見立て、右上 45° に衛星を1つ。Λ の頂は平らに切る）。上の帯・ログイン・共有カード・素材は
+同じ1つの形で、大きさで形を変えない。上の帯の 15px では等倍の画面で衛星が Ó のアクセントに
+読める恐れがある——並べて見たうえで持ち主が衛星を選んだ。
 印だけのとき（favicon・404・管理画面の頭）は Λ を1つ（`Mark`）。絵も動きも持たない。形は
 `src/ui/logo.ts` が正で、ページは `src/ui/icons.tsx` の `Wordmark` / `Mark` が直に描き、素材
 （ワードマークと favicon の SVG、favicon・apple-touch-icon・共有カードの PNG）は
-`scripts/logo/export.mjs` が書く。favicon・apple-touch-icon は黒い地を敷く。共有カードだけは
-O を軌道に見立てて衛星を1つ置く（`ORBIT_O`。上の帯の 15px では置かない）。
+`scripts/logo/export.mjs` が書く。favicon・apple-touch-icon は黒い地を敷く。
 
 **メンバーの天体（`members.celestial_body` / `celestial_accent`）は使わない列。** 読む口も書く口も
 外し、列だけを残している（前のコードが読む。expand → contract の contract を次のリリースで出す）。
