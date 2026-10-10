@@ -1158,6 +1158,103 @@ describe('一覧の行', () => {
   一覧の行にも作品のページにも置いていたが、外した（持ち主の「なんか違う」「開くとまだある」）。
   画像の無い作品は文の列だけ。規則と値の段を残すと、使われない図の決まりが残り続ける。
 */
+/*
+  天体の飾り（app.css の同名の節）。サイトの名の天体を、線と点だけで添える。
+
+  前に置いた天体の絵・星空・軌道図は、最初の画面の6割を占めて動き続け、持ち主の
+  「シンプル・モダンに」で外した。戻したのは線と点だけで、面・光・影・色相と動きを
+  持たない形。試作のレビューで落ちた3つ——地の色を塗って線を切ると強制色で黒い円が
+  浮く／目印の詳細度が高くて紙と強制色で外せない／星の印が章にも付いて箇条書きに
+  下がる——をここで止める。効いているか（字と重ならないか）は npm run check:fit。
+*/
+describe('天体の飾り', () => {
+  // 節の見出しの行の直後から次の節の見出しまで（コメントの途中で切らない）
+  const from = css.indexOf('= 天体の飾り */') + '= 天体の飾り */'.length
+  const section = bare(css.slice(from, css.lastIndexOf('/*', css.indexOf('= 600px 以上 */'))))
+
+  it('節を読めている（読めていないと、以下の検査が素通りする）', () => {
+    expect(section).toContain('.head--page')
+    expect(section).toContain("url('/assets/sky.svg')")
+    expect(section).toContain("url('/assets/orbit.svg')")
+  })
+
+  it('線と点だけ。面・光・影・色相・動きを持たない。色は字の白と罫線の段だけ', () => {
+    expect(section).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(/)
+    expect(section).not.toMatch(/box-shadow|filter|text-shadow|animation|transition|opacity/)
+    const colors = new Set(
+      [...section.matchAll(/var\((--[\w-]+)\)/g)]
+        .map(([, name = '']) => name)
+        .filter((name) => /^--(ink|line|accent|mono|bg|surface)/.test(name)),
+    )
+    expect([...colors].sort()).toEqual(['--ink', '--ink-weak', '--line-strong'])
+  })
+
+  it('線を切るのに地の色を塗らない。切れ目は形（mask）で作る', () => {
+    expect(section).not.toContain('var(--bg)')
+    expect(bodyOf(sheet, ':is(.nameplate .avatar, .oops__mark)::before {')).toContain(
+      'mask-image: var(--orbit-mask);',
+    )
+  })
+
+  it('入口と Contact の飾りは main の背景。目印の詳細度は 0 で、紙と強制色の1本が外す', () => {
+    const backgrounds = rulesOf(section).filter(
+      (rule) =>
+        rule.selectors.some((selector) => selector.includes('main')) &&
+        rule.decls.some(([name]) => name === 'background'),
+    )
+    expect(backgrounds.flatMap((rule) => rule.selectors)).toEqual([
+      ':where(body[data-site]) > main:where(:has(> .hero--cover))',
+      ':where(body[data-site]:not([data-whole])) > main:where(:has(> #contact))',
+    ])
+    for (const marker of ['@media print', '@media (forced-colors: active)']) {
+      expect(bodyOf(blockAt(sheet, marker), 'body[data-site] > main {'), marker).toContain(
+        'background: none',
+      )
+    }
+  })
+
+  it('強制色では飾りの疑似要素を全部外す', () => {
+    const forced = blockAt(sheet, '@media (forced-colors: active)')
+    const owners = rulesOf(section)
+      .filter((rule) => rule.decls.some(([name, value]) => name === 'content' && value === "''"))
+      .flatMap((rule) => rule.selectors)
+    expect(owners.length).toBeGreaterThan(4)
+    for (const part of [
+      '.head--page',
+      '.screen-head',
+      '.career li',
+      '.career .period',
+      '.nameplate .avatar',
+      '.oops__mark',
+    ]) {
+      expect(forced, part).toContain(part)
+    }
+    expect(ruleWith(forced, 'display: none').selector).toMatch(/::after[\s\S]*::before/)
+  })
+
+  it('四芒星はページの見出しの罫線と、経歴のいまの行だけ', () => {
+    const stars = rulesOf(section).filter((rule) =>
+      rule.decls.some(([name, value]) => name === 'clip-path' && value === 'var(--sparkle)'),
+    )
+    expect(stars.flatMap((rule) => rule.selectors)).toEqual([
+      ':is(.head--page, .screen-head:has(> .head--page))::after',
+      '.career__now .period::before',
+    ])
+  })
+
+  it('経歴の星座は左の余白へ吊るし、中身を左の軸から動かさない', () => {
+    // 行は右へずらさない（About の段落と頭がそろわなくなる）
+    expect(bodyOf(section, '.career li {')).toBe('position: relative;')
+    expect(bodyOf(section, '.career .period::before {')).toContain('left: calc(var(--hang) * -1);')
+    expect(bodyOf(section, '.career li::after {')).toContain('left: calc(var(--hang) * -1);')
+    // 四芒星ごと、いちばん狭い余白（--gutter の下限）に収まる
+    const root = bodyOf(sheet, ':root {')
+    const px = (name: string) => Number(root.match(new RegExp(`${name}:\\s*([\\d.]+)px;`))?.[1])
+    const gutter = Number(root.match(/--gutter:\s*clamp\((\d+)px/)?.[1])
+    expect(px('--hang') + px('--spark') / 2).toBeLessThanOrEqual(gutter)
+  })
+})
+
 describe('作品の星図を置かない', () => {
   it('星図の規則と値の段を持たない', () => {
     const left = rulesOf(sheet).filter((rule) =>
@@ -1370,8 +1467,8 @@ describe('文字の段', () => {
   無い色の段があると、その色だけが紙に黒い地の色のまま残る（白い紙に白に近い字）。
 */
 describe('配色（黒基調と紙）', () => {
-  // 帯の右端のぼかしは不透明度の坂で、紙に差し替える色の段ではない。
-  const MASKS = new Set(['--fade-right'])
+  // 帯の右端のぼかしと、軌道の輪の切れ目は不透明度の坂で、紙に差し替える色の段ではない。
+  const MASKS = new Set(['--fade-right', '--orbit-mask'])
   const colorTokens = (body: string) =>
     [...body.matchAll(/(--[\w-]+):\s*([^;]+);/g)]
       .filter(

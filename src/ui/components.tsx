@@ -16,7 +16,14 @@ import {
   type KindCounts,
   type StoryPart,
 } from '../domain'
-import { initials, isHttpsUrl, isSafeUrl, type SkillGroup, skillRows } from '../lib/format'
+import {
+  initials,
+  isHttpsUrl,
+  isOngoing,
+  isSafeUrl,
+  type SkillGroup,
+  skillRows,
+} from '../lib/format'
 import { isContactEmail, SITE, type SiteSettings } from '../site'
 import { GithubIcon, MailIcon, PencilIcon, Wordmark } from './icons'
 
@@ -210,7 +217,8 @@ export const Avatar = ({
   そちらは h2（h1 は Hero が1つ持つ）。
 
   出し分けの元は renderBlock が受け取る whole（全体ページの節として描くか）で、
-  ここでは数えない。
+  ここでは数えない。h1 の見出しは .head--page を持ち、app.css の「天体の飾り」が
+  その罫線の左端に四芒星を1つ置く（ページの見出しだけ。1ページに1つ）。
 
   note（添え）は見出しに無い情報のときだけ渡す——作品のページの「業界 · 年」、
   全体ページの作品の本文の「Story」、区分の絞り込みが並ばない Projects の区分名。
@@ -268,7 +276,13 @@ export const SectionHead = ({
       {note ? <span class="note">{note}</span> : null}
     </>
   )
-  const kind = sub ? 'head head--sub' : chapter ? 'head head--chapter' : 'head'
+  const kind = sub
+    ? 'head head--sub'
+    : chapter
+      ? 'head head--chapter'
+      : h1
+        ? 'head head--page'
+        : 'head'
   return icon ? (
     <div class={`${kind} head--icon`}>
       <img class="head__icon" src={icon} alt="" width="64" height="64" decoding="async" />
@@ -327,8 +341,9 @@ export const Screen = ({
   本文が続く読み物の頭で、本文の列と同じ左の軸に立てる。
 
   cover は入口（.hero--cover）。札・大見出し・リード文・押し手を左の軸に積む。
-  絵は置かない——字が最初の画面の主役（前は右半分に天体の絵と軌道図を置き、
-  最初の画面の6割を装飾が占めていた）。
+  HTML に絵は置かない——字が最初の画面の主役（前は右半分に天体の絵と軌道図を置き、
+  最初の画面の6割を装飾が占めていた）。いまの惑星の縁と空は、字の無い右下に
+  app.css の「天体の飾り」が main の背景として描く（線と点だけで、動かない）。
 */
 export const Hero = ({
   profile,
@@ -849,6 +864,8 @@ export const ItemStories = ({
   大見出し（headline）を書いていない人では名前が h1 になる——書いている人では
   大見出しが h1 で、名前は添え。全体ページ（/all）の Profile の節でも使い、
   そこでは見出しは節の h2 なので、名前は添えのまま。
+
+  顔のまわりの軌道の輪と衛星は app.css の「天体の飾り」が描く（顔の箱の疑似要素）。
 */
 export const Nameplate = ({ member, heading }: { member: Member; heading?: boolean }) => (
   <div class="nameplate">
@@ -1207,11 +1224,15 @@ export const LinkList = ({ rows }: { rows: string[][] }) => (
   </ul>
 )
 
-// 年月・何を・補足。個人ページの経歴もこれで描く
+/*
+  年月・何を・補足。個人ページの経歴もこれで描く。
+  期間が「現在」で終わる行（isOngoing）には .career__now を付ける——app.css の
+  「天体の飾り」が、期間の行ごとに置く星のうち、その行だけを四芒星にする
+*/
 export const Timeline = ({ rows }: { rows: string[][] }) => (
   <ul class="career">
-    {rows.map(([period, title, org]) => (
-      <li key={`${period}${title}`}>
+    {rows.map(([period = '', title, org]) => (
+      <li key={`${period}${title}`} class={isOngoing(period) ? 'career__now' : undefined}>
         <span class="period">{period}</span>
         <span class="title">{title}</span>
         {org ? <span class="org">{org}</span> : null}
@@ -1353,7 +1374,8 @@ export const OwnSocials = ({ member, site = SITE }: { member: Member; site?: Sit
   連絡先のページ。サイトの並びの最後で、入口と対になる締め。
 
   見える h1「Contact」、誘う1文（サイト設定の contactLead）、メールと GitHub の手だけを置く。
-  絵は置かない（前は天体の絵と星雲を右に敷き、字の後ろに暗がりの覆いを重ねていた）。
+  HTML に絵は置かない（前は天体の絵と星雲を右に敷き、字の後ろに暗がりの覆いを重ねていた）。
+  いまの軌道は、字の無い右下に app.css の「天体の飾り」が main の背景として描く。
 
   - 誘いの1文は、何の相談なら送ってよいかを言う唯一の言葉なので、大きく置く
     （句読点の塊を1行ずつ。入口の大見出しと同じ Phrases）

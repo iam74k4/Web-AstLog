@@ -8,6 +8,10 @@
   天体に合わせて動かしていたが、サイトを装飾より中身が先に読める形へ簡素にしたときに外した
   （絵は画像の読み込みを待つあいだ O が欠け、小さい帯では光の翼が隣の字に触れていた）。
 
+  O を軌道に見立て、右上に衛星を1つ置いた形（ORBIT_O）は、大きく出す共有カードにだけ使う。
+  上の帯の 15px では、等倍の画面で点と輪の切れ目が潰れて O の上のアクセント（Ó）に読めた。
+  衛星の角度（右上 45°）は、個人ページの顔と 404 の印の軌道（app.css の「天体の飾り」）と同じ。
+
   - Λ だけは塗りの形で描く。線で描くと足の切り口が脚に直角になり、片方の角が
     字の底より下へ出る。塗りなら足を水平に切れる
   - 丸い字（S・O・G）と尖った頂（Λ）は字の高さから少しはみ出させる（0.3）。
@@ -25,12 +29,39 @@ const BOX = { top: -20.31, bottom: 0.31, width: 131.67 }
 // O の輪。半径は G の弧と同じ 9（線の太さの半分ぶん、字の高さからはみ出す）
 const O = { cx: 93.97, cy: -10, r: 9 }
 
+// S・T・L と G（O の前後）
+const STL =
+  'M35.94 -16.61A5.3 4.5 0 0 0 25.96 -14.5A5.3 4.5 0 0 0 31.26 -10A5.3 4.5 0 0 1 36.56 -5.5A5.3 4.5 0 0 1 26.58 -3.39M44.66 -18.7H60.26M52.46 -18.7V0M67.68 -20V-1.3H78.78'
+const G = 'M128.46 -15.54A9 9 0 1 0 130.37 -10H122.45'
+
+// O は2つの半円の弧で閉じる（circle を別に持つと、素材の SVG と形が分かれる）
+const RING = `M${round(O.cx - O.r)} ${O.cy}A${O.r} ${O.r} 0 1 0 ${round(O.cx + O.r)} ${O.cy}A${O.r} ${O.r} 0 1 0 ${round(O.cx - O.r)} ${O.cy}Z`
+
 export const WORDMARK = {
   viewBox: `0 ${BOX.top} ${BOX.width} ${round(BOX.bottom - BOX.top)}`,
   lambda: 'M0 0L9.2 -20.3L18.4 0L15.55 0L9.2 -14L2.85 0Z',
-  // S・T・L・O・G。O は2つの半円の弧で閉じる（circle を別に持つと、素材の SVG と形が分かれる）
-  strokes: `M35.94 -16.61A5.3 4.5 0 0 0 25.96 -14.5A5.3 4.5 0 0 0 31.26 -10A5.3 4.5 0 0 1 36.56 -5.5A5.3 4.5 0 0 1 26.58 -3.39M44.66 -18.7H60.26M52.46 -18.7V0M67.68 -20V-1.3H78.78M${round(O.cx - O.r)} ${O.cy}A${O.r} ${O.r} 0 1 0 ${round(O.cx + O.r)} ${O.cy}A${O.r} ${O.r} 0 1 0 ${round(O.cx - O.r)} ${O.cy}ZM128.46 -15.54A9 9 0 1 0 130.37 -10H122.45`,
+  strokes: `${STL}${RING}${G}`,
   stroke: 2.6,
+} as const
+
+/*
+  衛星つきの O（共有カードだけ）。輪は衛星のまわりだけ途切れさせ、衛星は輪の上に置く。
+  切れ目は形で作る——地の色の円を重ねて線を隠すと、地の違う所（強制色・透けた地）で
+  黒い円が浮く。切れ目の半角は、線の端の角から衛星の縁まで線の太さの7割ほど空く 24°
+*/
+const SATELLITE = { angle: -45, gap: 24, r: 1.8 }
+const onRing = (deg: number) => {
+  const rad = (deg * Math.PI) / 180
+  return `${round(O.cx + O.r * Math.cos(rad))} ${round(O.cy + O.r * Math.sin(rad))}`
+}
+const circlePath = (center: string, r: number) => {
+  const [x = 0, y = 0] = center.split(' ').map(Number)
+  return `M${round(x - r)} ${y}A${r} ${r} 0 1 0 ${round(x + r)} ${y}A${r} ${r} 0 1 0 ${round(x - r)} ${y}Z`
+}
+export const ORBIT_O = {
+  // 衛星の先から時計回りに、衛星の手前まで（大きい弧）
+  strokes: `${STL}M${onRing(SATELLITE.angle + SATELLITE.gap)}A${O.r} ${O.r} 0 1 1 ${onRing(SATELLITE.angle - SATELLITE.gap)}${G}`,
+  satellite: circlePath(onRing(SATELLITE.angle), SATELLITE.r),
 } as const
 
 /*
@@ -77,7 +108,7 @@ export const iconSvg = () => {
 /*
   共有カード（og:image。1200×630）の SVG。サイトの1枚で、個人の名前や顔は焼き込まない
   （空の DB で個人の情報を公開しない。人の名前はページの <title> と本文が言う）。
-  ワードマークを左に大きく、下にサイトの所在（astlog.dev）を置く。字は輪郭で描くので、
+  ワードマーク（衛星つきの O。ORBIT_O）を左に大きく、下にサイトの所在（astlog.dev）を置く。字は輪郭で描くので、
   書き出す環境の書体に左右されない——所在だけはワードマークと同じ線の字ではないので、
   scripts/logo/export.mjs が HTML の字として重ねて撮る
 */
@@ -87,6 +118,9 @@ export const cardSvg = () => {
   return svg(
     `0 0 ${CARD.width} ${CARD.height}`,
     `<rect width="${CARD.width}" height="${CARD.height}" fill="${LOGO_COLORS.ground}"/>` +
-      `<g transform="translate(${CARD.pad} ${round(CARD.height / 2 + CARD.wordmarkHeight / 2 - BOX.bottom * scale)}) scale(${scale})">${wordmarkPaths(LOGO_COLORS.ink)}</g>`,
+      `<g transform="translate(${CARD.pad} ${round(CARD.height / 2 + CARD.wordmarkHeight / 2 - BOX.bottom * scale)}) scale(${scale})">` +
+      `<path d="${WORDMARK.lambda}" fill="${LOGO_COLORS.ink}"/>` +
+      `<path d="${ORBIT_O.strokes}" fill="none" stroke="${LOGO_COLORS.ink}" stroke-width="${WORDMARK.stroke}"/>` +
+      `<path d="${ORBIT_O.satellite}" fill="${LOGO_COLORS.ink}"/></g>`,
   )
 }

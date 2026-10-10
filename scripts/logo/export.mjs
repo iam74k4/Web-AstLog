@@ -1,10 +1,11 @@
 /*
-  ロゴの素材を書き出す。`node scripts/logo/export.mjs`
+  ロゴと天体の飾りの素材を書き出す。`node scripts/logo/export.mjs`
 
-  形の正は src/ui/logo.ts（ページのロゴはそこから直に SVG を描く）。ここは、ページの
-  外で使う素材——ファイルとしての SVG（ワードマークと favicon）と、SVG を読めない所に
+  形の正は src/ui/logo.ts（ページのロゴはそこから直に SVG を描く）と src/ui/astra.ts
+  （入口の空と Contact の軌道。app.css が背景として読む）。ここは、ページの
+  外で使う素材——ファイルとしての SVG（ワードマーク・favicon・空・軌道）と、SVG を読めない所に
   渡す PNG（favicon・iPhone のホーム画面・共有カード）——を同じ形から作る。
-  手で描き直さない（test/public.test.ts が SVG の中身を logo.ts と突き合わせる）。
+  手で描き直さない（test/public.test.ts が SVG の中身を logo.ts・astra.ts と突き合わせる）。
 
   PNG はブラウザ（Playwright の Chromium）で SVG を描いて撮る。共有カード（1200×630）の
   所在（astlog.dev）だけはワードマークと同じ線の字ではないので、HTML の字として重ねて撮る
@@ -18,11 +19,14 @@ import { ROOT } from '../lib/dev-server.mjs'
 import { importTs } from '../lib/ts-import.mjs'
 
 const logo = await importTs('src/ui/logo.ts')
+const astra = await importTs('src/ui/astra.ts')
 const ASSETS = `${ROOT}public/assets/`
 
 const files = new Map([
   ['astlog-wordmark.svg', logo.wordmarkSvg()],
   ['favicon.svg', logo.iconSvg()],
+  ['sky.svg', astra.skySvg()],
+  ['orbit.svg', astra.orbitSvg()],
 ])
 
 const sized = (svg, width, height) =>
