@@ -11,7 +11,7 @@
 
   公開ページの見た目は、CV テンプレートの Cavani を下敷きにしている（向こうのコードも
   素材も使っていない。型だけを CSS で組み直した）:
-  - 白い地に、左の星図の窓と右の淡い本文の面の2分割（「骨格」）
+  - 白い地に、左の夜明けの窓と右の淡い本文の面の2分割（「骨格」）
   - 節の見出しは字間の広い大文字と、右へ伸びる罫線。押し手は角の立った墨の四角
   - 目次のいまのページは、墨で塗った四角
   手触りは React Bits（reactbits.dev）の Micro を手本にしている（こちらもコードは使って
@@ -154,7 +154,7 @@
   --frame-x: max(var(--gutter), (100% - var(--w-page)) / 2);
 
   /*
-    本文の枠（「骨格」の .frame）。--window-w は 900 以上で左に並べる星図の窓の幅、
+    本文の枠（「骨格」の .frame）。--window-w は 900 以上で左に並べる夜明けの窓の幅、
     --panel-pad は右の本文の面の左右の内側の余白（Cavani の 50px が上限）。
     --window-band-h は 900 未満の入口で、上の帯の下に出す窓の帯の高さ
   */
@@ -250,12 +250,12 @@
   /*
     天体の飾り（下の「天体の飾り」の節）。
 
-    星図の窓（.window）: --window-sky-at / --window-sky-size は空の素材
-    （public/assets/sky.svg）の置き場所と幅（窓の幅に対する割合。上端を窓の上端にそろえ、
-    すばるが窓の右上に来る）、--window-horizon は惑星の縁の頂の高さ（窓の上から。窓の下から
-    窓の高さの 16% を、64px から 140px のあいだで取る——入口の短い帯では空と惑星がほぼ
-    2:1、画面の高さの窓では惑星が底の帯に下がり、空が窓を占める）、--window-limb-r はその
-    円の半径。--track-caption は窓の左下の札の字間。
+    夜明けの窓（.window）: --window-sky-at / --window-sky-size は空の素材
+    （public/assets/sky.svg）の置き場所と幅（窓の幅の 130%。素材の原寸 560px で止める——
+    タブレットの横に長い帯で星が膨らみ、すばるが明けた白へ沈まないように。上端を窓の上端にそろえ、
+    すばるが窓の右上——空のまだ暗いところ——に来る）。--window-sky-at-tall は 900 以上の
+    縦に長い窓での置き場所（上端から少し下げ、左上の札の行から離す）。--track-caption は
+    窓の左上の札の字間。
 
     --spark は四芒星（経歴のいまの行）の大きさ、--sparkle は
     その形。--satellite は軌道の上の衛星（個人ページの顔と 404 の印）、--orbit-cut は輪を
@@ -264,9 +264,8 @@
     動かさず、印だけを余白に出す（余白 --gutter の最小 16px に四芒星ごと収まる）
   */
   --window-sky-at: 35% 0%;
-  --window-sky-size: 130%;
-  --window-horizon: calc(100% - clamp(64px, 16%, 140px));
-  --window-limb-r: 750px;
+  --window-sky-at-tall: 35% 56px;
+  --window-sky-size: min(130%, 560px);
   --track-caption: 0.24em;
   --spark: 9px;
   --sparkle: polygon(50% 0, 58% 42%, 100% 50%, 58% 58%, 50% 100%, 42% 58%, 0 50%, 42% 42%);
@@ -323,9 +322,10 @@
   /*
     配色は白い地の1つ（Cavani を下敷きにした明るい配色）。字とボタンは墨色で、
     塗りのボタンの字は白——アクセントの既定は墨（--mono。管理画面の「見た目」でほかの
-    色も選べる）。OS が暗い配色を選んでいても黒い地には切り替えない。左の星図の窓も
-    淡い地に墨の星（--starmap）で、暗い面は置かない——前は窓だけ夜の黒にしていたが、白い
-    ページの中で1枚だけ浮いた。紙にもこのまま刷る（窓だけは刷らない。末尾の @media print）。
+    色も選べる）。OS が暗い配色を選んでいても黒い地には切り替えない。左の夜明けの窓だけが
+    暗い空を持つが、下へ行くほど明けて地の白に溶ける（--dawn）——前は窓を平らな夜の黒で
+    塗り、白いページの中で1枚の板が浮いた。紙にもこのまま刷る（窓だけは刷らない。末尾の
+    @media print）。
 
     color-scheme は、フォームの部品やスクロールバーのようなブラウザが描くものも
     明るい側にそろえるため（<meta name="color-scheme"> と同じ値。components.tsx の
@@ -374,15 +374,26 @@
   --danger-soft: rgba(192, 52, 59, 0.08);
 
   /*
-    星図の窓（骨格の .window と「天体の飾り」）。刷った星図のように、白い地より1段
-    沈んだ淡い地に墨の星と罫線の縁。惑星の面は地と同じ白で、窓の下から昇った惑星が
-    そのまま本文の白へ続く（狭い画面では窓の帯の下が本文）
+    夜明けの窓（骨格の .window と「天体の飾り」）。空の写真のように、上は夜の紺、下へ
+    行くほど明けて、底で地の白（--dawn-day）に溶ける——窓の縁が白いページの中で浮かない。
+    星と札は白（明けた空では白い星は見えなくなる。夜明けの空そのもの）。
+    すばるは窓の右上、まだ暗いところ（--window-sky-at）
   */
-  --starmap: #e7ecf3;
-  --starmap-ink: var(--ink);
-  --starmap-line: var(--line-strong);
-  --starmap-planet: var(--bg);
-  --starmap-faint: var(--ink-weak);
+  --dawn-night: #0c1122;
+  --dawn-dusk: #18213d;
+  --dawn-haze: #4b5675;
+  --dawn-mist: #b9c0cf;
+  --dawn-day: var(--bg);
+  --dawn: linear-gradient(
+    180deg,
+    var(--dawn-night) 0%,
+    var(--dawn-dusk) 30%,
+    var(--dawn-haze) 56%,
+    var(--dawn-mist) 80%,
+    var(--dawn-day) 100%
+  );
+  --dawn-star: #ffffff;
+  --dawn-faint: rgba(255, 255, 255, 0.6);
 
   /* 公開する / しない のスイッチ。つまみは押すと潰れて横に伸びる */
   --switch-w: 44px;
@@ -586,7 +597,7 @@ img {
   3つとも中身を同じ版面の幅（--w-page）にそろえる。左右の余白は --gutter と、版面より
   広い画面で余った幅の半分の大きいほう（--frame-x）。
 
-  本文の枠は Cavani を下敷きにした2分割——左に星図の窓（.window）、右に本文（main。
+  本文の枠は Cavani を下敷きにした2分割——左に夜明けの窓（.window）、右に本文（main。
   地と同じ白）。900 未満は縦に積み、窓は入口でだけ上の帯の下に短い帯として出す（ほかの
   ページでは本文を先に読ませる）。900 以上は左右に並べ、窓を画面に貼り付けて本文だけが
   流れる（「ページの外枠」とあわせて 900 以上の節）。窓の絵は「天体の飾り」が描く。
@@ -615,7 +626,7 @@ body[data-site] > .frame {
 }
 
 /*
-  星図の窓。900 未満は入口でだけ、短い帯として出す。:has は1本の規則で書き、:where() で
+  夜明けの窓。900 未満は入口でだけ、短い帯として出す。:has は1本の規則で書き、:where() で
   詳細度を下げる——900 以上で窓を出す規則（「ページの外枠」の .frame > .window）が勝つように
 */
 .window {
@@ -2367,12 +2378,12 @@ body[data-site] > .frame {
   HTML は字だけで、飾りは CSS の背景と疑似要素と、静的な SVG の素材（src/ui/astra.ts が正。
   scripts/logo/export.mjs が書き出す）が描く。
 
-  置くのは4か所: 星図の窓（骨格の .window。Cavani の左の写真の位置）、経歴の星座、
+  置くのは4か所: 夜明けの窓（骨格の .window。Cavani の左の写真の位置）、経歴の星座、
   個人ページの顔と 404 の印の軌道の輪。
 
   決まり:
-  - 星図の窓の外は線と点だけ。面・光・影・色相を持たない（字の墨と罫線の段だけ）。
-    窓の中だけが星図の地（--starmap）と惑星の面を持つ
+  - 夜明けの窓の外は線と点だけ。面・光・影・色相を持たない（字の墨と罫線の段だけ）。
+    窓の中だけが夜から明ける空（--dawn）を持つ
   - 字と重ねない。窓は本文の外、経歴の星座は左の軸の外の余白
   - 線を切るのに地の色を塗らない。切れ目は形（mask・弧の端）で作る——地の色の円を
     重ねると、強制色や紙など地の違う所で黒い円が浮く
@@ -2381,47 +2392,35 @@ body[data-site] > .frame {
 */
 
 /*
-  星図の窓。3枚を重ねる——窓の地（--starmap）、すばるとまばらな星（::before）、窓の下から
-  昇る惑星（::after。1本の弧と、その内側の惑星の面）と左下の札「M45 — PLEIADES」（すばるの
-  天体の番号。札は字を持たない窓の飾りなので、CSS の content で描く）。どのページでも同じ窓。
+  夜明けの窓。3枚を重ねる——夜から明ける空（--dawn）、すばるとまばらな星（::before）、
+  左上の札「M45 — PLEIADES」（::after。すばるの天体の番号。札は字を持たない窓の飾り
+  なので、CSS の content で描く）。どのページでも同じ窓。
   900 以上は「ページの外枠」が窓を画面に貼り付ける（position: sticky がこの relative を上書き）
 */
 .window {
   position: relative;
   overflow: hidden;
-  background: var(--starmap);
+  background: var(--dawn);
 }
 
 /*
-  星は素材（public/assets/sky.svg）を形（mask）として読み、色は段（--starmap-ink）で塗る。
+  星は素材（public/assets/sky.svg）を形（mask）として読み、色は段（--dawn-star）で塗る。
   素材に色を焼くと、段を変えた日に星だけが前の色で残る
 */
 .window::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: var(--starmap-ink);
+  background: var(--dawn-star);
   mask: url('/assets/sky.svg') no-repeat var(--window-sky-at) / var(--window-sky-size) auto;
 }
 
-/*
-  惑星は星の上に重ねる——地平より下の星は惑星の面に隠れる（淡い面に星が散ると、
-  ほこりに見えた）
-*/
 .window::after {
   content: 'M45 — PLEIADES';
   position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: flex-end;
-  padding: 0 var(--sp-6) var(--sp-5);
-  background: radial-gradient(
-    circle var(--window-limb-r) at 50% calc(var(--window-horizon) + var(--window-limb-r)),
-    var(--starmap-planet) calc(var(--window-limb-r) - 1px),
-    var(--starmap-line) calc(var(--window-limb-r) - 0.75px) var(--window-limb-r),
-    transparent calc(var(--window-limb-r) + 0.5px)
-  );
-  color: var(--starmap-faint);
+  top: var(--sp-5);
+  left: var(--sp-6);
+  color: var(--dawn-faint);
   font-family: var(--font-latin);
   font-size: var(--fs-label);
   letter-spacing: var(--track-caption);
@@ -2918,7 +2917,7 @@ body[data-site] > .frame {
   }
 
   /*
-    900 以上は星図の窓と本文の面を左右に並べ、窓を上の帯の下に貼り付ける（本文だけが
+    900 以上は夜明けの窓と本文の面を左右に並べ、窓を上の帯の下に貼り付ける（本文だけが
     流れる）。窓の高さは画面から帯と下の余白を引いたぶん。本文の面は枠の高さいっぱいに
     伸び、短いページでも窓の横が空かない
   */
@@ -2930,6 +2929,7 @@ body[data-site] > .frame {
     }
 
     .frame > .window {
+      --window-sky-at: var(--window-sky-at-tall);
       display: block;
       position: sticky;
       top: var(--top-h);
@@ -3038,7 +3038,7 @@ body[data-site] > .frame {
     break-inside: avoid;
   }
 
-  /* 紙は画面と同じ白い地で刷る（色の段は差し替えない）。星図の窓は刷らない */
+  /* 紙は画面と同じ白い地で刷る（色の段は差し替えない）。夜明けの窓は刷らない */
   .window {
     display: none;
   }

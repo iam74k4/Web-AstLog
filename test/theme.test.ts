@@ -513,7 +513,7 @@ describe('ページの外枠', () => {
     */
     const frame = blockAt(sheet, '@media screen')
     expect(ruleWith(frame, 'min-height: var(--screen-h)').selector).toBe('body[data-site]')
-    // 読むのは body の min-height と、900 以上で画面に貼り付ける星図の窓の高さの2か所だけ
+    // 読むのは body の min-height と、900 以上で画面に貼り付ける夜明けの窓の高さの2か所だけ
     expect(sheet.match(/var\(--screen-h\)/g)).toHaveLength(2)
     expect(ruleWith(frame, 'height: calc(var(--screen-h)').selector).toBe('.frame > .window')
     /*
@@ -1167,7 +1167,7 @@ describe('一覧の行', () => {
   天体の飾り（app.css の同名の節）。サイトの名の天体を添える。
 
   前に置いた天体の絵・星空・軌道図は、最初の画面の6割を占めて動き続け、持ち主の
-  「シンプル・モダンに」で外した。いまの飾りは、Cavani の左の写真の位置に置いた星図の
+  「シンプル・モダンに」で外した。いまの飾りは、Cavani の左の写真の位置に置いた夜明けの
   窓と、その外の線と点だけで、どれも動かない。試作のレビューで落ちた2つ——地の色を
   塗って線を切ると強制色で黒い円が浮く／紙と強制色で外せない——をここで止める。
   効いているか（字と重ならないか）は npm run check:fit。
@@ -1183,7 +1183,7 @@ describe('天体の飾り', () => {
     expect(section).toContain('.career__now')
   })
 
-  it('星図の窓の外は線と点だけ。面・光・影・色相・動きを持たない。色は字の墨と罫線の段だけ', () => {
+  it('夜明けの窓の外は線と点だけ。面・光・影・色相・動きを持たない。色は字の墨と罫線の段だけ', () => {
     expect(section).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(/)
     const outside = rulesOf(section).filter(
       (rule) => !rule.selectors.some((selector) => selector.startsWith('.window')),
@@ -1195,12 +1195,12 @@ describe('天体の飾り', () => {
     const colors = new Set(
       outsideText
         .flatMap((text) => [...text.matchAll(/var\((--[\w-]+)\)/g)].map(([, name = '']) => name))
-        .filter((name) => /^--(ink|line|accent|mono|bg|surface|starmap)/.test(name)),
+        .filter((name) => /^--(ink|line|accent|mono|bg|surface|dawn)/.test(name)),
     )
     expect([...colors].sort()).toEqual(['--ink', '--ink-weak', '--line-strong'])
   })
 
-  it('星図の窓は窓の段（--starmap）だけで描く。字の墨や本文の面の色を直に持ち込まない', () => {
+  it('夜明けの窓は窓の段（--dawn）だけで描く。字の墨や地の色を直に持ち込まない', () => {
     const window = rulesOf(section).filter((rule) =>
       rule.selectors.some((selector) => selector.startsWith('.window')),
     )
@@ -1208,26 +1208,16 @@ describe('天体の飾り', () => {
       window
         .flatMap((rule) => rule.decls.map(([, value]) => value))
         .flatMap((value) => [...value.matchAll(/var\((--[\w-]+)\)/g)].map(([, name = '']) => name))
-        .filter((name) => /^--(ink|line|accent|mono|bg|surface|panel|starmap)/.test(name)),
+        .filter((name) => /^--(ink|line|accent|mono|bg|surface|panel|dawn)/.test(name)),
     )
-    expect([...colors].sort()).toEqual([
-      '--starmap',
-      '--starmap-faint',
-      '--starmap-ink',
-      '--starmap-line',
-      '--starmap-planet',
-    ])
+    expect([...colors].sort()).toEqual(['--dawn', '--dawn-faint', '--dawn-star'])
   })
 
-  it('星は素材を形として読み、色は段で塗る。惑星は星の上に重ねる', () => {
-    /*
-      素材に色を焼いて背景に敷くと、段を変えた日に星だけが前の色で残る。惑星（::after）を
-      星（::before）より下に敷くと、地平より下の星が惑星の面に散って、ほこりに見えた
-    */
+  it('星は素材を形として読み、色は段で塗る', () => {
+    // 素材に色を焼いて背景に敷くと、段を変えた日に星だけが前の色で残る
     const stars = bodyOf(section, '.window::before {')
-    expect(stars).toContain('background: var(--starmap-ink);')
+    expect(stars).toContain('background: var(--dawn-star);')
     expect(stars).toContain("mask: url('/assets/sky.svg')")
-    expect(bodyOf(section, '.window::after {')).toContain('var(--starmap-planet)')
     expect(bodyOf(section, '.window {')).not.toContain('url(')
   })
 
@@ -1238,7 +1228,7 @@ describe('天体の飾り', () => {
     )
   })
 
-  it('星図の窓は HTML の外の飾り。紙には刷らず、強制色では枠ごと外す', () => {
+  it('夜明けの窓は HTML の外の飾り。紙には刷らず、強制色では枠ごと外す', () => {
     expect(bodyOf(blockAt(sheet, '@media print'), '.window {')).toContain('display: none')
     expect(
       bodyOf(blockAt(sheet, '@media (forced-colors: active)'), '.frame > .window {'),
@@ -1351,7 +1341,7 @@ describe('文字の段', () => {
         '.side-head:lang(en)',
         // 公開ページの数字だけの札（見出しの件数）
         '.head__count',
-        // 星図の窓の英字だけの札（M45 — PLEIADES）
+        // 夜明けの窓の英字だけの札（M45 — PLEIADES）
         '.window::after',
       ].sort(),
     )
@@ -1491,11 +1481,11 @@ describe('文字の段', () => {
 
 /*
   配色は白い地の1つで、OS が暗い配色でも黒い地に切り替えない。前は黒基調だったが、
-  Cavani を下敷きにした作り替えで持ち主が明るい配色を選んだ。左の星図の窓も淡い地に
+  Cavani を下敷きにした作り替えで持ち主が明るい配色を選んだ。左の夜明けの窓も淡い地に
   墨の星で、暗い面は置かない（窓だけ黒にしたら、白いページの中で1枚だけ浮いた）。紙にも
-  画面と同じ白い地で刷り、星図の窓だけを刷らない。
+  画面と同じ白い地で刷り、夜明けの窓だけを刷らない。
 */
-describe('配色（白い地と星図の窓）', () => {
+describe('配色（白い地と夜明けの窓）', () => {
   // 帯の右端のぼかしと、軌道の輪の切れ目は不透明度の坂で、色の段ではない。
   const MASKS = new Set(['--fade-right', '--orbit-mask'])
   const colorTokens = (body: string) =>
@@ -1531,7 +1521,7 @@ describe('配色（白い地と星図の窓）', () => {
     expect(bodyOf(sheet, "[data-accent='mono'] {")).toContain('--accent: var(--mono);')
   })
 
-  it('紙は画面と同じ白い地で刷る。色の段を差し替えず、星図の窓だけを刷らない', () => {
+  it('紙は画面と同じ白い地で刷る。色の段を差し替えず、夜明けの窓だけを刷らない', () => {
     const screen = bodyOf(sheet, ':root {')
     // 読めているか（地・面・線・字・モノクロとアクセント6色と薄い地・危険・スイッチ・窓）
     expect(colorTokens(screen).length).toBeGreaterThan(20)
@@ -1540,14 +1530,19 @@ describe('配色（白い地と星図の窓）', () => {
     expect(bodyOf(print, '.window {')).toContain('display: none')
   })
 
-  it('星図の窓も明るい段で描く。暗い面を置かない', () => {
+  it('夜明けの窓の空は、底で地の白に溶ける。平らな夜の板を置かない', () => {
+    /*
+      窓を平らな夜の黒で塗ったら、白いページの中で1枚の板が浮いた。空は上から下へ
+      明けていき、最後の色は地と同じ白（--dawn-day は --bg）
+    */
     const root = bodyOf(sheet, ':root {')
     const value = (name: string) => root.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1]
-    // 窓の地は本文の面と同じ淡い側（#e で始まる明るい地）。星と縁は字の墨と罫線の段
-    expect(value('--starmap')).toMatch(/^#e[0-9a-f]{5}$/)
-    expect(value('--starmap-ink')).toBe('var(--ink)')
-    expect(value('--starmap-planet')).toBe('var(--bg)')
+    expect(value('--dawn-day')).toBe('var(--bg)')
+    const dawn = root.slice(root.indexOf('--dawn:'), root.indexOf(');', root.indexOf('--dawn:')))
+    expect(dawn).toContain('linear-gradient(')
+    expect(dawn.trim().split('\n').at(-1)?.trim()).toBe('var(--dawn-day) 100%')
     expect(sheet).not.toContain('--night')
+    expect(sheet).not.toContain('--starmap')
   })
 
   it('ロゴの素材に焼く色は、塗りの押し手の :root の段と同じ', () => {

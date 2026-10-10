@@ -1,12 +1,12 @@
 /*
-  天体の飾りの素材の形（ここが正）。星図の窓の空（sky.svg。すばるとまばらな星）。
+  天体の飾りの素材の形（ここが正）。夜明けの窓の空（sky.svg。すばるとまばらな星）。
   ファイルは scripts/logo/export.mjs がここから public/assets に書き出し、ページは
-  app.css の「天体の飾り」が星図の窓（骨格の .window）の星の形（mask）として読む——HTML には
+  app.css の「天体の飾り」が夜明けの窓（骨格の .window）の星の形（mask）として読む——HTML には
   置かない（本文の HTML は字だけ。test/public.test.ts が main に svg が無いことを見ている）。
 
   点だけの図で、面・光・影を持たない。ページが読むのは点の形と濃さ（不透明度）だけで、
-  色は app.css の段（--starmap-ink）が塗る。ファイルに焼く色はロゴの素材の墨（LOGO_COLORS.ground）
-  で、直に開いても窓と同じ姿に見えるようにしてある。色相は持たない
+  色は app.css の段（--dawn-star）が塗る。ファイルに焼く色はロゴの素材の白（LOGO_COLORS.ink）
+  で、窓の星と同じ色。点に色相は持たせない
   ——既定のモノクロの中に1色だけ色の点を置くと、目がそこへ寄り道した。
 
   JSX を持たない（scripts から読むため）。
@@ -19,7 +19,7 @@ const round = (value: number) => Math.round(value * 100) / 100
 const svg = (width: number, height: number, title: string, body: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}"><title>${title}</title>${body}</svg>\n`
 const dot = (x: number, y: number, r: number, opacity: number) =>
-  `<circle cx="${round(x)}" cy="${round(y)}" r="${round(r)}" fill="${LOGO_COLORS.ground}" fill-opacity="${round(opacity)}"/>`
+  `<circle cx="${round(x)}" cy="${round(y)}" r="${round(r)}" fill="${LOGO_COLORS.ink}" fill-opacity="${round(opacity)}"/>`
 
 /*
   すばる（プレアデス星団）。持ち主の名の「昂」の字。赤経・赤緯の差を分角で持ち（東が左）、
@@ -38,9 +38,10 @@ const PLEIADES: [x: number, y: number, magnitude: number][] = [
 ]
 
 /*
-  まばらな星（x, y, 半径, 不透明度）。すばるの周りを空け、明るさは揃えない。上の 300 は
+  まばらな星（x, y, 半径, 不透明度）。すばるの周りと、窓の左上の札（M45 — PLEIADES）の
+  下を空け、明るさは揃えない。上の 300 は
   狭い画面の入口の帯に出るぶん、その下は 900 以上の縦に長い窓を埋めるぶん（窓の下の
-  ほうは惑星の面が隠す）
+  ほうは空が明けて、白い星は見えなくなる）
 */
 const FIELD: [number, number, number, number][] = [
   [40, 250, 0.9, 0.35],
@@ -55,7 +56,6 @@ const FIELD: [number, number, number, number][] = [
   [530, 40, 1.2, 0.5],
   [546, 160, 0.8, 0.3],
   [70, 70, 0.8, 0.28],
-  [140, 24, 1.0, 0.35],
   [252, 132, 0.7, 0.25],
   [508, 272, 0.8, 0.3],
   [356, 264, 0.9, 0.32],
@@ -89,7 +89,7 @@ const FIELD: [number, number, number, number][] = [
 ]
 
 /*
-  星図の窓の空。窓の右上にすばるが来るように、app.css が窓の幅に合わせて置く（上端を
+  夜明けの窓の空。窓の右上にすばるが来るように、app.css が窓の幅に合わせて置く（上端を
   窓の上端にそろえる）。縦に長いのは、900 以上の窓が画面の高さまで伸びるため
 */
 export const SKY = { width: 560, height: 1000 } as const

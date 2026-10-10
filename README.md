@@ -35,8 +35,8 @@ workers.dev とプレビュー URL は無効。公開はデプロイ後で、購
 開発ツールの間接依存（undici・sharp・旧 esbuild loader）は、セキュリティ修正版へ
 `package.json` の overrides で固定し、型・テスト・ビルドと Drizzle の schema export を確認する。**内容と導線は JavaScript なしで成立する**。
 公開ページは実行する script を1本も持たない（JSON-LD はデータ）。装飾の動きは置かず、
-HTML は字だけで組む——入口の HTML は約 4.5KB。天体の飾り（惑星の縁・すばる・軌道・星）は
-静止した線と点だけを CSS の背景と疑似要素が描く（`CLAUDE.md` の「天体の飾り」）。
+HTML は字だけで組む——入口の HTML は約 4.5KB。天体の飾り（夜明けの窓のすばると星・経歴の
+星座・顔の軌道）は、静止したまま CSS の背景と疑似要素が描く（`CLAUDE.md` の「天体の飾り」）。
 絞り込みとページの移動は URL とサーバー、管理画面は HTML フォームと 303 で動く。
 全部の応答に CSP（管理画面の HTML は補助1本の exact SHA-256 だけ、それ以外は `script-src 'none'`）と
 `X-Content-Type-Options: nosniff`・`Referrer-Policy: strict-origin-when-cross-origin`
@@ -661,8 +661,8 @@ public/
   app.css            全画面のスタイル。値は :root のトークンだけで決める
                      色・書体のプリセットもここ（[data-accent] / [data-typeface]）
                      末尾の「ページの外枠」が足元の位置と貼り付く上の帯、900 以上の
-                     2分割（左の星図の窓・右の本文）を作る。
-                     「天体の飾り」の節が、星図の窓と静止した線と点の飾りを背景と疑似要素で描く。
+                     2分割（左の夜明けの窓・右の本文）を作る。
+                     「天体の飾り」の節が、夜明けの窓と静止した線と点の飾りを背景と疑似要素で描く。
                      ページを移るときの切り替え（@view-transition）もここ
   admin.css          管理画面だけの規則。管理画面は app.css のあとにこれを読み、
                      公開ページは読まない（:root は持たず、app.css の段を読む）
@@ -673,7 +673,7 @@ public/
                      /app.css?v=… などで読むので、変えてデプロイすれば URL が変わる）
   assets/            ロゴと天体の飾りの素材と、見出しの書体だけ。favicon（favicon.svg・favicon-32.png・
                      apple-touch-icon.png）・ページの外で使うワードマーク（astlog-wordmark.svg）・共有カード
-                     （astlog-card.png。1200×630）・星図の窓の空（sky.svg）——ここまでは
+                     （astlog-card.png。1200×630）・夜明けの窓の空（sky.svg）——ここまでは
                      scripts/logo/export.mjs が src/ui/logo.ts と src/ui/astra.ts から書く。
                      見出しの欧文の Poppins（poppins-400/500/600/700.woff2。欧文だけに絞った
                      もの）とそのライセンス（poppins-OFL.txt）は手で置いたもの。

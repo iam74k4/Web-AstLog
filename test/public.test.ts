@@ -281,11 +281,11 @@ describe('名乗り', () => {
     }
   })
 
-  it('星図の窓の素材（空）は astra.ts が正。点だけで色相を持たない', () => {
+  it('夜明けの窓の素材（空）は astra.ts が正。点だけで色相を持たない', () => {
     /*
       ロゴと同じく、ファイルは scripts/logo/export.mjs が src/ui/astra.ts から書く。
-      app.css が星図の窓の星の形（mask）として読む（HTML には置かない）。ファイルの色は
-      ロゴの素材の墨（LOGO_COLORS.ground）を不透明度で薄めるだけ——前に試した橙の星は、
+      app.css が夜明けの窓の星の形（mask）として読む（HTML には置かない）。ファイルの色は
+      窓の星と同じ白（LOGO_COLORS.ink）を不透明度で薄めるだけ——前に試した橙の星は、
       モノクロの中で1つだけ色を持ち、目がそこへ寄り道した
     */
     expect(skyFile).toBe(skySvg())
@@ -293,7 +293,7 @@ describe('名乗り', () => {
     const colors = new Set(
       [...skyFile.matchAll(/(?:fill|stroke)="(#[0-9a-f]+)"/g)].map((m) => m[1]),
     )
-    expect([...colors]).toEqual(['#222226'])
+    expect([...colors]).toEqual(['#ffffff'])
   })
 
   it('ページと CSS が読む素材は、どれも public/assets にある', async () => {
