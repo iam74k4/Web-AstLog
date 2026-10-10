@@ -8,7 +8,7 @@ import type { Db } from '../../db/queries'
 import * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
 import { newToken } from '../../lib/auth'
-import { bool, isHttpsUrl, str } from '../../lib/format'
+import { bool, isHttpsUrl, ONGOING_HINT, str } from '../../lib/format'
 import { IMAGE_ACCEPT, IMAGE_LABELS } from '../../lib/image'
 import { isContactEmail } from '../../site'
 import {
@@ -245,7 +245,12 @@ const MemberForm = (props: {
             value={value('careerText')}
             rows={4}
             error={props.errors?.careerText}
-            hint="1行に1件。「期間 | 肩書き | 所属」"
+            /*
+              公開ページの経歴は、期間が「現在」で終わる行だけを星座のいまの星にする
+              （src/lib/format.ts の isOngoing）。書いた字で決まるので、書き方をここで言う
+              ——「2024.03 —」と先を空けて書くと、星は黙って付かない
+            */
+            hint={`1行に1件。「期間 | 肩書き | 所属」。${ONGOING_HINT}`}
           />
           <label class="field">
             <span class="field__label">アバター画像</span>

@@ -1,6 +1,6 @@
 import type { Block, Item, Member } from './db/schema'
 import { STORY_SECTIONS, type StoryColumn, type StoryPart } from './domain'
-import { isSafeUrl, paragraphs, parseLines, parseSkills } from './lib/format'
+import { isSafeUrl, ONGOING_HINT, paragraphs, parseLines, parseSkills } from './lib/format'
 
 /*
   トップページを組むブロックの一覧。
@@ -85,7 +85,8 @@ export const BLOCK_TYPES = [
     note: '年月と出来事を並べる',
     kind: 'free',
     title: 'Timeline',
-    hint: '1行に1件。「年月 | 何を | 補足」',
+    // 経歴と同じ星座で描く（期間が「現在」で終わる行がいまの星。src/lib/format.ts の isOngoing）
+    hint: `1行に1件。「年月 | 何を | 補足」。${ONGOING_HINT}`,
   },
   {
     key: 'note',
