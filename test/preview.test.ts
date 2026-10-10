@@ -227,7 +227,7 @@ describe('保存前のサイト設定・見た目', () => {
       const html = await previewText(response)
       expect(html).toContain('編集中のContactです')
       expect(html).toContain('mailto:preview@example.test')
-      expect(html).toContain('class="orbital')
+      expect(html).toContain('<section id="contact" role="region" aria-label="Contact">')
       expect(html).toContain('このプレビューでは保存されません')
       expect(await loadSiteSettings(db())).toEqual(savedSite)
       expect(await env.MEDIA.get(SITE_VERSION_KEY)).toBe(version)
@@ -235,7 +235,7 @@ describe('保存前のサイト設定・見た目', () => {
     },
   )
 
-  it('見た目の保存前プレビューは既定の入口で軌道図と選択色・書体を描く', async () => {
+  it('見た目の保存前プレビューは既定の入口で選択色・書体を描く', async () => {
     await seedItem({ slug: 'app' })
     const fetch = await signIn()
     const version = await env.MEDIA.get(SITE_VERSION_KEY)
@@ -246,7 +246,7 @@ describe('保存前のサイト設定・見た目', () => {
     const html = await previewText(response)
     expect(html).toContain('data-accent="rose"')
     expect(html).toContain('data-typeface="mono"')
-    expect(html).toContain('class="hero hero--orbit"')
+    expect(html).toContain('class="hero hero--cover"')
     expect(html).not.toContain('data-whole=')
     expect(await loadTheme(db())).toEqual({ accent: 'mono', typeface: 'sans' })
     expect(await env.MEDIA.get(SITE_VERSION_KEY)).toBe(version)
@@ -292,13 +292,11 @@ describe('保存前のサイト設定・見た目', () => {
         }
 
   it.each(['appearance', 'site'])(
-    '%sのProfileプレビューは大きな天体と未保存設定を反映し、DB・KV全体を変えない',
+    '%sのProfileプレビューは未保存設定を反映し、DB・KV全体を変えない',
     async (target) => {
       await seedMember({
         headline: 'プロフィールの表紙',
         bio: '公開中の自己紹介',
-        celestialBody: 'saturn',
-        celestialAccent: 'inherit',
       })
       await seedMember({ slug: 'draft-person', name: '未公開の人', published: 0 })
       await env.MEDIA.put('avatars/profile-kept.png', png(), {
@@ -314,8 +312,6 @@ describe('保存前のサイト設定・見た目', () => {
       )
       expect(html).toContain('プレビュー · Profile')
       expect(html).toContain('hero--profile')
-      expect(html).toContain('class="celestial celestial--art"')
-      expect(html).toContain('data-celestial-body="saturn"')
       expect(html).toContain('プロフィールの表紙')
       expect(html).toContain('公開中の自己紹介')
       expect(html).not.toContain('未公開の人')

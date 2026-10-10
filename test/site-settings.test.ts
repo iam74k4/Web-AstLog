@@ -27,14 +27,16 @@ describe('サイト設定', () => {
       email: '',
       github: '',
     })
-    for (const path of ['/', '/all', '/contact']) {
+    for (const path of ['/', '/all']) {
       const html = await okText(path)
       expect(html).not.toContain('iam74k4')
       expect(html).not.toContain('noctifex.dev')
       expect(html).not.toContain('href="mailto:')
       expect(html).not.toContain('/assets/avatar.png')
+      // 連絡の手が無いのに誘うページは作らない（src/blocks.ts の blockShown）
+      expect(html).not.toContain('href="/contact"')
     }
-    expect(await okText('/contact')).toContain('連絡先を準備しています')
+    expect((await get('/contact')).status).toBe(404)
   })
 
   it('ログインと送信元の検査を通ってから編集できる', async () => {
@@ -97,7 +99,9 @@ describe('サイト設定', () => {
     const html = await okText('/')
     expect(html).not.toContain('href="mailto:')
     expect(html).not.toContain('"sameAs"')
-    expect(await okText('/contact')).toContain('連絡先を準備しています')
+    // 連絡の手が無くなったので、Contact のページも目次の行も無くなる
+    expect(html).not.toContain('href="/contact"')
+    expect((await get('/contact')).status).toBe(404)
   })
 
   it('不正な URL・メールや長すぎる文は保存せず、入力欄で理由を返す', async () => {
@@ -128,9 +132,13 @@ describe('サイト設定', () => {
         { key: 'site.github', value: '//evil.example' },
       ])
     await touch()
-    const html = await okText('/contact')
-    expect(html).not.toContain('href="mailto:')
-    expect(html).not.toContain('evil.example')
+    // 形の通らない連絡先は無いものとして数える（src/site.ts の hasContact）。Contact は出ない
+    expect((await get('/contact')).status).toBe(404)
+    for (const path of ['/', '/all']) {
+      const html = await okText(path)
+      expect(html).not.toContain('href="mailto:')
+      expect(html).not.toContain('evil.example')
+    }
   })
 
   it('メンバーのメールも同じ単一宛先の検査を通す', async () => {

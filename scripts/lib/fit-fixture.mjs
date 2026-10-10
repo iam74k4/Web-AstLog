@@ -412,7 +412,7 @@ function itemRows() {
   主画像と続く画像のサイズが異なる配置を確かめる。
 */
 const SHOT_SOURCES = [
-  { url: '/assets/blackhole.webp', width: 1672, height: 941 },
+  { url: '/assets/astlog-card.png', width: 1200, height: 630 },
   { url: '/images/avatars/avatar.png', width: 144, height: 144 },
   { url: '/assets/apple-touch-icon.png', width: null, height: null },
 ]
@@ -525,6 +525,11 @@ export function fixture({ solo = false } = {}) {
     insert('item_tags', tags),
     insert('item_links', links),
     insert('item_shots', shots),
+    /*
+      連絡先。Contact は連絡先（メールか GitHub）があるときだけ出る（src/blocks.ts の
+      blockShown）。無いと /contact が生えず、締めのページを測らないまま緑になる
+    */
+    "INSERT OR REPLACE INTO settings (key, value) VALUES ('site.email', 'contact@example.com'), ('site.github', 'https://github.com/example');",
   ].join('\n')
 
   const itemPath = (item) => `/${item.type === 'app' ? 'apps' : 'works'}/item/${item.slug}`

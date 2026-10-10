@@ -73,6 +73,8 @@ async function legacyRows() {
     d1().prepare(
       "INSERT INTO blocks (id, type, published, sort_order) VALUES (1, 'hero', 1, 10), (2, 'apps', 0, 20), (3, 'works', 1, 30), (4, 'team', 1, 40), (5, 'contact', 1, 50)",
     ),
+    // Contact は連絡先があるときだけ出る（src/blocks.ts の blockShown）。前の DB にも置いておく
+    d1().prepare("INSERT INTO settings (key, value) VALUES ('site.email', 'contact@example.test')"),
   ])
 }
 

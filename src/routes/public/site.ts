@@ -1,14 +1,8 @@
-import {
-  countPublishedByKind,
-  type Db,
-  listPublishedItemKeys,
-  listPublishedItems,
-  oldestPublishedItemYear,
-} from '../../db/queries'
+import { countPublishedByKind, type Db, listPublishedItems } from '../../db/queries'
 import type * as schema from '../../db/schema'
 import { type ItemFilter, type KindCounts, totalOf } from '../../domain'
 import type { Page } from '../../lib/sequence'
-import { SITE, type SiteSettings } from '../../site'
+import type { SiteSettings } from '../../site'
 import { filterQuery } from '../../ui/components'
 import { renderBlock } from './blocks'
 import {
@@ -101,28 +95,18 @@ const pageQuery = (slug: string, filter: ItemFilter): string =>
   filterApplies(slug) ? filterQuery(filter) : ''
 
 /*
-  いま出すページの行を引く。一覧（Projects）は絞り込みを効かせて、入口は件数の帯の
-  いちばん古い年（Since）だけを集約する（入口に絞り込みは効かない）。ほかの
-  ページでは1件も引かない——そのページに作品は出ない。
-
-  絞り込んだ一覧は、行の番号のために公開中の並び（id）も引く。番号は絞り込む前の並びでの
-  位置（data.ts の ItemListData）。
+  いま出すページの行を引く。一覧（Projects）だけが絞り込みを効かせて行を引き、
+  ほかのページでは1件も引かない——そのページに作品は出ない。
 */
 export async function pageRows(
   db: Db,
   page: BlockPage,
   filter: ItemFilter,
   memberId: number | null,
-): Promise<Pick<ItemListData, 'rows' | 'numbers' | 'since'>> {
-  if (page.block.type === 'hero') return { rows: [], since: await oldestPublishedItemYear(db) }
+): Promise<Pick<ItemListData, 'rows'>> {
   if (!filterApplies(page.block.type)) return { rows: [] }
   const scope = scopeOf(filter, memberId)
-  if (!scope.kind && !scope.memberId) return { rows: await listPublishedItems(db) }
-  const [rows, order] = await Promise.all([
-    listPublishedItems(db, scope),
-    listPublishedItemKeys(db),
-  ])
-  return { rows, numbers: new Map(order.map((key, index) => [key.id, index + 1])) }
+  return { rows: await listPublishedItems(db, scope.kind || scope.memberId ? scope : {}) }
 }
 
 /*
@@ -137,8 +121,12 @@ export async function sitePages(
   members: schema.Member[],
   filter: ItemFilter,
   // 区分ごとの件数。呼ぶ側が絞り込みを読むのに先に引いていれば渡す（二度引かない）
-  byKind?: KindCounts,
-  site: SiteSettings = SITE,
+  byKind: KindCounts | undefined,
+  /*
+    サイト設定。必須——Contact を出すか（連絡先があるか）がこれで決まる。既定値を置いて
+    いたころは、sitemap だけが設定を渡さずに数え、連絡先のあるサイトでも /contact を落とした
+  */
+  site: SiteSettings,
 ): Promise<{ pages: SitePage[]; counted: TopData }> {
   const counts = byKind ?? (await countPublishedByKind(db))
 

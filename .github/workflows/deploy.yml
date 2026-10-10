@@ -6,7 +6,7 @@ name: deploy
 #
 # 本番へ出す道はこれ1本で、順序はこう決めてある。
 #   1. main か・id が入っているか（guard）——どちらも満たさなければ何もせず止まる
-#   2. check.yml と同じ門（型・lint・テスト・写しの戻し・ビルド・fit・contrast）
+#   2. check.yml と同じ門（型・lint・テスト・写しの戻し・ビルド・fit・admin）
 #   3. 本番 D1 の写し（定義と中身の2本）と Time Travel の栞を artifact に残す
 #   4. マイグレーションを流す（いつも。未適用のものだけが当たる）
 #   5. Worker を出す

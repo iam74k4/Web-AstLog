@@ -118,15 +118,15 @@ describe('個人ページ → 一覧', () => {
     expect(band).toContain('<strong>このメンバーのつくったもの</strong>')
   })
 
-  it('入口は、個人開発と業務を別々に数えて1つの一覧へ送る', async () => {
+  it('入口は、個人開発と業務を区分を問わず1つの一覧へ送る。件数の帯は置かない', async () => {
     await seedItem({ type: 'app' })
     await seedItem({ type: 'work', title: '業務の実績' })
     await place(['hero', 'projects', 'contact'])
 
     const html = await okText('/')
     expect(html).toContain('<a class="cta" href="/projects">')
-    expect(html).toContain('<dt>個人開発</dt><dd class="tally__num" style="--to:1">01</dd>')
-    expect(html).toContain('<dt>業務</dt><dd class="tally__num" style="--to:1">01</dd>')
+    // 件数（07 Projects・Since 2024）は数の少なさを目立たせるだけだった（components.tsx の Hero）
+    expect(html).not.toContain('class="tally')
   })
 })
 

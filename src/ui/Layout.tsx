@@ -1,5 +1,4 @@
 import type { Child } from 'hono/jsx'
-import type { CelestialMember } from '../celestial'
 import { yearInJapan } from '../lib/format'
 import { SITE } from '../site'
 import type { Theme } from '../theme'
@@ -12,7 +11,6 @@ import {
   langOf,
   Stylesheets,
 } from './components'
-import { MOTION_START } from './motion'
 
 export type NavItem = { href: string; label: string; active?: boolean }
 
@@ -32,14 +30,15 @@ export type NavItem = { href: string; label: string; active?: boolean }
   1枚に戻す（X が og:image に読むのは JPEG / PNG / WebP / GIF だけ）。
 
   **それ以外のページはサイトの1枚**（SITE_IMAGE）。素材はリポジトリにある
-  public/assets/astlog-avatar.png（サイトのロゴ）。メンバーの顔は管理画面から
-  アップロードしたプロフィールだけに載せ、空の DB で個人の顔を公開しない。
+  public/assets/astlog-card.png（1200×630。ワードマークとサイトの所在。src/ui/logo.ts の
+  cardSvg から scripts/logo/export.mjs が書き出す）。個人の名前や顔は焼き込まない——
+  メンバーの顔は管理画面からアップロードしたプロフィールだけに載せ、空の DB で個人の顔を
+  公開しない。前は 1024 角のロゴで、貼り先では小さい札（summary）にしかならなかった。
 
   twitter:card は画像の寸法で決める（cardOf）。横長で X の大きい札の下限
-  （300x157）以上なら summary_large_image、それ以外は summary。サイトのロゴは
-  正方形（1024x1024）なので summary のまま。縦長のスクリーンショットも summary——大きい札は
-  横長に切り抜くので、縦長の絵は真ん中の帯しか残らない。寸法が分からない
-  画像も summary に倒す。
+  （300x157）以上なら summary_large_image、それ以外は summary。縦長のスクリーンショットも
+  summary——大きい札は横長に切り抜くので、縦長の絵は真ん中の帯しか残らない。寸法が
+  分からない画像も summary に倒す。
 
   width と height を添えるのは、取りに行く前に大きさが分かるようにするため。
 
@@ -56,11 +55,11 @@ export type OgImage = {
 }
 
 const SITE_IMAGE: OgImage = {
-  url: `${SITE.origin}/assets/astlog-avatar.png`,
-  alt: `${SITE.name} のアイコン`,
+  url: `${SITE.origin}/assets/astlog-card.png`,
+  alt: `${SITE.name}（${SITE.origin.replace('https://', '')}）`,
   type: 'image/png',
-  width: 1024,
-  height: 1024,
+  width: 1200,
+  height: 630,
 }
 
 const cardOf = ({ width, height }: OgImage) =>
@@ -90,9 +89,8 @@ const ShareImage = ({ image }: { image: OgImage }) => (
   サイトか・連絡先・全体ページへの1本）。見た目のプリセットで変わるのは色と
   見出しの書体だけで、並べ方は変えない（src/theme.ts）。
 
-  内容・絞り込み・ページの移動はサーバーが決め、JavaScript 無効でもリンクをたどれる。
-  装飾の初期化だけ MOTION_START が分散させる。CSP はこの固定文字列の SHA-256 だけを
-  許可し、無効時は通常の CSS 動作へ戻る。ページを移るときの切り替え（app.css の
+  内容・絞り込み・ページの移動はサーバーが決め、公開ページは script を1本も持たない
+  （CSP も script-src 'none'。src/index.tsx）。ページを移るときの切り替え（app.css の
   @view-transition）も CSS だけで、知らないブラウザではふつうに移るだけ。
 */
 export const Layout = (props: {
@@ -102,8 +100,6 @@ export const Layout = (props: {
   jsonLd?: unknown
   nav: NavItem[]
   theme: Theme
-  // 公開中の1人、またはこのページの持ち主。未指定なら O はブラックホール。
-  celestial?: CelestialMember
   /*
     足元の名乗り（components.tsx の SiteIdentity）。どのページにも出るので、
     ここに載せたものは全ページに載る
@@ -121,7 +117,7 @@ export const Layout = (props: {
   admin?: string
   // 共有カードの画像。渡さなければサイトの1枚（SITE_IMAGE）
   image?: OgImage
-  // 認証済みプレビューの案内。検索・共有用のメタ情報と開始スクリプトは出さない。
+  // 認証済みプレビューの案内。検索・共有用のメタ情報は出さない。
   preview?: Child
   // 未保存の値はこの応答だけ。全体への移動で保存済みの内容へ戻ることを明示する。
   previewUnsaved?: boolean
@@ -150,7 +146,6 @@ export const Layout = (props: {
       )}
 
       <FaviconLinks />
-      {props.preview ? null : <script dangerouslySetInnerHTML={{ __html: MOTION_START }} />}
       <Stylesheets preview={Boolean(props.preview)} />
       {props.jsonLd && !props.preview ? (
         <script
@@ -182,7 +177,7 @@ export const Layout = (props: {
         貼り付き（全体ページを除く）、ページを移っても同じ場所に居る。
       */}
       <header class="top">
-        <Brand href={props.preview ? '/admin/preview' : '/'} member={props.celestial} />
+        <Brand href={props.preview ? '/admin/preview' : '/'} />
         {/*
           いま見ているページには aria-current="page"。'true' ではなく 'page' な
           のは、目次の行き先が別の URL（/projects）だから。'true' は「この一覧の

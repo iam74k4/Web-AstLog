@@ -1492,93 +1492,6 @@ html:has(.admin-shell) {
 .icon-btn {
   gap: var(--sp-2);
 }
-.celestial-choices {
-  display: grid;
-  gap: var(--sp-5);
-}
-.celestial-choices fieldset {
-  border: 0;
-  padding: 0;
-  min-width: 0;
-}
-.celestial-choices legend {
-  color: var(--ink-weak);
-  font-size: var(--fs-meta);
-  margin-bottom: var(--sp-3);
-}
-.celestial-choices__grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--sp-3);
-}
-.celestial-choice,
-.accent-choice {
-  position: relative;
-  cursor: pointer;
-}
-.celestial-choice input,
-.accent-choice input {
-  position: absolute;
-  opacity: 0;
-  width: 1px;
-  height: 1px;
-}
-.celestial-choice > span {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: var(--sp-4);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-}
-.celestial-choice img {
-  width: var(--admin-art-size);
-  height: var(--admin-art-size);
-  object-fit: contain;
-}
-.celestial-choice strong {
-  font-size: var(--fs-sm);
-}
-.celestial-choice small {
-  font-size: var(--fs-meta);
-  color: var(--ink-weak);
-}
-.celestial-choice input:checked + span,
-.accent-choice input:checked + span {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-.celestial-choice input:focus-visible + span,
-.accent-choice input:focus-visible + span {
-  outline: var(--focus-ring) solid var(--accent);
-  outline-offset: var(--focus-offset);
-}
-.accent-choices {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-3);
-}
-.accent-choice > span {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  min-height: var(--tap);
-  padding: var(--sp-3);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  font-size: var(--fs-meta);
-}
-.accent-choice i {
-  width: var(--admin-swatch-size);
-  height: var(--admin-swatch-size);
-  border-radius: 50%;
-  background: var(--accent);
-}
-.accent-choice[data-accent='inherit'] i {
-  background: transparent;
-  border: 1px dashed var(--ink-weak);
-}
 .design-sample {
   padding: var(--sp-6);
   border: 1px solid var(--line);
@@ -1638,10 +1551,13 @@ html:has(.admin-shell) {
   background: var(--bg);
   overflow: hidden;
 }
-.block-illustration img {
+/* 決まった中身のブロック（Hero・Team・Contact）の頭の大きな字の塊。中身の構造だけを示す */
+.block-illustration__head {
+  display: block;
   width: var(--admin-thumb-height);
   height: var(--admin-thumb-height);
-  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: var(--line);
 }
 .block-illustration i {
   display: block;
@@ -1718,9 +1634,6 @@ html:has(.admin-shell) {
   .input {
     font-size: var(--fs-base);
   }
-  .celestial-choices__grid {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
   .row--project {
     flex-wrap: wrap;
   }
@@ -1755,18 +1668,12 @@ html:has(.admin-shell) {
 }
 .dashboard-observatory {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   overflow: hidden;
 }
 .dashboard-observatory__copy h2 {
   font-size: var(--fs-display-xs);
   margin-top: var(--sp-3);
-}
-.dashboard-observatory__art {
-  width: var(--admin-art-size);
-  height: var(--admin-art-size);
-  object-fit: contain;
-  align-self: center;
 }
 .dashboard-metrics {
   grid-column: 1 / -1;
@@ -1984,14 +1891,6 @@ html:has(.admin-shell) {
     height: var(--switch-knob);
     top: var(--sp-4);
     left: var(--sp-4);
-  }
-
-  .celestial-choice input,
-  .accent-choice input {
-    position: static;
-    opacity: 1;
-    width: var(--switch-knob);
-    height: var(--switch-knob);
   }
 
   .preset__box {

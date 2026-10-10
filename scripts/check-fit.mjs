@@ -20,8 +20,7 @@
     (3) 切られた要素が無い  overflow が hidden / clip の祖先の外へ出ている要素も、
                           自分の中身（字）を hidden / clip で切っている箱も無い
                           （行止め line-clamp・1行で末尾を省く ellipsis・読み上げ用の
-                          1px の箱・SVG の中・星空 .cosmos と光の粒 .orbit-dust の中は除く。
-                          SVG の箱そのもの——ロゴ・軌道図・アイコン——と星空・粒の枠は測る）
+                          1px の箱・SVG の中は除く。SVG の箱そのもの——ロゴ・アイコン——は測る）
     (4) h1 がちょうど1つ   1ページ = 1ドキュメント（WCAG 1.3.1）。見出しの左にアイコンの
                           ある見出し（作品のページ）は、アイコンと見出しが同じ行に居る
                           （1行に入らない題が次の行へ落ちて、アイコンだけが残らない）
@@ -35,19 +34,18 @@
     (8) 押す的             目次の行き先と管理画面への入口の高さが --tap 以上
                           （指の姿では 44px）
     (9) 見出しの錨         同じ書体・寸法・姿の中で、節の見出しの上端の y が 1px 以内でそろう
-   (10) 入口の軌道図       ブラックホールが焦点に座り、光の絵が読めている
 
   ほかに、読み込み直して測るものが2つある（measureRun の後半）。
 
-   (11) 目次の印           いまのページの行き先（aria-current）が帯の見えている幅の中にある。
+   (10) 目次の印           いまのページの行き先（aria-current）が帯の見えている幅の中にある。
                           帯の最初の位置は読み込んだ時点で決まる（app.css の
                           scroll-initial-target）ので、読み込み直して測る。書体はサイトの既定のまま
-   (12) 全体ページ         /all がどの書体・寸法でも横に動かない
+   (11) 全体ページ         /all がどの書体・寸法でも横に動かない
 
   (9) は「どのページでも見出しが同じ高さから始まる」。節は上揃えで、見出しの高さは
   中身の量で変わらない（app.css の「ページの外枠」）。比べるのは main の最初の子が
-  節のページだけ——Hero で始まるページ（入口・個人ページの名札）と締めの節（Contact）は
-  見出しで始まるページではなく、名乗り・誘いを置く表紙そのもの。作品のページは
+  節のページだけ——Hero で始まるページ（入口・個人ページの名札）は見出しで始まる
+  ページではなく、名乗りを置く頭そのもの。作品のページは
   「← 一覧に戻る」が見出しの上に立つので、その手の上端で比べる。
 
   1px までは許す。連動する文字の段は clamp() で決まるので、幅しだいで端数が出る。
@@ -97,19 +95,7 @@ import { chromium } from 'playwright'
 import { devServer, ROOT, scratchState } from './lib/dev-server.mjs'
 import { fixture, seedBlocks } from './lib/fit-fixture.mjs'
 import { keysOf } from './lib/theme.mjs'
-import { importTs } from './lib/ts-import.mjs'
 import { DESIGN_SIZES } from './lib/viewports.mjs'
-
-/*
-  入口の枠の焦点（ブラックホールの置き場所）を、枠に対する割合で。src/lib/orbits.ts の
-  HERO_FRAME をそのまま読む——焦点は枠の真ん中より上にある（軌道は焦点より手前へ深く回るので、
-  星系の上下の真ん中を枠の真ん中にそろえる）。写すと、焦点を動かした日に検査だけが古い所を測る
-*/
-const { HERO_FRAME } = await importTs('src/lib/orbits.ts')
-const FOCUS = {
-  x: HERO_FRAME.focus.x / HERO_FRAME.width,
-  y: HERO_FRAME.focus.y / HERO_FRAME.height,
-}
 
 // 設計サイズ（390 と 768 は指で測る）。一覧と理由は scripts/lib/viewports.mjs
 const VIEWPORTS = DESIGN_SIZES
@@ -118,11 +104,11 @@ const VIEWPORTS = DESIGN_SIZES
 const SLACK = 1
 
 /*
-  見出しの錨を比べる相手。main の最初の子が節で、締めの節（.orbital）でないもの。
+  見出しの錨を比べる相手。main の最初の子が節のもの（Contact も含む）。
   Hero（header.hero）で始まるページ（入口・個人ページ）は比べない——個人ページの
   About の見出しは名札の下にあり、名札の高さしだいで下がる。
 */
-const ANCHORED = 'main > section:first-child:not(.orbital)'
+const ANCHORED = 'main > section:first-child'
 
 // src/lib/auth.ts の SESSION_COOKIE と sessionKey（SHA-256 の16進）と同じ
 const SESSION_COOKIE = 'astlog_session'
@@ -203,10 +189,10 @@ const measure = ([typeface, cfg]) => {
   document.body.dataset.typeface = typeface
   to(0)
   /*
-    着いたときの動き（入口のブラックホールが大きく灯り、軌道が回って収まる）は
-    終わらせてから測る。測るのは止まった版面で、動きの途中の箱の位置ではない
-    （途中の姿の読みやすさは check:contrast が測る）。終わらない動き（軌道を流れる星や
-    ブラックホールの光の揺らぎ）は finish() できない（投げる）ので、外して止まった姿に戻す
+    動き（押した手のばね・ページの切り替え）は終わらせてから測る。測るのは止まった版面で、
+    動きの途中の箱の位置ではない。終わらない動きは finish() できない（投げる）ので、
+    外して止まった姿に戻す（いまの公開ページは終わらない動きを持たないが、足した日に
+    測り方ごと黙って崩れないように）
   */
   for (const animation of document.getAnimations()) {
     if (Number.isFinite(animation.effect.getComputedTiming().endTime)) animation.finish()
@@ -276,7 +262,7 @@ const measure = ([typeface, cfg]) => {
     (2)(3) 横のはみ出しと、切られた要素。
 
     除くもの: 大きさの無い箱、visibility: hidden、読み上げ用の 1px の箱（.sr-only）の中、
-    軌道図の SVG の中（aria-hidden の飾り。viewBox の外を SVG が自分で切る）、行止め
+    SVG の中（ロゴ・アイコンの線。viewBox の外を SVG が自分で切る）、行止め
     （line-clamp）の中、横や縦に送れる箱（overflow: auto / scroll ——目次と絞り込みの帯）の
     中。送れる箱はその箱自身を測る
   */
@@ -307,23 +293,12 @@ const measure = ([typeface, cfg]) => {
       continue
     }
     /*
-      SVG の中（ロゴの光・軌道図の線と点）は測らない。線の箱（getBoundingClientRect）は
-      線の形の外接の箱で、SVG が枠で切る前の形のまま——ロゴの O の光は字の箱の外へ
-      出して見せ、軌道図の星屑の箱は半面で切る前の軌道1周ぶんある。SVG の箱そのものは、
-      画面の中に居て、祖先に切られていないこと（下で測る）
+      SVG の中（ロゴ・アイコンの線）は測らない。線の箱（getBoundingClientRect）は線の形の
+      外接の箱で、線の太さのぶん字の箱からはみ出す。SVG の箱そのものは、画面の中に居て、
+      祖先に切られていないこと（下で測る）
     */
     const drawing = el.tagName.toLowerCase() === 'svg'
     if (drawing) skipped.add(el)
-    /*
-      星空（入口と締めの .cosmos）の中も測らない。本文の幅いっぱいに敷く飾りの背景で、
-      中の星雲は図より大きく置いて星空の箱で切り取るのが決まり（app.css の .cosmos__nebula）。
-      光の粒（.orbit-dust）も同じ。無限の動きを外すと、円は枠の原点へ戻り、中心をそろえる負の
-      margin のぶんだけ枠から出る（opacity: 0）。装飾の内部の切り取りを、本文の切れと数えない。
-      どちらも箱そのものは、画面の中に居て祖先に切られていないことを測る（自分で中身を切って
-      いるのは決まりどおりなので、下の「自分の中身を切っている箱」には数えない）
-    */
-    const backdrop = el.matches('.cosmos, .orbit-dust')
-    if (backdrop) skipped.add(el)
     if (rect.width === 0 || rect.height === 0 || style.visibility === 'hidden') continue
     if (rect.right > innerWidth + slack || rect.left < -slack) {
       wide.push(`${nameOf(el)} ${round(rect.left)}〜${round(rect.right)}px`)
@@ -339,7 +314,6 @@ const measure = ([typeface, cfg]) => {
     */
     if (
       !drawing &&
-      !backdrop &&
       clips(style) &&
       style.textOverflow !== 'ellipsis' &&
       (el.scrollHeight > el.clientHeight + slack || el.scrollWidth > el.clientWidth + slack)
@@ -379,30 +353,6 @@ const measure = ([typeface, cfg]) => {
       )
     }
   }
-  /*
-    (10) 入口の軌道図。ブラックホールは焦点（入口の枠の HERO_FRAME の focus。cfg.focus は枠に
-    対する割合）に座る——箱は回してあるが、回る中心が箱の真ん中なので、外接の箱の真ん中が
-    焦点。天体に札は添えない（持ち主が「いらない」と外した）ので、測るのはブラックホールだけ
-  */
-  const system = document.querySelector('.system')
-  if (system && getComputedStyle(system).display !== 'none') {
-    const box = system.getBoundingClientRect()
-    const hole = system.querySelector('.hole')?.getBoundingClientRect()
-    if (hole) {
-      const dx = (hole.left + hole.right) / 2 - (box.left + box.width * cfg.focus.x)
-      const dy = (hole.top + hole.bottom) / 2 - (box.top + box.height * cfg.focus.y)
-      if (Math.abs(dx) > slack || Math.abs(dy) > slack) {
-        problems.push(`ブラックホールが焦点から ${round(dx)}, ${round(dy)}px ずれている`)
-      }
-      const art = system.querySelector('.hole__art')
-      if (!art?.complete || !art.naturalWidth) {
-        problems.push('入口のブラックホールの絵（.hole__art）が読めていない')
-      }
-    } else {
-      problems.push('入口の軌道図にブラックホール（.hole）が無い')
-    }
-  }
-
   /*
     (9) 錨の y。節の最初の h1 の上端——ただし h1 より前に別の子（作品のページの
     「← 一覧に戻る」）が立つページでは、その最初の子の上端。絶対配置の子
@@ -645,7 +595,7 @@ async function measureRun(browser, base, run, typefaces) {
         for (const typeface of typefaces) {
           const found = await page.evaluate(measure, [
             typeface,
-            { slack: SLACK, anchored: ANCHORED, focus: FOCUS },
+            { slack: SLACK, anchored: ANCHORED },
           ])
           checked += 1
           const label = `${typeface} ${where} ${path}`
@@ -789,7 +739,7 @@ async function main() {
     }
     console.log(
       `✓ ${result.run.label}: ${result.checked} 通り（${result.urls} URL × ${shape}${poses}）。` +
-        `横のはみ出し 0・切られた要素 0・h1 はどれも1つ・一番下まで送っても目次が見え、送った先は帯の下・ブラックホールは焦点に座る。` +
+        `横のはみ出し 0・切られた要素 0・h1 はどれも1つ・一番下まで送っても目次が見え、送った先は帯の下。` +
         `いちばん長いページ ${result.longest.tall}px（${result.longest.where}）。` +
         `見出しの錨のずれ 最大 ${result.drift}px。` +
         `目次の印 ${result.toc.checked} ページが帯の中（うち ${result.toc.scrolled} ページは送って開いた）。` +
@@ -803,7 +753,7 @@ async function main() {
         '\n送った先が帯の下に隠れたら、:root の --top-clear（帯の高さ）と html の scroll-padding-top を見る。' +
         '\n見出しの錨がずれたら、節の寄せ方（app.css の align-content: safe start）か、見出しより前に置いた子を疑う。' +
         '\n目次の印が帯の外なら app.css の scroll-initial-target と、帯がスクロール容器か（overflow-x: auto）を見る。' +
-        '\n目次の的が --tap に合わなければ .toc a の min-height、ブラックホールが焦点からずれたら src/lib/orbits.ts の HERO_FRAME と app.css の .hole、' +
+        '\n目次の的が --tap に合わなければ .toc a の min-height、' +
         '/all が横に動いたら目次の折り返し（flex-wrap）を見る。',
     )
     process.exitCode = 1

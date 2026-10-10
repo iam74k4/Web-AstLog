@@ -1,6 +1,5 @@
 /*
-  設計サイズ。check:fit（レイアウト）と check:contrast（軌道図のまわりの字が読めるか）が
-  同じこの一覧を読む。
+  設計サイズ。check:fit（レイアウト）が読む。
 
   電話・板・机。ページは縦にスクロールするので、背の低い窓（WCAG 1.4.10 の
   320x256 など）でも中身はページごと読める。ここに入れるのは設計の基準にする3つだけ。
@@ -14,9 +13,3 @@ export const DESIGN_SIZES = [
   { width: 768, height: 1024, touch: true },
   { width: 1440, height: 900, touch: false },
 ]
-
-/*
-  「幅は広いのに背が低い」窓。表紙がいちばん短くなり、軌道図と字の間隔が
-  いちばん詰まるので、check:contrast はこれも測る（収まりの検査 check:fit には入れない）。
-*/
-export const SHORT_WIDE = { width: 1024, height: 768 }

@@ -37,6 +37,13 @@ export const isContactEmail = (email: string) =>
   !/[<>"\\]/.test(email) &&
   !/%(?:0[0-9a-f]|1[0-9a-f]|7f)/i.test(email)
 
+/*
+  サイトに連絡の手があるか。Contact のページを出すかを決める（src/blocks.ts の blockShown）。
+  形の通らない値は無いものとして数える——描く部品（components.tsx の Contact）も同じ検査で落とす
+*/
+export const hasContact = (site: Pick<SiteSettings, 'email' | 'github'>) =>
+  isContactEmail(site.email) || isHttpsUrl(site.github)
+
 export function siteSettingsErrors(site: SiteSettings): Record<string, string> | null {
   const errors: Record<string, string> = {}
   for (const key of SITE_SETTING_KEYS) {

@@ -1,4 +1,4 @@
-import { and, asc, count, eq, min, sql } from 'drizzle-orm'
+import { and, asc, count, eq, sql } from 'drizzle-orm'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import { blockType, DEFAULT_BLOCKS, LEGACY_BLOCK_KEYS } from '../blocks'
 import { ITEM_KIND_KEYS, type ItemKind, type ItemView, type KindCounts } from '../domain'
@@ -215,23 +215,8 @@ export async function countPublishedItems(db: Db, scope: ItemScope = {}) {
 }
 
 /*
-  入口の Since に使う、公開中の作品のいちばん古い年。年の分からない行は min が
-  除き、読める年が無ければ null。区分や担当の絞り込みは入口には効かせない。
-
-  年だけを集約する——入口に出さない本文やタグ・リンク・画像を全件引かない。
-*/
-export async function oldestPublishedItemYear(db: Db): Promise<number | null> {
-  const [row] = await db
-    .select({ since: min(schema.items.yearFrom) })
-    .from(schema.items)
-    .where(itemsWhere({}))
-  return row?.since ?? null
-}
-
-/*
-  区分ごとの公開中の件数。区分の絞り込み（両方の区分に項目があるときだけ並べる）
-  と、入口の軌道図と件数の帯（Tally）と、個人ページの帯の「個人開発 5 · 業務 2」に
-  使う。memberId を渡せばその人のぶん。
+  区分ごとの公開中の件数。区分の絞り込み（両方の区分に項目があるときだけ並べる）と、
+  個人ページの帯の「個人開発 5 · 業務 2」に使う。memberId を渡せばその人のぶん。
 
   絞り込みは絞り込む前の件数から決める。絞り込んだ結果から決めると、押すたびに
   絞り込みの並びが変わり、いま押した手が消えて戻れなくなる。

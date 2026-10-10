@@ -3,7 +3,6 @@ import assetHeaders from 'virtual:repo:public/_headers'
 import { beforeEach, describe, expect, it } from 'vitest'
 import app from '../src/index'
 import { ADMIN_BEHAVIOR, ADMIN_CSP } from '../src/ui/admin-behavior'
-import { MOTION_CSP, MOTION_START } from '../src/ui/motion'
 import { get, okText, resetDb, seedItem, seedMember, signIn, uncachedEnv } from './helpers'
 
 beforeEach(resetDb)
@@ -25,22 +24,19 @@ const directives = (csp: string | null) =>
       .map(([name, ...values]) => [name, values.join(' ')]),
   )
 
-function expectPageHeaders(response: Response, label: string, motion = false, admin = false) {
+function expectPageHeaders(response: Response, label: string, admin = false) {
   const csp = directives(response.headers.get('content-security-policy'))
-  // 公開 Layout の成功した HTML だけに、初期描画の補助1本のハッシュを許す
-  expect(csp['script-src'], label).toBe(
-    admin ? `'${ADMIN_CSP}'` : motion ? `'${MOTION_CSP}'` : "'none'",
-  )
+  // 公開ページはスクリプトを1本も許さない。管理画面だけが補助1本のハッシュを許す
+  expect(csp['script-src'], label).toBe(admin ? `'${ADMIN_CSP}'` : "'none'")
   expect(csp['default-src'], label).toBe("'self'")
   expect(csp['object-src'], label).toBe("'none'")
   expect(csp['base-uri'], label).toBe("'none'")
   expect(csp['form-action'], label).toBe("'self'")
   expect(csp['frame-ancestors'], label).toBe("'none'")
-  // 画像は同じオリジンだけ（favicon も public/assets のファイル）。軌道図の置き場所や件数は style 属性で渡す
+  // 画像は同じオリジンだけ（favicon も public/assets のファイル）。アバターの寸法は style 属性で渡す
   expect(csp['img-src'], label).toBe("'self'")
   expect(csp['style-src'], label).toBe("'self' 'unsafe-inline'")
   expect(response.headers.get('x-content-type-options'), label).toBe('nosniff')
-  expect(response.headers.get('x-astlog-motion'), label).toBeNull()
   /*
     no-referrer にしない。Chromium はそのページから出た同じオリジンの POST に
     Origin: null を付け、sameOrigin が 403 で弾く（管理画面の保存が全部止まる）
@@ -52,20 +48,20 @@ describe('応答のヘッダ', () => {
   it('公開ページ・全体ページ・404・robots・sitemap・リダイレクトのどれにも付く', async () => {
     await seedMember()
     await seedItem({ slug: 'appmixer' })
-    for (const [path, status, motion] of [
-      ['/', 200, true],
-      ['/projects', 200, true],
-      ['/apps/item/appmixer', 200, true],
-      ['/all', 200, true],
-      ['/contact', 200, true],
-      ['/robots.txt', 200, false],
-      ['/sitemap.xml', 200, false],
-      ['/apps', 301, false],
-      ['/no-such-page', 404, false],
+    for (const [path, status] of [
+      ['/', 200],
+      ['/projects', 200],
+      ['/apps/item/appmixer', 200],
+      ['/all', 200],
+      ['/contact', 200],
+      ['/robots.txt', 200],
+      ['/sitemap.xml', 200],
+      ['/apps', 301],
+      ['/no-such-page', 404],
     ] as const) {
       const response = await get(path)
       expect(response.status, path).toBe(status)
-      expectPageHeaders(response, path, motion)
+      expectPageHeaders(response, path)
       // 訪問者に返す公開ページは共有のキャッシュに置いてよい（no-store は管理画面だけ）
       expect(response.headers.get('cache-control'), path).toBeNull()
     }
@@ -85,30 +81,17 @@ describe('応答のヘッダ', () => {
     expectPageHeaders(response, '500')
   })
 
-  it('公開ページの実行スクリプトは初期描画の補助1本だけ。ほかは JSON-LD', async () => {
+  it('公開ページは実行するスクリプトを持たない。script 要素は JSON-LD（データ）だけ', async () => {
     await seedMember()
     await seedItem({ slug: 'appmixer' })
     for (const path of ['/', '/apps/item/appmixer', '/all', '/members/okazaki']) {
       const html = await okText(path)
       const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)]
-      const helpers = scripts.filter((script) => script[1] !== ' type="application/ld+json"')
-      expect(helpers, path).toHaveLength(1)
-      expect(helpers[0]?.[0], path).toBe(`<script>${MOTION_START}</script>`)
+      expect(
+        scripts.filter((script) => script[1] !== ' type="application/ld+json"'),
+        path,
+      ).toEqual([])
     }
-  })
-
-  it('CSP のハッシュは、実際に配った補助の UTF-8 全文の SHA-256 と一致する', async () => {
-    const response = await get('/')
-    const html = await response.text()
-    const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1]
-    expect(script).toBe(MOTION_START)
-    if (script === undefined) throw new Error('初期描画の補助が無い')
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(script))
-    const hash = `sha256-${btoa(String.fromCharCode(...new Uint8Array(digest)))}`
-    expect(MOTION_CSP).toBe(hash)
-    expect(directives(response.headers.get('content-security-policy'))['script-src']).toBe(
-      `'${hash}'`,
-    )
   })
 
   it('管理画面の補助も配った全文の SHA-256 だけを許す', async () => {
@@ -121,13 +104,7 @@ describe('応答のヘッダ', () => {
     if (helper === undefined) throw new Error('管理画面の補助が無い')
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(helper))
     expect(ADMIN_CSP).toBe(`sha256-${btoa(String.fromCharCode(...new Uint8Array(digest)))}`)
-    expectPageHeaders(response, '管理', false, true)
-  })
-
-  it('要求ヘッダで公開 Layout の内部印を偽っても、404 に実行許可は付かない', async () => {
-    const response = await get('/no-such-page', { headers: { 'x-astlog-motion': 'staged' } })
-    expect(response.status).toBe(404)
-    expectPageHeaders(response, '内部印を偽った404')
+    expectPageHeaders(response, '管理', true)
   })
 
   it('管理画面は no-store。ログイン前の画面・壁のリダイレクト・ログイン後の画面のどれも', async () => {
@@ -148,7 +125,7 @@ describe('応答のヘッダ', () => {
     ]) {
       const response = await fetchAs(path)
       expect(response.status, path).toBe(200)
-      expectPageHeaders(response, path, false, true)
+      expectPageHeaders(response, path, true)
       expect(response.headers.get('cache-control'), path).toBe('no-store')
     }
   })
@@ -158,7 +135,7 @@ describe('応答のヘッダ', () => {
     const response = await fetchAs('/')
     expect(response.status).toBe(200)
     expect(response.headers.get('cache-control')).toBe('private, no-store')
-    expectPageHeaders(response, '/', true)
+    expectPageHeaders(response, '/')
   })
 
   /*
@@ -206,10 +183,10 @@ describe('応答のヘッダ', () => {
     expect(values['x-content-type-options']).toBe('nosniff')
     expect(values['referrer-policy']).toBe('strict-origin-when-cross-origin')
     /*
-      読み込みを許すのは data: の画像だけ。ロゴの SVG（ワードマークと favicon）は O の光の絵を
-      data URI で抱えていて、ブラウザによっては <img> や favicon で使うときもこの CSP が効く
+      何も読み込ませない。ロゴの SVG（ワードマークと favicon）は輪郭の path だけで、
+      ブラウザによっては <img> や favicon で使うときもこの CSP が効く
     */
-    expect(values['content-security-policy']).toBe("default-src 'none'; img-src data:; sandbox")
+    expect(values['content-security-policy']).toBe("default-src 'none'; sandbox")
     // 規則の数には上限がある（Workers Static Assets は 100 まで）
     expect(rules.size).toBeLessThanOrEqual(100)
   })
@@ -218,26 +195,13 @@ describe('応答のヘッダ', () => {
     PERF-2。CSS は既定（public, max-age=0, must-revalidate）のまま配られ、ページを
     移るたびに描画を止めて条件付き GET を1往復していた。いまは中身から作った版を
     URL に付け（src/ui/components.tsx の Stylesheets）、_headers が1年・immutable で配る。
-    長く持たせてよいのは版つきの URL で読まれるものだけ——版の無い素材（ロゴの素材・GitHub の顔）を
-    immutable にすると、差し替えた絵が1年届かない。ブラックホールの絵も版つき（上の帯のロゴの O が
-    どのページでも読む。版は src/ui/logo.ts の BLACKHOLE_ART で、test/public.test.ts が中身と突き合わせる）。
-    星雲とメンバーの天体の絵も中身の版つきで読み、同じテストで実ファイルと突き合わせる
+    長く持たせてよいのは版つきの URL で読まれるものだけ——版の無い素材（ロゴの素材・共有カード）を
+    immutable にすると、差し替えた絵が1年届かない
   */
   it('スタイルシートは版つきの URL で読み、1年・immutable で配る', async () => {
     const rules = headerRules()
-    const cached = [
-      '/app.css',
-      '/admin.css',
-      '/preview.css',
-      '/assets/blackhole.webp',
-      '/assets/astra-black-hole.webp',
-      '/assets/astra-nebula-v2.webp',
-      ...['moon', 'saturn', 'neptune', 'sun'].map((body) => `/assets/astra-${body}.webp`),
-      ...['sun', 'moon', 'neptune', 'saturn'].map((body) => `/assets/celestial-${body}-v2.webp`),
-      ...['iris', 'violet', 'ember', 'mint', 'sky', 'rose'].map(
-        (name) => `/assets/nebula-${name}.webp`,
-      ),
-    ]
+    // 1年持たせるのは版つきの URL で読むものだけ（版の無い素材に付けると、古い写しが1年残る）
+    const cached = ['/app.css', '/admin.css', '/preview.css']
     for (const path of cached) {
       expect(rules.get(path)?.['cache-control'], path).toBe('public, max-age=31536000, immutable')
     }
@@ -262,10 +226,6 @@ describe('応答のヘッダ', () => {
       expect(links, path).toHaveLength(1)
       expect(links[0], path).toMatch(version)
       expect(links[0], path).toMatch(/^\/app\.css/)
-      // ブラックホールの絵（上の帯のロゴの O と入口の真ん中）も、版の無い URL では読まない
-      const art = [...html.matchAll(/\/assets\/blackhole\.webp[^"'\s)]*/g)].map((found) => found[0])
-      expect(art.length, path).toBeGreaterThan(0)
-      for (const url of art) expect(url, path).toMatch(/^\/assets\/blackhole\.webp\?v=[0-9a-f]{8}$/)
     }
     // 管理画面（壁の中と外）は app.css のあとに admin.css
     const signed = await signIn()

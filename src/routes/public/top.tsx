@@ -87,7 +87,6 @@ export async function renderWholePage(c: Context<AppEnv>) {
 
   const solo = soloMember(members)
 
-  c.header('x-astlog-motion', 'staged')
   return c.html(
     <Layout
       // 入口と同じ題にしない（履歴と検索結果で、全体版を選び直せるように）
@@ -114,7 +113,6 @@ export async function renderWholePage(c: Context<AppEnv>) {
       jsonLd={siteJsonLd(members, site)}
       nav={nav}
       theme={theme}
-      celestial={solo}
       // 節を縦に積んだ1本の文書。app.css の「ページの外枠」を外す印
       whole
       /*
@@ -187,7 +185,6 @@ export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
   */
   if (!pages.length) {
     if (slug) return c.notFound()
-    c.header('x-astlog-motion', 'staged')
     return c.html(
       <Layout
         title={siteTitle(solo)}
@@ -195,7 +192,6 @@ export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
         canonical={`${SITE.origin}/`}
         nav={[]}
         theme={theme}
-        celestial={solo}
         footer={<SiteIdentity site={site} solo={solo} />}
         // 何も出ていないのは、構成に公開中のブロックが無いから。直す場所はそこ
         admin={await adminHref(c, '/admin/blocks')}
@@ -246,7 +242,6 @@ export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
     description: rendered.description,
     jsonLd: firstOnly(links, link, siteJsonLd(members, site)),
     theme,
-    celestial: solo,
     // Contact では足元の GitHub / メールを出さない（本文に同じ手がある。SiteIdentity）
     footer: <SiteIdentity site={site} solo={solo} contact={current.block.type === 'contact'} />,
     adminPath: blockAdminPath(current.block, solo),

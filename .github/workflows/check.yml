@@ -4,7 +4,7 @@ on:
   push:
     branches: ['**']
   pull_request:
-  # deploy.yml が本番へ出す前に、これと同じ門（型・lint・テスト・写しの戻し・ビルド・fit・contrast・motion）を
+  # deploy.yml が本番へ出す前に、これと同じ門（型・lint・テスト・写しの戻し・ビルド・fit・admin）を
   # そのまま呼ぶ。門を2か所に書き写すと、片方だけ弱くなる（以前の deploy は型とテストしか
   # 通していなかった）
   workflow_call:
@@ -60,9 +60,9 @@ jobs:
       - name: ビルド
         run: npx wrangler deploy --dry-run
 
-  # 実際に描いてみないと分からない3つを、ブラウザで測る。
+  # 実際に描いてみないと分からない2つを、ブラウザで測る。
   # 「公開ページのレイアウト（横にはみ出さない・切られない・目次が貼り付く）」と、
-  # 「入口と締めの軌道図のまわりで文字が読める」、装飾の開始と同期。
+  # 「管理画面の実フォーム（入力・競合・プレビュー・スマホ表示）」。
   #
   # 上の4つはどれも版面を見ない——vitest は workerd の上で動くので、
   # そもそも組むエンジンが居ない。
@@ -93,27 +93,6 @@ jobs:
       - name: レイアウト（はみ出し・切り取り・目次の貼り付け）
         run: npm run check:fit
 
-      # 空の DB では、軌道図のまわりの字（入口の札と件数・Contact）が生えない。check:contrast は
-      # 手元の D1（--local の既定の置き場）をそのまま読む
-      - name: ローカル D1 を用意する
-        run: |
-          npm run db:migrate:local
-          npm run db:seed:local
-
-      # 同じブラウザで、もう1つの「実際に描いてみないと分からない」不変条件を測る。
-      # 入口と締めの軌道図のまわりで、見出し・リード文・札・件数が読めるか（WCAG 1.4.3）と、
-      # 軌道図とブラックホールが出ていること。光は白、字は #f2f2f4 なので、置き方を
-      # 間違えると白の上の白になる——前の入口の月では、リード文が 1.00:1（背景と同じ
-      # 明るさ＝消えている）だった。
-      # job を分けないのは、ブラウザの用意と D1 の seed をそのまま使えるため。
-      - name: 軌道図のまわりで文字が読めるか
-        run: npm run check:contrast
-
-      - name: 装飾の開始順・同期・CSP・動きを減らす設定
-        run: npm run check:motion
-
-      - name: 天体とワードマークの連動
-        run: npm run check:celestial-motion
-
+      # check:admin も使い捨ての D1 と KV を自分で作って測る（手元の D1 には触らない）
       - name: 管理画面の入力・競合・プレビュー・スマホ表示
         run: npm run check:admin

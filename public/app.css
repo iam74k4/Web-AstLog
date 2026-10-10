@@ -17,16 +17,6 @@
 */
 
 :root {
-  --cover-lift: -6px;
-  --cover-turn: 0.75deg;
-  --cover-rest-scale: 0.975;
-  --cover-zoom: 0.987;
-  --cover-drift-dur: 36s;
-  --cover-light-dur: 14s;
-  --cover-dim: 0.94;
-  --cover-home-opacity: 1;
-  --cover-contact-opacity: 0.78;
-  --cover-contact-wide-opacity: 0.72;
   --admin-shell-width: 1240px;
   --admin-preview-width: 1280px;
   --admin-preview-height: 88svh;
@@ -108,16 +98,21 @@
   */
   --w-page: 1344px;
   --gutter: clamp(16px, 3.4vw, 60px);
-  /* 管理画面の面は大きく、操作部品は小さく丸める（公開ページは角を立てるので使わない） */
+  /*
+    角の丸み。管理画面の面は大きく、操作部品は小さく丸める。公開ページで丸めるのは
+    押せるもの（--radius-pill。押し手と同じ丸い端）と、作品のページの実績値の面
+    （--radius-sm）だけ——罫線で区切った字の並びの中で、丸い形が「押せる」の印になる
+  */
   --radius: 16px;
   --radius-sm: 10px;
+  --radius-pill: 999px;
 
   /*
-    画面1つぶんの高さ。svh は道具の帯を出したときの高さなので、帯の出入りで
-    表紙の高さが跳ねない。
+    画面1つぶんの高さ（body の min-height。足元を画面の底に置く。「ページの外枠」）。
+    svh は道具の帯を出したときの高さなので、帯の出入りで足元が跳ねない。
 
     100vh の控えは置かない。svh を知らない環境ではこの値が計算できず、min-height が
-    素の auto に落ちる——表紙が中身の高さになるだけで、読めなくなるものは無い。
+    素の auto に落ちる——短いページで足元が中身のすぐ下に来るだけで、読めなくなるものは無い。
   */
   --screen-h: calc(100svh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
 
@@ -132,11 +127,6 @@
   */
   --page-pad: clamp(32px, 5vw, 72px);
   /*
-    表紙（入口と締めの Contact）の高さの下限。帯と本文の上下の余白を除いた、
-    画面の残りいっぱい。表紙の下端が画面の下端に来て、足元は次の画面に回る。
-  */
-  --cover-h: calc(var(--screen-h) - var(--top-h) - var(--page-pad) * 2);
-  /*
     貼り付いた上の帯の下に、送った先（#about などのフラグメント・フォーカス）を
     止める空き（html の scroll-padding-top。「ページの外枠」）。帯の高さ＋ --sp-5。
     npm run check:fit が、節の id へ送った先の上端が帯の下端より下にあることを測る。
@@ -144,13 +134,10 @@
   --top-clear: calc(var(--top-h) + var(--sp-5));
 
   /*
-    上の帯のロゴ（ワードマーク ΛSTLOG。O は選択中の天体）の字の高さ。字の幅は字の
-    高さの約 6.6 倍（15px で 99px）。ログイン画面のワードマークも同じ規則（.brand__word）。
-    --hole-core はロゴの O の黒い円（影）の色で、地より一段深い黒。src/ui/logo.ts の
-    LOGO_COLORS（素材のファイルに焼く色）と同じ値
+    上の帯のロゴ（ワードマーク ΛSTLOG）の字の高さ。字の幅は字の高さの約 6.4 倍
+    （15px で 96px）。ログイン画面のワードマークも同じ規則（.brand__word）
   */
   --brand-h: 15px;
-  --hole-core: #000;
 
   /*
     段落（.bio p。紹介文・メモ・作品の説明と本文）の1行の長さ。約40字で止める。
@@ -170,10 +157,8 @@
     この列より前の画像には無いので、この2つの枠には使わない。寸法は共有カードと、
     画像そのものの縦横比のために使う）。
 
-    --thumb-ratio は一覧のサムネイルの縦横比。Mac の画面と同じ 16:10 で、画面の
-    スクリーンショットがそのまま枠いっぱいに収まる（絵は切らない。.entry__thumb）。
-    3:1 の帯に切り抜いていたころは、画面の上の半分だけが部品の途中で切れて見えた
-    （持ち主の「途切れている」）。
+    --thumb-ratio はギャラリーの枠の縦横比。Mac の画面と同じ 16:10 で、画面の
+    スクリーンショットがそのまま枠いっぱいに収まる（絵は切らない）。
 
     --shot-h は作品ページの画像の枠の高さ。絵はこの中に縮めて収める
     （object-fit: contain。切らない）。可変部は幅と高さの小さいほうで、
@@ -195,12 +180,6 @@
   --gallery-shift: clamp(24px, 4vw, 64px);
   --head-icon: clamp(44px, 5vw, 64px);
 
-  /* The bodies share the black hole's subdued light. Narrow profiles keep the
-     decoration compact; identity symbols retain one readable size. */
-  --celestial-w: 580px;
-  --celestial-profile-w: clamp(200px, 52vw, 240px);
-  --celestial-symbol: 24px;
-
   /*
     横に送る帯（上の帯の目次と、狭い画面の絞り込み）の右端のぼかし。切れている
     ことを見せる。覆いなので色ではなく不透明度の坂で、地の色とは関わらない。
@@ -213,193 +192,16 @@
   --fade-w: min(var(--sp-6), var(--gutter));
   --fade-right: linear-gradient(to right, #000 calc(100% - var(--fade-w)), transparent);
 
-  /*
-    入口の軌道図（.system。components.tsx の OrbitSystem、形は src/lib/orbits.ts）。
-
-    --system-ratio / --contact-ratio は入口と締めの枠の縦横比。orbits.ts の
-    HERO_FRAME / CONTACT_FRAME の width / height と同じ数（test/theme.test.ts が
-    突き合わせる）。SVG は枠いっぱいに貼るので、ずれると絵が枠の中で縮み、
-    焦点（ブラックホール）が軌道の焦点から外れる。枠の幅は置かれた列の幅（入口の
-    右の列、900 未満は本文の列いっぱい）。
-
-    --system-tilt は軌道面の画面の中での傾き（orbits.ts の TILT と同じ数。test が
-    突き合わせる）。軌道は orbits.ts が傾けて描き、ブラックホールの絵（円盤は軌道と同じ面）は
-    ここで同じだけ回す。いまは水平（0deg）。
-  */
-  --system-ratio: 1000 / 560;
-  --contact-ratio: 1000 / 512;
-  --system-tilt: 0deg;
-  /*
-    締めの軌道図の幅の上限と、高さの上限（表紙の高さの半分）。星系は枠の幅いっぱいに描くので、
-    広い画面で本文の列いっぱいに伸ばすと、表紙の高さを図だけで食う。背の低い窓では高さで
-    止める——止めないと、誘いの1文とメールと GitHub の手が1画面目の下へ押し出される
-    （npm run check:contrast の 1024x768 が字を測れなくなる）
-  */
-  --contact-w: 900px;
-  --contact-h: calc(var(--cover-h) * 0.5);
+  /* 押し手（.cta）の高さ。指の的（--tap）より大きく取る */
+  --cta-h: 48px;
 
   /*
-    軌道の線と天体。
-
-    線の太さは画面の px（vector-effect: non-scaling-stroke）で、1px のまま。天体（中心から
-    溶ける白い光と、まわりのにじみと、業務の天体の輪）は枠の単位で描き、枠の幅に比例する。
-    手前の天体ほど大きい（奥行きの倍率。回る天体の大きさは transform で変える）。
-
-    線はアクセント色。濃さは軌道面の奥から手前へ続けて変わる——手前の端が --orbit-ink、
-    奥の端はそれに --orbit-far を掛けた薄さ（奥ほど遠い）。外の軌道ほど淡く、いちばん外側は
-    内側の --orbit-outer 倍（同じ濃さの輪が並ぶと、的のような平らな縞に見えた）。
-    天体の光のまわりにも外へ消えるにじみ（濃さ --body-halo。色はアクセント。大きさは
-    components.tsx の Bodies）。字は軌道の上に乗せないので、濃さの
-    上限は見た目だけで決まり、下限は npm run check:contrast が測る（線が消えるのは改善
-    ではない）。
+    一覧の行（.entry）の区画の幅。札の列（区分・プラットフォーム・年）と矢印の列で、
+    本文の列が残りを受ける（広い画面ほど本文が細る、を起こさない）。
+    --entry-title-lh は行の題（--fs-display-xs）の1行の高さで、札と矢印を題の
+    1行目の高さにそろえるために読む。
   */
-  --orbit-line: 1px;
-  --orbit-ink: 0.34;
-  --orbit-far: 0.15;
-  --orbit-outer: 0.55;
-  --orbit-band: 0.42;
-  /*
-    ブラックホールの光の絵の濃さ（components.tsx の Hole。影の黒い円には掛けない）。白い光が
-    濃いと、星屑の円盤よりブラックホールが先に目に入った（持ち主の「主張が強すぎる」）
-  */
-  --hole-light: 0.72;
-  /*
-    星屑の粒の太さと濃さ（components.tsx の Stardust）。星屑は回るのでぼかしを掛けない。
-    ぼかしてにじませていたころと同じ明るさに見えるよう、粒を少し太く濃くしてある
-  */
-  --stardust-w: clamp(0.6px, 0.16cqi, 1.25px);
-  --stardust-ink: 1;
-  --stardust-far: 0.35;
-  --body-halo: 0.55;
-
-  /*
-    星雲（components.tsx の Nebula。形は orbits.ts の nebulaMap）。雲の4枚（光・雲・筋・塵）を
-    透過 WebP に焼くときの濃さ。色は見た目のプリセットごとの3色（--nebula-a / -b / -c。下の「見た目の
-    プリセット」）で、モノクロのときも星雲だけは青紫と桃と空色にする（持ち主の「星雲だけ色を
-    付ける」）。字は星雲の上に乗せない（星空の覆いが字の後ろで消す）。下限は
-    npm run check:contrast が測る
-  */
-  --nebula-art: url('/assets/nebula-iris.webp?v=c5b0f3ae');
-  --nebula-light: 0.3;
-  --nebula-cloud: 0.95;
-  --nebula-veil: 0.85;
-  --nebula-dust: 0.85;
-  --nebula-a: var(--iris);
-  --nebula-b: var(--rose);
-  --nebula-c: var(--sky);
-
-  /*
-    宇宙（components.tsx の Cosmos）。星空に敷く星雲の色の淡い広がりの濃さ（2色を透明に
-    混ぜる割合）
-  */
-  --cosmos-wash: 16%;
-  /*
-    字の暗がり（「入口の軌道図」の .hero__copy と、Contact の .contact の ::before）。字の塊の
-    箱は地の色で塗りきり、その外で星空と星雲へ溶かす長さ。上と下と左（--veil）は短く——900
-    未満ではすぐ上に図がある。右（--veil-side）は長く——900 以上の入口では右に図があり、短い
-    坂の縦の縁が、星雲を断ち切る線に見えた。
-
-    坂は覆い（--veil-y は縦、--veil-x は横。900 以上だけ重ねる）。濃さは S 字に変える
-    （3次のなめらかな段差の 1/4・1/2・3/4 の値）——まっすぐな坂は、両端の折れ目が淡い星雲の上で
-    線に見えた
-  */
-  --veil: clamp(40px, 5vw, 72px);
-  --veil-side: clamp(64px, 14vw, 240px);
-  --veil-y: linear-gradient(
-    to bottom,
-    transparent,
-    rgb(0 0 0 / 0.16) calc(var(--veil) * 0.25),
-    rgb(0 0 0 / 0.5) calc(var(--veil) * 0.5),
-    rgb(0 0 0 / 0.84) calc(var(--veil) * 0.75),
-    #000 var(--veil),
-    #000 calc(100% - var(--veil)),
-    rgb(0 0 0 / 0.84) calc(100% - var(--veil) * 0.75),
-    rgb(0 0 0 / 0.5) calc(100% - var(--veil) * 0.5),
-    rgb(0 0 0 / 0.16) calc(100% - var(--veil) * 0.25),
-    transparent
-  );
-  --veil-x: linear-gradient(
-    to right,
-    transparent,
-    rgb(0 0 0 / 0.16) calc(var(--veil) * 0.25),
-    rgb(0 0 0 / 0.5) calc(var(--veil) * 0.5),
-    rgb(0 0 0 / 0.84) calc(var(--veil) * 0.75),
-    #000 var(--veil),
-    #000 calc(100% - var(--veil-side)),
-    rgb(0 0 0 / 0.84) calc(100% - var(--veil-side) * 0.75),
-    rgb(0 0 0 / 0.5) calc(100% - var(--veil-side) * 0.5),
-    rgb(0 0 0 / 0.16) calc(100% - var(--veil-side) * 0.25),
-    transparent
-  );
-
-  /* 入口の字が先に読める短い待ちから、件数だけを数え上げる。図は初めから完成形。 */
-  --count-dur: 1200ms;
-  --count-delay: 600ms;
-
-  /*
-    着いたあとも動き続けるもの（「動き続ける」）。星屑と天体の公転と軌道を流れる星（1周の長さは
-    orbits.ts の INNER_PERIOD から。外側の軌道ほど長い）、吸い込まれる粒（落ちるほど速く回り、
-    速く寄る。曲線は keyframes の orbit-grain-*）、ブラックホールの光の揺らぎ（明るさが
-    --breathe-low まで沈んで戻る。片道 --breathe-dur）、星雲の漂い（片道 --drift-dur）と星の
-    瞬き（周期は星ごと。orbits.ts の nebulaMap）。止める手は置かない（持ち主の判断。動きを
-    減らす設定では全部止まる）
-  */
-  --drift-dur: 40s;
-  --drift-ticks: 400;
-  --breathe-dur: 4s;
-  --breathe-ticks: 40;
-  --breathe-low: 0.82;
-  /* 天体の小さな浮遊・外周の光。画像は固定画素、更新は約100msごと。 */
-  --celestial-moon-dur: 14s;
-  --celestial-moon-ticks: 18;
-  --celestial-neptune-dur: 16s;
-  --celestial-neptune-ticks: 20;
-  --celestial-saturn-dur: 14s;
-  --celestial-saturn-ticks: 18;
-  --celestial-radiance-dur: 5s;
-  --celestial-radiance-ticks: 50;
-  --celestial-breathe-dur: 4s;
-  --celestial-breathe-ticks: 40;
-  --celestial-flow-dur: 10s;
-  --celestial-flow-ticks: 25;
-  --celestial-flow-offset: -5s;
-  --celestial-flow-beam-w: 40%;
-  --celestial-flow-beam: linear-gradient(100deg, transparent, var(--ink), transparent);
-  --celestial-flow-mask: linear-gradient(
-    to bottom,
-    transparent 42%,
-    #000 49%,
-    #000 56%,
-    transparent 63%
-  );
-  --celestial-corona-mask: radial-gradient(
-    circle closest-side,
-    transparent 59%,
-    #000 71%,
-    #000 85%,
-    transparent 98%
-  );
-  --celestial-corona-light: 0.2;
-  /*
-    軌道を流れる星（components.tsx の Flows）。後ろに引く尾の、星の側の濃さ（--flow-trail。
-    後ろへ消える）と、十字の光芒の濃さ（--flow-glint）
-  */
-  --flow-trail: 0.5;
-  --flow-glint: 0.75;
-
-  /* 塗りの押し手（.cta）の高さ。指の的（--tap）より大きく取る、ページでいちばん強い1本 */
-  --cta-h: 52px;
-
-  /*
-    一覧の行（.entry）の区画の幅。番号の列・札の列・技術の列・矢印の列で、本文の列が
-    残りを受ける。サムネイルは本文の下に、--entry-thumb を上限に列いっぱいまで。
-    --entry-title-lh は行の題（--fs-display-xs）の1行の高さで、番号と矢印を題の
-    1行目の高さの真ん中に置くために読む。
-  */
-  --entry-index: 56px;
-  --entry-meta: 160px;
-  --entry-tags: 200px;
-  --entry-thumb: 320px;
+  --entry-meta: 180px;
   --entry-go: var(--sp-6);
   --entry-title-lh: calc(var(--fs-display-xs) * 1.3);
   /* 行の題の左のアイコン（.entry__icon）。題の字より一回り大きく、1行目の高さの真ん中に置く */
@@ -419,14 +221,6 @@
   --dot: 6px;
 
   /*
-    入口の字の浮かび上がり。不透明度と下からのずれ（--enter-shift）を解き、
-    句読点で切った塊を --stagger ずつ遅らせて
-    出す。曲線はばねと同じ1本（--ease-spring）で、量だけをここで決める
-  */
-  --enter-shift: var(--sp-3);
-  --stagger: 72ms;
-
-  /*
     配色は黒基調の1つ（夜の地）。文字もボタンも白で組む——アクセントの既定は
     白黒（--mono。管理画面の「見た目」でほかの色も選べる）。OS がライトを選んで
     いても白い地には切り替えない。「黒の上に白」がこのサイトの見た目の芯で、
@@ -444,22 +238,22 @@
     持たず、罫線（--line / --line-strong）で区切る
   */
   color-scheme: dark;
-  --bg: #0c0c0e;
+  --bg: #0a0a0b;
   --surface: rgba(255, 255, 255, 0.04);
   --surface-hover: rgba(255, 255, 255, 0.07);
-  --line: rgba(255, 255, 255, 0.07);
-  --line-strong: rgba(255, 255, 255, 0.13);
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.16);
   --highlight: inset 0 1px 0 rgba(255, 255, 255, 0.07);
-  --ink: #f2f2f4;
-  --ink-mid: #b4b4c2;
-  --ink-weak: #8a8a96;
+  --ink: #ededef;
+  --ink-mid: #b4b4bc;
+  --ink-weak: #8c8c96;
   /*
     アクセントの候補。どれを使うかは管理画面の「見た目」で選ぶ。既定はモノクロ
-    （--mono）で、リンク・塗りのボタン・選んだ印・軌道の線がどれも白になり、
-    塗りのボタンの字（--accent-ink）は黒になる
+    （--mono）で、リンク・塗りのボタン・選んだ印がどれも白になり、塗りのボタンの字
+    （--accent-ink）は黒になる
   */
-  --mono: #f2f2f4;
-  --mono-soft: rgba(242, 242, 244, 0.1);
+  --mono: #ededef;
+  --mono-soft: rgba(237, 237, 239, 0.1);
   --iris: #8f8ff5;
   --iris-soft: rgba(143, 143, 245, 0.13);
   --violet: #b58cf8;
@@ -698,22 +492,6 @@ body[data-site] > main {
   padding-block: var(--page-pad);
 }
 
-/*
-  本文は、入口と締めの星空（.cosmos）の位置の基準で、重なりの容れ物。星空は本文の幅いっぱい
-  （inset: 0）に、本文の中身の後ろ（z-index: -1）に敷く。容れ物にしないと、-1 の星空が
-  ページの地の後ろへ沈むことがある。
-
-  横だけ切る（overflow-x: clip。スクロール箱は作らず、縦は出してよい）。字の暗がり（「入口の
-  軌道図」）は字の塊の外へ広げて溶かすので、締めの字が長いと画面の右端の先まで伸びる——
-  切らないと、見えない暗がりでページが横に動く。本文の幅は画面の幅なので、ほかに切られる
-  ものは無い（目次と絞り込みのはみ出しは右の余白の中まで）
-*/
-body[data-site] > main {
-  position: relative;
-  isolation: isolate;
-  overflow-x: clip;
-}
-
 /* --- 上の帯 --- */
 
 /*
@@ -739,31 +517,13 @@ body[data-site] > main {
 }
 
 /*
-  ロゴの O の影の黒い円（src/ui/icons.tsx の HoleArt。上の帯・ログイン画面・404・管理画面）。
-  光は焼いた絵（.logo-art。入口のブラックホールと同じ1枚）で、色を持たない
-*/
-.logo-core {
-  fill: var(--hole-core);
-}
-
-/*
-  ワードマーク（ΛSTLOG）。上の帯とログイン画面。高さで大きさを決め、幅は縦横比から。
-  O の光は字の箱の外へはみ出して見せる（箱を光に合わせると、字が小さくなる）
+  ワードマーク（ΛSTLOG。src/ui/icons.tsx の Wordmark）。上の帯とログイン画面。高さで
+  大きさを決め、幅は縦横比から。字の色を継ぐ（currentColor）
 */
 .brand__word {
   display: block;
   height: var(--brand-h);
   width: auto;
-  overflow: visible;
-}
-
-.brand__word .logo-art {
-  transform-box: fill-box;
-  transform-origin: center;
-}
-
-.wordmark__fallback {
-  display: none;
 }
 
 /*
@@ -792,29 +552,20 @@ body[data-site] > main {
   目次に番号は振らない。目次の番号はブロックの並び順でしかなく、読む人に言う
   ことが無い（src/ui/Layout.tsx の目次の注記）。
 
-  英字だけの行き先（Projects・Contact…）は、等幅の小さな大文字の札にする。
-  打ち込んだ見出し（「あとがき」）が行き先の名前になることもあるので、和文の
-  行き先は本文の書体のまま（lang="en" は Layout.tsx が langOf で付ける。
-  :root の --font-mono を見ること）。
+  行き先の名前は本文の書体のまま、本文の1段上（--fs-md）。英字だけの行き先を等幅の
+  小さな大文字（11px）にしていたころは、ページを移る主な手がページでいちばん読みにくい
+  字だった。lang="en" は読み上げの発音のために残る（Layout.tsx が langOf で付ける）。
 */
 .toc a {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-  gap: var(--sp-3);
   min-height: var(--tap);
-  color: var(--ink-weak);
-  font-size: var(--fs-sm);
+  color: var(--ink-mid);
+  font-size: var(--fs-md);
   transition:
     color var(--dur-fast) var(--ease),
     scale var(--dur-spring) var(--ease-spring);
-}
-
-.toc a:lang(en) {
-  font-family: var(--font-mono);
-  font-size: var(--fs-label);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
 }
 
 /*
@@ -826,22 +577,15 @@ body[data-site] > main {
 }
 
 /*
-  いまのページ。字を --ink に上げ、頭に四角い印を1つ置く。色だけで分けない
-  （印の形が残る。WCAG 1.4.1）。目次の行き先は節（#projects）ではなく画面の URL
-  （/projects）なので、'true' ではなく 'page'
-
-  印は枠線で塗る。地（background）で塗ると、強制色モード（Windows のハイコントラスト）
-  では地の色に置き換わって消える——枠線は字の色になって残る
+  いまのページ。字を --ink に上げ、下線を引く。色だけで分けない（線の形が残る。
+  WCAG 1.4.1。強制色モードでも線は字の色で残る）。目次の行き先は節（#projects）ではなく
+  画面の URL（/projects）なので、'true' ではなく 'page'
 */
 .toc a[aria-current='page'] {
   color: var(--ink);
-}
-
-.toc a[aria-current='page']::before {
-  content: '';
-  width: var(--dot);
-  height: var(--dot);
-  border: calc(var(--dot) / 2) solid var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: var(--sp-3);
 }
 
 /*
@@ -998,64 +742,32 @@ body[data-site] > main {
 /* --- 入口 --- */
 
 /*
-  入口（.hero--orbit）。左に大見出しの列（.hero__copy）、右に作品の軌道図
-  （.system）、底に件数の帯（.tally）。900 未満は1列に積み、軌道図を上に置く。
-
-  見出しの列が DOM の先頭なのは、読み上げと Tab の順を見出しから始めるため。
-  並べ替えは grid-template-areas だけで、字の並びは変えない。
-
-  表紙の高さ（--cover-h。「ページの外枠」）の余りは 1fr の行が受け、件数の帯は底に
-  座る。1列のときは見出しの列を軌道図のすぐ下に置き（余りは件数の帯の上に残る）、
-  2列のときは見出しの列と軌道図を残りの高さの縦の真ん中に置く。
+  入口（.hero--cover。components.tsx の Hero の cover）。札・大見出し・リード文・押し手を
+  左の軸に縦に積む。絵も件数の帯も置かない（components.tsx の Hero の注記）。
+  上を1段広く空けて、最初の画面の主役が字だと分かるようにする——Hero は見出しの錨
+  （「ページの外枠」）を持たないので、ここで上の空きを決める。
 */
-.hero--orbit {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto 1fr auto;
-  grid-template-areas: 'map' 'copy' 'tally';
-  gap: var(--sp-7);
-}
-
-.hero__copy {
-  grid-area: copy;
-  align-self: start;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--sp-5);
-  min-width: 0;
+.hero--cover {
+  gap: var(--sp-6);
+  padding-top: var(--page-pad);
 }
 
 /*
-  見出しの上の小さな札（components.tsx の Eyebrow。入口の「職種 — 所在地」）。
-  英字だけなら等幅の小さな大文字（--fs-label を使ってよい「和文が入らない英大文字の
-  小見出し」）、和文を含めば本文の書体で和文の最小の段。
+  見出しの上の小さな札（components.tsx の Eyebrow。入口の「名前 · 職種 · 所在地」、全体ページの
+  頭の職種）。区切りの字は置かず、間隔で分ける——札が折り返したとき、行の頭に区切りの字
+  （「— Kanagawa」）が残らない。最初の部分（名前）だけ字を上げる。
 */
 .eyebrow {
-  color: var(--ink-weak);
-  font-size: var(--fs-meta);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-5);
+  color: var(--ink-mid);
+  font-size: var(--fs-sm);
 }
 
-.eyebrow :lang(en) {
-  font-family: var(--font-mono);
-  font-size: var(--fs-label);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-/*
-  部分のあいだの区切り。飾りなので読み上げには流さない（/ の後ろの代わりの字が空）。
-  代わりの字は書けるブラウザにだけ渡す（@supports）——書けないブラウザは宣言ごと
-  捨て、区切りが消えて「SYSTEM ENGINEER神奈川」と続く
-*/
-.eyebrow > * + *::before {
-  content: ' — ';
-}
-
-@supports (content: '' / '') {
-  .eyebrow > * + *::before {
-    content: ' — ' / '';
-  }
+.hero--cover .eyebrow > :first-child {
+  color: var(--ink);
+  font-weight: 600;
 }
 
 /*
@@ -1074,7 +786,7 @@ body[data-site] > main {
   font-size: var(--fs-display-xl);
   font-weight: 600;
   font-feature-settings: 'palt';
-  line-height: 1.25;
+  line-height: 1.2;
   letter-spacing: -0.02em;
 }
 
@@ -1092,913 +804,48 @@ body[data-site] > main {
   text-wrap: pretty;
 }
 
+/* 押し手の並び（入口の「一覧で見る →」「プロフィール →」） */
+.hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  margin-top: var(--sp-3);
+}
+
 /*
-  塗りの押し手（components.tsx の Cta。入口の「一覧で見る →」）。ページで
-  いちばん強い1本。角は立て、面は --accent で塗る（既定のモノクロでは白い面に黒い字）。
-  600 未満は列いっぱいに伸ばして、字を左・矢印を右に置く（指で押す的を広く）。
+  押し手（components.tsx の Cta）。丸い端はこのサイトで「押せる」の印（:root の
+  --radius-pill）。塗りはページでいちばん強い1本で、面は --accent（既定のモノクロでは
+  白い面に黒い字）。2本目（.cta--quiet）は面を持たず、内側の線だけ——同じ強さが2本並ぶと、
+  どちらが先か分からない。線は box-shadow で描く（border だと2本の高さがずれる）。
+  600 未満は2本を同じ幅に伸ばして並べる（指で押す的を広く。600 以上は字の幅に戻す）。
 */
 .cta {
   display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-6);
+  justify-content: center;
+  gap: var(--sp-3);
   min-height: var(--cta-h);
-  margin-top: var(--sp-3);
   padding-inline: var(--sp-6);
+  border-radius: var(--radius-pill);
   background: var(--accent);
   color: var(--accent-ink);
-  font-size: var(--fs-base);
-  font-weight: 600;
+  font-size: var(--fs-md);
+  font-weight: 500;
   transition: scale var(--dur-spring) var(--ease-spring);
+}
+
+.cta--quiet {
+  background: transparent;
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.hero__actions > .cta {
+  flex: 1 1 0;
 }
 
 .cta__arrow {
   transition: translate var(--dur-spring) var(--ease-spring);
-}
-
-/* --- 入口の軌道図 --- */
-
-/*
-  入口の軌道図（components.tsx の OrbitSystem）。真ん中にブラックホールを置き、
-  そのまわりに作品を1つずつ軌道に載せる（形は src/lib/orbits.ts。件数だけから
-  決まる）。天体に作品の札は添えない（持ち主が「いらない」と外した）。図は全部飾り。
-
-  絵の層は枠いっぱいに重ねる——軌道の奥の半分・ブラックホール（.hole）・軌道の手前の
-  半分・天体の順（DOM の順がそのまま重なりの順）。星雲と星空は枠の外、本文の幅いっぱいに
-  敷く（.cosmos）。縦横比は :root の
-  --system-ratio（orbits.ts の HERO_FRAME と同じ数）。
-
-  横だけ切る（overflow-x: clip。縦は出してよい——着いたときに灯るブラックホールと、
-  渦を巻いて収まる軌道が、枠の上下へ少し出る）。回して霞ませた出だしの軌道が枠の左右へ
-  出ても、ページを横に動かさない。
-
-  枠は星屑の太さ（cqi）を自分の幅から取る容れ物（container）。重なりの順は
-  枠の中に閉じる（isolation。貼り付いた上の帯より上には来ない）。
-*/
-.system {
-  grid-area: map;
-  position: relative;
-  width: 100%;
-  aspect-ratio: var(--system-ratio);
-  overflow-x: clip;
-  container-type: inline-size;
-  isolation: isolate;
-}
-
-.system__bands,
-.system__orbits,
-.system__stardust,
-.system__bodies {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-/*
-  動かない層と、刻んで動く層は、それぞれ自分の合成の層に描き、描いた層を使い回す。
-
-  - 動かない層（光の帯 .system__bands・軌道の線 .system__orbits、締めはまとめて .orbits__still）。
-    帯のぼかし（SVG のフィルタ）を一度だけ描いて使い回す。帯と線は完成形で表示する
-  - 刻んで動く層（星屑 .system__stardust / .orbits__stardust、天体 .system__bodies /
-    .orbits__bodies）。どれも同じ刻み（orbits.ts の TICK・BODY_TICK）でだけ姿を変える
-    （「動き続ける」の steps()）ので、そのあいだは描き直さない
-
-  流れる星と吸い込まれる粒は、小さい HTML の箱だけを動かす。動くものをまとめて毎コマ
-  描き直していたころは、144Hz の画面で GPU の仕事が
-  1コマの枠を超え、ブラウザごと重くなった
-*/
-:is(
-  .system__bands,
-  .system__orbits,
-  .orbits__still,
-  .system__stardust,
-  .orbits__stardust,
-  .system__bodies,
-  .orbits__bodies
-) {
-  will-change: transform;
-}
-
-/*
-  宇宙（components.tsx の Cosmos。入口と締め）。軌道図のまわりを、本文の幅いっぱいの星空に
-  する——星と、星雲（ブラックホールのまわりから画面の端まで）と、星雲の2色の淡い広がり
-  （背景の放射の坂。図の焦点のあたりに置く）と流れ星。
-
-  字の後ろには何も出さない。小さい字は地の黒で 4.5:1 ぎりぎりの所があり（職種と所在地の札・
-  件数の見出し）、星1つが字の行に掛かるだけで割る。消し方は2つ——
-  - 字の塊（入口の見出しの列・締めの字）は、自分の後ろに地の色の暗がりを敷く（下の「字の
-    暗がり」）。暗がりは塊の箱に付いてくるので、字の長さや画面の幅で塊が動いても外れない。
-    図の場所から字の列を見積もった覆いで消していたころは、900 以上で左の列を丸ごと消すぶん、
-    星雲が画面の右半分に寄っていた
-  - 星空は底で消える（静止した地の色の覆い）。入口は件数の帯の上で、締めは本文の底で
-    （足元の罫線で雲を断ち切らない）
-  位置の基準は本文（main。「骨格」）。npm run check:contrast が字の下を測る。
-*/
-.cosmos {
-  --cosmos-x: 50%;
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  overflow: hidden;
-  pointer-events: none;
-  container-type: size;
-}
-
-/*
-  底のフェードは、動く星空をまとめて抜く mask の代わりに、逆の濃さの地を重ねる。
-  同じ --bg の上では見え方は同じ。親の mask は星や雲が動くたびに画面大の中間面を合成し、
-  アクセラレーションを切った Edge で重くなった。覆いは底の帯だけの静止した1枚。
-  cosmos の子より上、外の軌道と文字より下（cosmos 自体の z-index は -1）に置く。
-*/
-.cosmos::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  top: auto;
-  height: var(--cosmos-fade-h);
-  z-index: 1;
-  background: var(--cosmos-fade);
-  pointer-events: none;
-}
-
-.cosmos__stars {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-/* HTML の星と流れ星も SVG と同じ1600×1000の視野を中央で slice する。 */
-.cosmos__stars--twinkle,
-.cosmos__meteors {
-  position: absolute;
-  inset: auto;
-  left: 50%;
-  top: 50%;
-  width: max(100cqw, 160cqh);
-  height: max(62.5cqw, 100cqh);
-  transform: translate(-50%, -50%);
-}
-
-.cosmos__twinkle {
-  position: absolute;
-  border-radius: 50%;
-  background: var(--ink);
-  transform: translate(-50%, -50%);
-  will-change: opacity;
-}
-
-/*
-  星。太さは星ごと（style）で、画面の px のまま。光芒は細い十字で、真ん中から先へ消える
-  （坂は部品が style で渡す。同じ明るさの十字は照準に見えた）
-*/
-.cosmos__stars path {
-  fill: none;
-  stroke: var(--ink);
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-}
-
-.cosmos__stars .cosmos__glint {
-  stroke-width: var(--orbit-line);
-  stroke-linecap: butt;
-  opacity: 0.5;
-}
-
-.cosmos__spark {
-  stop-color: var(--ink);
-}
-
-/* 流れ星。90視野単位の筋を置いた向きのまま流す。太さは画面pxのまま。 */
-.cosmos__meteor-frame {
-  position: absolute;
-  transform-origin: 0 0;
-}
-
-.cosmos__meteor {
-  position: absolute;
-  right: 100%;
-  top: calc(var(--orbit-line) * -0.75);
-  width: 100%;
-  height: calc(var(--orbit-line) * 1.5);
-  background: linear-gradient(to right, transparent, var(--ink));
-  opacity: 0;
-  will-change: transform, opacity;
-}
-
-/* 元の丸い線端と同じ、筋の先の半円。 */
-.cosmos__meteor::after {
-  content: '';
-  position: absolute;
-  left: 100%;
-  top: 0;
-  width: calc(var(--orbit-line) * 1.5);
-  height: 100%;
-  border-radius: 50%;
-  background: var(--ink);
-  transform: translateX(-50%);
-}
-
-/*
-  図の幅（--cosmos-fig-w）と高さ（--cosmos-fig）と、底の消え方。入口の図は本文の幅
-  いっぱい（900 以上は右の列）で縦横比が --system-ratio、締めの図は .orbits と同じ幅の
-  決め方で --contact-ratio。本文の幅は min(画面 − 余白, 版面)。
-
-  入口は件数の帯の上で消えきる（帯と行の間は約 112px。帯の上の罫線より 20px ほど上）。
-  締めは本文の底（足元の罫線）の手前で消えきる
-*/
-.cosmos--hero {
-  --cosmos-fig-w: min(100vw - 2 * var(--gutter), var(--w-page));
-  --cosmos-fig: calc(var(--cosmos-fig-w) / (var(--system-ratio)));
-  --cosmos-fade-h: calc(var(--page-pad) + 220px);
-  --cosmos-fade: linear-gradient(to bottom, transparent 0, var(--bg) 120px);
-}
-
-.cosmos--contact {
-  --cosmos-fig-w: min(
-    min(100vw - 2 * var(--gutter), var(--w-page)),
-    var(--contact-w),
-    var(--contact-h) *
-    (var(--contact-ratio))
-  );
-  --cosmos-fig: calc(var(--cosmos-fig-w) / (var(--contact-ratio)));
-  --cosmos-fade-h: calc(var(--page-pad) * 2);
-  --cosmos-fade: linear-gradient(to bottom, transparent, var(--bg));
-}
-
-/* 図の焦点の高さと、星雲の色の淡い広がり（星雲の芯のまわり） */
-.cosmos--hero,
-.cosmos--contact {
-  --cosmos-y: calc(var(--page-pad) + var(--cosmos-fig) * var(--cosmos-focus));
-  background:
-    radial-gradient(
-      ellipse calc(var(--cosmos-fig-w) * 0.9) calc(var(--cosmos-fig) * 0.9) at
-        calc(var(--cosmos-x) - 8%) var(--cosmos-y),
-      color-mix(in srgb, var(--nebula-a) var(--cosmos-wash), transparent),
-      transparent
-    ),
-    radial-gradient(
-      ellipse calc(var(--cosmos-fig-w) * 0.7) calc(var(--cosmos-fig) * 0.8) at
-        calc(var(--cosmos-x) + 10%) var(--cosmos-y),
-      color-mix(in srgb, var(--nebula-b) var(--cosmos-wash), transparent),
-      transparent
-    );
-}
-
-/*
-  字の暗がり。入口の見出しの列と、締めの字の塊の後ろに、地の色を敷く。塊の箱は塗りきり、
-  上と下へ --veil だけ広げた所で、星空と星雲へ溶かす。900 未満は字の塊が本文の列いっぱい
-  なので、横は本文の端から端まで（左右の余白 --gutter ぶん広げる）の帯にする。900 以上は
-  塊を中身の幅に縮め、左は --veil、右は --veil-side で溶かす（「900px 以上」）。
-
-  重なりは星空（.cosmos）と同じ z-index: -1 の層で、文書の順が星空より後——星空と星雲の上、
-  字の下に描かれる（本文 main が重なりの容れ物。「骨格」）。軌道図（.system・.orbits）は
-  ふつうの層なので、暗がりが図に掛かっても、軌道の線と天体は消さない。
-*/
-.hero--orbit > .hero__copy,
-.orbital > .contact {
-  position: relative;
-}
-
-.hero--orbit > .hero__copy::before,
-.orbital > .contact::before {
-  content: '';
-  position: absolute;
-  inset: calc(-1 * var(--veil)) calc(-1 * var(--gutter));
-  z-index: -1;
-  background: var(--bg);
-  mask-image: var(--veil-y);
-  pointer-events: none;
-}
-
-/*
-  星雲（components.tsx の Nebula。星空の中、ブラックホールのまわりから画面の端まで）。
-  ブラックホールの位置（--cosmos-x / --cosmos-y）を真ん中に、図の幅（--cosmos-fig-w）に
-  比例した大きさで置く——軌道のまわりの芯の雲は図と一緒に伸び縮みし、外の雲が画面の端へ
-  届く（900 以上の入口では、箱の左の端が本文の左の端より外に出る）。箱の縦横比は orbits.ts の
-  NEBULA と同じ（test/theme.test.ts が突き合わせる）。はみ出したぶんは星空（.cosmos）が切る。
-  位置は余白（margin）で引く——translate は漂う動きが使う（「動き続ける」）。
-
-  4層の模様は生成時にだけフィルタを掛けて透過 WebP に焼く（scripts/nebula/render.mjs）。
-  色と濃さは :root の --nebula-* が生成入力。配色は [data-accent] が版つきの
-  --nebula-art を選ぶ。瞬く星と同じ描画に、大きなノイズのフィルタを持たせない。
-*/
-.cosmos__nebula {
-  --nebula-w: calc(var(--cosmos-fig-w) * 3.53);
-  position: absolute;
-  left: var(--cosmos-x);
-  top: var(--cosmos-y);
-  width: var(--nebula-w);
-  aspect-ratio: 3600 / 2000;
-  margin-left: calc(var(--nebula-w) / -2);
-  margin-top: calc(var(--nebula-w) / -3.6);
-  background-image: var(--nebula-art);
-  background-size: 100% 100%;
-}
-
-/*
-  ブラックホール（components.tsx の Hole）を焦点に置き、枠と一緒に伸び縮みさせる。置き場所
-  （--hole-x / --hole-y）と大きさ（--hole-w）は、部品が orbits.ts の数（枠の focus と hole）
-  から組んで style で渡す。軌道面と同じ傾きに回す（--system-tilt）。
-
-  焼いた光の絵（logo.ts の BLACKHOLE_ART。ロゴの O と同じ1枚）と、その下に敷く影の黒い円
-  （::before。径は部品が絵の幅に対する割合 --hole-shadow で渡す）。箱の高さは絵の縦横比
-  （img の width / height）から決まる。影は不透明なので、奥を回る軌道はその後ろに隠れる。
-  光だけが揺らぐ（「動き続ける」）。
-
-  光は白銀、影は --hole-core（ロゴの O の .logo-core と同じ段）。見た目の
-  プリセットのアクセント色では塗らない（ロゴの O と同じ1つのものに見せる）。
-*/
-.hole {
-  position: absolute;
-  left: var(--hole-x);
-  top: var(--hole-y);
-  width: var(--hole-w);
-  translate: -50% -50%;
-  rotate: var(--system-tilt);
-  pointer-events: none;
-}
-
-.hole::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: var(--hole-shadow);
-  aspect-ratio: 1;
-  translate: -50% -50%;
-  border-radius: 50%;
-  background: var(--hole-core);
-}
-
-.hole__art {
-  position: relative;
-  display: block;
-  width: 100%;
-  height: auto;
-  opacity: var(--hole-light);
-}
-
-/*
-  軌道と天体（入口と締めで同じ）。絵は色を持たず、線はアクセント色、点は字の色。
-  線の太さは画面の px（non-scaling-stroke。:root の --orbit-line の話）。
-
-  線の色は、部品が線ごとに渡す坂（components.tsx の OrbitLines。stroke 属性の
-  url(#…)）が持つ。坂の両端の色と濃さはここで敷く——奥の端は --orbit-far を掛けて薄く、
-  手前へ続けて --orbit-ink まで濃くなる（奥ほど遠い）。.orbit に stroke を書かない（書くと
-  坂を上書きする）。外の軌道ほど淡い——部品が軌道ごとに内側の 0 から外側の 1 までの
-  位置（--reach）を渡し、濃さは外側で --orbit-outer 倍まで落ちる
-*/
-.orbit {
-  fill: none;
-  vector-effect: non-scaling-stroke;
-  stroke-width: var(--orbit-line);
-  opacity: calc(1 - var(--reach, 0) * (1 - var(--orbit-outer)));
-}
-
-/*
-  軌道に沿う光の帯（components.tsx の OrbitBands）。色は線と同じアクセント。区間ごとの太さと
-  濃さは部品が渡し（手前ほど太く明るい）、帯ぜんぶの濃さは :root の --orbit-band
-*/
-.orbit-bands {
-  fill: none;
-  stroke: var(--accent);
-  opacity: var(--orbit-band);
-}
-
-/*
-  軌道に沿って散る星屑（components.tsx の Stardust）。明るさの段ごとの太さ（--stardust-w の
-  倍）と濃さ。太さは画面の px（点を軌道の楕円の枠で潰さない）で、枠の幅に比例する（電話の
-  小さな枠で粒が帯を埋めない）。色は字の白で、外側 SVG の奥・手前に代表の濃さを掛ける。
-  --stardust-far から不透明へ続く坂の1/4・3/4の濃さにして、奥ほど淡い手がかりを保つ。
-  SVG 内・外側とも mask を掛けない（ソフトウェア描画では大きい層を描き直す）
-*/
-.stardust path {
-  fill: none;
-  stroke: var(--ink);
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-}
-
-.system__stardust--far,
-.orbits__stardust--far {
-  opacity: calc((1 + 3 * var(--stardust-far)) / 4);
-}
-
-.system__stardust--near,
-.orbits__stardust--near {
-  opacity: calc((3 + var(--stardust-far)) / 4);
-}
-
-.stardust__0 {
-  stroke-width: var(--stardust-w);
-  opacity: calc(var(--stardust-ink) * 0.45);
-}
-
-.stardust__1 {
-  stroke-width: calc(var(--stardust-w) * 1.5);
-  opacity: calc(var(--stardust-ink) * 0.65);
-}
-
-.stardust__2 {
-  stroke-width: calc(var(--stardust-w) * 2.1);
-  opacity: calc(var(--stardust-ink) * 0.85);
-}
-
-.stardust__3 {
-  stroke-width: calc(var(--stardust-w) * 2.8);
-  opacity: var(--stardust-ink);
-}
-
-.orbit-depth__far {
-  stop-color: var(--accent);
-  stop-opacity: calc(var(--orbit-ink) * var(--orbit-far));
-}
-
-.orbit-depth__near {
-  stop-color: var(--accent);
-  stop-opacity: var(--orbit-ink);
-}
-
-/*
-  天体は光る惑星（components.tsx の Bodies）。中心がいちばん明るく外へ溶ける白い光（字の色の
-  放射の坂）と、そのまわりのにじみ（アクセント色の、外へ消える放射の坂）。縁のくっきりした
-  白い円は、軌道を回る平らな丸い点に見えた。奥行きの倍率（手前ほど大きい）は部品が scale で
-  掛け、光・にじみ・輪がそろって縮む（線の太さを画面の px に保つ non-scaling-stroke は輪の
-  線だけ）。業務は輪のある惑星——軌道面と同じ角度から見た輪を、奥の半分は光の後ろ、手前の
-  半分は前に描く。区分を色だけで分けない（形で分ける）
-*/
-.orbit-body path {
-  fill: none;
-  stroke-linecap: round;
-}
-
-.orbit-body__light {
-  stop-color: var(--ink);
-}
-
-.orbit-body__halo {
-  opacity: var(--body-halo);
-}
-
-.orbit-body__glow {
-  stop-color: var(--accent);
-}
-
-.orbit-body__ring {
-  stroke: var(--ink);
-  stroke-width: var(--orbit-line);
-  vector-effect: non-scaling-stroke;
-}
-
-/* --- 入口の件数の帯 --- */
-
-/*
-  件数の帯（components.tsx の Tally）。表紙の底に、上に1本の罫線を引いて、
-  セルを同じ幅で横に並べる（セルの数は区分の数で変わる）。値が上・見出しが下
-  （<dl> の dt が先なので、並べ替えは column-reverse。読む順は「見出し → 値」）。
-*/
-.tally {
-  grid-area: tally;
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  gap: var(--sp-5);
-  border-top: 1px solid var(--line);
-}
-
-.tally__cell {
-  display: flex;
-  flex-direction: column-reverse;
-  justify-content: flex-end;
-  gap: var(--sp-2);
-  padding-top: var(--sp-5);
-}
-
-.tally dt {
-  color: var(--ink-weak);
-  font-size: var(--fs-meta);
-}
-
-.tally dt:lang(en) {
-  font-family: var(--font-mono);
-  font-size: var(--fs-label);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-/* 値。字は細く大きく、数字の幅をそろえる（数え上げで幅が揺れない） */
-.tally__num,
-.tally__year {
-  font-size: var(--fs-display-sm);
-  font-weight: 300;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-  font-variant-numeric: tabular-nums;
-}
-
-/* --- 締めの軌道図 --- */
-
-/*
-  締めの軌道図（components.tsx の ContactOrbits）。入口と同じ星系を、横長の枠に
-  描いて列の真ん中に置く。縦横比は :root の --contact-ratio（orbits.ts の
-  CONTACT_FRAME）、幅の上限は --contact-w と、高さの上限 --contact-h から決まる幅。
-*/
-.orbits {
-  position: relative;
-  align-self: stretch;
-  justify-self: center;
-  width: min(100%, var(--contact-w), calc(var(--contact-h) * var(--contact-ratio)));
-  aspect-ratio: var(--contact-ratio);
-  container-type: inline-size;
-}
-
-/* 星雲・軌道の奥の半分・ブラックホール・手前の半分の順に重ねる（入口と同じ） */
-.orbits > svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-/* --- 入口に着いたとき --- */
-
-/*
-  星系は完成形で初めから出す。大きい層の opacity・blur・scale や軌道の stroke-dashoffset を
-  動かす登場は、アクセラレーションを切った Edge で毎コマの描き直しになった。
-  文字・名札・件数だけが opacity と translate で浮かぶ（ぼかしを掛けない）。件数は600ms待って
-  数え上がる。どれも一度きりで5秒以内に止まる。続く動きは下の「動き続ける」。
-  終わりの姿（to）は書かず、動きを減らす設定で animation: none になった姿も完成形にする。
-*/
-@keyframes rise-in {
-  from {
-    opacity: 0;
-    translate: 0 var(--enter-shift);
-  }
-}
-
-.hero h1 .phrase,
-.hero__copy > :not(h1),
-.hero > .nameplate,
-.tally__cell {
-  animation: rise-in var(--dur-spring) var(--ease-spring) backwards;
-}
-
-/* 札 → 見出しの塊 → リード文 → 押し手。件数の帯は字を先に見せてから */
-.hero h1 .phrase {
-  animation-delay: calc((var(--i, 0) + 1) * var(--stagger));
-}
-
-.hero__copy > .hero__lead {
-  animation-delay: calc(3 * var(--stagger));
-}
-
-.hero__copy > .cta {
-  animation-delay: calc(4 * var(--stagger));
-}
-
-.tally__cell {
-  animation-delay: calc(var(--count-delay) + var(--i, 0) * var(--stagger));
-}
-
-/* --- 動き続ける --- */
-
-/*
-  着いたあとも動き続けるもの（components.tsx の Flows・Stardust・Bodies・Dust・Hole）。入口と
-  締めで同じ。
-
-  - 星屑と天体が軌道ごと公転する（持ち主の「軌道の線を星と一緒に動かして」）。軌道の楕円の
-    枠の中で、星屑と天体の置き場所を1周回す（orbit-swirl を linear で。周期は軌道ごとの
-    --dur で、内側ほど速い）。天体の形はその中で回転を打ち消し（orbit-unswirl）、大きさは
-    手前へ回るほど大きい（orbit-sway。0 から 1 の keyframes を、軌道ごとの大きさの揺れを
-    書いた linear() で送る——量は keyframes ではなく timing が持つ）
-  - 軌道に沿って星が流れる。輝く星が、星屑と天体より速く回る。65点の投影位置と尾の姿勢を
-    SSR で固定の CSS keyframes へ焼き、区間ごとの steps() を60Hzの格子にそろえる。
-    周期は軌道ごとの --dur。芯と光芒の小さい SVG は向きを保ち、尾の箱だけを matrix で回す
-  - 光の粒が渦を巻いてブラックホールへ吸い込まれ、黒い円の縁で光に溶ける（orbit-grain-fall で
-    投影した螺旋の道を進む）。落ちるほど速い10%ごとの曲線を65点へ写し、明滅の節点と一緒に
-    SSR で固定の CSS keyframes へ焼く。位置と opacity の両方を区間ごとの steps() で60Hzへそろえる
-  - ブラックホールの光が明るさを沈めては戻す（orbit-breathe。光の絵の不透明度だけを変え、
-    下に敷いた影の黒い円は動かさない——絵の明るさを filter で落とすと、白い光が灰色に
-    くすんだ）
-  - 星雲がゆっくり漂い（orbit-drift。透過 WebP を敷いた箱ごと動かし、生成時のフィルタを
-    ブラウザで掛け直さない）、星が瞬き（orbit-twinkle。小さい HTML の円の明るさだけ。
-    もとの明るさは星ごとの style の opacity で、
-    keyframes は真ん中の暗さだけを持つ）、流れ星が流れる（orbit-meteor）
-
-  keyframes に var() を書かない（光の揺らぎの1つを除く）。var() を持つ keyframes は、
-  動いている要素ごとに毎コマ解き直され、粒の多い入口では style の計算だけでコマの予算を
-  食った（電話相当で 1 秒あたり 480ms。固定の値にして 75ms）。流れる星の位置と尾の姿勢、粒の
-  螺旋と明滅は、SSR が計算した固定の数値だけを keyframes に持つ。星屑と天体は楕円の形と
-  置き場所を動かない親の transform 属性が持ち、動く子が1周する。天体の大きさの揺れの量は timing（linear()）が
-  持つ（timing は一度だけ読まれ、毎コマ解き直されない）。
-
-  - 止める手は置かない（持ち主の判断。5 秒を超えて続く動きの止め方は、動きを減らす設定
-    だけが受ける）。動きを減らす設定では、星屑と天体は回らず、流れる光と粒の層は出さない
-    ——止まった姿が完成形
-*/
-@keyframes orbit-swirl {
-  to {
-    transform: rotate(1turn);
-  }
-}
-
-@keyframes orbit-unswirl {
-  to {
-    transform: rotate(-1turn);
-  }
-}
-
-/*
-  天体の大きさの揺れ。0 から 1 へ送るだけで、どの向きでどれだけの大きさかは、部品が軌道
-  ごとに渡す linear()（--sway。orbits.ts の OrbitPath の sway）が決める
-*/
-@keyframes orbit-sway {
-  from {
-    scale: 0;
-  }
-
-  to {
-    scale: 1;
-  }
-}
-
-@keyframes orbit-drift {
-  to {
-    translate: 0.7% -0.45%;
-  }
-}
-
-@keyframes orbit-twinkle {
-  50% {
-    opacity: 0.15;
-  }
-}
-
-/*
-  流れ星。置いた向きのまま、周期の頭の 6% で420視野単位だけ流れて消える。
-  自分の長さ90の 420/90 倍へ動かすので、slice の倍率が変わっても距離を保つ。
-*/
-@keyframes orbit-meteor {
-  from {
-    transform: translate(0px, 0px);
-    opacity: 0;
-  }
-
-  1% {
-    opacity: 1;
-  }
-
-  6%,
-  to {
-    transform: translate(466.666667%, 0px);
-    opacity: 0;
-  }
-}
-
-/* 光の揺らぎは1つの要素だけなので、明るさの下限を :root の段から読む（光の濃さに掛ける） */
-@keyframes orbit-breathe {
-  from {
-    opacity: calc(var(--hole-light) * var(--breathe-low));
-  }
-}
-
-/*
-  軌道を流れる星（components.tsx の Flows）。輝く星——中心から外へ溶ける芯の光と、先へ消える
-  十字の光芒（入口の星空のいちばん明るい星と同じ形）——が、後ろに淡い尾を引いて軌道を回る。
-  尾は星の側が濃く、後ろへ消える坂（--flow-trail）。軌道の線の破線を送っていたころは、軌道の
-  上を移る線に見えた（持ち主の「移動する線をもっと星っぽく」）
-*/
-.orbit-flows {
-  position: absolute;
-  inset: 0;
-  overflow: clip;
-  container-type: inline-size;
-  pointer-events: none;
-}
-
-.orbit-flow,
-.orbit-flow__tail {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 0;
-  height: 0;
-  transform-origin: 0 0;
-  will-change: transform;
-}
-
-.orbit-flow__star,
-.orbit-flow__tail-art {
-  position: absolute;
-  overflow: visible;
-}
-
-.orbit-flow__light {
-  stop-color: var(--ink);
-}
-
-.orbit-flow__fade {
-  stop-color: var(--ink);
-  stop-opacity: var(--flow-trail);
-}
-
-.orbit-flow__glint {
-  fill: none;
-  stroke-width: var(--orbit-line);
-  vector-effect: non-scaling-stroke;
-  opacity: var(--flow-glint);
-}
-
-.orbit-dust {
-  position: absolute;
-  inset: 0;
-  overflow: clip;
-  container-type: inline-size;
-  pointer-events: none;
-}
-
-.orbit-grain__dot {
-  position: absolute;
-  left: 0;
-  top: 0;
-  border-radius: 50%;
-  opacity: 0;
-  will-change: transform, opacity;
-}
-
-:is(.orbit-flows, .orbit-dust, .cosmos__meteors) {
-  display: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  /* 初期化 helper が小さい装飾群を順に始める。印が無いJS無効時は通常のCSS動作。 */
-  html[data-motion-staged]
-  :is(
-    .cosmos__twinkle,
-    .orbit-spin,
-    .orbit-unspin,
-    .orbit-body,
-    .hole__art,
-    .cosmos__nebula,
-    .brand__word .logo-art
-  ):not([data-motion-ready]) {
-    /* 最初のフレームを保つ。animation:none では開始時に光や天体の大きさが跳ぶ。 */
-    /* biome-ignore lint/complexity/noImportantStyles: 開始済みの印が付くまで初期フレームで待つ */
-    animation-play-state: paused !important;
-  }
-
-  html[data-motion-staged]
-    :is(.orbit-flow, .orbit-flow__tail, .cosmos__meteor, .orbit-grain__dot):not(
-      [data-motion-ready]
-    ) {
-    /* 初めは見せない小さい粒のanimationは、各群の開始時にだけ作る。 */
-    /* biome-ignore lint/complexity/noImportantStyles: 下の通常animationを開始済みの印が付くまで止める */
-    animation: none !important;
-  }
-
-  /* 未開始の星は枠の原点に出さない。準備後は元の可視状態へ戻る。 */
-  html[data-motion-staged] .orbit-flow:not([data-motion-ready]) {
-    visibility: hidden;
-  }
-
-  :is(.orbit-flows, .orbit-dust) {
-    display: inline;
-  }
-
-  .cosmos__meteors {
-    display: block;
-  }
-
-  .cosmos__meteor {
-    animation: orbit-meteor var(--dur) linear var(--delay) infinite;
-  }
-
-  /* SSR が投影した65点の固定 CSS を小さい箱だけに掛ける。区間の steps() は60Hzの格子 */
-  .orbit-flow,
-  .orbit-flow__tail {
-    animation: var(--motion) var(--dur) linear infinite;
-  }
-
-  /*
-    星屑と天体の公転。天体は置き場所ごと回り（orbit-spin）、その中で回転を打ち消す
-    （orbit-unspin）。どちらも読み込んだ時から同じ秒数で回るので、打ち消しはずれない
-  */
-  .orbit-spin {
-    animation: orbit-swirl var(--dur) linear infinite;
-  }
-
-  .orbit-unspin {
-    animation: orbit-unswirl var(--dur) linear infinite;
-  }
-
-  /*
-    星屑は1周を --ticks 回に刻んで進める（1秒に10回。ゆっくりした公転）。進まない
-    あいだは星屑の層を描き直さない（「入口の軌道図」の .system__stardust）
-  */
-  .stardust .orbit-spin {
-    animation-timing-function: steps(var(--ticks));
-  }
-
-  /*
-    天体も1周を --ticks 回に刻んで進める（BODY_TICK ごと。回転と打ち消しは同じ刻みなので、
-    どの瞬間も打ち消し合う）。大きさの揺れは段の linear()（部品の stairs）
-  */
-  .orbit-bodies :is(.orbit-spin, .orbit-unspin) {
-    animation-timing-function: steps(var(--ticks));
-  }
-
-  /*
-    天体の大きさの揺れ。出だしの向きのぶんだけ先から始める（--delay）。linear() を知らない
-    ブラウザでは、この宣言ごと読めない（var() で入れた値が読めない宣言は、無いのと同じ）——
-    大きさは止まった姿のまま回る
-  */
-  .orbit-body {
-    animation: orbit-sway var(--dur) var(--sway) var(--delay) infinite;
-  }
-
-  .orbit-grain__dot {
-    animation: var(--motion) var(--dur) linear var(--delay) infinite;
-  }
-
-  .hole > .hole__art {
-    animation: orbit-breathe var(--breathe-dur) steps(var(--breathe-ticks)) infinite alternate;
-  }
-
-  /* 星雲は完成形の背景の箱ごと漂う。入口も締めも同じ動き。 */
-  .cosmos__nebula {
-    animation: orbit-drift var(--drift-dur) steps(var(--drift-ticks)) infinite alternate;
-  }
-
-  /*
-    星の瞬きも刻んで変える（明暗の片道を --ticks 回に。orbits.ts の cosmosMap が周期と遅れを
-    TICK の格子に乗せる）。静止星とは分けた小さい HTML の円の opacity だけを変える
-  */
-  .cosmos__twinkle {
-    animation: orbit-twinkle var(--dur) steps(var(--ticks)) var(--delay) infinite;
-  }
-}
-
-/*
-  件数の数え上げ。値の字（07）はページにそのまま置き、数え上げは ::after の
-  counter() が上に重なるだけ——止まった姿は字そのもので、読み上げも Ctrl-F も
-  字を読む。数えるあいだだけ、字を透明にして ::after を見せる。
-  --n は @property で整数として登録する（登録しないと途中の値を持てず、跳ぶ）。
-*/
-@property --n {
-  syntax: '<integer>';
-  inherits: false;
-  initial-value: 0;
-}
-
-@keyframes orbit-count {
-  from {
-    --n: 0;
-  }
-}
-
-@keyframes orbit-count-cover {
-  from,
-  to {
-    color: transparent;
-  }
-}
-
-@keyframes orbit-count-show {
-  from,
-  to {
-    opacity: 1;
-  }
-}
-
-.tally__num {
-  position: relative;
-  --n: var(--to);
-  counter-reset: n var(--n);
-  animation:
-    orbit-count var(--count-dur) var(--ease) var(--count-delay) backwards,
-    orbit-count-cover var(--count-dur) linear var(--count-delay) backwards;
-}
-
-/*
-  数え上げの字。代わりの字を空にして読み上げに流さない——流すと、dd の字と合わせて
-  「07 07」と2度読まれる（opacity: 0 は読み上げの木から外さない）。代わりの字は
-  書けるブラウザにだけ渡す（区切りの字の .eyebrow と同じ）
-*/
-.tally__num::after {
-  content: counter(n, decimal-leading-zero);
-  position: absolute;
-  inset: 0;
-  color: var(--ink);
-  opacity: 0;
-  animation: orbit-count-show var(--count-dur) linear var(--count-delay) backwards;
-}
-
-@supports (content: '' / '') {
-  .tally__num::after {
-    content: counter(n, decimal-leading-zero) / '';
-  }
 }
 
 /* --- 句読点と折り返し --- */
@@ -2054,396 +901,6 @@ body[data-site] > main {
   font-size: var(--fs-display);
 }
 
-/* Keep the profile ornament compact before About on narrow screens. Wide screens
-   separate the artwork and profile text into two columns. */
-.hero--profile {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: center;
-  gap: var(--sp-5);
-}
-
-.profile-cover__copy {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-5);
-  min-width: 0;
-}
-
-.hero--profile > .celestial--art {
-  width: min(100%, var(--celestial-profile-w));
-  justify-self: center;
-}
-
-/* A member's colour belongs to the sky and body, while links and buttons stay white. */
-.hero[data-accent] > :is(.hero__copy, .profile-cover__copy),
-.orbital[data-accent] > .contact {
-  --accent: var(--mono);
-}
-
-/* --- Member celestial bodies (cached transparent artwork; CSS motion only) --- */
-.celestial {
-  --celestial-tone: var(--accent);
-  position: relative;
-  flex-shrink: 0;
-  pointer-events: none;
-}
-
-.celestial[data-celestial-accent='mono'] {
-  --celestial-tone: var(--mono);
-}
-
-.celestial[data-celestial-accent='iris'] {
-  --celestial-tone: var(--iris);
-}
-
-.celestial[data-celestial-accent='violet'] {
-  --celestial-tone: var(--violet);
-}
-
-.celestial[data-celestial-accent='ember'] {
-  --celestial-tone: var(--ember);
-}
-
-.celestial[data-celestial-accent='mint'] {
-  --celestial-tone: var(--mint);
-}
-
-.celestial[data-celestial-accent='sky'] {
-  --celestial-tone: var(--sky);
-}
-
-.celestial[data-celestial-accent='rose'] {
-  --celestial-tone: var(--rose);
-}
-
-.celestial--art {
-  width: 100%;
-  aspect-ratio: 360 / 300;
-  isolation: isolate;
-}
-
-.celestial--art svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-.celestial__guide {
-  position: absolute;
-  inset: 0;
-  fill: var(--ink-weak);
-  stroke: var(--line-strong);
-  stroke-width: 0.7;
-}
-
-.celestial__guide ellipse {
-  fill: none;
-}
-
-.celestial__halo {
-  position: absolute;
-  inset: 8%;
-  border-radius: 50%;
-  background: radial-gradient(
-    ellipse,
-    color-mix(in srgb, var(--celestial-tone) 12%, transparent),
-    transparent 68%
-  );
-}
-
-/* Each image reserves the same stage before decoding; its transparent padding
-   preserves soft light without a rectangle over the underlying sky. */
-.celestial__image {
-  position: absolute;
-  inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.celestial__black-hole {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-}
-
-.celestial__black-hole::before {
-  content: '';
-  position: absolute;
-  width: var(--celestial-hole-shadow);
-  aspect-ratio: 1;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: var(--hole-core);
-}
-
-.celestial__black-hole img {
-  position: relative;
-  width: 100%;
-  height: auto;
-}
-
-/* The disk and its luminance mask stay still. A narrow light travels through
-   the existing bright texture; black pixels and the silhouette never move. */
-.blackhole-flow {
-  display: none;
-  position: absolute;
-  left: 0;
-  top: 50%;
-  width: 100%;
-  translate: 0 -50%;
-  mask-image: var(--celestial-flow-mask);
-  pointer-events: none;
-}
-
-.blackhole-flow__texture {
-  position: absolute;
-  inset: 0;
-  mask-image: var(--blackhole-flow-art);
-  mask-mode: luminance;
-  mask-size: 100% 100%;
-  mask-repeat: no-repeat;
-  overflow: hidden;
-}
-
-.blackhole-flow__beam {
-  position: absolute;
-  inset-block: 0;
-  left: 0;
-  display: block;
-  width: var(--celestial-flow-beam-w);
-  background: var(--celestial-flow-beam);
-  opacity: 0;
-}
-
-/* The sun's opaque surface stays fixed; only a masked rim can expand. */
-.celestial__corona {
-  display: none;
-  position: absolute;
-  inset: 0;
-  mask-image: var(--celestial-corona-mask);
-  opacity: var(--celestial-corona-light);
-}
-
-.celestial__corona-image {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-/* Fixed keyframe values avoid style recalculation of per-frame custom properties.
-   Percent travel scales down naturally with the phone and orbital-center stages. */
-@keyframes celestial-float {
-  0%,
-  50%,
-  100% {
-    transform: translate(0, 0);
-  }
-  12.5%,
-  37.5% {
-    transform: translate(0.24%, -1.26%);
-  }
-  25% {
-    transform: translate(0.36%, -1.8%);
-  }
-  62.5%,
-  87.5% {
-    transform: translate(-0.24%, 1.26%);
-  }
-  75% {
-    transform: translate(-0.36%, 1.8%);
-  }
-}
-
-@keyframes celestial-drift {
-  0%,
-  50%,
-  100% {
-    transform: translate(0, 0);
-  }
-  12.5%,
-  37.5% {
-    transform: translate(-0.38%, -1.54%);
-  }
-  25% {
-    transform: translate(-0.55%, -2.2%);
-  }
-  62.5%,
-  87.5% {
-    transform: translate(0.38%, 1.54%);
-  }
-  75% {
-    transform: translate(0.55%, 2.2%);
-  }
-}
-
-@keyframes celestial-rock {
-  0%,
-  50%,
-  100% {
-    transform: translate(0, 0) rotate(0deg);
-  }
-  12.5%,
-  37.5% {
-    transform: translate(0.22%, -1.12%) rotate(-0.53deg);
-  }
-  25% {
-    transform: translate(0.32%, -1.6%) rotate(-0.75deg);
-  }
-  62.5%,
-  87.5% {
-    transform: translate(-0.22%, 1.12%) rotate(0.53deg);
-  }
-  75% {
-    transform: translate(-0.32%, 1.6%) rotate(0.75deg);
-  }
-}
-
-@keyframes celestial-radiance {
-  from {
-    transform: scale(1);
-    opacity: 0.5;
-  }
-  to {
-    transform: scale(1.065);
-    opacity: 1;
-  }
-}
-
-@keyframes celestial-breathe {
-  from {
-    opacity: 0.82;
-  }
-}
-
-/* 小さい O では輪郭を読める濃さで保ち、光と大きさだけを穏やかに変える。 */
-@keyframes wordmark-radiance {
-  from {
-    transform: scale(1);
-    opacity: 0.82;
-  }
-  to {
-    transform: scale(1.04);
-    opacity: 1;
-  }
-}
-
-@keyframes celestial-flow {
-  0% {
-    transform: translateX(-100%);
-    opacity: 0;
-  }
-  25% {
-    transform: translateX(12.5%);
-    opacity: 0.2;
-  }
-  50% {
-    transform: translateX(125%);
-    opacity: 0.28;
-  }
-  75% {
-    transform: translateX(237.5%);
-    opacity: 0.2;
-  }
-  100% {
-    transform: translateX(350%);
-    opacity: 0;
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .celestial[data-celestial-body='moon'] > .celestial__image,
-  .brand__word[data-celestial-body='moon'] .logo-art {
-    animation: celestial-float var(--celestial-moon-dur) steps(var(--celestial-moon-ticks)) infinite;
-  }
-  .celestial[data-celestial-body='neptune'] > .celestial__image,
-  .brand__word[data-celestial-body='neptune'] .logo-art {
-    animation: celestial-drift var(--celestial-neptune-dur) steps(var(--celestial-neptune-ticks))
-      infinite;
-  }
-  .celestial[data-celestial-body='saturn'] > .celestial__image,
-  .brand__word[data-celestial-body='saturn'] .logo-art {
-    animation: celestial-rock var(--celestial-saturn-dur) steps(var(--celestial-saturn-ticks))
-      infinite;
-  }
-  .celestial__black-hole > img,
-  .brand__word[data-celestial-body='black-hole'] .logo-art {
-    animation: celestial-breathe var(--celestial-breathe-dur) steps(var(--celestial-breathe-ticks))
-      infinite alternate;
-  }
-  .brand__word[data-celestial-body='sun'] .logo-art {
-    animation: wordmark-radiance var(--celestial-radiance-dur)
-      steps(var(--celestial-radiance-ticks)) infinite alternate;
-  }
-  .blackhole-flow,
-  .celestial__corona {
-    display: block;
-  }
-  .blackhole-flow__beam {
-    animation: celestial-flow var(--celestial-flow-dur) steps(var(--celestial-flow-ticks)) infinite;
-  }
-  .blackhole-flow__beam[data-flow-layer='1'] {
-    animation-delay: var(--celestial-flow-offset);
-  }
-  .celestial__corona-image,
-  .celestial[data-celestial-body='sun'] > .celestial__halo {
-    animation: celestial-radiance var(--celestial-radiance-dur)
-      steps(var(--celestial-radiance-ticks)) infinite alternate;
-  }
-}
-
-/* Unsupported masks keep the original artwork; never show a drifting duplicate. */
-@supports not (mask-image: linear-gradient(#000, #000)) {
-  .blackhole-flow,
-  .celestial__corona {
-    display: none;
-  }
-}
-
-/* Alpha-only masks would light the opaque black center. Keep the original
-   breathing artwork on engines without luminance masking. */
-@supports not (mask-mode: luminance) {
-  .blackhole-flow {
-    display: none;
-  }
-}
-
-.orbit-center {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-}
-
-.orbit-center .celestial__guide {
-  display: none;
-}
-
-.celestial--symbol {
-  display: inline-flex;
-  width: var(--celestial-symbol);
-  height: var(--celestial-symbol);
-  color: var(--celestial-tone);
-  vertical-align: middle;
-}
-
-.celestial--symbol svg {
-  width: 100%;
-  height: 100%;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.2;
-}
-
-.celestial--symbol[data-celestial-body='black-hole'] svg {
-  stroke: none;
-}
-
 /*
   個人ページの頭の名札（components.tsx の Nameplate）。Team のカードと同じ
   並び——顔・名前・肩書きと所在地——で、カードを押した先で同じ顔に着く。
@@ -2465,12 +922,6 @@ body[data-site] > main {
   gap: var(--sp-1);
   min-width: 0;
   text-align: start;
-}
-
-.nameplate__heading {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-3);
 }
 
 .nameplate .nameplate__name {
@@ -2607,8 +1058,10 @@ body[data-site] > main {
   font-size: var(--fs-display-sm);
 }
 
-/* A stacked profile already separates the ornament from About with main's gap.
-   Another chapter margin leaves a small body floating in an empty screen. */
+/*
+  個人ページの頭（名札・大見出し）のすぐ下の章は、上を空けない。頭と章のあいだは本文
+  （main）の間隔がもう空けていて、章の上の1段を足すと、頭と About のあいだだけが広すぎる
+*/
 .hero--profile + section > .head--chapter {
   margin-top: 0;
 }
@@ -2853,7 +1306,7 @@ body[data-site] > main {
 .filters a[aria-current] {
   color: var(--ink);
   text-decoration: underline;
-  text-decoration-thickness: var(--orbit-line);
+  text-decoration-thickness: 1px;
   text-underline-offset: var(--sp-3);
 }
 
@@ -2926,15 +1379,14 @@ body[data-site] > main {
 /* --- 一覧の行 --- */
 
 /*
-  一覧（Projects）は番号付きの行を縦に並べた索引（components.tsx の ItemRow）。
+  一覧（Projects）は行を縦に並べた索引（components.tsx の ItemRow）。
   行と行のあいだに1本の罫線を引き、箱（枠・面・影）には入れない。
 
-  行の中は grid の区画（番号・本文・サムネイル・札・技術・矢印）で組む。
-    600 未満   番号と矢印の下に、本文 → サムネイル → 札 → 技術を縦に積む
-    600 以上   左に番号の列を立て、本文・サムネイル・札・技術をその右に積む
-    900 以上   番号・本文・札・技術・矢印を横に並べ、サムネイルは本文の下
-               （下の「900px 以上」）
-  区画の幅は :root の --entry-*。本文の列が残りを受ける。
+  行の中は grid の区画（札・本文・矢印）で組む。
+    600 未満   札と矢印の下に、本文（題・説明・実績値・技術・行き先）を積む
+    600 以上   左に札の列を立て、本文をその右に、矢印を右端に置く
+  区画の幅は :root の --entry-*。本文の列が残りを受ける。矢印はどの幅でも行の右端の
+  列にあり、本文が折り返しても動かない。
 */
 .entries {
   display: flex;
@@ -2946,25 +1398,12 @@ body[data-site] > main {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
-    'index go'
-    'main main'
-    'thumb thumb'
-    'meta meta'
-    'tags tags';
-  gap: var(--sp-4) var(--sp-6);
+    'meta go'
+    'main main';
+  gap: var(--sp-3) var(--sp-6);
   align-items: start;
   padding-block: var(--sp-6);
   border-bottom: 1px solid var(--line);
-}
-
-/* 番号（01・02 …）。公開中の全件の並びでの番号（絞り込んでも同じ）で、飾りなので読み上げには流さない */
-.entry__index {
-  grid-area: index;
-  color: var(--ink-weak);
-  font-family: var(--font-mono);
-  font-size: var(--fs-label);
-  letter-spacing: 0.14em;
-  line-height: var(--entry-title-lh);
 }
 
 .entry__main {
@@ -3044,7 +1483,7 @@ body[data-site] > main {
 .entry__link {
   text-decoration-line: underline;
   text-decoration-color: transparent;
-  text-decoration-thickness: var(--orbit-line);
+  text-decoration-thickness: 1px;
   text-underline-offset: var(--sp-2);
   transition: text-decoration-color var(--dur) var(--ease);
 }
@@ -3067,26 +1506,23 @@ body[data-site] > main {
 }
 
 /*
-  札（プラットフォームか業界・区分・年・担当）。600 未満は1行に並べ、600 以上は
-  区画の中で縦に積む。英字だけの札（macOS）は等幅の小さな大文字、和文の札
-  （金融系基幹システム・個人開発）は本文の書体で和文の最小の段。年は和文を含む
-  書き方（「2024 — 現在」）なので等幅にせず、数字の幅だけそろえる。
+  札（区分・プラットフォームか業界・年・担当）。600 未満は1行に並べ、600 以上は
+  区画の中で縦に積む。書体は本文のまま（英字だけの札を等幅の大文字にしていたころは、
+  和文の札と並ぶと別の書体の行が混ざって見えた）。先頭の区分だけ字を上げる。
+  年は和文を含む書き方（「2024 — 現在」）なので、数字の幅だけそろえる。
 */
 .entry__meta {
   grid-area: meta;
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-1) var(--sp-4);
-  color: var(--ink-mid);
-  font-size: var(--fs-meta);
-  line-height: 1.9;
+  color: var(--ink-weak);
+  font-size: var(--fs-sm);
+  line-height: var(--entry-title-lh);
 }
 
-.entry__meta li:lang(en) {
-  font-family: var(--font-mono);
-  font-size: var(--fs-label);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+.entry__meta li:first-child {
+  color: var(--ink);
 }
 
 .entry__year {
@@ -3104,42 +1540,6 @@ body[data-site] > main {
   color: var(--ink-mid);
   text-decoration: underline;
   text-underline-offset: var(--sp-1);
-}
-
-/*
-  サムネイル（画像のある作品だけ）。どの幅でも出す——一覧は1ページに縦に並ぶので、
-  画像のぶん行が伸びても次の行は送れば見える。画像は一覧の中で作品を見分ける
-  手がかりで、以前（1画面に収めていたころ）は電話で畳んでいた——畳んだ電話では、
-  一覧のどこにも作品の絵が無かった。
-
-  縦横比は :root の --thumb-ratio で固定し、絵は切らずに枠へ収める（contain）。
-  画面のスクリーンショット（16:10）は枠いっぱいに、ほかの比の絵は面（--surface）の
-  余白を残して収まる。切り抜くと、画面の部品や字が枠の縁で途中から切れる。
-
-  画像の無い行は、この区画に何も置かない（components.tsx の ItemRow）。
-
-  min-height: 0 は必須。縦横比を持つ箱は、既定（auto）の最小の高さが「中身の
-  高さ」になる。読み込んだ絵が自分の寸法で箱を押し広げ、縦横比が黙って外れる。
-*/
-.entry__thumb {
-  grid-area: thumb;
-  display: block;
-  width: min(100%, var(--entry-thumb));
-  aspect-ratio: var(--thumb-ratio);
-  min-height: 0;
-  background: var(--surface);
-  overflow: clip;
-}
-
-.entry__thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-/* 技術（components.tsx の Tags）。区画に名前を付けて置き場所を決める */
-.entry > .tags {
-  grid-area: tags;
 }
 
 /* 矢印。押せる行（題にリンクのある行）にだけ出る。飾りなので読み上げには流さない */
@@ -3167,19 +1567,15 @@ body[data-site] > main {
 }
 
 /*
-  タグは打ち込んだ札。英字だけのもの（Swift・C#）にだけ lang="en" が付き
-  （components.tsx の Tags）、等幅になる。「生成AI」のような和文のタグは
-  本文の書体のまま。大きさはどちらも和文の最小の段にそろえる——同じ行の札が
-  1枚ごとに違う大きさだと、並びが波打つ。
+  タグは打ち込んだ札。英字も和文も本文の書体のまま、同じ段にそろえる——同じ行の札が
+  1枚ごとに違う書体や大きさだと、並びが波打つ。札は面も枠も持たない字（丸い形は
+  押せるものの印なので、押せない札には使わない）。札の中では折らない（「Core Audio」を
+  「Core／Audio」に割らない）。
 */
 .tags li {
   color: var(--ink-weak);
-  font-size: var(--fs-meta);
-}
-
-.tags li:lang(en) {
-  font-family: var(--font-mono);
-  letter-spacing: 0.04em;
+  font-size: var(--fs-sm);
+  white-space: nowrap;
 }
 
 .tags li::before {
@@ -3246,29 +1642,51 @@ body[data-site] > main {
   content: '→';
 }
 
+/*
+  実績値（components.tsx の Metric と、「数字」ブロックの Numbers）。値・単位・添えの1行で、
+  値は本文の書体の数字（幅をそろえる）。等幅の書体にしていたころは、和文の単位と添えの
+  隣で数字だけが別の書体に見えた。
+*/
 .metric {
   display: flex;
   align-items: baseline;
-  gap: var(--sp-3);
+  gap: var(--sp-2) var(--sp-3);
   flex-wrap: wrap;
 }
 
 .metric__value {
-  color: var(--accent);
+  color: var(--ink);
   font-size: var(--fs-display-xs);
   font-weight: 600;
-  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   line-height: 1.2;
 }
 
 .metric__unit {
-  color: var(--accent);
+  color: var(--ink-mid);
   font-size: var(--fs-sm);
 }
 
 .metric__note {
   color: var(--ink-weak);
-  font-size: var(--fs-meta);
+  font-size: var(--fs-sm);
+}
+
+/*
+  作品のページの実績値は1枚の面に載せる（このサイトの公開ページで面を持つのはここだけ）。
+  一覧の行では1行の字のまま——行を開いた作品のページで、その作品の成果がいちばん先に
+  目に入るように。値は1段大きく
+*/
+.detail__text > .metric {
+  justify-self: start;
+  padding: var(--sp-5) var(--sp-6);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.detail__text > .metric .metric__value {
+  font-size: var(--fs-display-sm);
 }
 
 /* --- Team --- */
@@ -3466,19 +1884,32 @@ body[data-site] > main {
   font-size: var(--fs-meta);
 }
 
+/*
+  技術の項目。枠も面も持たない字の並びで、区切りの点は一覧の行のタグ（.tags）と同じく
+  項目の左の外へ吊るし、並びの左端で切る（折り返した行を点から始めない）。丸い形と枠は
+  押せるものの印なので、押せない項目には付けない。項目の中では折らない
+  （「SQL Server」を「SQL／Server」に割らない）
+*/
 .skill-list {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--sp-2);
+  gap: var(--sp-1) var(--sp-4);
+  overflow-x: clip;
 }
 
 .skill-list li {
-  display: inline-flex;
-  align-items: baseline;
-  padding: var(--sp-1) var(--sp-3);
-  border: 1px solid var(--line);
-  font-size: var(--fs-sm);
   color: var(--ink-mid);
+  font-size: var(--fs-md);
+  white-space: nowrap;
+}
+
+.skill-list li::before {
+  content: '·';
+  display: inline-block;
+  width: var(--sp-4);
+  margin-inline-start: calc(var(--sp-4) * -1);
+  color: var(--ink-weak);
+  text-align: center;
 }
 
 .career li {
@@ -3692,23 +2123,15 @@ body[data-site] > main {
 /* --- Contact --- */
 
 /*
-  サイトの並びの最後のページ（components.tsx の Contact）。入口と対になる締めで、
-  入口と同じ星系の軌道図（.orbits）を上に、誘いの1文とメールと GitHub の手を
-  その下に置く。字は表紙（--cover-h。「ページの外枠」）の底に寄せる（図と字の
-  あいだの余りは 1fr の行が受ける）。箱（枠・面・影）には入れない。
+  サイトの並びの最後のページ（components.tsx の Contact）。見出し（Contact）の下に、
+  誘いの1文とメールと GitHub の手を縦に積む。ほかのページと同じ節で、見出しの錨を
+  持つ（「ページの外枠」）。箱（枠・面・影）には入れない。
 */
-.orbital {
-  grid-template-rows: auto 1fr;
-  gap: var(--sp-7);
-}
-
-/* 字は 900 未満では残りの高さの真ん中に、900 以上では表紙の底に寄せる */
 .contact {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--sp-5);
-  align-self: center;
+  gap: var(--sp-6);
   min-width: 0;
 }
 
@@ -3757,26 +2180,19 @@ body[data-site] > main {
 
 .contact__go {
   color: var(--ink-mid);
-  font-size: var(--fs-meta);
+  font-size: var(--fs-sm);
 }
 
-/* GitHub。目次の英字の行き先と同じ、等幅の小さな大文字（英字だけの札） */
+/* GitHub。外へ出る脇の道なので、本文の書体の小さな字の手（目次の行き先と同じ段） */
 .contact__sub {
   display: inline-flex;
   align-items: center;
   min-height: var(--tap);
   color: var(--ink-mid);
-  font-size: var(--fs-meta);
+  font-size: var(--fs-md);
   transition:
     color var(--dur-fast) var(--ease),
     scale var(--dur-spring) var(--ease-spring);
-}
-
-.contact__sub :lang(en) {
-  font-family: var(--font-mono);
-  font-size: var(--fs-label);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
 }
 
 .empty {
@@ -3848,18 +2264,23 @@ body[data-site] > main {
   }
 
   /* 押し手は列いっぱいに伸ばさず、字の幅に戻す（600 未満で伸ばす理由は素の .cta に） */
-  .cta {
-    align-self: flex-start;
+  .hero__actions > .cta {
+    flex: none;
   }
 
-  /* 一覧の行: 左に番号の列を立て、本文・サムネイル・札・技術をその右に積む */
+  /*
+    一覧の行: 左に札の列を立て、本文をその右に、矢印を右端に置く。札は区画の中で縦に積む。
+    区画の幅は行をまたいで同じなので、札と本文の縦の線が一覧の上から下までそろう
+  */
   .entry {
-    grid-template-columns: var(--entry-index) minmax(0, 1fr) auto;
-    grid-template-areas:
-      'index main go'
-      '. thumb .'
-      '. meta .'
-      '. tags .';
+    grid-template-columns: var(--entry-meta) minmax(0, 1fr) var(--entry-go);
+    grid-template-areas: 'meta main go';
+    column-gap: var(--sp-7);
+  }
+
+  .entry__meta {
+    flex-direction: column;
+    gap: 0;
   }
 
   .team-grid {
@@ -3878,97 +2299,6 @@ body[data-site] > main {
 /* ============================================================ 900px 以上 */
 
 @media (min-width: 900px) {
-  .hero--profile {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
-    gap: var(--gutter);
-  }
-
-  .hero--profile > .celestial--art {
-    width: min(100%, var(--celestial-w));
-  }
-
-  .hero--profile + section > .head--chapter {
-    margin-top: var(--sp-7);
-  }
-
-  /*
-    入口は2列。左に見出しの列、右に作品の軌道図、底に件数の帯（2列にまたがる）。
-    見出しの列と軌道図は、表紙の残りの高さの縦の真ん中に座る。
-  */
-  .hero--orbit {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-rows: 1fr auto;
-    grid-template-areas: 'copy map' 'tally tally';
-    column-gap: calc(var(--sp-7) * 1.5);
-  }
-
-  .hero--orbit > :is(.hero__copy, .system) {
-    align-self: center;
-  }
-
-  /*
-    字の暗がり（「入口の軌道図」）。入口の見出しの列と締めの字の塊（下の .orbital > .contact）は
-    中身の幅に縮める——列いっぱいのままだと、短い字の右に空いた所（入口では図の左の端まで）の
-    星雲を消す。字の折り返しは変わらない（列より長い塊があれば、列の幅で止まる）。
-
-    暗がりは縦と横の坂の覆いを重ねる（角は2つの坂の積で丸まる）。左は --veil、右は
-    --veil-side（:root）。右へ広げたぶんが画面の外へ出ても、本文が横に切る（「骨格」）
-  */
-  .hero--orbit > .hero__copy {
-    justify-self: start;
-  }
-
-  .hero--orbit > .hero__copy::before,
-  .orbital > .contact::before {
-    inset: calc(-1 * var(--veil)) calc(-1 * var(--veil-side)) calc(-1 * var(--veil))
-      calc(-1 * var(--veil));
-    mask-image: var(--veil-y), var(--veil-x);
-    mask-composite: intersect;
-  }
-
-  /*
-    入口の星空の図（--cosmos-fig-w）は右の列で、焦点（--cosmos-x / -y）は横がその真ん中、縦は
-    件数の帯と行の間（約 112px）を除いた残りの真ん中から、図の中の焦点の高さ（--cosmos-focus）
-    だけずらした所。星雲は左の字の列の上と下まで広がり、字の後ろは字の暗がりが消す
-  */
-  .cosmos--hero {
-    --cosmos-fig-w: calc((min(100vw - 2 * var(--gutter), var(--w-page)) - var(--sp-7) * 1.5) / 2);
-    --cosmos-x: calc(50% + var(--sp-7) * 0.75 + var(--cosmos-fig-w) / 2);
-    --cosmos-y: calc(
-      var(--page-pad) +
-      (100% - 2 * var(--page-pad) - 112px) /
-      2 +
-      (var(--cosmos-focus) - 0.5) *
-      var(--cosmos-fig)
-    );
-  }
-
-  /*
-    一覧の行: 番号・本文・札・技術・矢印を横に並べ、サムネイルは本文の下に置く。
-    本文の列が残りを受け、札は区画の中で縦に積む。区画の幅は行をまたいで同じ
-    なので、札と技術の縦の線が一覧の上から下までそろう
-  */
-  .entry {
-    grid-template-columns:
-      var(--entry-index) minmax(0, 1fr) var(--entry-meta) var(--entry-tags)
-      var(--entry-go);
-    grid-template-areas:
-      'index main meta tags go'
-      'index thumb meta tags go';
-    grid-template-rows: auto 1fr;
-  }
-
-  .entry__meta {
-    flex-direction: column;
-    gap: 0;
-  }
-
-  /* 締めの字は表紙の底に寄せ、中身の幅に縮める（字の暗がり。上の .hero__copy と同じ） */
-  .orbital > .contact {
-    align-self: end;
-    justify-self: start;
-  }
-
   /*
     作品のページで画像がある作品は、文の列を左・画像を右に並べる。
     画像の枠は行の高さ（＝文の列の高さ）まで伸び、下限は --shot-h。本文が
@@ -4035,72 +2365,40 @@ body[data-site] > main {
 /*
   body だけでなく要素単位でも効かせる。管理画面の見本が、同じ指定で
   そのまま色を出せるようにするため（見本用の色を別に持たない）。
-
-  星雲の3色（--nebula-a / -b / -c）もここで決める。1色目はアクセント、2色目と3色目は相方——
-  どれもパレットの色から選ぶ（色相を回して作ると、エンバーの相方が黄緑になった）。
-  モノクロでも星雲だけは青紫と桃と空色（持ち主の「星雲だけ色を付ける」）。
 */
 [data-accent='mono'] {
-  --nebula-art: url('/assets/nebula-iris.webp?v=c5b0f3ae');
   --accent: var(--mono);
   --accent-soft: var(--mono-soft);
-  --nebula-a: var(--iris);
-  --nebula-b: var(--rose);
-  --nebula-c: var(--sky);
 }
 
 [data-accent='iris'] {
-  --nebula-art: url('/assets/nebula-iris.webp?v=c5b0f3ae');
   --accent: var(--iris);
   --accent-soft: var(--iris-soft);
-  --nebula-a: var(--iris);
-  --nebula-b: var(--rose);
-  --nebula-c: var(--sky);
 }
 
 [data-accent='violet'] {
-  --nebula-art: url('/assets/nebula-violet.webp?v=65fc83e2');
   --accent: var(--violet);
   --accent-soft: var(--violet-soft);
-  --nebula-a: var(--violet);
-  --nebula-b: var(--rose);
-  --nebula-c: var(--iris);
 }
 
 [data-accent='ember'] {
-  --nebula-art: url('/assets/nebula-ember.webp?v=33228880');
   --accent: var(--ember);
   --accent-soft: var(--ember-soft);
-  --nebula-a: var(--ember);
-  --nebula-b: var(--rose);
-  --nebula-c: var(--violet);
 }
 
 [data-accent='mint'] {
-  --nebula-art: url('/assets/nebula-mint.webp?v=96d31dea');
   --accent: var(--mint);
   --accent-soft: var(--mint-soft);
-  --nebula-a: var(--mint);
-  --nebula-b: var(--sky);
-  --nebula-c: var(--iris);
 }
 
 [data-accent='sky'] {
-  --nebula-art: url('/assets/nebula-sky.webp?v=f1c8c8b2');
   --accent: var(--sky);
   --accent-soft: var(--sky-soft);
-  --nebula-a: var(--sky);
-  --nebula-b: var(--violet);
-  --nebula-c: var(--mint);
 }
 
 [data-accent='rose'] {
-  --nebula-art: url('/assets/nebula-rose.webp?v=afc4da75');
   --accent: var(--rose);
   --accent-soft: var(--rose-soft);
-  --nebula-a: var(--rose);
-  --nebula-b: var(--violet);
-  --nebula-c: var(--ember);
 }
 
 /* --- 書体。変えるのは見出しだけで、本文は読みやすさを優先して据え置く --- */
@@ -4248,99 +2546,6 @@ body[data-site] > main {
   }
 }
 
-/*
-  はっきり見たいと言われたら、入口の軌道図は消す。
-
-  軌道図は装飾で、forced-colors（Windows のハイコントラスト）では線と点がシステム色に
-  置き換わって、ただの線の束になる。prefers-contrast: more も同じ意図の申告
-  なので、まとめて受ける。消しても失われる情報は無い（作品の名前は「一覧で見る →」の
-  先に全部あり、件数は件数の帯が字で言う）。締めの図（.orbits）も同じ。星空を消すので、
-  字の後ろの暗がり（「入口の軌道図」）も要らない。
-*/
-@media (forced-colors: active), (prefers-contrast: more) {
-  .system,
-  .orbits,
-  .cosmos,
-  .celestial--art,
-  .hero--orbit > .hero__copy::before,
-  .orbital > .contact::before {
-    display: none;
-  }
-
-  /* 図の区画も畳む（下の「表紙を1列に畳む」） */
-  .hero--orbit {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 1fr auto;
-    grid-template-areas: 'copy' 'tally';
-  }
-
-  .orbital {
-    grid-template-rows: 1fr;
-  }
-
-  .hero--profile {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-  }
-}
-
-/*
-  強制色モードでは、ロゴの O を字と同じ色の輪に替える。光は焼いた絵で色を変えられず
-  （明るいテーマでは白い光が地に溶け、影の黒だけが塗りの円で残る）、字の色（強制色の
-  リンクの色）とも揃わないので隠し、影の円を地の色で抜いて縁に線を引く（太さは字の線と
-  同じ。icons.tsx の HoleArt が渡す）。prefers-contrast: more の括りには入れない——強制色
-  でないときの Canvas は灰色の地で、影が灰色の円になる
-*/
-@media (forced-colors: active) {
-  .logo-art {
-    display: none;
-  }
-
-  .brand__word[data-celestial-body] .logo-art {
-    animation: none;
-  }
-
-  .logo-core {
-    fill: Canvas;
-    stroke: currentColor;
-  }
-
-  .wordmark__fallback {
-    display: inline;
-  }
-}
-
-/*
-  背の低い窓でも消す。
-
-  400px を切ると、貼り付いた帯を除いた表紙が軌道図を絵として置けるほど高くならず
-  （320x256 では表紙の残りが 100px 足らず）、図が見出しを画面の外へ押し出す。
-  拡大 200% の人が最初に当たる寸法なので、装飾より本文を通す。
-*/
-@media (max-height: 400px) {
-  .system,
-  .orbits,
-  .cosmos,
-  .hero--orbit > .hero__copy::before,
-  .orbital > .contact::before {
-    display: none;
-  }
-
-  /*
-    表紙を1列に畳む。図を消しただけだと区画が残り、900 以上の入口は右半分が空き、
-    締めは字が図の行（auto）へ繰り上がって表紙の上に寄る
-  */
-  .hero--orbit {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 1fr auto;
-    grid-template-areas: 'copy' 'tally';
-  }
-
-  .orbital {
-    grid-template-rows: 1fr;
-  }
-}
-
 /* ====================================================== ページの切り替え */
 
 /*
@@ -4390,15 +2595,15 @@ body[data-site] > main {
   以前は「1画面に1つぶんだけを収め、ページはスクロールさせない」を不変条件にして
   いた。持ち主が実際に触って、節を画面ごとに割って底の左右の手でしかめくれないのは
   面倒すぎる、と判断してやめた（CLAUDE.md の「公開ページは縦に読む」）。この節は
-  その外枠の跡地で、残したのは3つだけ——表紙（入口と締め）を1画面ぶんの高さに
-  敷くこと、節の見出しを上に揃えること、上の帯を貼り付けること。
+  その外枠の跡地で、残したのは3つだけ——足元を画面の底に置くこと、節の見出しを
+  上に揃えること、上の帯を貼り付けること。
 
-  @media screen で括るのは、紙には貼り付ける帯も1画面ぶんの表紙も要らないため
+  @media screen で括るのは、紙には貼り付ける帯も画面の底の足元も要らないため
   （紙の上の姿は末尾の @media print）。幅のメディアクエリ（600 / 900）とは別物。
 
   当てる相手は公開ページだけ（body[data-site]。管理画面と 404 には付かない）。
   [data-whole] が付くのは全体ページ（/all）で、あちらは節を縦に積んだ1本の文書
-  なので、表紙も帯の貼り付けも持たない。目印の側は :where() で包んで詳細度を 0 に
+  なので、帯の貼り付けを持たない。目印の側は :where() で包んで詳細度を 0 に
   してある。
 
   この節はファイルの末尾近くに置く。骨格（.top / main）と部品の素の指定を
@@ -4429,8 +2634,8 @@ body[data-site] > main {
   }
 
   /*
-    上の帯を貼り付ける。重なりは z-index: 2——入口の軌道図の字（z-index: 1）と、
-    作品の行の中のリンク（覆いの上に出す z-index: 1）より上。地（--bg）は素の
+    上の帯を貼り付ける。重なりは z-index: 2——作品の行の中のリンク（覆いの上に出す
+    z-index: 1）より上。地（--bg）は素の
     .top が敷いている。全体ページでは貼り付けない（節を縦に積んだ1本の文書で、
     目次はページの中の行き先。帯は頭にあれば足りる）。
   */
@@ -4472,15 +2677,6 @@ body[data-site] > main {
     align-content: safe start;
   }
 
-  /*
-    表紙（入口の Hero と締めの Contact）は、帯と本文の余白を除いた画面の残り
-    いっぱい（--cover-h）を下限に持つ。表紙の下端が画面の下端に来て、足元は
-    次の画面に回る。全体ページには表紙が無い（節の並びのまま）。
-  */
-  :where(body[data-site]:not([data-whole])) main > :is(.hero--orbit, .orbital) {
-    min-height: var(--cover-h);
-  }
-
   @media (max-width: 899px) {
     /*
       絞り込みも目次と同じ、1行の横に送る帯にする。折り返すと2段で場所を取る。
@@ -4513,236 +2709,6 @@ body[data-site] > main {
   }
 }
 
-/* Astra Minimal cover: one quiet image per celestial body, with content and
-   navigation set in the site's shared type scale and spacing. */
-.hero--orbit:has(> .astra-art),
-.orbital:has(> .astra-art) {
-  position: relative;
-  isolation: isolate;
-}
-
-.astra-art {
-  --cover-opacity: var(--cover-home-opacity);
-  display: block;
-  width: 100%;
-  height: auto;
-  pointer-events: none;
-  user-select: none;
-  opacity: var(--cover-opacity);
-  transform-origin: 68% 50%;
-}
-
-/* Move only the decorative image. Independent transform properties preserve
-   the desktop anchor. A small inset keeps the tilted image inside its own area
-   without clipping Contact's text veil or the surrounding starfield. */
-@keyframes cover-drift {
-  0%,
-  100% {
-    translate: 0 0;
-    rotate: 0deg;
-    scale: var(--cover-rest-scale);
-  }
-  50% {
-    translate: 0 var(--cover-lift);
-    rotate: var(--cover-turn);
-    scale: var(--cover-zoom);
-  }
-}
-
-@keyframes cover-light {
-  0%,
-  100% {
-    opacity: var(--cover-opacity);
-  }
-  50% {
-    opacity: calc(var(--cover-opacity) * var(--cover-dim));
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .astra-art {
-    animation:
-      cover-drift var(--cover-drift-dur) ease-in-out infinite,
-      cover-light var(--cover-light-dur) ease-in-out infinite;
-  }
-}
-
-.hero--orbit:has(> .astra-art) {
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto auto;
-  grid-template-areas: 'copy' 'art' 'tally';
-  align-content: start;
-  row-gap: var(--sp-7);
-}
-
-.hero--orbit:has(> .astra-art) > .astra-art {
-  grid-area: art;
-  width: 100%;
-  height: clamp(280px, 82vw, 460px);
-  object-fit: cover;
-  /* Generated covers have subtly different near-black edges. Fade the canvas
-     itself so it reads as one sky rather than a rectangular image panel. */
-  mask-image:
-    linear-gradient(to right, transparent, #000 16%, #000 88%, transparent),
-    linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
-  mask-composite: intersect;
-}
-
-.hero--orbit:has(> .astra-art) > .hero__copy {
-  z-index: 1;
-  gap: var(--sp-6);
-}
-
-/* This cover is fully composed at first paint. A staggered text reveal makes
-   the otherwise static artwork look like an empty page while it is decoding. */
-.hero--orbit:has(> .astra-art) :is(.hero__copy > *, .tally__cell, h1 .phrase) {
-  animation: none;
-}
-
-.hero--orbit:has(> .astra-art) > .system,
-.orbital:has(> .astra-art) > .orbits,
-:is(.hero--orbit, .orbital):has(> .astra-art) .cosmos__nebula {
-  display: none;
-}
-
-:is(.hero--orbit, .orbital):has(> .astra-art) > .cosmos {
-  opacity: 0.35;
-}
-
-/* Contact's existing text veil must remain: Linux font rasterization brings the
-   mail action close to the 4.5:1 contrast floor where the image overlaps it. */
-.hero--orbit:has(> .astra-art) > .hero__copy::before {
-  display: none;
-}
-
-.hero--orbit:has(> .astra-art) .cta {
-  min-height: var(--tap);
-  align-self: flex-start;
-  margin-top: var(--sp-3);
-  padding: 0 0 var(--sp-2);
-  border-bottom: 1px solid var(--ink);
-  background: transparent;
-  color: var(--ink);
-  font-weight: 500;
-}
-
-.hero--orbit:has(> .astra-art) .tally {
-  position: relative;
-  z-index: 1;
-  max-width: 640px;
-}
-
-.hero--orbit:has(> .astra-art) .tally__num,
-.hero--orbit:has(> .astra-art) .tally__num::after {
-  animation: none;
-}
-
-.orbital:has(> .astra-art) {
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto auto;
-  grid-template-areas: 'title' 'content' 'art';
-  align-content: start;
-  gap: var(--sp-7);
-}
-
-.orbital:has(> .astra-art) > .contact__title {
-  grid-area: title;
-  position: relative;
-  z-index: 1;
-  font-family: var(--font-display);
-  font-size: var(--fs-display-xl);
-  font-weight: 500;
-  line-height: 1.2;
-}
-
-.orbital:has(> .astra-art) > .contact {
-  grid-area: content;
-  z-index: 1;
-  align-self: start;
-  gap: var(--sp-6);
-}
-
-.orbital:has(> .astra-art) > .astra-art {
-  grid-area: art;
-  width: 100%;
-  height: clamp(280px, 82vw, 460px);
-  object-fit: cover;
-  object-position: right center;
-  --cover-opacity: var(--cover-contact-opacity);
-  mask-image: radial-gradient(ellipse 60% 73% at 42% 50%, #000 45%, transparent 100%);
-}
-
-.orbital:has(> .astra-art) .contact__mail {
-  gap: var(--sp-5);
-  border-color: var(--ink);
-}
-
-.orbital:has(> .astra-art) .contact__go {
-  font-size: var(--fs-md);
-}
-
-.orbital:has(> .astra-art) .contact__sub {
-  border-bottom: 1px solid var(--ink-mid);
-}
-
-@media (min-width: 900px) {
-  .hero--orbit:has(> .astra-art) {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 1fr auto;
-    grid-template-areas: 'copy' 'tally';
-  }
-
-  .hero--orbit:has(> .astra-art) > .hero__copy {
-    width: min(52%, 680px);
-    align-self: center;
-  }
-
-  .hero--orbit:has(> .astra-art) > .astra-art {
-    position: absolute;
-    top: 48%;
-    right: 0;
-    width: min(74vw, 1000px);
-    height: auto;
-    object-fit: contain;
-    transform: translateY(-50%);
-  }
-
-  .orbital:has(> .astra-art) {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 1fr auto;
-    grid-template-areas: 'title' 'content';
-  }
-
-  .orbital:has(> .astra-art) > .contact__title {
-    align-self: end;
-    max-width: 52%;
-  }
-
-  .orbital:has(> .astra-art) > .contact {
-    align-self: start;
-    justify-self: start;
-    max-width: 52%;
-    margin-bottom: clamp(56px, 10vh, 140px);
-  }
-
-  .orbital:has(> .astra-art) > .astra-art {
-    position: absolute;
-    top: 50%;
-    right: 0;
-    width: min(74vw, 1000px);
-    height: auto;
-    object-fit: contain;
-    --cover-opacity: var(--cover-contact-wide-opacity);
-    transform: translateY(-50%);
-  }
-}
-
-@media (forced-colors: active), (prefers-contrast: more), (max-height: 400px) {
-  .astra-art {
-    display: none;
-  }
-}
-
 @media print {
   /*
     紙は白い地で刷る。画面の黒い地のまま刷ると、白に近い字が白い紙に乗る（地の色は
@@ -4752,8 +2718,6 @@ body[data-site] > main {
     形は夜の地を裏返しただけ: 地は色味の無い白、面は黒をうっすら重ね、線は弱く、
     上辺の光は白。アクセントは同じ色相を暗くして、白い地で字が 4.5:1 に届く所へ
     置く（いちばん低いのはエンバーで 5.21:1）。モノクロは黒、塗りのボタンの字は白。
-    ロゴの O の影（--hole-core）は紙の色に抜く——光を墨で刷るので、黒のままだと光の
-    輪と影がつながって塗りの円になる。
   */
   :root {
     --bg: #ffffff;
@@ -4765,7 +2729,6 @@ body[data-site] > main {
     --ink: #111114;
     --ink-mid: #4a4a53;
     --ink-weak: #6a6a74;
-    --hole-core: #ffffff;
     --mono: #111114;
     --mono-soft: rgba(17, 17, 20, 0.06);
     --iris: #4c4cd9;
@@ -4788,23 +2751,14 @@ body[data-site] > main {
 
   /*
     紙の上ではリンクは押せない。サイトを通して刷るなら全体ページ（/all）を
-    刷ること。軌道図はインクを食うだけの装飾なので、ここで落とす（入口の軌道図は
-    /all には元から出ないが、入口のページを直接刷られたときのため）。
+    刷ること。押す手（目次・絞り込み・戻る・帯・押し手）は紙では何もしないので落とす。
   */
   .top,
   .filters,
   .back,
   .skip,
   .band,
-  .cta,
-  .system,
-  .orbits,
-  .cosmos,
-  .astra-art,
-  .celestial--art,
-  .celestial--symbol,
-  .hero--orbit > .hero__copy::before,
-  .orbital > .contact::before {
+  .cta {
     display: none;
   }
 
@@ -4818,9 +2772,5 @@ body[data-site] > main {
 
   .gallery__open {
     display: none;
-  }
-
-  .hero--profile {
-    grid-template-columns: minmax(0, 1fr);
   }
 }

@@ -9,7 +9,6 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core'
 import { BLOCK_KEYS, FIXED_BLOCK_KEYS } from '../blocks'
-import { DEFAULT_CELESTIAL } from '../celestial'
 import { ITEM_KIND_KEYS } from '../domain'
 import { PROVIDER_KEYS } from '../lib/oauth'
 
@@ -48,9 +47,14 @@ export const members = sqliteTable(
     careerText: text('career_text').notNull().default(''),
     // /images/<key>（KV にアップロードしたもの）か /assets/...（同梱）。null なら頭文字
     avatarUrl: text('avatar_url'),
-    // 旧メンバーは同じ天体・サイトの色を維持する。未知のDB値はSSRで正規化する。
-    celestialBody: text('celestial_body').notNull().default(DEFAULT_CELESTIAL.body),
-    celestialAccent: text('celestial_accent').notNull().default(DEFAULT_CELESTIAL.accent),
+    /*
+      もう読まない列（天体と装飾色の選択）。サイトを簡素にしたときに表示も管理画面の欄も外した。
+      列だけ残すのは expand → contract のため——この列を書く前の版のコードへ戻したとき
+      （wrangler rollback）も動くように、次のリリースで ALTER TABLE … DROP COLUMN で落とす
+      （CLAUDE.md「移行」）。既定値は落とす日まで変えない（drizzle-kit が移行を作らないように）
+    */
+    celestialBody: text('celestial_body').notNull().default('black-hole'),
+    celestialAccent: text('celestial_accent').notNull().default('inherit'),
     github: text('github'),
     email: text('email'),
     published: integer('published').notNull().default(0),

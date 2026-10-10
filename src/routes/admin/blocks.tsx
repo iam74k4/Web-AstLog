@@ -23,11 +23,13 @@ import {
   initBlocks,
   listBlocks,
   listPublishedMembers,
+  loadSiteSettings,
   reorderBlocks,
 } from '../../db/queries'
 import * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
 import { bool, str } from '../../lib/format'
+import { hasContact } from '../../site'
 import { BlockBodyFields } from '../../ui/AdminBlockFields'
 import {
   Confirm,
@@ -104,12 +106,13 @@ const blockLabel = (block: schema.Block) =>
   置き換わる（src/routes/public/data.ts の profileOf。行の下にその旨を出す）。
 */
 async function siteCounts(database: Db): Promise<SiteCounts> {
-  const [projects, members] = await Promise.all([
+  const [projects, members, site] = await Promise.all([
     // Projects は個人開発と業務を1つの一覧に並べるので、区分を問わず数える
     countPublishedItems(database),
     listPublishedMembers(database),
+    loadSiteSettings(database),
   ])
-  return { items: projects, members: members.length }
+  return { items: projects, members: members.length, contact: hasContact(site) }
 }
 
 const BlocksPage = (props: {
@@ -229,6 +232,12 @@ const BlocksPage = (props: {
                       <span class="row__sub">
                         公開中が1人のあいだは、その人のプロフィール（目次は Profile）に置き換わる
                       </span>
+                    ) : null}
+                    {/* 連絡の手が無いのに誘うページを作らない（blockShown）。直す場所はサイト設定 */}
+                    {block.type === 'contact' && !props.counts.contact ? (
+                      <a class="row__sub" href="/admin/site">
+                        サイト設定にメールか GitHub を入れるまで出ない →
+                      </a>
                     ) : null}
                   </span>
                   {/* 読み取り専用の知らせ。ここから件数は変えられない */}

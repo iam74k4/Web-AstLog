@@ -3,95 +3,41 @@
   場所の文字色になる。
 */
 
-import { type CelestialMember, normalizeCelestial } from '../celestial'
-import { CELESTIAL_ART } from './celestial-art'
-import { BLACKHOLE_ART, HOLE, holeArt, MARK_VIEWBOX, WORDMARK, wordmarkArt } from './logo'
+import { MARK_TRANSFORM, MARK_VIEWBOX, WORDMARK } from './logo'
 
 /*
-  ロゴの O のブラックホール。入口と締めの軌道図の真ん中と同じ絵（logo.ts の BLACKHOLE_ART）を、
-  影の黒い円（CSS の --hole-core。app.css の .logo-core）の上に、影の半径が HOLE.core になる
-  大きさで置く。絵は外側の光が透過し、中央の黒い影も含む WebP。/assets から読む
-  （入口と同じ1枚。版つきの URL で1年持つので、ページを移っても取り直さない。
-  CSP の img-src 'self' の中）。
-
-  強制色のモードでは絵の色を変えられない（白い光が明るい地に溶ける）ので、app.css が絵を隠して
-  影の円を字の色の輪にする——O の字の形だけは残る。輪の太さは字の線と同じ（stroke-width。
-  ふだんは stroke が無いので引かれない）
+  ワードマーク（ΛSTLOG）。形は logo.ts が正で、字の色を継ぐ（currentColor）。大きさは CSS の
+  高さで決める（幅は viewBox の縦横比から）。読み上げには出さない——名前は置く側が字で持つ
+  （.sr-only の AstLog）
 */
-export const HoleArt = ({ cx, cy }: { cx: number; cy: number }) => {
-  const box = holeArt(cx, cy)
-  return (
-    <>
-      <circle class="logo-core" cx={cx} cy={cy} r={HOLE.core} stroke-width={WORDMARK.stroke} />
-      <image
-        class="logo-art"
-        href={BLACKHOLE_ART.src}
-        x={box.x}
-        y={box.y}
-        width={box.width}
-        height={box.height}
-      />
-    </>
-  )
-}
+export const Wordmark = ({ class: className }: { class: string }) => (
+  <svg
+    class={className}
+    viewBox={WORDMARK.viewBox}
+    fill="currentColor"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path d={WORDMARK.lambda} />
+    <path d={WORDMARK.strokes} fill="none" stroke="currentColor" stroke-width={WORDMARK.stroke} />
+  </svg>
+)
 
 /*
-  ワードマーク（ΛSTLOG。O は選択中の天体、未指定ならブラックホール）。大きさは CSS の高さで決める
-  （幅は viewBox の縦横比から。O の光は字の箱の外へはみ出して見せる——overflow visible）。読み上げには出さない——名前は置く側が字で持つ（.sr-only の AstLog）
-*/
-export const Wordmark = ({
-  class: className,
-  member,
-}: {
-  class: string
-  member?: CelestialMember
-}) => {
-  const { body } = normalizeCelestial(member)
-  return (
-    <svg
-      class={className}
-      data-celestial-body={body}
-      viewBox={WORDMARK.viewBox}
-      fill="currentColor"
-      overflow="visible"
-      aria-hidden="true"
-      focusable="false"
-    >
-      {body === 'black-hole' ? (
-        <HoleArt cx={HOLE.cx} cy={HOLE.cy} />
-      ) : (
-        <>
-          <circle
-            class="logo-core wordmark__fallback"
-            cx={HOLE.cx}
-            cy={HOLE.cy}
-            r={HOLE.core}
-            stroke-width={WORDMARK.stroke}
-          />
-          <image class="logo-art" href={CELESTIAL_ART[body].src} {...wordmarkArt(body)} />
-        </>
-      )}
-      <path d={WORDMARK.lambda} />
-      <path d={WORDMARK.strokes} fill="none" stroke="currentColor" stroke-width={WORDMARK.stroke} />
-    </svg>
-  )
-}
-
-/*
-  印だけ（ワードマークの O を1つで）。404 と管理画面の頭で使う。
+  印だけ（ワードマークの Λ を1つで）。404 と管理画面の頭で使う。
   size は必須——app.css は印に寸法を与える規則を持たないので、渡し忘れると素の
-  300x150 に落ちて版面が崩れる。光の翼の淡い端は枠の外へ出して見せる（logo.ts の MARK_HALF）
+  300x150 に落ちて版面が崩れる
 */
-export const HoleMark = ({ size }: { size: number }) => (
+export const Mark = ({ size }: { size: number }) => (
   <svg
     viewBox={MARK_VIEWBOX}
     width={size}
     height={size}
-    overflow="visible"
+    fill="currentColor"
     aria-hidden="true"
     focusable="false"
   >
-    <HoleArt cx={0} cy={0} />
+    <path d={WORDMARK.lambda} transform={MARK_TRANSFORM} />
   </svg>
 )
 

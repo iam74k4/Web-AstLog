@@ -1,17 +1,17 @@
-# public/ の静的なファイル（CSS・ロゴ・天体の絵・共有カードの画像）のヘッダ。
+# public/ の静的なファイル（CSS・ロゴ・共有カードの画像）のヘッダ。
 # ここは Worker を通らない（wrangler.toml の [assets] が先に配る）ので、
 # src/index.tsx のミドルウェアは届かない。Workers Static Assets がこのファイルを
 # 読んで付け、このファイル自身は配らない。
 #
 # CSP は /images/* と同じ狭い約束。ここにあるのは文書ではなく素材なので、
 # SVG を直に開かれてもスクリプトを走らせず、外のものを読み込ませない。
-# 許すのは data: の画像だけ——ロゴの SVG（ワードマークと favicon）は O の光の絵を
-# data URI で抱えている（ファイルは /assets の絵を読みに行けない。src/ui/logo.ts）。
-# ブラウザによっては、<img> や favicon で使うときもこの CSP が SVG の中に効く。
+# ロゴの SVG（ワードマークと favicon）は輪郭の path だけで、絵も外のものも読まない
+# （src/ui/logo.ts）。ブラウザによっては、<img> や favicon で使うときもこの CSP が
+# SVG の中に効く。
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  Content-Security-Policy: default-src 'none'; img-src data:; sandbox
+  Content-Security-Policy: default-src 'none'; sandbox
 
 # スタイルシートは1年・immutable。HTML が中身から作った版つきの URL（/app.css?v=…）で
 # 読むので、CSS を変えてデプロイすれば URL が変わり、古い写しは二度と引かれない
@@ -27,63 +27,4 @@
   Cache-Control: public, max-age=31536000, immutable
 
 /preview.css
-  Cache-Control: public, max-age=31536000, immutable
-
-# ブラックホールの絵も版つき（/assets/blackhole.webp?v=…。版はファイルの SHA-256 の頭で、
-# src/ui/logo.ts の BLACKHOLE_ART が持つ）。上の帯のロゴの O がどのページでも読むので、
-# 毎回確かめると、ページを移るたびに O の光が1往復ぶん消えてから灯る。
-/assets/blackhole.webp
-  Cache-Control: public, max-age=31536000, immutable
-
-# Home / Contact each use a versioned Astra Minimal cover image.
-/assets/astra-black-hole.webp
-  Cache-Control: public, max-age=31536000, immutable
-
-/assets/astra-nebula-v2.webp
-  Cache-Control: public, max-age=31536000, immutable
-
-/assets/astra-moon.webp
-  Cache-Control: public, max-age=31536000, immutable
-
-/assets/astra-saturn.webp
-  Cache-Control: public, max-age=31536000, immutable
-
-/assets/astra-neptune.webp
-  Cache-Control: public, max-age=31536000, immutable
-
-/assets/astra-sun.webp
-  Cache-Control: public, max-age=31536000, immutable
-
-# メンバーの天体も内容の SHA-256 を版に付けて読む（src/ui/celestial-art.ts）。
-# 同じパスに絵を更新しても、HTML の URL が変わり前の写しは使われない。
-/assets/celestial-sun-v2.webp
-  Cache-Control: public, max-age=31536000, immutable
-
-/assets/celestial-moon-v2.webp
-  Cache-Control: public, max-age=31536000, immutable
-
-/assets/celestial-neptune-v2.webp
-  Cache-Control: public, max-age=31536000, immutable
-
-/assets/celestial-saturn-v2.webp
-  Cache-Control: public, max-age=31536000, immutable
-
-# 星雲の絵は CSS のプリセットが中身の SHA-256 の頭8桁を版として付けて読む。
-# mono と iris は同じ1枚。版の無い素材へ広げず、この6枚だけ長く持たせる。
-/assets/nebula-iris.webp
-  Cache-Control: public, max-age=31536000, immutable
-
-/assets/nebula-violet.webp
-  Cache-Control: public, max-age=31536000, immutable
-
-/assets/nebula-ember.webp
-  Cache-Control: public, max-age=31536000, immutable
-
-/assets/nebula-mint.webp
-  Cache-Control: public, max-age=31536000, immutable
-
-/assets/nebula-sky.webp
-  Cache-Control: public, max-age=31536000, immutable
-
-/assets/nebula-rose.webp
   Cache-Control: public, max-age=31536000, immutable
