@@ -7,9 +7,9 @@ import { isHttpsUrl } from './lib/format'
 export const SITE = {
   name: 'AstLog',
   origin: 'https://astlog.dev',
-  tagline: 'つくる人の、置き場所。',
+  tagline: 'つくったものを、ひとつずつ記録する。',
   heroLead: 'つくったものと、取り組んできたことをまとめています。',
-  contactLead: 'ご相談やお問い合わせは、こちらからお願いします。',
+  contactLead: 'お仕事のご相談や取り組みについて、話しませんか。',
   email: '',
   github: '',
 } as const

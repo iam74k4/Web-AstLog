@@ -93,7 +93,7 @@ export const MARK_TRANSFORM = `translate(${-LAMBDA.width / 2} ${round(LAMBDA.hei
 /*
   素材のファイルの文字と地に焼き込む色。ファイルは貼る先の字の色を継げない
   （currentColor が効くのはページに直に描いた SVG だけで、<img> や favicon では黒になる）ので、
-  サイトと同じ黒基調の色を決め打つ。app.css の :root の --ink・--bg と同じ値
+  サイトの夜空の窓と同じ色を決め打つ。app.css の :root の --night-ink・--night と同じ値
   （test/theme.test.ts が突き合わせる）
 */
 export const LOGO_COLORS = { ink: '#ededef', ground: '#0a0a0b' } as const

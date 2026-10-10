@@ -513,7 +513,9 @@ describe('ページの外枠', () => {
     */
     const frame = blockAt(sheet, '@media screen')
     expect(ruleWith(frame, 'min-height: var(--screen-h)').selector).toBe('body[data-site]')
-    expect(sheet.match(/var\(--screen-h\)/g)).toHaveLength(1)
+    // 読むのは body の min-height と、900 以上で画面に貼り付ける夜空の窓の高さの2か所だけ
+    expect(sheet.match(/var\(--screen-h\)/g)).toHaveLength(2)
+    expect(ruleWith(frame, 'height: calc(var(--screen-h)').selector).toBe('.frame > .window')
     /*
       表紙（1画面ぶんの高さを下限に持つ入口と締め）は持たない。入口の字の下が空いたまま
       足元が次の画面へ押し出されていた。足元は body の min-height が画面の底に置く
@@ -526,7 +528,7 @@ describe('ページの外枠', () => {
     const body = bodyOf(frame, 'body[data-site] {')
     expect(body).toContain('display: flex')
     expect(body).toContain('flex-direction: column')
-    expect(bodyOf(frame, 'body[data-site] > main {')).toContain('flex: 1 0 auto')
+    expect(bodyOf(frame, 'body[data-site] > .frame {')).toContain('flex: 1 0 auto')
   })
 
   it('節は grid で上から置く。flex のままだと寄せ方が黙って効かなくなる', () => {
@@ -575,9 +577,7 @@ describe('ページの外枠', () => {
     expect(bodyOf(frame, ':where(body[data-site]) main > :is(.hero, section) {')).toContain(
       'align-content: safe start',
     )
-    expect(ruleWith(sheet, 'padding-block: var(--page-pad)').selector).toBe(
-      'body[data-site] > main',
-    )
+    expect(ruleWith(sheet, 'padding: var(--page-pad) var(--gutter)').selector).toBe('.frame > main')
 
     // 外枠のどの寄せ方にも safe を付ける。素の center / end は、中身が容器を超えた
     // 瞬間に上端を容器の外へ押し出す
@@ -669,12 +669,16 @@ describe('ページの外枠', () => {
     /*
       骨格のプリセットは無くなったので、外枠が部品の規則に勝つための強さは要らない。
       目印（body[data-site]）は全部 :where() の中に置き、外枠の規則の強さは部品の
-      セレクタだけで決まるようにする（body と main の名指しの2本だけは例外——
-      骨格そのもので、部品が上書きする相手が居ない）
+      セレクタだけで決まるようにする（body と本文の枠の名指しの2本だけは例外——
+      骨格そのもので、部品が上書きする相手が居ない。900 以上の枠の並べ方も同じ1本）
     */
     const frame = blockAt(sheet, '@media screen')
     const bare = (frame.match(/^\s*body\[data-site\][^\n]*\{/gm) ?? []).map((line) => line.trim())
-    expect(bare).toEqual(['body[data-site] {', 'body[data-site] > main {'])
+    expect(bare).toEqual([
+      'body[data-site] {',
+      'body[data-site] > .frame {',
+      'body[data-site] > .frame {',
+    ])
   })
 })
 
@@ -885,7 +889,8 @@ describe('部品の作法', () => {
       何も言わないので、気づくのは見た目が跳ねたときだけ。
     */
     expect(sheet).not.toContain('.head h2 {')
-    expect(bodyOf(sheet, '.head :is(h1, h2) {')).toContain('font-size: var(--fs-display-xl)')
+    expect(bodyOf(sheet, '.head :is(h1, h2) {')).toContain('font-size: var(--fs-md)')
+    expect(bodyOf(sheet, '.head--item :is(h1, h2) {')).toContain('font-size: var(--fs-display-xl)')
   })
 
   it('個人ページの名乗りは、要素とクラスの両方で段を下げる', () => {
@@ -1159,13 +1164,13 @@ describe('一覧の行', () => {
   画像の無い作品は文の列だけ。規則と値の段を残すと、使われない図の決まりが残り続ける。
 */
 /*
-  天体の飾り（app.css の同名の節）。サイトの名の天体を、線と点だけで添える。
+  天体の飾り（app.css の同名の節）。サイトの名の天体を添える。
 
   前に置いた天体の絵・星空・軌道図は、最初の画面の6割を占めて動き続け、持ち主の
-  「シンプル・モダンに」で外した。戻したのは線と点だけで、面・光・影・色相と動きを
-  持たない形。試作のレビューで落ちた3つ——地の色を塗って線を切ると強制色で黒い円が
-  浮く／目印の詳細度が高くて紙と強制色で外せない／星の印が章にも付いて箇条書きに
-  下がる——をここで止める。効いているか（字と重ならないか）は npm run check:fit。
+  「シンプル・モダンに」で外した。いまの飾りは、Cavani の左の写真の位置に置いた夜空の
+  窓と、その外の線と点だけで、どれも動かない。試作のレビューで落ちた2つ——地の色を
+  塗って線を切ると強制色で黒い円が浮く／紙と強制色で外せない——をここで止める。
+  効いているか（字と重ならないか）は npm run check:fit。
 */
 describe('天体の飾り', () => {
   // 節の見出しの行の直後から次の節の見出しまで（コメントの途中で切らない）
@@ -1173,20 +1178,44 @@ describe('天体の飾り', () => {
   const section = bare(css.slice(from, css.lastIndexOf('/*', css.indexOf('= 600px 以上 */'))))
 
   it('節を読めている（読めていないと、以下の検査が素通りする）', () => {
-    expect(section).toContain('.head--page')
+    expect(section).toContain('.window {')
     expect(section).toContain("url('/assets/sky.svg')")
-    expect(section).toContain("url('/assets/orbit.svg')")
+    expect(section).toContain('.career__now')
   })
 
-  it('線と点だけ。面・光・影・色相・動きを持たない。色は字の白と罫線の段だけ', () => {
+  it('夜空の窓の外は線と点だけ。面・光・影・色相・動きを持たない。色は字の墨と罫線の段だけ', () => {
     expect(section).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(/)
-    expect(section).not.toMatch(/box-shadow|filter|text-shadow|animation|transition|opacity/)
+    const outside = rulesOf(section).filter(
+      (rule) => !rule.selectors.some((selector) => selector.startsWith('.window')),
+    )
+    const outsideText = outside.map((rule) => rule.decls.map(([n, v]) => `${n}: ${v}`).join('; '))
+    expect(outsideText.join('\n')).not.toMatch(
+      /box-shadow|filter|text-shadow|animation|transition|opacity/,
+    )
     const colors = new Set(
-      [...section.matchAll(/var\((--[\w-]+)\)/g)]
-        .map(([, name = '']) => name)
-        .filter((name) => /^--(ink|line|accent|mono|bg|surface)/.test(name)),
+      outsideText
+        .flatMap((text) => [...text.matchAll(/var\((--[\w-]+)\)/g)].map(([, name = '']) => name))
+        .filter((name) => /^--(ink|line|accent|mono|bg|surface|night)/.test(name)),
     )
     expect([...colors].sort()).toEqual(['--ink', '--ink-weak', '--line-strong'])
+  })
+
+  it('夜空の窓は窓の段（--night）だけで描く。字の墨や本文の面の色を持ち込まない', () => {
+    const window = rulesOf(section).filter((rule) =>
+      rule.selectors.some((selector) => selector.startsWith('.window')),
+    )
+    const colors = new Set(
+      window
+        .flatMap((rule) => rule.decls.map(([, value]) => value))
+        .flatMap((value) => [...value.matchAll(/var\((--[\w-]+)\)/g)].map(([, name = '']) => name))
+        .filter((name) => /^--(ink|line|accent|mono|bg|surface|panel|night)/.test(name)),
+    )
+    expect([...colors].sort()).toEqual([
+      '--night',
+      '--night-faint',
+      '--night-line',
+      '--night-planet',
+    ])
   })
 
   it('線を切るのに地の色を塗らない。切れ目は形（mask）で作る', () => {
@@ -1196,21 +1225,11 @@ describe('天体の飾り', () => {
     )
   })
 
-  it('入口と Contact の飾りは main の背景。目印の詳細度は 0 で、紙と強制色の1本が外す', () => {
-    const backgrounds = rulesOf(section).filter(
-      (rule) =>
-        rule.selectors.some((selector) => selector.includes('main')) &&
-        rule.decls.some(([name]) => name === 'background'),
-    )
-    expect(backgrounds.flatMap((rule) => rule.selectors)).toEqual([
-      ':where(body[data-site]) > main:where(:has(> .hero--cover))',
-      ':where(body[data-site]:not([data-whole])) > main:where(:has(> #contact))',
-    ])
-    for (const marker of ['@media print', '@media (forced-colors: active)']) {
-      expect(bodyOf(blockAt(sheet, marker), 'body[data-site] > main {'), marker).toContain(
-        'background: none',
-      )
-    }
+  it('夜空の窓は HTML の外の飾り。紙には刷らず、強制色では枠ごと外す', () => {
+    expect(bodyOf(blockAt(sheet, '@media print'), '.window {')).toContain('display: none')
+    expect(
+      bodyOf(blockAt(sheet, '@media (forced-colors: active)'), '.frame > .window {'),
+    ).toContain('display: none')
   })
 
   it('強制色では飾りの疑似要素を全部外す', () => {
@@ -1218,28 +1237,22 @@ describe('天体の飾り', () => {
     const owners = rulesOf(section)
       .filter((rule) => rule.decls.some(([name, value]) => name === 'content' && value === "''"))
       .flatMap((rule) => rule.selectors)
-    expect(owners.length).toBeGreaterThan(4)
-    for (const part of [
-      '.head--page',
-      '.screen-head',
-      '.career li',
-      '.career .period',
-      '.nameplate .avatar',
-      '.oops__mark',
-    ]) {
+    expect(owners.length).toBeGreaterThan(3)
+    for (const part of ['.career li', '.career .period', '.nameplate .avatar', '.oops__mark']) {
       expect(forced, part).toContain(part)
     }
-    expect(ruleWith(forced, 'display: none').selector).toMatch(/::after[\s\S]*::before/)
+    const hidden = rulesOf(forced).find((rule) =>
+      rule.selectors.some((selector) => selector.endsWith('::after')),
+    )
+    expect(hidden?.selectors.join(', ')).toMatch(/::after[\s\S]*::before/)
+    expect(hidden?.decls).toContainEqual(['display', 'none'])
   })
 
-  it('四芒星はページの見出しの罫線と、経歴のいまの行だけ', () => {
+  it('四芒星は経歴のいまの行だけ', () => {
     const stars = rulesOf(section).filter((rule) =>
       rule.decls.some(([name, value]) => name === 'clip-path' && value === 'var(--sparkle)'),
     )
-    expect(stars.flatMap((rule) => rule.selectors)).toEqual([
-      ':is(.head--page, .screen-head:has(> .head--page))::after',
-      '.career__now .period::before',
-    ])
+    expect(stars.flatMap((rule) => rule.selectors)).toEqual(['.career__now .period::before'])
   })
 
   it('経歴の星座は左の余白へ吊るし、中身を左の軸から動かさない', () => {
@@ -1325,6 +1338,8 @@ describe('文字の段', () => {
         '.side-head:lang(en)',
         // 公開ページの数字だけの札（見出しの件数）
         '.head__count',
+        // 夜空の窓の英字だけの札（M45 — PLEIADES）
+        '.window::after',
       ].sort(),
     )
   })
@@ -1384,17 +1399,21 @@ describe('文字の段', () => {
     expect(bodyOf(sheet, ':root {')).toMatch(/--measure:\s*\d+em/)
   })
 
-  it('見出しの段: 節は最上段、個人ページの頭はその下、章はさらに下、小節と行の題は小さく', () => {
+  it('見出しの段: 節と章は字間の広い名札、作品名と頭の大見出しは大きく、小節と行の題は小さく', () => {
     /*
-      ページの名前（Projects…）は大きな字で1つだけ置く（入口の大見出しと同じ段）。
-      個人ページは頭の大見出し（h1）が --fs-display で、章（About / Skills / Career の
-      h2）はそれより小さい --fs-display-sm——同じ大きさだと章が h1 と同じ格に見える
+      節の名前（Projects…）と個人ページの章（About / Skills / Career）は Cavani の名札——
+      --fs-md の大文字を字間を広く取り、右へ罫線を伸ばす。ページの主役はその下の中身。
+      作品のページの作品名（.head--item）は名札ではなく中身の名前なので、はしごの最上段の
+      まま。個人ページの頭の大見出し（h1）は --fs-display
     */
-    expect(bodyOf(sheet, '.head :is(h1, h2) {')).toContain('font-size: var(--fs-display-xl)')
+    const label = bodyOf(sheet, '.head :is(h1, h2) {')
+    expect(label).toContain('font-size: var(--fs-md)')
+    expect(label).toContain('letter-spacing: var(--track-label)')
+    expect(label).toContain('text-transform: uppercase')
+    expect(bodyOf(sheet, '.head::after {')).toContain('background: var(--line-strong)')
+    expect(bodyOf(sheet, '.head--item :is(h1, h2) {')).toContain('font-size: var(--fs-display-xl)')
     expect(bodyOf(sheet, '.hero h1.hero__headline {')).toContain('font-size: var(--fs-display)')
-    expect(bodyOf(sheet, '.head--chapter :is(h1, h2) {')).toContain(
-      'font-size: var(--fs-display-sm)',
-    )
+    expect(sheet).not.toContain('.head--chapter :is(h1, h2) {')
     expect(bodyOf(sheet, '.head--chapter {')).toContain('margin-top: var(--sp-7)')
     /*
       小節の見出し（作品のページの Story の h2、/all の Profile の h3）は、節の見出しより
@@ -1458,16 +1477,12 @@ describe('文字の段', () => {
 })
 
 /*
-  配色は黒基調の1つで、OS がライトでも白い地に切り替えない（「黒の上に白」が見た目の
-  芯。持ち主が白い地の姿を見て「黒基調で文字やボタンは白のつもりだった」と戻した）。
-  紙だけは白い地で刷る——黒い地のまま刷ると、白に近い字が白い紙に乗る（地の色は
-  既定では刷られない）。
-
-  紙の配色（@media print の :root）は同じ名前の色の段を差し替えるだけ。片方にしか
-  無い色の段があると、その色だけが紙に黒い地の色のまま残る（白い紙に白に近い字）。
+  配色は白い地の1つで、OS が暗い配色でも黒い地に切り替えない。前は黒基調だったが、
+  Cavani を下敷きにした作り替えで持ち主が明るい配色を選んだ（暗いのは左の夜空の窓
+  だけ）。紙にも画面と同じ白い地で刷り、夜空の窓だけを刷らない。
 */
-describe('配色（黒基調と紙）', () => {
-  // 帯の右端のぼかしと、軌道の輪の切れ目は不透明度の坂で、紙に差し替える色の段ではない。
+describe('配色（白い地と夜空の窓）', () => {
+  // 帯の右端のぼかしと、軌道の輪の切れ目は不透明度の坂で、色の段ではない。
   const MASKS = new Set(['--fade-right', '--orbit-mask'])
   const colorTokens = (body: string) =>
     [...body.matchAll(/(--[\w-]+):\s*([^;]+);/g)]
@@ -1478,11 +1493,11 @@ describe('配色（黒基調と紙）', () => {
       .map(([, name = '']) => name)
       .sort()
 
-  it('画面は黒基調の1つ。OS の配色の申告で白い地に切り替えない', async () => {
+  it('画面は白い地の1つ。OS の配色の申告で黒い地に切り替えない', async () => {
     expect(sheets).not.toContain('prefers-color-scheme')
-    expect(bodyOf(sheet, ':root {')).toContain('color-scheme: dark;')
+    expect(bodyOf(sheet, ':root {')).toContain('color-scheme: light;')
     // 公開・404・管理画面の外枠がどれも同じ1本（components.tsx の ColorSchemeMeta）を置く
-    const meta = '<meta name="color-scheme" content="dark"/>'
+    const meta = '<meta name="color-scheme" content="light"/>'
     expect(await okText('/')).toContain(meta)
     const missing = await get('/no-such-page')
     expect(missing.status).toBe(404)
@@ -1492,28 +1507,26 @@ describe('配色（黒基調と紙）', () => {
     expect(await login.text()).toContain(meta)
   })
 
-  it('既定のアクセントはモノクロ。リンクもボタンも字と同じ白で、ボタンの字は黒', () => {
+  it('既定のアクセントはモノクロ。リンクもボタンも字と同じ墨で、ボタンの字は白', () => {
     const root = bodyOf(sheet, ':root {')
     const value = (name: string) => root.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1]
     expect(value('--accent')).toBe('var(--mono)')
-    // 白は字の白と同じ1色（白を2種類持たない）
+    expect(value('--accent-ink')).toBe('#ffffff')
+    // 墨は字の墨と同じ1色（墨を2種類持たない）
     expect(value('--mono')).toBe(value('--ink'))
     expect(bodyOf(sheet, "[data-accent='mono'] {")).toContain('--accent: var(--mono);')
   })
 
-  it('紙の色の段は、黒い地の色の段をどれも差し替える。紙だけの段は作らない', () => {
+  it('紙は画面と同じ白い地で刷る。色の段を差し替えず、夜空の窓だけを刷らない', () => {
     const screen = bodyOf(sheet, ':root {')
-    const paper = bodyOf(blockAt(sheet, '@media print'), ':root {')
-    const screenColors = colorTokens(screen)
-    // 読めているか（地・面・線・字・モノクロとアクセント6色と薄い地・危険・スイッチ）
-    expect(screenColors.length).toBeGreaterThan(20)
-    expect(colorTokens(paper)).toEqual(screenColors)
-    for (const [, name] of paper.matchAll(/(--[\w-]+):/g)) {
-      expect(screen, `${name} は :root に無い`).toContain(`${name}:`)
-    }
+    // 読めているか（地・面・線・字・モノクロとアクセント6色と薄い地・危険・スイッチ・窓）
+    expect(colorTokens(screen).length).toBeGreaterThan(20)
+    const print = blockAt(sheet, '@media print')
+    expect(print).not.toContain(':root {')
+    expect(bodyOf(print, '.window {')).toContain('display: none')
   })
 
-  it('ロゴの素材に焼く色は、画面の :root の段と同じ', () => {
+  it('ロゴの素材に焼く色は、夜空の窓の :root の段と同じ', () => {
     /*
       favicon とワードマークのファイルは貼る先の字の色を継げないので、色を決め打って
       焼く（src/ui/logo.ts の LOGO_COLORS）。段を変えた日に素材だけが前の色で残らない
@@ -1521,7 +1534,8 @@ describe('配色（黒基調と紙）', () => {
     */
     const root = bodyOf(sheet, ':root {')
     const value = (name: string) => root.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1]
-    expect(value('--ink')).toBe(LOGO_COLORS.ink)
-    expect(value('--bg')).toBe(LOGO_COLORS.ground)
+    // 素材（favicon・共有カード・空）は夜空の窓の地と白で焼く（ページの字の墨ではない）
+    expect(value('--night-ink')).toBe(LOGO_COLORS.ink)
+    expect(value('--night')).toBe(LOGO_COLORS.ground)
   })
 })

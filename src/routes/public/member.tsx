@@ -43,7 +43,7 @@ const isSection = (key: string): key is MemberSection =>
     1人のサイト（Team を置いているとき。data.ts の profileOf）
       Team のページは作らず、その位置にこの人のページが並ぶ（site.ts の pageList）。
       目次は「Profile」の1行で、このページでその行に印。帯は出さない（入口の
-      「一覧で見る →」と同じ行き先・同じ件数）。構造化データはサイトの並びの先頭のときだけ
+      「作品を見る →」と同じ行き先・同じ件数）。構造化データはサイトの並びの先頭のときだけ
       サイトの名乗りを載せる（firstOnly）
     2人以上のサイト
       Team の続き。目次はサイトのもので、印は Team に付く。この人の一覧への帯を
@@ -126,7 +126,7 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
   /*
     この人の一覧への帯。一覧の行をここに複製せず、絞り込んだ一覧へ送る。
     行き先と件数の決め方は data.ts の bandOf。1人のサイトのプロフィールでは
-    出さない（入口の「一覧で見る →」と同じ行き先・同じ件数になる）。
+    出さない（入口の「作品を見る →」と同じ行き先・同じ件数になる）。
 
     1人のサイトでは ?member= を付けない。readFilter が読まない（名前の絞り込みが
     無い）ので、付けても効かない URL が1本増えるだけになる。

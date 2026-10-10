@@ -164,8 +164,8 @@ INSERT INTO item_slug_redirects (old_slug, item_id) VALUES
 -- ローカル見本のサイト設定 ------------------------------------------------
 -- 公開文言・宛先の編集は管理画面で行う。本番の初期値には個人データを置かない。
 INSERT OR REPLACE INTO settings (key, value) VALUES
-  ('site.tagline', 'つくる人の、置き場所。'),
-  ('site.heroLead', '個人でつくったアプリと、仕事で取り組んだ開発効率化をまとめています。'),
-  ('site.contactLead', '開発効率化や生成AIの活用、個人開発について話せる機会を探しています。お仕事のご相談も歓迎です。'),
+  ('site.tagline', 'つくったものを、ひとつずつ記録する。'),
+  ('site.heroLead', 'つくったアプリと、仕事で取り組んだ開発効率化をまとめています。'),
+  ('site.contactLead', '生成AIを使った開発効率化や個人開発について、話しませんか。お仕事のご相談も歓迎します。'),
   ('site.email', 'iam74k4@gmail.com'),
   ('site.github', 'https://github.com/iam74k4');

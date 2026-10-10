@@ -55,7 +55,7 @@ export const showMemberOf = (blocks: schema.Block[], members: schema.Member[]) =
 export const kindsOf = (counts: KindCounts): ItemKind[] =>
   ITEM_KIND_KEYS.filter((kind) => counts[kind] > 0)
 
-// 一覧への1本（入口の「一覧で見る →」と件数、2人以上のサイトの個人ページの帯。components.tsx の Cta / Tally / Band）
+// 一覧への1本（入口の「作品を見る →」と件数、2人以上のサイトの個人ページの帯。components.tsx の Cta / Tally / Band）
 export type BandData = { href: string; counts: KindCounts }
 
 /*
@@ -96,7 +96,7 @@ export type TopData = {
   // 一覧の行に担当者を出すか（showMemberOf）
   showMember: boolean
   /*
-    入口（Hero のページ）に置く一覧への1本（「一覧で見る →」）のもと。
+    入口（Hero のページ）に置く一覧への1本（「作品を見る →」）のもと。
     全体ページ（/all）では null——全部が同じ文書に並ぶので、送り出す先が無い。
   */
   band: BandData | null

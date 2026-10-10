@@ -126,11 +126,11 @@ export const Stylesheets = ({
 )
 
 /*
-  このページの配色（黒基調の1つ。OS がライトでも切り替えない）。app.css の :root の
+  このページの配色（白い地の1つ。OS が暗い配色でも切り替えない）。app.css の :root の
   color-scheme と同じ値で、CSS より先に読まれるので、CSS が届くまでの一瞬の地も
-  暗い側で出る（白い地が一瞬光らない）。公開・管理・404 の外枠がどれもこれを置く。
+  明るい側で出る（暗い地が一瞬出ない）。公開・管理・404 の外枠がどれもこれを置く。
 */
-export const ColorSchemeMeta = () => <meta name="color-scheme" content="dark" />
+export const ColorSchemeMeta = () => <meta name="color-scheme" content="light" />
 
 /*
   favicon。ロゴの印（Λ を1つで）を地の色の正方形に載せたもの（src/ui/logo.ts の iconSvg）を
@@ -217,8 +217,10 @@ export const Avatar = ({
   そちらは h2（h1 は Hero が1つ持つ）。
 
   出し分けの元は renderBlock が受け取る whole（全体ページの節として描くか）で、
-  ここでは数えない。h1 の見出しは .head--page を持ち、app.css の「天体の飾り」が
-  その罫線の左端に四芒星を1つ置く（ページの見出しだけ。1ページに1つ）。
+  ここでは数えない。
+
+  見た目は Cavani の節の見出し（字間の広い大文字と、右へ伸びる罫線）。item（作品の
+  ページの作品名）だけは名札ではなく中身の名前なので、大きな字のまま（.head--item）。
 
   note（添え）は見出しに無い情報のときだけ渡す——作品のページの「業界 · 年」、
   全体ページの作品の本文の「Story」、区分の絞り込みが並ばない Projects の区分名。
@@ -253,6 +255,7 @@ export const SectionHead = ({
   chapter,
   transition,
   icon,
+  item,
 }: {
   title: string
   note?: string
@@ -263,6 +266,8 @@ export const SectionHead = ({
   // ページを移るときにつなぐ名前（作品のページの h1。itemTransition）
   transition?: string
   icon?: string | null
+  // 作品のページの作品名か（.head--item。大きな字のまま）
+  item?: boolean
 }) => {
   const text = (
     <>
@@ -280,8 +285,8 @@ export const SectionHead = ({
     ? 'head head--sub'
     : chapter
       ? 'head head--chapter'
-      : h1
-        ? 'head head--page'
+      : item
+        ? 'head head--item'
         : 'head'
   return icon ? (
     <div class={`${kind} head--icon`}>
@@ -410,7 +415,7 @@ export const Eyebrow = ({ parts }: { parts: string[] }) => (
 )
 
 /*
-  押し手（入口の「一覧で見る →」「プロフィール →」）。塗りはページでいちばん強い1本にだけ
+  押し手（入口の「作品を見る →」「プロフィール →」）。塗りはページでいちばん強い1本にだけ
   使い、2本目は枠線だけの quiet にする（同じ強さが2本並ぶと、どちらが先か分からない）。
   矢印は飾りなので読み上げには流さない。サイトの中の続きなので ↗ ではなく →。
 */
@@ -963,7 +968,7 @@ export const SkillGroups = ({ groups, level }: { groups: SkillGroup[]; level: 3 
 
   「プロフィール →」は操作の言葉なので日本語（CLAUDE.md「文言」）。英語で
   書くのは節の名前（目次・見出しの Profile / About …）だけ。
-  「Profile →」と英語で書いていたころは、同じページの「一覧で見る →」
+  「Profile →」と英語で書いていたころは、同じページの「作品を見る →」
   「メールを送る →」と押す手の言葉だけが言語を変えていた（lang="en" を
   付けて読み上げを直していたが、印を要する英語そのものが要らなかった）。
 */
@@ -996,7 +1001,7 @@ export const MemberCardCompact = ({ member }: { member: Member }) => (
 /*
   一覧への帯。件数を添えて、押す前に「ここに何件あるか」を見せる。
 
-  使うのは、2人以上のサイトの個人ページの名札の下（入口は同じことを「一覧で見る →」
+  使うのは、2人以上のサイトの個人ページの名札の下（入口は同じことを「作品を見る →」
   と件数の帯 Tally で言う）。作品そのものは別の URL（その人で絞った一覧）にあるので、
   そこに何があるかを数で示してから送り出す。行き先は呼ぶ側が決める（項目のある側へ
   送ること。0件の側へ送ると、0件の知らせだけのページに着く）。
@@ -1127,7 +1132,7 @@ export const Empty = ({ children }: { children: Child }) => <p class="empty">{ch
   リンクから直接着いた人には一覧へ戻る手にならない。
 
   見た目は面を持たない字の手で、当たり判定は --tap（pointer: coarse では 44px）。
-  矢印は飾りなので読み上げには流さない（入口の「一覧で見る →」と同じ）。
+  矢印は飾りなので読み上げには流さない（入口の「作品を見る →」と同じ）。
 */
 export const BackLink = ({ href, label }: { href: string; label: string }) => (
   <a class="back" href={href}>
@@ -1198,7 +1203,7 @@ export const Numbers = ({ rows }: { rows: string[][] }) => (
   矢印は行き先で変える。↗ はこのサイトでは「外へ出る・別タブで開く」の印
   （一覧の行の .links、管理画面の「サイトを見る ↗」）で、サイトの中の続き——
   / で始まる URL——には → を付ける（Team のカードの「プロフィール →」、入口の
-  「一覧で見る →」、LinkRow の「担当」と同じ）。
+  「作品を見る →」、LinkRow の「担当」と同じ）。
   中の行き先にも ↗ を付けていたころは、同じタブで開くのに「外へ出る」と
   言っていた。別タブで開くか（target）と rel も同じ1つの条件で決める。
 */

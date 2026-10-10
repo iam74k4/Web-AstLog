@@ -1,7 +1,6 @@
 import { env } from 'cloudflare:test'
 import wordmarkFile from 'virtual:asset:astlog-wordmark.svg'
 import faviconFile from 'virtual:asset:favicon.svg'
-import orbitFile from 'virtual:asset:orbit.svg'
 import skyFile from 'virtual:asset:sky.svg'
 import assetFiles from 'virtual:assets'
 import seedSql from 'virtual:repo:seed.sql'
@@ -11,7 +10,7 @@ import css from '../public/app.css'
 import * as schema from '../src/db/schema'
 import { ITEM_KINDS } from '../src/domain'
 import { publicRoutes } from '../src/routes/public/routes'
-import { orbitSvg, skySvg } from '../src/ui/astra'
+import { skySvg } from '../src/ui/astra'
 import { itemHref, LinkList, LinkRow, splitPhrases } from '../src/ui/components'
 import { cardSvg, iconSvg, WORDMARK, wordmarkSvg } from '../src/ui/logo'
 import {
@@ -213,7 +212,7 @@ describe('名乗り', () => {
     await seedMember({ slug: 'hoshino', name: '星野' })
     const html = await okText('/team')
     // 「メンバー」は Team の訳語でしかなく、見出しを2つの言語で2度言うだけだった
-    expect(html).toContain('<div class="head head--page"><h1>Team</h1></div>')
+    expect(html).toContain('<div class="head"><h1>Team</h1></div>')
     expect(html).not.toContain('<span class="note">')
     // 複数いる前提の器に1人しか入っていないことを、自分で数えて告知していた
     expect(html).not.toContain('2 members')
@@ -282,23 +281,19 @@ describe('名乗り', () => {
     }
   })
 
-  it('天体の飾りの素材（入口の空・Contact の軌道）は astra.ts が正。線と点だけで色相を持たない', () => {
+  it('夜空の窓の素材（空）は astra.ts が正。点だけで色相を持たない', () => {
     /*
       ロゴと同じく、ファイルは scripts/logo/export.mjs が src/ui/astra.ts から書く。
-      どちらも app.css が背景として読む（HTML には置かない）。色は字の白（--ink と同じ
-      LOGO_COLORS.ink）を不透明度で薄めるだけ——前に試した橙の星は、既定のモノクロの
+      app.css が夜空の窓の背景として読む（HTML には置かない）。色は窓の白（--night-ink と
+      同じ LOGO_COLORS.ink）を不透明度で薄めるだけ——前に試した橙の星は、モノクロの
       中で1つだけ色を持ち、目がそこへ寄り道した
     */
     expect(skyFile).toBe(skySvg())
-    expect(orbitFile).toBe(orbitSvg())
-    for (const file of [skyFile, orbitFile]) {
-      expect(file).not.toMatch(/<image|data:|href=|<filter|Gradient/)
-      const colors = new Set([...file.matchAll(/(?:fill|stroke)="(#[0-9a-f]+)"/g)].map((m) => m[1]))
-      expect([...colors]).toEqual(['#ededef'])
-    }
-    // 線を切るのに地の色の円を重ねない（地の違う所で黒い円が浮く）。切れ目は弧の端で作る
-    expect(orbitFile).not.toContain('#0a0a0b')
-    expect(orbitFile).not.toContain('<ellipse')
+    expect(skyFile).not.toMatch(/<image|data:|href=|<filter|Gradient/)
+    const colors = new Set(
+      [...skyFile.matchAll(/(?:fill|stroke)="(#[0-9a-f]+)"/g)].map((m) => m[1]),
+    )
+    expect([...colors]).toEqual(['#ededef'])
   })
 
   it('ページと CSS が読む素材は、どれも public/assets にある', async () => {
@@ -334,7 +329,10 @@ describe('名乗り', () => {
       'apple-touch-icon.png',
       'astlog-card.png',
       'sky.svg',
-      'orbit.svg',
+      'poppins-400.woff2',
+      'poppins-500.woff2',
+      'poppins-600.woff2',
+      'poppins-700.woff2',
     ]) {
       expect(read, file).toContain(file)
     }
@@ -342,6 +340,8 @@ describe('名乗り', () => {
     const OUTSIDE = new Set([
       // ページの外で使うワードマーク（ページはインラインの SVG で描く）
       'astlog-wordmark.svg',
+      // 同梱した書体（Poppins）に添えるライセンス（SIL OFL は書体と一緒に配ることを求める）
+      'poppins-OFL.txt',
     ])
     // 作品の検査素材はローカル KV に投入し、本番の public/ に同梱しない。
     expect(seedSql.replace(/--.*$/gm, '')).not.toMatch(/\/assets\/(?:appmixer-|avatar)/)
@@ -481,7 +481,7 @@ describe('入口の画面', () => {
     }
     // 一覧が主、プロフィールは枠線だけの2本目。絵も件数の帯も置かない
     expect(hero).toContain(
-      '<div class="hero__actions"><a class="cta" href="/projects">一覧で見る<span class="cta__arrow" aria-hidden="true">→</span></a><a class="cta cta--quiet" href="/members/okazaki">プロフィール<span class="cta__arrow" aria-hidden="true">→</span></a></div>',
+      '<div class="hero__actions"><a class="cta" href="/projects">作品を見る<span class="cta__arrow" aria-hidden="true">→</span></a><a class="cta cta--quiet" href="/members/okazaki">プロフィール<span class="cta__arrow" aria-hidden="true">→</span></a></div>',
     )
     expect(hero).not.toMatch(/<img|<svg|class="tally/)
   })
@@ -598,7 +598,7 @@ describe('足元の名乗り', () => {
 })
 
 /*
-  入口の押し手（「一覧で見る →」と「プロフィール →」）。作品そのものは一覧（Projects）の
+  入口の押し手（「作品を見る →」と「プロフィール →」）。作品そのものは一覧（Projects）の
   ページにあり、その人のことは個人ページにある。件数の帯（「07 Projects」「Since 2024」）は
   置かない——数の少なさを目立たせるだけだった（components.tsx の Hero）。
 */
@@ -838,7 +838,7 @@ describe('ページごとの見出し', () => {
     const count = (n: number) =>
       `<span class="head__count">${String(n).padStart(2, '0')}<span class="sr-only"> 件</span></span>`
     const both = await okText('/projects')
-    expect(both).toContain(`<div class="head head--page"><h1>Projects</h1>${count(2)}</div>`)
+    expect(both).toContain(`<div class="head"><h1>Projects</h1>${count(2)}</div>`)
     expect(both).toContain('href="/projects?kind=work"')
 
     // 区分が1つ: 絞り込みが並ばないので、何の一覧かを言うのは添えだけ
@@ -846,7 +846,7 @@ describe('ページごとの見出し', () => {
     await touch()
     const only = await okText('/projects')
     expect(only).toContain(
-      `<div class="head head--page"><h1>Projects</h1>${count(1)}<span class="note">個人開発</span></div>`,
+      `<div class="head"><h1>Projects</h1>${count(1)}<span class="note">個人開発</span></div>`,
     )
     expect(only).not.toContain('kind=')
   })
@@ -1012,7 +1012,7 @@ describe('締めのページ（Contact）', () => {
 
     const main = mainOf(await okText('/contact'))
     expect(main.match(/<h1[^>]*>/g)).toEqual(['<h1>'])
-    expect(main).toContain('<div class="head head--page"><h1>Contact</h1></div>')
+    expect(main).toContain('<div class="head"><h1>Contact</h1></div>')
     const contact = main.slice(main.indexOf('<div class="contact">'))
     // ページに出る p はリードの1つだけ（札は置かない）
     expect(contact.match(/<p\b[^>]*>/g)).toEqual(['<p class="contact__lead">'])
@@ -2402,7 +2402,7 @@ describe('1人のサイトのプロフィール', () => {
     // 目次はサイトのもの。Profile の行も印も無い
     expect(tocOf(html)).not.toContain('Profile')
     expect(html).not.toContain('aria-current="page"')
-    // 帯はこちらでは出る（入口の「一覧で見る →」と行き先が同じでも、このページはサイトの並びの外）
+    // 帯はこちらでは出る（入口の「作品を見る →」と行き先が同じでも、このページはサイトの並びの外）
     expect(mainOf(html)).toContain('class="band"')
     // カードの担当者名から入る（Team が無いので、個人ページへの道はそこだけ）
     expect(mainOf(await okText('/projects'))).toContain('href="/members/okazaki"')
@@ -3291,15 +3291,7 @@ describe('サイトの全ページ', () => {
     for (const path of paths) {
       const html = await okText(path)
       expect(html.match(/<h1[^>]*>/g) ?? [], path).toHaveLength(1)
-      /*
-        見出しの罫線の四芒星（app.css の「天体の飾り」）は、ページの見出し（h1 の
-        SectionHead の .head--page）にだけ付く。1ページに1つまで——章や節にも付けると
-        箇条書きの印に下がる
-      */
-      expect((html.match(/head--page/g) ?? []).length, path).toBeLessThanOrEqual(1)
     }
-    // 全体ページの節の見出しは h2 なので、星を持たない
-    expect(await okText('/all')).not.toContain('head--page')
   })
 
   it('見出しを空けたメモは、種類の名前（メモ）を読み上げの h1・region と独立ページの目次に使う', async () => {

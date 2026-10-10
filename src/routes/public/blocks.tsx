@@ -181,7 +181,7 @@ export function renderBlock(
             </p>
             {band || profile ? (
               <div class="hero__actions">
-                {band ? <Cta href={band.href}>一覧で見る</Cta> : null}
+                {band ? <Cta href={band.href}>作品を見る</Cta> : null}
                 {profile ? (
                   <Cta href={memberHref(profile.slug)} quiet={Boolean(band)}>
                     プロフィール

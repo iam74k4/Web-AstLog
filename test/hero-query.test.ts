@@ -55,7 +55,7 @@ describe('入口の取得', () => {
 
     const { html, statements } = await uncachedHero('?kind=app&member=first')
     // 一覧への1本は出る（作品がある）。件数の帯は持たない
-    expect(html).toContain('一覧で見る')
+    expect(html).toContain('作品を見る')
     expect(html).not.toContain('class="tally')
     const itemQueries = statements.filter((sql) => /\bfrom\s+"items"(?:\s|$)/i.test(sql))
     expect(itemQueries.length).toBeGreaterThan(0)

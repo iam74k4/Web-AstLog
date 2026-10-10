@@ -216,9 +216,17 @@ export const Layout = (props: {
         キーボードの位置は帯に残る。このサイトに迂回路はこの1本しか無いので、
         外すと目次を毎回たどる以外の手が消える。-1 なので Tab の順番には入らない。
       */}
-      <main id="main" tabindex={-1}>
-        {props.children}
-      </main>
+      {/*
+        本文の枠（Cavani を下敷きにした2分割）。左に夜空の窓、右に本文の面。窓は字を
+        持たない飾りで、絵は app.css の「天体の飾り」が背景として描く（読み上げには出さない）。
+        main の直接の子は今までどおり Screen / Hero だけ。
+      */}
+      <div class="frame">
+        <div class="window" aria-hidden="true" />
+        <main id="main" tabindex={-1}>
+          {props.children}
+        </main>
+      </div>
       {/*
         足元。誰のサイトか（名前・職種・一言）と連絡先、著作権表示と全体ページへの
         1本。どの幅でも畳まない——上の帯にはロゴと目次しか置かないので、名乗りと

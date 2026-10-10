@@ -660,8 +660,9 @@ src/
 public/
   app.css            全画面のスタイル。値は :root のトークンだけで決める
                      色・書体のプリセットもここ（[data-accent] / [data-typeface]）
-                     末尾の「ページの外枠」が足元の位置と貼り付く上の帯を作る。
-                     「天体の飾り」の節が、静止した線と点の飾りを背景と疑似要素で描く。
+                     末尾の「ページの外枠」が足元の位置と貼り付く上の帯、900 以上の
+                     2分割（左の夜空の窓・右の本文の面）を作る。
+                     「天体の飾り」の節が、夜空の窓と静止した線と点の飾りを背景と疑似要素で描く。
                      ページを移るときの切り替え（@view-transition）もここ
   admin.css          管理画面だけの規則。管理画面は app.css のあとにこれを読み、
                      公開ページは読まない（:root は持たず、app.css の段を読む）
@@ -670,10 +671,12 @@ public/
                      Workers Static Assets が読む規則で、ファイルとしては配られない
                      3枚の CSS は 1年・immutable（中身の版つきの URL
                      /app.css?v=… などで読むので、変えてデプロイすれば URL が変わる）
-  assets/            ロゴと天体の飾りの素材だけ。favicon（favicon.svg・favicon-32.png・apple-touch-icon.png）・
-                     ページの外で使うワードマーク（astlog-wordmark.svg）・共有カード（astlog-card.png。
-                     1200×630）・入口の空（sky.svg）・Contact の軌道（orbit.svg）——どれも
+  assets/            ロゴと天体の飾りの素材と、見出しの書体だけ。favicon（favicon.svg・favicon-32.png・
+                     apple-touch-icon.png）・ページの外で使うワードマーク（astlog-wordmark.svg）・共有カード
+                     （astlog-card.png。1200×630）・夜空の窓の空（sky.svg）——ここまでは
                      scripts/logo/export.mjs が src/ui/logo.ts と src/ui/astra.ts から書く。
+                     見出しの欧文の Poppins（poppins-400/500/600/700.woff2。欧文だけに絞った
+                     もの）とそのライセンス（poppins-OFL.txt）は手で置いたもの。
                      版を持たないので既定のキャッシュ（毎回確かめる）のまま。
                      ※ ここに robots.txt や sitemap.xml を置かないこと。
                        public/ は Worker より先に配られるので、置くと

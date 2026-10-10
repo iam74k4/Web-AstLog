@@ -91,6 +91,7 @@ export function itemPage(item: ItemView, links: { backHref?: string; memberHref?
           title={item.title}
           note={note || undefined}
           h1
+          item
           transition={itemTransition(item)}
           icon={item.iconUrl}
         />

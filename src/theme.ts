@@ -17,7 +17,7 @@
 */
 
 export const ACCENTS = [
-  { key: 'mono', label: 'モノクロ', note: '白と黒だけ' },
+  { key: 'mono', label: 'モノクロ', note: '墨と白だけ' },
   { key: 'iris', label: 'アイリス', note: '夜の青紫' },
   { key: 'violet', label: 'ヴァイオレット', note: '宵の紫' },
   { key: 'ember', label: 'エンバー', note: '熾火の橙' },
@@ -27,7 +27,7 @@ export const ACCENTS = [
 ] as const
 
 export const TYPEFACES = [
-  { key: 'sans', label: 'ゴシック', note: '見出しも本文も同じ書体' },
+  { key: 'sans', label: 'ゴシック', note: '見出しの欧文は Poppins、和文は本文と同じ書体' },
   { key: 'serif', label: '明朝', note: '見出しだけ明朝にする' },
   { key: 'mono', label: '等幅', note: '見出しだけ等幅にする' },
 ] as const
