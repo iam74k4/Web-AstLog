@@ -209,6 +209,14 @@ export function yearFrom(year: string): number | null {
   return head ? Number(head[0]) : null
 }
 
+/*
+  期間が「いま」まで続いているか。期間の書き方は「2024.03 — 現在」で、先を空けない
+  （CLAUDE.md「文言」）——続いている期間は「現在」で終わる。経歴の星座で、いまの行だけを
+  四芒星にするのに使う（src/ui/components.tsx の Timeline）。並びの先頭を「いま」と
+  見なさないのは、先頭がいまとは限らないから（卒業だけの経歴・できごとの一覧）
+*/
+export const isOngoing = (period: string) => /現在$/.test(period.trim())
+
 export function bool(value: FormValue): number {
   return str(value) ? 1 : 0
 }

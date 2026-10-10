@@ -181,6 +181,38 @@
   --head-icon: clamp(44px, 5vw, 64px);
 
   /*
+    天体の飾り（下の「天体の飾り」の節）。線と点だけで、面・光・影を持たない。
+
+    --limb-r は入口の惑星の縁（足元の罫線から昇る1本の弧）の半径、--limb-rise は半径の
+    うち足元の線より上に出る割合、--limb-x は円の中心の横の位置。
+    --sky-w は入口の空（public/assets/sky.svg）、--orbit-w は Contact の軌道
+    （public/assets/orbit.svg）の幅。空の可変部は幅と高さの小さいほう（下の @supports で
+    svh を足す）——背の低い窓では小さくなり、押し手と並ぶ最初の画面を空が取らない。
+
+    --spark は四芒星（ページの見出しの罫線の左端・経歴のいまの行）の大きさ、--sparkle は
+    その形。--satellite は軌道の上の衛星（個人ページの顔と 404 の印）、--orbit-cut は輪を
+    衛星のまわりだけ切る半角、--orbit-mask はその切れ目（右上 45°。ロゴの共有カードの
+    衛星と同じ角度）。--hang は経歴の星座を左の余白へ吊るす距離——中身は左の軸のまま
+    動かさず、印だけを余白に出す（余白 --gutter の最小 16px に四芒星ごと収まる）
+  */
+  --limb-r: clamp(460px, 64vw, 980px);
+  --limb-rise: 0.15;
+  --limb-x: 86%;
+  --sky-w: clamp(220px, 78vw, 540px);
+  --orbit-w: clamp(260px, 30vw, 420px);
+  --spark: 9px;
+  --sparkle: polygon(50% 0, 58% 42%, 100% 50%, 58% 58%, 50% 100%, 42% 58%, 0 50%, 42% 42%);
+  --satellite: 5px;
+  --orbit-cut: 10deg;
+  --orbit-mask: conic-gradient(
+    from 45deg,
+    transparent var(--orbit-cut),
+    #000 0 calc(360deg - var(--orbit-cut)),
+    transparent 0
+  );
+  --hang: 10px;
+
+  /*
     横に送る帯（上の帯の目次と、狭い画面の絞り込み）の右端のぼかし。切れている
     ことを見せる。覆いなので色ではなく不透明度の坂で、地の色とは関わらない。
 
@@ -346,6 +378,10 @@
   括りは @supports。svh を知らない環境ではこの節ごと落ちて、上の幅だけの段が
   そのまま残る（括らないと var() の差し替えに失敗して、見出しが本文の 14px を
   受け継いでしまう）。
+
+  入口の空の幅（--sky-w）も同じ理由で高さを見る。横向きの電話では本文が画面より
+  長く、空は押し手と同じ最初の画面に並ぶ——そこで字より大きな面積を取らない。
+  係数は 1440x900 で 504px（上限の 540px より少し小さい）、390x844 では幅が先に効く。
 */
 @supports (font-size: 1svh) {
   :root {
@@ -353,6 +389,7 @@
     --fs-display: clamp(28px, min(4vw, 6svh), 52px);
     --fs-display-sm: clamp(24px, min(3vw, 4.4svh), 38px);
     --fs-display-xs: clamp(19px, min(1.7vw, 2.7svh), 24px);
+    --sky-w: clamp(220px, min(78vw, 56svh), 540px);
   }
 }
 
@@ -743,7 +780,8 @@ body[data-site] > main {
 
 /*
   入口（.hero--cover。components.tsx の Hero の cover）。札・大見出し・リード文・押し手を
-  左の軸に縦に積む。絵も件数の帯も置かない（components.tsx の Hero の注記）。
+  左の軸に縦に積む。HTML に絵も件数の帯も置かない（components.tsx の Hero の注記）。
+  惑星の縁と空は、字の無い右下に main の背景が描く（「天体の飾り」）。
   上を1段広く空けて、最初の画面の主役が字だと分かるようにする——Hero は見出しの錨
   （「ページの外枠」）を持たないので、ここで上の空きを決める。
 */
@@ -2214,7 +2252,7 @@ body[data-site] > main {
 }
 
 /*
-  ロゴの印（ブラックホールの O。src/ui/icons.tsx の HoleMark）。光は焼いた絵で色を持たない。
+  ロゴの印（Λ。src/ui/icons.tsx の Mark）。まわりの軌道の輪と衛星は「天体の飾り」が描く。
 
   display: flex は、印の svg を行に載せないため。この箱は .oops の列の中で block に
   なり、中の svg は1行ぶんの行ボックスに載る。標準モードの行ボックスは字が無くても
@@ -2249,6 +2287,188 @@ body[data-site] > main {
   min-height: var(--tap);
   display: inline-flex;
   align-items: center;
+}
+
+/* ============================================================ 天体の飾り */
+
+/*
+  サイトの名（AstLog）の天体を、線と点だけで添える。どれも静止していて、HTML には
+  置かない——本文の HTML は字だけで、飾りは CSS の背景と疑似要素と、静的な SVG の素材
+  （src/ui/astra.ts が正。scripts/logo/export.mjs が書き出す）が描く。
+
+  決まり:
+  - 線と点だけ。面・光・影・色相を持たない（字の白と罫線の段だけを使う）。前に入口へ
+    置いた天体の絵・星空・軌道図は、最初の画面の6割を占め、動き続けていた
+  - 字と重ねない。置くのは字の無い所（入口と Contact の右下）か、左の軸の外の余白
+    （経歴の星座）か、罫線の上（ページの見出しの星）だけ
+  - 線を切るのに地の色を塗らない。切れ目は形（mask・弧の端）で作る——地の色の円を
+    重ねると、強制色や紙など地の違う所で黒い円が浮く
+  - 強制色（Windows のハイコントラスト）では全部消す（末尾の @media (forced-colors: active)）。
+    飾りは読む人に何も伝えないので、置き換えずに外す
+*/
+
+/*
+  入口: 足元の罫線から昇る惑星の縁（1本の弧）と、その上の空（すばる・まばらな星）。
+  空の右端は版面の右端（main の padding-inline と同じ式）にそろえ、下端は弧の頂より
+  1段上に置く。背景なので本文の字より必ず奥に描かれ、押す手を覆わない。
+
+  目印（どのページの main か）は :where() で包んで詳細度を 0 にする。紙と強制色の
+  素の main の1本（background: none）で外せるように
+*/
+:where(body[data-site]) > main:where(:has(> .hero--cover)) {
+  background:
+    url('/assets/sky.svg') no-repeat right max(var(--gutter), (100% - var(--w-page)) / 2) bottom
+    calc(var(--limb-r) * var(--limb-rise) + var(--sp-6)) / var(--sky-w) auto,
+    radial-gradient(
+      circle var(--limb-r) at var(--limb-x) calc(100% + var(--limb-r) * (1 - var(--limb-rise))),
+      transparent calc(var(--limb-r) - 1px),
+      var(--line-strong) calc(var(--limb-r) - 0.75px) var(--limb-r),
+      transparent calc(var(--limb-r) + 0.5px)
+    );
+}
+
+/*
+  Contact（締め）: 字の無い右下に、傾いた軌道と中心の星・惑星・月。全体ページ（/all）の
+  Contact は節の1つなので置かない（main は全部の節を抱えている）
+*/
+:where(body[data-site]:not([data-whole])) > main:where(:has(> #contact)) {
+  background:
+    url('/assets/orbit.svg') no-repeat right max(var(--gutter), (100% - var(--w-page)) / 2) bottom
+    var(--page-pad) / var(--orbit-w) auto;
+}
+
+/*
+  ページの見出し（h1 の SectionHead。.head--page）の罫線の左端に四芒星を1つ。横の腕が
+  罫線に重なり、線がそこから伸びて見える。1ページに1つだけ——章（About / Skills /
+  Career）や全体ページの節（h2）には付けない（どこにでもあると箇条書きの印に下がる）。
+  Projects は見出しと絞り込みの下に箱（.screen-head）が1本の線を引くので、そちらに付ける。
+  :has はセレクタの列に素で並べない（知らないブラウザが列ごと捨てる）ので :is() で包む
+*/
+:is(.head--page, .screen-head:has(> .head--page)) {
+  position: relative;
+}
+
+:is(.head--page, .screen-head:has(> .head--page))::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: calc(var(--spark) / -2 - 0.5px);
+  width: var(--spark);
+  height: var(--spark);
+  background: var(--ink);
+  clip-path: var(--sparkle);
+}
+
+.screen-head > .head--page::after {
+  content: none;
+}
+
+/*
+  経歴とできごと（components.tsx の Timeline）: 期間の行ごとに星を置き、線でつないだ星座。
+  いまの行（期間が「現在」で終わる。.career__now）だけが四芒星。
+
+  星と線は左の余白へ吊るす（--hang）。中身を右へずらすと、About の段落と頭がそろわなく
+  なる。線は行の上端から下端まで引き、最初の行は星から、最後の行は星までで止める。
+  星の高さは期間の行の真ん中で、線の端は期間の字の段（--fs-meta）の 0.5lh——
+  疑似要素の字の段を期間とそろえれば、行の高さの係数を写さずに済む
+*/
+.career li {
+  position: relative;
+}
+
+.career .period {
+  position: relative;
+}
+
+.career .period::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: calc(var(--hang) * -1);
+  width: var(--sp-2);
+  height: var(--sp-2);
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: var(--ink-weak);
+}
+
+.career__now .period::before {
+  width: var(--spark);
+  height: var(--spark);
+  border-radius: 0;
+  background: var(--ink);
+  clip-path: var(--sparkle);
+}
+
+/* 行と行のあいだの罫線（li + li の border-top）の1本ぶん上から引き、線を途切れさせない */
+.career li::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  bottom: 0;
+  left: calc(var(--hang) * -1);
+  width: 1px;
+  translate: -50% 0;
+  background: var(--line-strong);
+  font-size: var(--fs-meta);
+}
+
+.career li:first-child::after {
+  top: 0.5lh;
+}
+
+.career li:last-child::after {
+  bottom: auto;
+  height: calc(1px + var(--sp-4) + 0.5lh);
+}
+
+.career li:only-child::after {
+  content: none;
+}
+
+/*
+  軌道の輪と衛星。個人ページの顔（.nameplate の .avatar）と 404 の印（.oops__mark）。
+  輪は右上 45° で衛星のまわりだけ切れていて（--orbit-mask）、衛星はその切れ目に座る。
+  輪の半径はどちらも 32px（顔 56px + 4px、印 40px + 12px）。
+
+  顔は輪の外側が左の軸にそろうよう、輪の幅（--orbit-gap）だけ内側へ寄せる。丸く切るのは
+  顔の箱ではなく中の画像——箱の overflow: hidden は、箱の外に出る輪と衛星まで切る
+*/
+.nameplate .avatar {
+  --orbit-gap: var(--sp-2);
+  overflow: visible;
+  margin-inline: var(--orbit-gap);
+}
+
+.nameplate .avatar > :is(img, .avatar__fallback) {
+  border-radius: 50%;
+}
+
+.oops__mark {
+  --orbit-gap: var(--sp-4);
+  position: relative;
+  margin-block: var(--orbit-gap);
+}
+
+:is(.nameplate .avatar, .oops__mark)::before {
+  content: '';
+  position: absolute;
+  inset: calc(var(--orbit-gap) * -1);
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  mask-image: var(--orbit-mask);
+}
+
+:is(.nameplate .avatar, .oops__mark)::after {
+  content: '';
+  position: absolute;
+  left: calc(50% + (50% + var(--orbit-gap)) * 0.7071);
+  top: calc(50% - (50% + var(--orbit-gap)) * 0.7071);
+  width: var(--satellite);
+  height: var(--satellite);
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: var(--ink);
 }
 
 /* ============================================================ 600px 以上 */
@@ -2586,6 +2806,25 @@ body[data-site] > main {
   }
 }
 
+/* ====================================================== 強制色（ハイコントラスト） */
+
+/*
+  天体の飾りを全部外す。強制色では背景の色が Canvas に塗り替えられ、グラデーションは
+  消えるが url() の素材は残る——白い星が白い地に溶け、塗った四芒星は Canvas 色の
+  欠けになって罫線を切った。飾りは何も伝えないので、置き換えずに外す。罫線と字は
+  強制色の CanvasText でそのまま残る
+*/
+@media (forced-colors: active) {
+  body[data-site] > main {
+    background: none;
+  }
+
+  :is(.head--page, .screen-head, .career li, .nameplate .avatar, .oops__mark)::after,
+  :is(.career .period, .nameplate .avatar, .oops__mark)::before {
+    display: none;
+  }
+}
+
 /* ====================================================== ページの外枠（公開ページ） */
 
 /*
@@ -2764,6 +3003,11 @@ body[data-site] > main {
 
   .entry {
     break-inside: avoid;
+  }
+
+  /* 入口と Contact の天体の飾り（main の背景）は刷らない。紙は字と罫線だけ */
+  body[data-site] > main {
+    background: none;
   }
 
   .gallery__item {

@@ -34,8 +34,9 @@ workers.dev とプレビュー URL は無効。公開はデプロイ後で、購
 ランタイム依存は Hono と Drizzle だけ。
 開発ツールの間接依存（undici・sharp・旧 esbuild loader）は、セキュリティ修正版へ
 `package.json` の overrides で固定し、型・テスト・ビルドと Drizzle の schema export を確認する。**内容と導線は JavaScript なしで成立する**。
-公開ページは実行する script を1本も持たない（JSON-LD はデータ）。装飾の絵も動きも置かず、
-字と罫線だけで組む——入口の HTML は約 4.5KB。
+公開ページは実行する script を1本も持たない（JSON-LD はデータ）。装飾の動きは置かず、
+HTML は字だけで組む——入口の HTML は約 4.5KB。天体の飾り（惑星の縁・すばる・軌道・星）は
+静止した線と点だけを CSS の背景と疑似要素が描く（`CLAUDE.md` の「天体の飾り」）。
 絞り込みとページの移動は URL とサーバー、管理画面は HTML フォームと 303 で動く。
 全部の応答に CSP（管理画面の HTML は補助1本の exact SHA-256 だけ、それ以外は `script-src 'none'`）と
 `X-Content-Type-Options: nosniff`・`Referrer-Policy: strict-origin-when-cross-origin`
@@ -655,10 +656,12 @@ src/
                      外枠はどれも HtmlDocument で <html> を開く（DOCTYPE を出す）
     icons.tsx        インライン SVG（ロゴの Wordmark / Mark もここで描く）
     logo.ts          ロゴの形と素材に焼く色の正（字で組む ΛSTLOG。印は Λ。JSX を持たない）
+    astra.ts         天体の飾りの素材（入口の空・Contact の軌道）の形の正。JSX を持たない
 public/
   app.css            全画面のスタイル。値は :root のトークンだけで決める
                      色・書体のプリセットもここ（[data-accent] / [data-typeface]）
                      末尾の「ページの外枠」が足元の位置と貼り付く上の帯を作る。
+                     「天体の飾り」の節が、静止した線と点の飾りを背景と疑似要素で描く。
                      ページを移るときの切り替え（@view-transition）もここ
   admin.css          管理画面だけの規則。管理画面は app.css のあとにこれを読み、
                      公開ページは読まない（:root は持たず、app.css の段を読む）
@@ -667,9 +670,10 @@ public/
                      Workers Static Assets が読む規則で、ファイルとしては配られない
                      3枚の CSS は 1年・immutable（中身の版つきの URL
                      /app.css?v=… などで読むので、変えてデプロイすれば URL が変わる）
-  assets/            ロゴの素材だけ。favicon（favicon.svg・favicon-32.png・apple-touch-icon.png）・
+  assets/            ロゴと天体の飾りの素材だけ。favicon（favicon.svg・favicon-32.png・apple-touch-icon.png）・
                      ページの外で使うワードマーク（astlog-wordmark.svg）・共有カード（astlog-card.png。
-                     1200×630）——どれも scripts/logo/export.mjs が src/ui/logo.ts から書く。
+                     1200×630）・入口の空（sky.svg）・Contact の軌道（orbit.svg）——どれも
+                     scripts/logo/export.mjs が src/ui/logo.ts と src/ui/astra.ts から書く。
                      版を持たないので既定のキャッシュ（毎回確かめる）のまま。
                      ※ ここに robots.txt や sitemap.xml を置かないこと。
                        public/ は Worker より先に配られるので、置くと
@@ -685,8 +689,8 @@ scripts/
   seed-local.mjs     ローカルにだけ検査用のデータと画像を入れる
   fixtures/media/    検査用の作品画像とプロフィール素材。本番には配らない
   touch-site.mjs     公開ページの写しの版を上げる（npm run site:touch / db:seed:local の最後）
-  logo/              export.mjs。ロゴの素材（SVG と favicon・iPhone のホーム画面・共有カードの PNG）を
-                     src/ui/logo.ts から書く（node scripts/logo/export.mjs。PNG は Playwright の Chromium で撮る）
+  logo/              export.mjs。ロゴと天体の飾りの素材（SVG と favicon・iPhone のホーム画面・共有カードの PNG）を
+                     src/ui/logo.ts と src/ui/astra.ts から書く（node scripts/logo/export.mjs。PNG は Playwright の Chromium で撮る）
   lib/               check-fit と check-admin の共通部分。dev サーバの立て方と使い捨ての D1（dev-server.mjs）、
                      src/theme.ts の読み方（theme.mjs）、設計サイズ（viewports.mjs）。写しを2本持たない
                      wrangler.toml の id の読み方（wrangler-ids.mjs）も

@@ -1,6 +1,8 @@
 import { env } from 'cloudflare:test'
 import wordmarkFile from 'virtual:asset:astlog-wordmark.svg'
 import faviconFile from 'virtual:asset:favicon.svg'
+import orbitFile from 'virtual:asset:orbit.svg'
+import skyFile from 'virtual:asset:sky.svg'
 import assetFiles from 'virtual:assets'
 import seedSql from 'virtual:repo:seed.sql'
 import { eq } from 'drizzle-orm'
@@ -9,6 +11,7 @@ import css from '../public/app.css'
 import * as schema from '../src/db/schema'
 import { ITEM_KINDS } from '../src/domain'
 import { publicRoutes } from '../src/routes/public/routes'
+import { orbitSvg, skySvg } from '../src/ui/astra'
 import { itemHref, LinkList, LinkRow, splitPhrases } from '../src/ui/components'
 import { iconSvg, WORDMARK, wordmarkSvg } from '../src/ui/logo'
 import {
@@ -210,7 +213,7 @@ describe('名乗り', () => {
     await seedMember({ slug: 'hoshino', name: '星野' })
     const html = await okText('/team')
     // 「メンバー」は Team の訳語でしかなく、見出しを2つの言語で2度言うだけだった
-    expect(html).toContain('<div class="head"><h1>Team</h1></div>')
+    expect(html).toContain('<div class="head head--page"><h1>Team</h1></div>')
     expect(html).not.toContain('<span class="note">')
     // 複数いる前提の器に1人しか入っていないことを、自分で数えて告知していた
     expect(html).not.toContain('2 members')
@@ -279,6 +282,25 @@ describe('名乗り', () => {
     }
   })
 
+  it('天体の飾りの素材（入口の空・Contact の軌道）は astra.ts が正。線と点だけで色相を持たない', () => {
+    /*
+      ロゴと同じく、ファイルは scripts/logo/export.mjs が src/ui/astra.ts から書く。
+      どちらも app.css が背景として読む（HTML には置かない）。色は字の白（--ink と同じ
+      LOGO_COLORS.ink）を不透明度で薄めるだけ——前に試した橙の星は、既定のモノクロの
+      中で1つだけ色を持ち、目がそこへ寄り道した
+    */
+    expect(skyFile).toBe(skySvg())
+    expect(orbitFile).toBe(orbitSvg())
+    for (const file of [skyFile, orbitFile]) {
+      expect(file).not.toMatch(/<image|data:|href=|<filter|Gradient/)
+      const colors = new Set([...file.matchAll(/(?:fill|stroke)="(#[0-9a-f]+)"/g)].map((m) => m[1]))
+      expect([...colors]).toEqual(['#ededef'])
+    }
+    // 線を切るのに地の色の円を重ねない（地の違う所で黒い円が浮く）。切れ目は弧の端で作る
+    expect(orbitFile).not.toContain('#0a0a0b')
+    expect(orbitFile).not.toContain('<ellipse')
+  })
+
   it('ページと CSS が読む素材は、どれも public/assets にある', async () => {
     /*
       favicon と apple-touch-icon（scripts/logo/export.mjs）は素材のファイル。名前を
@@ -311,6 +333,8 @@ describe('名乗り', () => {
       'favicon-32.png',
       'apple-touch-icon.png',
       'astlog-card.png',
+      'sky.svg',
+      'orbit.svg',
     ]) {
       expect(read, file).toContain(file)
     }
@@ -806,7 +830,7 @@ describe('ページごとの見出し', () => {
     const count = (n: number) =>
       `<span class="head__count">${String(n).padStart(2, '0')}<span class="sr-only"> 件</span></span>`
     const both = await okText('/projects')
-    expect(both).toContain(`<div class="head"><h1>Projects</h1>${count(2)}</div>`)
+    expect(both).toContain(`<div class="head head--page"><h1>Projects</h1>${count(2)}</div>`)
     expect(both).toContain('href="/projects?kind=work"')
 
     // 区分が1つ: 絞り込みが並ばないので、何の一覧かを言うのは添えだけ
@@ -814,7 +838,7 @@ describe('ページごとの見出し', () => {
     await touch()
     const only = await okText('/projects')
     expect(only).toContain(
-      `<div class="head"><h1>Projects</h1>${count(1)}<span class="note">個人開発</span></div>`,
+      `<div class="head head--page"><h1>Projects</h1>${count(1)}<span class="note">個人開発</span></div>`,
     )
     expect(only).not.toContain('kind=')
   })
@@ -958,7 +982,7 @@ describe('連絡先の行き先', () => {
 })
 
 describe('締めのページ（Contact）', () => {
-  it('絵も図も置かない。見出しと誘いの1文と手だけの節', async () => {
+  it('HTML に絵も図も置かない。見出しと誘いの1文と手だけの節（軌道は CSS の背景が描く）', async () => {
     await seedMember()
     await seedItem({ type: 'app' })
     await seedItem({ type: 'work' })
@@ -980,7 +1004,7 @@ describe('締めのページ（Contact）', () => {
 
     const main = mainOf(await okText('/contact'))
     expect(main.match(/<h1[^>]*>/g)).toEqual(['<h1>'])
-    expect(main).toContain('<div class="head"><h1>Contact</h1></div>')
+    expect(main).toContain('<div class="head head--page"><h1>Contact</h1></div>')
     const contact = main.slice(main.indexOf('<div class="contact">'))
     // ページに出る p はリードの1つだけ（札は置かない）
     expect(contact.match(/<p\b[^>]*>/g)).toEqual(['<p class="contact__lead">'])
@@ -1112,10 +1136,12 @@ describe('ページの URL', () => {
     expect(html.match(/aria-current="page"/g)).toHaveLength(1)
   })
 
-  it('公開ページは装飾の絵を持たない。本文の画像は作品とアバターだけ', async () => {
+  it('公開ページの HTML は装飾の絵を持たない。本文の画像は作品とアバターだけ', async () => {
     /*
       入口・締め・個人ページに天体の絵・星空・軌道図を置いていたころは、最初の画面の6割を
-      装飾が占め、HTML の半分以上が見えない層の動き（keyframes）だった。いまは字が主役
+      装飾が占め、HTML の半分以上が見えない層の動き（keyframes）だった。いまは字が主役で、
+      天体の飾り（惑星の縁・空・軌道・星）は線と点だけを CSS の背景と疑似要素が描く
+      （app.css の「天体の飾り」）。HTML には1つも置かない
     */
     const member = await seedMember()
     await seedItem({ type: 'app' })
@@ -2036,6 +2062,26 @@ describe('個人ページは1ページ', () => {
     ])
     // めくる手は置かない
     expect(main).not.toContain('class="pager')
+  })
+
+  it('経歴のいまの行（期間が「現在」で終わる）にだけ印を付ける。並びの先頭をいまと見なさない', async () => {
+    /*
+      app.css の「天体の飾り」は、経歴の行ごとに星を置き、.career__now の行だけを
+      四芒星にする。先頭の行で決めていたら、卒業だけの経歴やできごとの一覧でも、先頭が
+      「いま」として光った
+    */
+    await seedMember({
+      careerText: [
+        '2020.03 卒業 | 学科 | ある大学',
+        '2024.03 — 現在 | 入社 | ある会社',
+        '2020.04 — 2024.03 | 前の職 | 別の会社',
+      ].join('\n'),
+    })
+    const main = mainOf(await okText('/members/okazaki'))
+    expect(main).toContain('<li class="career__now"><span class="period">2024.03 — 現在</span>')
+    expect(main).toContain('<li><span class="period">2020.03 卒業</span>')
+    expect(main).toContain('<li><span class="period">2020.04 — 2024.03</span>')
+    expect(main.match(/career__now/g)).toHaveLength(1)
   })
 
   it('書いていない小節は作らない。About だけは空でも「準備中です」で置く', async () => {
@@ -3237,7 +3283,15 @@ describe('サイトの全ページ', () => {
     for (const path of paths) {
       const html = await okText(path)
       expect(html.match(/<h1[^>]*>/g) ?? [], path).toHaveLength(1)
+      /*
+        見出しの罫線の四芒星（app.css の「天体の飾り」）は、ページの見出し（h1 の
+        SectionHead の .head--page）にだけ付く。1ページに1つまで——章や節にも付けると
+        箇条書きの印に下がる
+      */
+      expect((html.match(/head--page/g) ?? []).length, path).toBeLessThanOrEqual(1)
     }
+    // 全体ページの節の見出しは h2 なので、星を持たない
+    expect(await okText('/all')).not.toContain('head--page')
   })
 
   it('見出しを空けたメモは、種類の名前（メモ）を読み上げの h1・region と独立ページの目次に使う', async () => {
