@@ -123,25 +123,28 @@ export const personJsonLd = (
 */
 export const siteJsonLd = (members: schema.Member[], site: SiteSettings = SITE) => {
   const solo = soloMember(members)
+  // 足元に出すサイトの Instagram と X も、同じ名乗りの別の口として並べる（通らない URL は名乗らない）
+  const elsewhere = [site.instagram, site.x].filter((url) => isHttpsUrl(url))
   if (solo) {
+    // 通らない GitHub（相対 URL・javascript:）は名乗らず、サイトのものに戻す
+    const github = isHttpsUrl(solo.github) ? solo.github : site.github
+    const sameAs = [...(github ? [github] : []), ...elsewhere]
     return {
       '@context': 'https://schema.org',
       ...personJsonLd(solo, SITE.origin, {
         description: site.heroLead,
-        // 通らない GitHub（相対 URL・javascript:）は名乗らず、サイトのものに戻す
-        ...((isHttpsUrl(solo.github) ? solo.github : site.github)
-          ? { sameAs: [isHttpsUrl(solo.github) ? solo.github : site.github] }
-          : {}),
+        ...(sameAs.length ? { sameAs } : {}),
       }),
     }
   }
+  const sameAs = [...(site.github ? [site.github] : []), ...elsewhere]
   return {
     '@context': 'https://schema.org',
     '@type': 'Organization',
     name: SITE.name,
     url: SITE.origin,
     description: site.heroLead,
-    ...(site.github ? { sameAs: [site.github] } : {}),
+    ...(sameAs.length ? { sameAs } : {}),
     member: members.map((member) => personJsonLd(member, `${SITE.origin}/members/${member.slug}`)),
   }
 }

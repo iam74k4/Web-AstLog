@@ -12,9 +12,24 @@ export const SITE = {
   contactLead: 'お仕事のご相談や取り組みについて、話しませんか。',
   email: '',
   github: '',
+  instagram: '',
+  x: '',
 } as const
 
-export const SITE_SETTING_KEYS = ['tagline', 'heroLead', 'contactLead', 'email', 'github'] as const
+/*
+  足元の行き先は GitHub → Instagram → X → メール の順（components.tsx の Socials）。
+  Contact のページを出すかを決めるのはメールと GitHub だけ（hasContact）——Instagram と X は
+  足元に添える行き先で、Contact の本文には置かない
+*/
+export const SITE_SETTING_KEYS = [
+  'tagline',
+  'heroLead',
+  'contactLead',
+  'email',
+  'github',
+  'instagram',
+  'x',
+] as const
 export type SiteSettingKey = (typeof SITE_SETTING_KEYS)[number]
 export type SiteSettings = Record<SiteSettingKey, string>
 
@@ -25,6 +40,8 @@ export const SITE_SETTING_LIMITS = {
   contactLead: 120,
   email: 254,
   github: 2048,
+  instagram: 2048,
+  x: 2048,
 } as const
 
 // biome-ignore lint/suspicious/noControlCharactersInRegex: 制御文字を弾くのがこの検査の目的
@@ -56,8 +73,9 @@ export function siteSettingsErrors(site: SiteSettings): Record<string, string> |
     else if (CONTROL.test(site[key])) errors[key] = '改行や制御文字を含めないでください'
   }
   if (site.email && !isContactEmail(site.email)) errors.email = 'メールアドレスを1つ入れてください'
-  if (site.github && !isHttpsUrl(site.github))
-    errors.github = 'https:// で始まる URL を入れてください'
+  for (const key of ['github', 'instagram', 'x'] as const) {
+    if (site[key] && !isHttpsUrl(site[key])) errors[key] = 'https:// で始まる URL を入れてください'
+  }
   return Object.keys(errors).length ? errors : null
 }
 

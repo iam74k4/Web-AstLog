@@ -25,7 +25,7 @@ import {
   itemTransition,
   Screen,
   SectionHead,
-  SiteIdentity,
+  SiteSocials,
 } from '../../ui/components'
 import type { OgImage } from '../../ui/Layout'
 import { NO_FILTER, showMemberOf, soloMember } from './data'
@@ -226,7 +226,7 @@ export async function renderItem(
           : {}),
     },
     theme,
-    footer: <SiteIdentity site={site} solo={solo} />,
+    footer: <SiteSocials site={site} />,
     adminPath: `/admin/items/${item.id}/edit`,
     // 貼られたときの札は、この作品の画像（あれば）
     image: itemOgImage(item),

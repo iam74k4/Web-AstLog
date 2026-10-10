@@ -12,6 +12,8 @@ const configured: SiteSettings = {
   contactLead: '開発に関するご相談をお待ちしています。',
   email: 'hello@example.test',
   github: 'https://github.com/astlog-example',
+  instagram: 'https://www.instagram.com/astlog.example',
+  x: 'https://x.com/astlog_example',
 }
 
 const plain = (html: string) => html.replace(/<[^>]*>/g, '')
@@ -26,6 +28,8 @@ describe('サイト設定', () => {
       contactLead: SITE.contactLead,
       email: '',
       github: '',
+      instagram: '',
+      x: '',
     })
     for (const path of ['/', '/all']) {
       const html = await okText(path)
@@ -67,11 +71,27 @@ describe('サイト設定', () => {
     await seedItem({ slug: 'sample', summary: '作品の説明。' })
     for (const path of ['/', '/all', '/projects', `/members/${member.slug}`, '/apps/item/sample']) {
       const html = await okText(path)
-      expect(plain(html)).toContain(configured.tagline)
       expect(html).toContain(`href="mailto:${configured.email}"`)
       expect(html).toContain(`href="${configured.github}"`)
       expect(html).not.toContain('contact@example.test')
+      // 足元の行き先は GitHub → Instagram → X → メール の順
+      const foot = html.slice(html.indexOf('<footer class="foot"'))
+      const at = (needle: string) => foot.indexOf(needle)
+      expect(at(`href="${configured.github}"`), path).toBeGreaterThan(-1)
+      expect(at(`href="${configured.instagram}"`), path).toBeGreaterThan(
+        at(`href="${configured.github}"`),
+      )
+      expect(at(`href="${configured.x}"`), path).toBeGreaterThan(
+        at(`href="${configured.instagram}"`),
+      )
+      expect(at(`href="mailto:${configured.email}"`), path).toBeGreaterThan(
+        at(`href="${configured.x}"`),
+      )
     }
+    // 1人のサイトの名乗り（構造化データ）は、Instagram と X も同じ人の別の口として並べる
+    expect(await okText('/')).toContain(
+      `"sameAs":["${configured.github}","${configured.instagram}","${configured.x}"]`,
+    )
     const top = await okText('/')
     expect(plain(top)).toContain(configured.heroLead)
     expect(top).toContain(`"description":"${configured.heroLead}"`)
@@ -92,7 +112,7 @@ describe('サイト設定', () => {
       (
         await signed('/admin/site', {
           method: 'POST',
-          body: form({ ...configured, email: '', github: '' }),
+          body: form({ ...configured, email: '', github: '', instagram: '', x: '' }),
         })
       ).status,
     ).toBe(303)
@@ -113,13 +133,16 @@ describe('サイト設定', () => {
         tagline: 'あ'.repeat(SITE_SETTING_LIMITS.tagline + 1),
         email: 'hello@example.test?bcc=other@example.test',
         github: 'javascript:alert(1)',
+        instagram: 'instagram.com/astlog',
+        x: 'http://x.com/astlog',
       }),
     })
     expect(response.status).toBe(400)
     const html = await response.text()
     expect(html).toContain('80 字まで')
     expect(html).toContain('メールアドレスを1つ')
-    expect(html).toContain('https:// で始まる URL')
+    // GitHub・Instagram・X の3欄とも、欄ごとに理由を返す
+    expect(html.match(/https:\/\/ で始まる URL/g)?.length).toBeGreaterThanOrEqual(3)
     expect((await loadSiteSettings(db())).email).toBe('contact@example.test')
   })
 
@@ -130,6 +153,8 @@ describe('サイト設定', () => {
       .values([
         { key: 'site.email', value: 'person@example.test?subject=unexpected' },
         { key: 'site.github', value: '//evil.example' },
+        { key: 'site.instagram', value: 'javascript:alert(1)' },
+        { key: 'site.x', value: '//evil.example/x' },
       ])
     await touch()
     // 形の通らない連絡先は無いものとして数える（src/site.ts の hasContact）。Contact は出ない
@@ -138,6 +163,7 @@ describe('サイト設定', () => {
       const html = await okText(path)
       expect(html).not.toContain('href="mailto:')
       expect(html).not.toContain('evil.example')
+      expect(html).not.toContain('javascript:')
     }
   })
 

@@ -13,7 +13,7 @@ import { ITEM_KIND_KEYS, type KindCounts } from '../../domain'
 import type { AppEnv } from '../../env'
 import { tableOfContents } from '../../lib/sequence'
 import { SITE } from '../../site'
-import { Empty, SiteIdentity } from '../../ui/components'
+import { Empty, SiteSocials } from '../../ui/components'
 import { Layout, type NavItem } from '../../ui/Layout'
 import { renderBlock } from './blocks'
 import {
@@ -119,7 +119,7 @@ export async function renderWholePage(c: Context<AppEnv>) {
         足元で名乗る。Hero の h1 は同じページにあるが、印刷した紙の
         終わりや Ctrl-F で飛んだ先では、足元が誰のサイトかを言う
       */
-      footer={<SiteIdentity site={site} solo={solo} />}
+      footer={<SiteSocials site={site} />}
       // 全部の節が並ぶページなので、節の並び（構成）へ送る
       admin={await adminHref(c, '/admin/blocks')}
     >
@@ -192,7 +192,7 @@ export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
         canonical={`${SITE.origin}/`}
         nav={[]}
         theme={theme}
-        footer={<SiteIdentity site={site} solo={solo} />}
+        footer={<SiteSocials site={site} />}
         // 何も出ていないのは、構成に公開中のブロックが無いから。直す場所はそこ
         admin={await adminHref(c, '/admin/blocks')}
       >
@@ -242,8 +242,8 @@ export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
     description: rendered.description,
     jsonLd: firstOnly(links, link, siteJsonLd(members, site)),
     theme,
-    // Contact では足元の GitHub / メールを出さない（本文に同じ手がある。SiteIdentity）
-    footer: <SiteIdentity site={site} solo={solo} contact={current.block.type === 'contact'} />,
+    // Contact では足元の GitHub / メールを出さない（本文に同じ手がある。SiteSocials）
+    footer: <SiteSocials site={site} contact={current.block.type === 'contact'} />,
     adminPath: blockAdminPath(current.block, solo),
   })
 }

@@ -75,6 +75,31 @@ export const GithubIcon = () => (
   </svg>
 )
 
+// Instagram の印（角の丸い枠・レンズ・光の点）。線で描き、字の色を継ぐ
+export const InstagramIcon = () => (
+  <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+    <rect
+      x="1.6"
+      y="1.6"
+      width="12.8"
+      height="12.8"
+      rx="3.8"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.4"
+    />
+    <circle cx="8" cy="8" r="3.1" fill="none" stroke="currentColor" stroke-width="1.4" />
+    <circle cx="11.9" cy="4.1" r="0.95" fill="currentColor" />
+  </svg>
+)
+
+// X の印
+export const XIcon = () => (
+  <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+  </svg>
+)
+
 export const MailIcon = () => (
   <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor" aria-hidden="true">
     <path d="M1.5 3h13A1.5 1.5 0 0 1 16 4.5v7a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 0 11.5v-7A1.5 1.5 0 0 1 1.5 3Zm.2 1.4 6.3 4.1 6.3-4.1H1.7Z" />

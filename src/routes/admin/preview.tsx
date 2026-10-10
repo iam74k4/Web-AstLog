@@ -24,7 +24,7 @@ import {
   itemHref,
   Screen,
   SectionHead,
-  SiteIdentity,
+  SiteSocials,
 } from '../../ui/components'
 import type { NavItem } from '../../ui/Layout'
 import { PreviewLayout, type PreviewLayoutProps } from '../../ui/PreviewLayout'
@@ -127,9 +127,7 @@ function previewNav(saved: Snapshot): NavItem[] {
   return nav
 }
 
-const footer = (saved: Snapshot) => (
-  <SiteIdentity site={saved.site} solo={soloMember(saved.members)} />
-)
+const footer = (saved: Snapshot) => <SiteSocials site={saved.site} />
 
 function emptyBlock(block?: schema.Block) {
   const title = block ? block.title || blockType(block.type)?.label || 'プレビュー' : 'プレビュー'
@@ -583,6 +581,8 @@ previewRoutes.post('/preview/site', async (c) => {
     contactLead: 'Contact の案内文',
     email: '公開するメールアドレス',
     github: '公開する GitHub URL',
+    instagram: '公開する Instagram URL',
+    x: '公開する X URL',
   }
   const previewErrors: Record<string, string> = {}
   for (const key of SITE_SETTING_KEYS) {

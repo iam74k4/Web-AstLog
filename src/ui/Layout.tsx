@@ -85,8 +85,8 @@ const ShareImage = ({ image }: { image: OgImage }) => (
 /*
   公開ページの外枠。head と骨格（上の帯・本文・足元）はここだけで決める。
 
-  骨格は1つ——上に帯（ロゴと目次。貼り付く）、その下に本文、底に足元（誰の
-  サイトか・連絡先・全体ページへの1本）。見た目のプリセットで変わるのは色と
+  骨格は1つ——上に帯（ロゴと目次。貼り付く）、その下に本文、底に足元（著作権表示と
+  サイトの行き先）。見た目のプリセットで変わるのは色と
   見出しの書体だけで、並べ方は変えない（src/theme.ts）。
 
   内容・絞り込み・ページの移動はサーバーが決め、公開ページは script を1本も持たない
@@ -101,7 +101,7 @@ export const Layout = (props: {
   nav: NavItem[]
   theme: Theme
   /*
-    足元の名乗り（components.tsx の SiteIdentity）。どのページにも出るので、
+    足元のサイトの行き先（components.tsx の SiteSocials）。どのページにも出るので、
     ここに載せたものは全ページに載る
   */
   footer: Child
@@ -119,8 +119,6 @@ export const Layout = (props: {
   image?: OgImage
   // 認証済みプレビューの案内。検索・共有用のメタ情報は出さない。
   preview?: Child
-  // 未保存の値はこの応答だけ。全体への移動で保存済みの内容へ戻ることを明示する。
-  previewUnsaved?: boolean
   children?: Child
 }) => (
   <HtmlDocument>
@@ -217,7 +215,7 @@ export const Layout = (props: {
         外すと目次を毎回たどる以外の手が消える。-1 なので Tab の順番には入らない。
       */}
       {/*
-        本文の枠（Cavani を下敷きにした2分割）。左に夜空の窓、右に本文の面。窓は字を
+        本文の枠（Cavani を下敷きにした2分割）。左に星図の窓、右に本文の面。窓は字を
         持たない飾りで、絵は app.css の「天体の飾り」が背景として描く（読み上げには出さない）。
         main の直接の子は今までどおり Screen / Hero だけ。
       */}
@@ -228,35 +226,15 @@ export const Layout = (props: {
         </main>
       </div>
       {/*
-        足元。誰のサイトか（名前・職種・一言）と連絡先、著作権表示と全体ページへの
-        1本。どの幅でも畳まない——上の帯にはロゴと目次しか置かないので、名乗りと
-        連絡先はここが受ける。
+        足元。著作権表示とサイトの行き先（GitHub・Instagram・X・メール）だけ——持ち主の
+        「シンプルに」。どの幅でも畳まない（上の帯にはロゴと目次しか置かないので、
+        連絡先はここが受ける）。全体ページ（/all）への1本は置かない（sitemap.xml が載せる）。
       */}
       <footer class="foot">
-        {props.footer}
         <p class="foot__meta">
-          <span>
-            © {yearInJapan()} {SITE.name}
-          </span>
-          {/*
-            全体ページ（/all）への1本道。印刷・Ctrl-F・ブラウザ翻訳の宛先で、
-            sitemap.xml にも載る。全体ページ自身には出さない（自分への行き先）。
-
-            未保存プレビューの全体GETは保存済みの内容。現在の見本を残すため別タブで
-            開き、リンク名でも切替先の状態を伝える。
-          */}
-          {props.whole ? null : (
-            <a
-              href={props.preview ? '/admin/preview' : '/all'}
-              target={props.preview && props.previewUnsaved ? '_blank' : undefined}
-              rel={props.preview && props.previewUnsaved ? 'noreferrer' : undefined}
-            >
-              {props.preview && props.previewUnsaved
-                ? '保存済みの全体プレビュー ↗'
-                : '全体を1ページで見る →'}
-            </a>
-          )}
+          © {yearInJapan()} {SITE.name}
         </p>
+        {props.footer}
       </footer>
     </body>
   </HtmlDocument>

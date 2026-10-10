@@ -148,6 +148,11 @@ UPDATE items SET
   image_height = 900
 WHERE id = 1;
 
+-- Discord Bot（4）と AstLog（5）のアイコン。AppMixer と同じ角丸の墨の台に、Discord の印と
+-- ΛSTLOG の Λ（src/ui/logo.ts）を載せたもの。
+UPDATE items SET icon_url = '/images/items/discord-bot-icon.png' WHERE id = 4;
+UPDATE items SET icon_url = '/images/items/astlog-icon.png' WHERE id = 5;
+
 INSERT INTO item_shots (item_id, url, alt, width, height, sort_order) VALUES
   (1, '/images/items/appmixer-02-auto-ducking.jpg', 'FaceTime の通話が始まり、ほかのアプリの音量を自動で下げている画面', 1440, 900, 10),
   (1, '/images/items/appmixer-03-per-device-memory.jpg', 'AirPods Pro と MacBook Air のスピーカーで、同じアプリの音量を別々に覚えている画面', 1440, 900, 20),

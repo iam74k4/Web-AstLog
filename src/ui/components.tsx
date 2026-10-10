@@ -25,7 +25,7 @@ import {
   skillRows,
 } from '../lib/format'
 import { isContactEmail, SITE, type SiteSettings } from '../site'
-import { GithubIcon, MailIcon, PencilIcon, Wordmark } from './icons'
+import { GithubIcon, InstagramIcon, MailIcon, PencilIcon, Wordmark, XIcon } from './icons'
 
 /*
   画面はこの部品だけで組む。新しい見た目が要るときは、まずここに足してから使う。
@@ -864,8 +864,8 @@ export const ItemStories = ({
   個人ページの頭に置く名札。顔・名前・肩書きと所在地を、Team のカード
   （MemberCardWide）と同じ並びで出す——カードを押した先で、同じ顔と名前に着く。
 
-  個人ページの足元はサイトの足元のまま。1人のサイトなら足元にも名前は出る
-  （どのページでも。SiteIdentity）が、顔が出るのはここだけ。heading は「名前がこのページの見出しか」。
+  個人ページの足元はサイトの足元のまま（著作権表示とサイトの行き先。SiteSocials）。
+  顔が出るのはここだけ。heading は「名前がこのページの見出しか」。
   大見出し（headline）を書いていない人では名前が h1 になる——書いている人では
   大見出しが h1 で、名前は添え。全体ページ（/all）の Profile の節でも使い、
   そこでは見出しは節の h2 なので、名前は添えのまま。
@@ -1319,44 +1319,64 @@ export const ProfileWhole = ({
 /* ------------------------------------------------------------ 連絡先と足元 */
 
 /*
-  GitHub とメールの行き先。GitHub は https:// の絶対 URL だけを描く（isHttpsUrl。
-  保存でも同じ検査で弾いている——src/routes/admin/members.tsx の memberErrors）。
-  部品の側でも見るのは、その検査より前に保存された行を、呼ぶ側に頼らずに落とすため。
+  GitHub・Instagram・X・メールの行き先（並びはこの順）。URL は https:// の絶対 URL
+  だけを描く（isHttpsUrl。保存でも同じ検査で弾いている——src/site.ts の siteSettingsErrors、
+  src/routes/admin/members.tsx の memberErrors）。部品の側でも見るのは、その検査より前に
+  保存された行を、呼ぶ側に頼らずに落とすため。
 
-  メールの札は「メール」。押す手の言葉は日本語（CLAUDE.md「文言」）で、GitHub は
-  サービスの固有名なのでそのまま。
+  メールの札は「メール」。押す手の言葉は日本語（CLAUDE.md「文言」）で、GitHub・
+  Instagram・X はサービスの固有名なのでそのまま。
 
-  owner は「誰の行き先か」。サイトの行き先（足元と Contact）は渡さず、その人だけの
+  owner は「誰の行き先か」。サイトの行き先（足元）は渡さず、その人だけの
   行き先（OwnSocials）が名前を渡す。読み上げの名前が「青木 春香の GitHub」になる
   （見た目の札は「GitHub」のまま。名前は見た目の字を含む——WCAG 2.5.3）。
 */
 export const Socials = ({
   github,
+  instagram,
+  x,
   email,
   owner,
 }: {
   github?: string | null
+  instagram?: string | null
+  x?: string | null
   email?: string | null
   owner?: string
-}) => (
-  <div class="socials">
-    {isHttpsUrl(github) ? (
-      <a
-        href={github}
-        rel="me noreferrer"
-        target="_blank"
-        aria-label={owner ? `${owner}の GitHub` : undefined}
-      >
-        <GithubIcon /> GitHub
-      </a>
-    ) : null}
-    {email && isContactEmail(email) ? (
-      <a href={`mailto:${email}`} aria-label={owner ? `${owner}のメール` : undefined}>
-        <MailIcon /> メール
-      </a>
-    ) : null}
-  </div>
-)
+}) => {
+  const mail = email && isContactEmail(email) ? email : null
+  // 1つも無ければ枠も置かない（Contact のページの足元は、Instagram も X も無いと空になる）
+  if (!isHttpsUrl(github) && !isHttpsUrl(instagram) && !isHttpsUrl(x) && !mail) return null
+  return (
+    <div class="socials">
+      {isHttpsUrl(github) ? (
+        <a
+          href={github}
+          rel="me noreferrer"
+          target="_blank"
+          aria-label={owner ? `${owner}の GitHub` : undefined}
+        >
+          <GithubIcon /> GitHub
+        </a>
+      ) : null}
+      {isHttpsUrl(instagram) ? (
+        <a href={instagram} rel="me noreferrer" target="_blank">
+          <InstagramIcon /> Instagram
+        </a>
+      ) : null}
+      {isHttpsUrl(x) ? (
+        <a href={x} rel="me noreferrer" target="_blank">
+          <XIcon /> X
+        </a>
+      ) : null}
+      {mail ? (
+        <a href={`mailto:${mail}`} aria-label={owner ? `${owner}のメール` : undefined}>
+          <MailIcon /> メール
+        </a>
+      ) : null}
+    </div>
+  )
+}
 
 /*
   その人だけの連絡先。サイトと違う行き先を持つ人のぶんだけ出す（同じ行き先を
@@ -1390,7 +1410,7 @@ export const OwnSocials = ({ member, site = SITE }: { member: Member; site?: Sit
   - GitHub は外へ出る脇の道なので、小さな札で添える（↗ は外へ出る・別タブの印）
   - 単独ページは見える h1「Contact」。ページは h1 をちょうど1つ持つ（WCAG 1.3.1）。
     全体ページ（/all）では、ほかの節と同じ見出しを目に見える形で置く
-  - このページでは足元の GitHub / メールを出さない（SiteIdentity の contact。同じ
+  - このページでは足元の GitHub / メールを出さない（SiteSocials の contact。同じ
     行き先が1つのページに2つ並ぶ）
 
   whole は「全体ページ（/all）の1節として描くか」。全体ページでは見出しを目に見える
@@ -1432,36 +1452,26 @@ export const Contact = ({
 )
 
 /*
-  足元の名乗り（Layout.tsx の footer）。どのページにも出るので、ここに載せたものは
-  全ページに載る。
-
-  solo は1人のサイトのその人（src/routes/public/data.ts の soloMember）。1人の
-  サイトなら、どのページでも名前と職種を載せる——入口の大見出しはその人の
-  一文で、名前ではない。Projects・作品・Contact は検索や貼られたリンクから直接着く
-  ページで、誰のサイトかを目に見える字で言うのはここになる。
-
-  2人以上のサイトでは名前を出さない。誰か1人の名前を置くと、その人の
-  サイトに見える。
+  足元のサイトの行き先（Layout.tsx の footer）。GitHub・Instagram・X・メール。どのページにも
+  出るので、ここに載せたものは全ページに載る。足元は著作権表示とこの行き先だけで、
+  名前や一言は置かない（持ち主の「シンプルに」。誰のサイトかは入口の札と Profile が言う）。
 
   contact は「Contact のページか」。本文にメールと GitHub の手があるので、
-  足元の GitHub / メールは出さない（同じ行き先を1つのページに2つ置かない）。
-  全体ページ（/all）では出す（あそこの Contact は節の1つで、足元は全体の足元）。
+  足元の GitHub / メールは出さない（同じ行き先を1つのページに2つ置かない）。Instagram と
+  X は本文に無いので出す。全体ページ（/all）では全部出す（あそこの Contact は節の1つで、
+  足元は全体の足元）。
 */
-export const SiteIdentity = ({
-  solo,
+export const SiteSocials = ({
   contact,
   site = SITE,
 }: {
-  solo?: Member
   contact?: boolean
   site?: SiteSettings
 }) => (
-  <div class="identity">
-    <div class="identity__who">
-      {solo ? <span class="identity__name">{solo.name}</span> : null}
-      {solo?.role ? <span class="identity__role">{solo.role}</span> : null}
-      <span class="identity__tagline">{site.tagline}</span>
-    </div>
-    {contact ? null : <Socials github={site.github} email={site.email} />}
-  </div>
+  <Socials
+    github={contact ? null : site.github}
+    instagram={site.instagram}
+    x={site.x}
+    email={contact ? null : site.email}
+  />
 )

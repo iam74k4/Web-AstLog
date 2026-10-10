@@ -14,7 +14,7 @@ import type { AppEnv } from '../../env'
 import { isHttpsUrl } from '../../lib/format'
 import { tableOfContents } from '../../lib/sequence'
 import { SITE } from '../../site'
-import { Band, filterQuery, SiteIdentity } from '../../ui/components'
+import { Band, filterQuery, SiteSocials } from '../../ui/components'
 import { bandOf, NO_FILTER, soloMember } from './data'
 import {
   MEMBER_SECTIONS,
@@ -175,7 +175,7 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
         },
     theme,
     // 足元はサイトのもの。個人ページだけのものに入れ替えると、別のサイトへ飛んだように見える
-    footer: <SiteIdentity site={site} solo={solo} />,
+    footer: <SiteSocials site={site} />,
     adminPath: `/admin/members/${member.id}/edit`,
   })
 }

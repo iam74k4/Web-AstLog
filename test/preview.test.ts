@@ -286,7 +286,7 @@ describe('保存前のサイト設定・見た目', () => {
       ? { accent: 'rose', typeface: 'serif', previewScreen: 'team' }
       : {
           ...TEST_SITE,
-          tagline: '保存前のサイト紹介',
+          instagram: 'https://www.instagram.com/preview.profile',
           email: 'preview-profile@example.test',
           previewScreen: 'team',
         }
@@ -320,14 +320,14 @@ describe('保存前のサイト設定・見た目', () => {
         expect(html).toContain('data-accent="rose"')
         expect(html).toContain('data-typeface="serif"')
       } else {
-        expect(html).toContain('保存前のサイト紹介')
+        expect(html).toContain('href="https://www.instagram.com/preview.profile"')
         expect(html).toContain('mailto:preview-profile@example.test')
       }
       expect(await previewStorageState()).toEqual(before)
       const saved = await previewText(await fetch('/admin/preview?screen=team'))
       expect(saved).toContain('data-accent="mono"')
       expect(saved).toContain('data-typeface="sans"')
-      expect(saved).not.toContain('保存前のサイト紹介')
+      expect(saved).not.toContain('preview.profile')
       expect(saved).not.toContain('mailto:preview-profile@example.test')
     },
   )
@@ -357,7 +357,7 @@ describe('保存前のサイト設定・見た目', () => {
         expect(html).toContain('data-accent="rose"')
         expect(html).toContain('data-typeface="serif"')
       } else {
-        expect(html).toContain('保存前のサイト紹介')
+        expect(html).toContain('href="https://www.instagram.com/preview.profile"')
         expect(html).toContain('mailto:preview-profile@example.test')
       }
       expect(await previewStorageState()).toEqual(before)
@@ -444,16 +444,15 @@ describe('保存前プレビューから編集を続ける案内', () => {
     expect(unsaved).not.toContain('href="/admin/site"')
     expect(unsaved).toContain('保存前だけの紹介')
     expect(unsaved).toContain('ほかの画面へ移動すると保存済みの内容を表示します')
-    expect(unsaved).toContain(
-      '<a href="/admin/preview" target="_blank" rel="noreferrer">保存済みの全体プレビュー ↗</a>',
-    )
+    // 足元は著作権表示と行き先だけ。全体への1本は置かない（全体はロゴから開く）
+    expect(unsaved).not.toContain('保存済みの全体プレビュー')
     const saved = await previewText(await fetch('/admin/preview'))
     expect(saved).toContain('編集画面を開く ↗')
     expect(saved).toContain('href="/admin"')
     expect(saved).not.toContain('保存前だけの紹介')
-    expect(saved).not.toContain('保存済みの全体プレビュー ↗')
     const savedScreen = await previewText(await fetch('/admin/preview?screen=hero'))
-    expect(savedScreen).toContain('<a href="/admin/preview">全体を1ページで見る →</a>')
+    expect(savedScreen).not.toContain('全体を1ページで見る')
+    expect(savedScreen).toContain('class="brand" href="/admin/preview"')
   })
 
   it('設定の入力エラーは欄ごとの理由と元のタブへの案内を示し、設定を変えない', async () => {
@@ -525,7 +524,7 @@ describe('プロフィールのプレビューと公開予定の文脈', () => {
     expect(whole).not.toContain('未公開の作品')
   })
 
-  it('未保存メンバーの名前・肩書き・公開チェックに合わせて足元を描き、他のGETは保存内容だけを表示する', async () => {
+  it('未保存メンバーの名前・肩書きで描き、足元には名前を出さない。他のGETは保存内容だけを表示する', async () => {
     const member = await seedMember({ name: '現在の名前', role: '現在の肩書き' })
     const fetch = await signIn()
     const version = await env.MEDIA.get(SITE_VERSION_KEY)
@@ -536,10 +535,12 @@ describe('プロフィールのプレビューと公開予定の文脈', () => {
         body: form({ ...values, published: '1' }),
       }),
     )
+    expect(checked).toContain('保存前の名前')
+    expect(checked).toContain('保存前の肩書き')
+    expect(checked).not.toContain('現在の名前')
+    // 足元は著作権表示とサイトの行き先だけ（名前は置かない）
     const checkedFooter = checked.match(/<footer\b[^>]*>([\s\S]*?)<\/footer>/)?.[1]
-    expect(checkedFooter).toContain('保存前の名前')
-    expect(checkedFooter).toContain('保存前の肩書き')
-    expect(checkedFooter).not.toContain('現在の名前')
+    expect(checkedFooter).not.toContain('保存前の名前')
     const draft = await previewText(
       await fetch(`/admin/preview/members/${member.id}`, { method: 'POST', body: form(values) }),
     )

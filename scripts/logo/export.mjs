@@ -2,7 +2,7 @@
   ロゴと天体の飾りの素材を書き出す。`node scripts/logo/export.mjs`
 
   形の正は src/ui/logo.ts（ページのロゴはそこから直に SVG を描く）と src/ui/astra.ts
-  （夜空の窓の空。app.css が背景として読む）。ここは、ページの
+  （星図の窓の空。app.css が星の形として読む）。ここは、ページの
   外で使う素材——ファイルとしての SVG（ワードマーク・favicon・空）と、SVG を読めない所に
   渡す PNG（favicon・iPhone のホーム画面・共有カード）——を同じ形から作る。
   手で描き直さない（test/public.test.ts が SVG の中身を logo.ts・astra.ts と突き合わせる）。

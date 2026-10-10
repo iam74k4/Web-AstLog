@@ -11,7 +11,7 @@
 
   公開ページの見た目は、CV テンプレートの Cavani を下敷きにしている（向こうのコードも
   素材も使っていない。型だけを CSS で組み直した）:
-  - 白い地に、左の夜空の窓と右の淡い本文の面の2分割（「骨格」）
+  - 白い地に、左の星図の窓と右の淡い本文の面の2分割（「骨格」）
   - 節の見出しは字間の広い大文字と、右へ伸びる罫線。押し手は角の立った墨の四角
   - 目次のいまのページは、墨で塗った四角
   手触りは React Bits（reactbits.dev）の Micro を手本にしている（こちらもコードは使って
@@ -154,7 +154,7 @@
   --frame-x: max(var(--gutter), (100% - var(--w-page)) / 2);
 
   /*
-    本文の枠（「骨格」の .frame）。--window-w は 900 以上で左に並べる夜空の窓の幅、
+    本文の枠（「骨格」の .frame）。--window-w は 900 以上で左に並べる星図の窓の幅、
     --panel-pad は右の本文の面の左右の内側の余白（Cavani の 50px が上限）。
     --window-band-h は 900 未満の入口で、上の帯の下に出す窓の帯の高さ
   */
@@ -250,10 +250,12 @@
   /*
     天体の飾り（下の「天体の飾り」の節）。
 
-    夜空の窓（.window）: --window-sky-at / --window-sky-size は空の素材
-    （public/assets/sky.svg）の置き場所と幅（窓の幅に対する割合。すばるが窓の右上に来る）、
-    --window-horizon は惑星の縁の頂の高さ（窓の上からの割合）、--window-limb-r はその円の
-    半径。--track-caption は窓の左下の札の字間。
+    星図の窓（.window）: --window-sky-at / --window-sky-size は空の素材
+    （public/assets/sky.svg）の置き場所と幅（窓の幅に対する割合。上端を窓の上端にそろえ、
+    すばるが窓の右上に来る）、--window-horizon は惑星の縁の頂の高さ（窓の上から。窓の下から
+    窓の高さの 16% を、64px から 140px のあいだで取る——入口の短い帯では空と惑星がほぼ
+    2:1、画面の高さの窓では惑星が底の帯に下がり、空が窓を占める）、--window-limb-r はその
+    円の半径。--track-caption は窓の左下の札の字間。
 
     --spark は四芒星（経歴のいまの行）の大きさ、--sparkle は
     その形。--satellite は軌道の上の衛星（個人ページの顔と 404 の印）、--orbit-cut は輪を
@@ -261,9 +263,9 @@
     同じ角度）。--hang は経歴の星座を左の余白へ吊るす距離——中身は左の軸のまま
     動かさず、印だけを余白に出す（余白 --gutter の最小 16px に四芒星ごと収まる）
   */
-  --window-sky-at: 35% 10%;
+  --window-sky-at: 35% 0%;
   --window-sky-size: 130%;
-  --window-horizon: 66%;
+  --window-horizon: calc(100% - clamp(64px, 16%, 140px));
   --window-limb-r: 750px;
   --track-caption: 0.24em;
   --spark: 9px;
@@ -321,23 +323,22 @@
   /*
     配色は白い地の1つ（Cavani を下敷きにした明るい配色）。字とボタンは墨色で、
     塗りのボタンの字は白——アクセントの既定は墨（--mono。管理画面の「見た目」でほかの
-    色も選べる）。OS が暗い配色を選んでいても黒い地には切り替えない。暗いのは
-    左の夜空の窓（--night）だけで、「夜空の窓と紙の面」の対比がこのサイトの見た目の芯。
-    紙にもこのまま刷る（窓だけは刷らない。末尾の @media print）。
+    色も選べる）。OS が暗い配色を選んでいても黒い地には切り替えない。左の星図の窓も
+    淡い地に墨の星（--starmap）で、暗い面は置かない——前は窓だけ夜の黒にしていたが、白い
+    ページの中で1枚だけ浮いた。紙にもこのまま刷る（窓だけは刷らない。末尾の @media print）。
 
     color-scheme は、フォームの部品やスクロールバーのようなブラウザが描くものも
     明るい側にそろえるため（<meta name="color-scheme"> と同じ値。components.tsx の
     ColorSchemeMeta）。
 
-    本文の面（--panel）は青みをごく薄く帯びた白。地（--bg）の白と1段だけ分けて、
-    上の帯・足元と本文の面の境を線なしで見せる。面の色はアクセントを変えても変えない。
+    本文も地（--bg）と同じ白で、面を持たない（持ち主の「白でも良い」。青みの面を敷いたら、
+    どの画面も色が気になった）。上の帯・足元との境は罫線（--line）で見せる。
 
     管理画面の部品の面は不透明な色で塗らず、黒をうっすら重ねて作る（ゴースト）。
     公開ページの区切りは罫線（--line / --line-strong）
   */
   color-scheme: light;
   --bg: #ffffff;
-  --panel: #f4f8fd;
   --surface: rgba(0, 0, 0, 0.035);
   --surface-hover: rgba(0, 0, 0, 0.06);
   --line: rgba(20, 20, 30, 0.1);
@@ -373,14 +374,15 @@
   --danger-soft: rgba(192, 52, 59, 0.08);
 
   /*
-    夜空の窓（骨格の .window と「天体の飾り」）。窓の地・星と線の白・惑星の面。
-    ロゴの素材に焼く色（src/ui/logo.ts の LOGO_COLORS）は、この窓の地と白と同じ値
+    星図の窓（骨格の .window と「天体の飾り」）。刷った星図のように、白い地より1段
+    沈んだ淡い地に墨の星と罫線の縁。惑星の面は地と同じ白で、窓の下から昇った惑星が
+    そのまま本文の白へ続く（狭い画面では窓の帯の下が本文）
   */
-  --night: #0a0a0b;
-  --night-ink: #ededef;
-  --night-line: rgba(237, 237, 239, 0.4);
-  --night-planet: #0f1118;
-  --night-faint: rgba(237, 237, 239, 0.55);
+  --starmap: #e7ecf3;
+  --starmap-ink: var(--ink);
+  --starmap-line: var(--line-strong);
+  --starmap-planet: var(--bg);
+  --starmap-faint: var(--ink-weak);
 
   /* 公開する / しない のスイッチ。つまみは押すと潰れて横に伸びる */
   --switch-w: 44px;
@@ -584,10 +586,11 @@ img {
   3つとも中身を同じ版面の幅（--w-page）にそろえる。左右の余白は --gutter と、版面より
   広い画面で余った幅の半分の大きいほう（--frame-x）。
 
-  本文の枠は Cavani を下敷きにした2分割——左に夜空の窓（.window）、右に本文の面（main。
-  --panel）。900 未満は縦に積み、窓は入口でだけ上の帯の下に短い帯として出す（ほかの
+  本文の枠は Cavani を下敷きにした2分割——左に星図の窓（.window）、右に本文（main。
+  地と同じ白）。900 未満は縦に積み、窓は入口でだけ上の帯の下に短い帯として出す（ほかの
   ページでは本文を先に読ませる）。900 以上は左右に並べ、窓を画面に貼り付けて本文だけが
   流れる（「ページの外枠」とあわせて 900 以上の節）。窓の絵は「天体の飾り」が描く。
+  本文は枠の残りの高さを受ける（足元を画面の底に置く）。
 
   本文は data-site（公開ページの印）の下の枠の main だけを名指しする。管理画面の
   main（admin.css の .admin-main）には当てない。
@@ -603,16 +606,16 @@ body[data-site] > .frame {
 }
 
 .frame > main {
+  flex: 1 0 auto;
   display: flex;
   flex-direction: column;
   gap: calc(var(--sp-7) * 2);
   min-width: 0;
   padding: var(--page-pad) var(--gutter);
-  background: var(--panel);
 }
 
 /*
-  夜空の窓。900 未満は入口でだけ、短い帯として出す。:has は1本の規則で書き、:where() で
+  星図の窓。900 未満は入口でだけ、短い帯として出す。:has は1本の規則で書き、:where() で
   詳細度を下げる——900 以上で窓を出す規則（「ページの外枠」の .frame > .window）が勝つように
 */
 .window {
@@ -627,9 +630,8 @@ body[data-site] > .frame {
 /* --- 上の帯 --- */
 
 /*
-  ロゴ（入口へ）を左に、目次を右に置く1行の帯。罫線は引かず、地（--bg の白）と本文の面
-  （--panel）の色の差で境を見せる（Cavani の帯）。貼り付いたとき、下を流れる本文の字が
-  透けないように地を敷く。
+  ロゴ（入口へ）を左に、目次を右に置く1行の帯。本文も同じ白なので、下に1本の罫線を
+  引いて境を見せる。貼り付いたとき、下を流れる本文の字が透けないように地を敷く。
   高さは --top-h で決め打ちにせず下限にする——字を大きくした人の帯を切らない。
 */
 .top {
@@ -637,6 +639,7 @@ body[data-site] > .frame {
   align-items: center;
   gap: var(--sp-5);
   min-height: var(--top-h);
+  border-bottom: 1px solid var(--line);
   background: var(--bg);
 }
 
@@ -743,54 +746,23 @@ body[data-site] > .frame {
 /* --- 足元 --- */
 
 /*
-  足元。誰のサイトか（名前・職種・一言）と連絡先、その下に著作権表示と全体ページへの
-  1本。上に1本の罫線を引き、面は持たない。どの幅でも畳まない（上の帯には
-  ロゴと目次しか置かないので、名乗りと連絡先はここが受ける）。
+  足元。左に著作権表示、右にサイトの行き先（GitHub・Instagram・X・メール）の1行。
+  上に1本の罫線を引き、面は持たない。狭い画面で入りきらなければ折り返す（畳まない）。
 */
 .foot {
   display: flex;
-  flex-direction: column;
-  gap: var(--sp-6);
-  padding-block: var(--sp-7) calc(var(--sp-7) + env(safe-area-inset-bottom));
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-6);
+  padding-block: var(--sp-6) calc(var(--sp-6) + env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
 }
 
-.identity {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--sp-5) var(--sp-6);
-}
-
-.identity__who {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  min-width: 0;
-}
-
-/* 名前が主、職種が添え、一言がその下。字の段も色も1段ずつ下げる */
-.identity__name {
-  color: var(--ink);
-  font-size: var(--fs-lg);
-  font-weight: 600;
-  line-height: 1.4;
-}
-
-.identity__role {
-  color: var(--ink-mid);
-  font-size: var(--fs-sm);
-}
-
-.identity__tagline {
-  color: var(--ink-weak);
-  font-size: var(--fs-meta);
-}
-
 /*
-  GitHub とメール（components.tsx の Socials）。足元と、Contact のページの本文で
-  同じ部品。札の面は持たず、字と印だけの行き先にする（的の高さは --tap）。
+  GitHub・Instagram・X・メール（components.tsx の Socials）。足元と、個人ページの名札の
+  下（その人だけの行き先）で同じ部品。札の面は持たず、字と印だけの行き先にする
+  （的の高さは --tap）。
 */
 .socials {
   display: flex;
@@ -810,28 +782,10 @@ body[data-site] > .frame {
     scale var(--dur-spring) var(--ease-spring);
 }
 
-/*
-  著作権表示と「全体を1ページで見る →」。和文が入るので等幅にせず、和文の最小の
-  段（--fs-meta）。
-*/
+/* 著作権表示。行き先より1段弱い字（--fs-meta / --ink-weak） */
 .foot__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2) var(--sp-5);
   color: var(--ink-weak);
   font-size: var(--fs-meta);
-}
-
-/*
-  「全体を1ページで見る →」。素の a は color: inherit / text-decoration: none
-  なので、置くだけでは著作権表示と同じ姿になり、押せるものだと分からない
-  （WCAG 1.4.1）。下線を引き、色も1段上げる（--ink-weak → --ink-mid）。
-  文の中のリンクのままにしてある（WCAG 2.5.8 の inline の例外）。
-*/
-.foot__meta a {
-  color: var(--ink-mid);
-  text-decoration: underline;
-  text-underline-offset: var(--sp-1);
 }
 
 /* --- 顔 --- */
@@ -879,7 +833,7 @@ body[data-site] > .frame {
 /*
   入口（.hero--cover。components.tsx の Hero の cover）。札・大見出し・リード文・押し手を
   左の軸に縦に積み、本文の面の縦の真ん中に置く（Cavani の入口。上下の auto の余白）。
-  HTML に絵も件数の帯も置かない（components.tsx の Hero の注記）——夜空は左の窓が描く
+  HTML に絵も件数の帯も置かない（components.tsx の Hero の注記）——星空は左の窓が描く
   （「天体の飾り」）。Hero は見出しの錨（「ページの外枠」）を持たない。
 */
 .hero--cover {
@@ -2413,12 +2367,12 @@ body[data-site] > .frame {
   HTML は字だけで、飾りは CSS の背景と疑似要素と、静的な SVG の素材（src/ui/astra.ts が正。
   scripts/logo/export.mjs が書き出す）が描く。
 
-  置くのは4か所: 夜空の窓（骨格の .window。Cavani の左の写真の位置）、経歴の星座、
+  置くのは4か所: 星図の窓（骨格の .window。Cavani の左の写真の位置）、経歴の星座、
   個人ページの顔と 404 の印の軌道の輪。
 
   決まり:
-  - 夜空の窓の外は線と点だけ。面・光・影・色相を持たない（字の墨と罫線の段だけ）。
-    窓の中だけが夜の地（--night）と惑星の面を持つ
+  - 星図の窓の外は線と点だけ。面・光・影・色相を持たない（字の墨と罫線の段だけ）。
+    窓の中だけが星図の地（--starmap）と惑星の面を持つ
   - 字と重ねない。窓は本文の外、経歴の星座は左の軸の外の余白
   - 線を切るのに地の色を塗らない。切れ目は形（mask・弧の端）で作る——地の色の円を
     重ねると、強制色や紙など地の違う所で黒い円が浮く
@@ -2427,31 +2381,47 @@ body[data-site] > .frame {
 */
 
 /*
-  夜空の窓。すばるとまばらな星（public/assets/sky.svg）、窓の下から昇る惑星の縁（1本の
-  弧と、その内側の惑星の面）、左下の札「M45 — PLEIADES」（すばるの天体の番号。札は字を
-  持たない窓の飾りなので、CSS の content で描く）。どのページでも同じ窓。
+  星図の窓。3枚を重ねる——窓の地（--starmap）、すばるとまばらな星（::before）、窓の下から
+  昇る惑星（::after。1本の弧と、その内側の惑星の面）と左下の札「M45 — PLEIADES」（すばるの
+  天体の番号。札は字を持たない窓の飾りなので、CSS の content で描く）。どのページでも同じ窓。
   900 以上は「ページの外枠」が窓を画面に貼り付ける（position: sticky がこの relative を上書き）
 */
 .window {
   position: relative;
   overflow: hidden;
-  background:
-    url('/assets/sky.svg') no-repeat var(--window-sky-at) / var(--window-sky-size) auto,
-    radial-gradient(
-      circle var(--window-limb-r) at 50% calc(var(--window-horizon) + var(--window-limb-r)),
-      var(--night-planet) calc(var(--window-limb-r) - 1px),
-      var(--night-line) calc(var(--window-limb-r) - 0.75px) var(--window-limb-r),
-      transparent calc(var(--window-limb-r) + 0.5px)
-    ),
-    var(--night);
+  background: var(--starmap);
 }
 
+/*
+  星は素材（public/assets/sky.svg）を形（mask）として読み、色は段（--starmap-ink）で塗る。
+  素材に色を焼くと、段を変えた日に星だけが前の色で残る
+*/
+.window::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--starmap-ink);
+  mask: url('/assets/sky.svg') no-repeat var(--window-sky-at) / var(--window-sky-size) auto;
+}
+
+/*
+  惑星は星の上に重ねる——地平より下の星は惑星の面に隠れる（淡い面に星が散ると、
+  ほこりに見えた）
+*/
 .window::after {
   content: 'M45 — PLEIADES';
   position: absolute;
-  left: var(--sp-6);
-  bottom: var(--sp-5);
-  color: var(--night-faint);
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 var(--sp-6) var(--sp-5);
+  background: radial-gradient(
+    circle var(--window-limb-r) at 50% calc(var(--window-horizon) + var(--window-limb-r)),
+    var(--starmap-planet) calc(var(--window-limb-r) - 1px),
+    var(--starmap-line) calc(var(--window-limb-r) - 0.75px) var(--window-limb-r),
+    transparent calc(var(--window-limb-r) + 0.5px)
+  );
+  color: var(--starmap-faint);
   font-family: var(--font-latin);
   font-size: var(--fs-label);
   letter-spacing: var(--track-caption);
@@ -2948,7 +2918,7 @@ body[data-site] > .frame {
   }
 
   /*
-    900 以上は夜空の窓と本文の面を左右に並べ、窓を上の帯の下に貼り付ける（本文だけが
+    900 以上は星図の窓と本文の面を左右に並べ、窓を上の帯の下に貼り付ける（本文だけが
     流れる）。窓の高さは画面から帯と下の余白を引いたぶん。本文の面は枠の高さいっぱいに
     伸び、短いページでも窓の横が空かない
   */
@@ -3068,16 +3038,9 @@ body[data-site] > .frame {
     break-inside: avoid;
   }
 
-  /*
-    紙は画面と同じ白い地で刷る（色の段は差し替えない）。夜空の窓は刷らず、本文の面の
-    色も敷かない（紙は字と罫線だけ）
-  */
+  /* 紙は画面と同じ白い地で刷る（色の段は差し替えない）。星図の窓は刷らない */
   .window {
     display: none;
-  }
-
-  .frame > main {
-    background: none;
   }
 
   .gallery__item {

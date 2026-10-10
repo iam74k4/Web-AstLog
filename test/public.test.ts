@@ -281,19 +281,19 @@ describe('名乗り', () => {
     }
   })
 
-  it('夜空の窓の素材（空）は astra.ts が正。点だけで色相を持たない', () => {
+  it('星図の窓の素材（空）は astra.ts が正。点だけで色相を持たない', () => {
     /*
       ロゴと同じく、ファイルは scripts/logo/export.mjs が src/ui/astra.ts から書く。
-      app.css が夜空の窓の背景として読む（HTML には置かない）。色は窓の白（--night-ink と
-      同じ LOGO_COLORS.ink）を不透明度で薄めるだけ——前に試した橙の星は、モノクロの
-      中で1つだけ色を持ち、目がそこへ寄り道した
+      app.css が星図の窓の星の形（mask）として読む（HTML には置かない）。ファイルの色は
+      ロゴの素材の墨（LOGO_COLORS.ground）を不透明度で薄めるだけ——前に試した橙の星は、
+      モノクロの中で1つだけ色を持ち、目がそこへ寄り道した
     */
     expect(skyFile).toBe(skySvg())
     expect(skyFile).not.toMatch(/<image|data:|href=|<filter|Gradient/)
     const colors = new Set(
       [...skyFile.matchAll(/(?:fill|stroke)="(#[0-9a-f]+)"/g)].map((m) => m[1]),
     )
-    expect([...colors]).toEqual(['#ededef'])
+    expect([...colors]).toEqual(['#222226'])
   })
 
   it('ページと CSS が読む素材は、どれも public/assets にある', async () => {
@@ -525,14 +525,11 @@ describe('入口の画面', () => {
 })
 
 /*
-  足元の名乗り。1人のサイトなら、入口も含めてどのページでも足元が名乗る。
-
-  名乗りを置かないと、奥の画面（検索や貼られたリンクから直接着く /projects や
-  /members/… ）を開いた人に、誰のサイトかがどこにも出ない。入口の大見出しは
-  その人の一文で、名前ではないので、入口でも足元が名乗る。
+  足元。著作権表示とサイトの行き先（GitHub・Instagram・X・メール）だけ——持ち主の
+  「シンプルに」。名前・職種・一言は置かない（誰のサイトかは入口の札と Profile が言う）。
 */
-describe('足元の名乗り', () => {
-  it('1人のサイトなら、どのページでも足元が名前と職種を名乗る', async () => {
+describe('足元', () => {
+  it('著作権表示とサイトの行き先だけ。名前・職種・一言は、1人のサイトでも置かない', async () => {
     await seedMember({
       name: '岡崎 昂功',
       role: 'System Engineer',
@@ -550,25 +547,24 @@ describe('足元の名乗り', () => {
       '/all',
     ]) {
       const foot = footOf(await okText(path))
-      expect(foot, path).toContain('<span class="identity__name">岡崎 昂功</span>')
-      expect(foot, path).toContain('<span class="identity__role">System Engineer</span>')
-      expect(foot, path).toContain(`<span class="identity__tagline">${SITE.tagline}</span>`)
+      expect(foot, path).toMatch(/<p class="foot__meta">© \d{4} AstLog<\/p>/)
+      expect(foot, path).not.toContain('岡崎 昂功')
+      expect(foot, path).not.toContain('System Engineer')
+      expect(foot, path).not.toContain(SITE.tagline)
     }
-    // 上の帯には名前を置かない（ロゴと目次だけ）
+    // 上の帯にも名前を置かない（ロゴと目次だけ）
     expect(topOf(await okText('/projects'))).not.toContain('岡崎 昂功')
   })
 
-  it('2人以上のサイトでは、足元に誰の名前も出さない', async () => {
-    // 誰か1人の名前を置くと、その人のサイトに見える
+  it('2人以上のサイトでも同じ足元', async () => {
     await seedMember()
     await seedMember({ slug: 'hoshino', name: '星野', role: 'Designer' })
     await seedItem({ slug: 'appmixer' })
 
     for (const path of ['/', '/projects', '/team', '/members/okazaki', '/contact', '/all']) {
       const foot = footOf(await okText(path))
-      expect(foot, path).toContain('<div class="identity">')
-      expect(foot, path).not.toContain('identity__name')
-      expect(foot, path).not.toContain('identity__role')
+      expect(foot, path).toMatch(/<p class="foot__meta">© \d{4} AstLog<\/p>/)
+      expect(foot, path).not.toContain('星野')
     }
   })
 
@@ -576,14 +572,16 @@ describe('足元の名乗り', () => {
     await seedMember()
 
     const contact = await okText('/contact')
-    expect(footOf(contact)).not.toContain('class="socials"')
+    expect(footOf(contact)).not.toContain('GitHub')
+    expect(footOf(contact)).not.toContain('mailto:')
     // 行き先は本文に残っている（同じ行き先を足元と本文に2組並べない）
     expect(mainOf(contact)).toContain(`href="${SITE.github}"`)
     expect(mainOf(contact)).toContain(`href="mailto:${SITE.email}"`)
 
     // ほかの画面の足元には今までどおり出る。全体ページの Contact は節の1つで、足元は全体のもの
     for (const path of ['/', '/all']) {
-      expect(footOf(await okText(path)), path).toContain('class="socials"')
+      expect(footOf(await okText(path)), path).toContain('GitHub')
+      expect(footOf(await okText(path)), path).toContain('mailto:')
     }
   })
 
@@ -730,32 +728,21 @@ describe('ページの移動', () => {
 })
 
 /*
-  全体ページ（/all）への道。足元の1本はどの幅でも畳まないので、本文には置かない
-  （同じ行き先を1つのページに2つ置かない）。/all 自身には置かない（自分への行き先）。
+  全体ページ（/all）は公開ページからリンクしない。足元は著作権表示と行き先だけにした
+  （持ち主の「シンプルに」）。行き先は sitemap.xml と管理画面の1本（admin.test.ts）。
 */
 describe('全体ページへの道', () => {
-  it('足元から行ける。どの幅でも畳まない', async () => {
+  it('公開ページの足元にも本文にも置かない', async () => {
     await seedMember()
     await seedItem()
-
     for (const path of ['/', '/projects', '/members/okazaki', '/contact']) {
-      expect(footOf(await okText(path)), path).toContain('<a href="/all">全体を1ページで見る →</a>')
+      expect(await okText(path), path).not.toContain('href="/all"')
     }
   })
 
-  it('本文には置かない。足元と同じ行き先を1つのページに2つ置かない', async () => {
-    await seedMember()
+  it('sitemap.xml には載る（印刷・Ctrl-F・ブラウザ翻訳の宛先）', async () => {
     await seedItem()
-    for (const path of ['/', '/projects', '/contact']) {
-      expect(mainOf(await okText(path)), path).not.toContain('href="/all"')
-    }
-  })
-
-  it('足元の著作権表示と全体ページへの1本は1行。全体ページ自身には1本を置かない', async () => {
-    expect(await okText('/')).toMatch(
-      /<p class="foot__meta"><span>© \d{4} AstLog<\/span><a href="\/all">全体を1ページで見る →<\/a><\/p>/,
-    )
-    expect(await okText('/all')).toMatch(/<p class="foot__meta"><span>© \d{4} AstLog<\/span><\/p>/)
+    expect(await okText('/sitemap.xml')).toContain(`<loc>${SITE.origin}/all</loc>`)
   })
 })
 
@@ -2749,25 +2736,7 @@ describe('robots.txt と sitemap.xml', () => {
   })
 })
 
-/*
-  全体ページ（/all）へ行く道。公開側にも管理画面にも href が1本も無かった。
-  @media print が「全体ページを刷ること」と書いている紙も、Ctrl-F で全体を
-  探す手も、この1本が無いと URL を手で打った人にしか届かない。
-*/
 describe('全体ページへの導線', () => {
-  it('どのページの足元からも行ける', async () => {
-    await seedItem()
-
-    for (const path of ['/', '/projects', '/contact']) {
-      const html = await okText(path)
-      /*
-        矢印は →。同じタブで開くサイトの中の行き先で、↗（外へ出る・別タブ）
-        ではない。管理画面の同じ1本は別タブなので ↗ のまま（admin.test.ts）
-      */
-      expect(html, path).toContain('<a href="/all">全体を1ページで見る →</a>')
-    }
-  })
-
   it('全体ページ自身には出さない（自分への行き先）', async () => {
     await seedItem()
     expect(await okText('/all')).not.toContain('href="/all"')
