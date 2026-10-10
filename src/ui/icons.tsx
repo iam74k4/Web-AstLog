@@ -6,7 +6,7 @@
 import { MARK_TRANSFORM, MARK_VIEWBOX, WORDMARK } from './logo'
 
 /*
-  ワードマーク（ΛSTLOG）。形は logo.ts が正で、字の色を継ぐ（currentColor）。大きさは CSS の
+  ワードマーク（ΛSTLOG。O は衛星つきの軌道）。形は logo.ts が正で、字の色を継ぐ（currentColor）。大きさは CSS の
   高さで決める（幅は viewBox の縦横比から）。読み上げには出さない——名前は置く側が字で持つ
   （.sr-only の AstLog）
 */
@@ -20,6 +20,7 @@ export const Wordmark = ({ class: className }: { class: string }) => (
   >
     <path d={WORDMARK.lambda} />
     <path d={WORDMARK.strokes} fill="none" stroke="currentColor" stroke-width={WORDMARK.stroke} />
+    <path d={WORDMARK.satellite} />
   </svg>
 )
 

@@ -13,7 +13,7 @@ import { ITEM_KINDS } from '../src/domain'
 import { publicRoutes } from '../src/routes/public/routes'
 import { orbitSvg, skySvg } from '../src/ui/astra'
 import { itemHref, LinkList, LinkRow, splitPhrases } from '../src/ui/components'
-import { iconSvg, WORDMARK, wordmarkSvg } from '../src/ui/logo'
+import { cardSvg, iconSvg, WORDMARK, wordmarkSvg } from '../src/ui/logo'
 import {
   db,
   form,
@@ -377,6 +377,14 @@ describe('名乗り', () => {
     }
     expect([...marks]).toHaveLength(1)
     expect([...marks][0]).toContain(`viewBox="${WORDMARK.viewBox}"`)
+    /*
+      O は軌道と衛星。上の帯・ログイン・共有カード・素材で同じ1つの形（大きさで形を変えない）。
+      衛星を共有カードだけに置いていたころは、ロゴが2つの形を持っていた
+    */
+    expect([...marks][0]).toContain(`<path d="${WORDMARK.satellite}"`)
+    expect(wordmarkFile).toContain(WORDMARK.satellite)
+    expect(cardSvg()).toContain(WORDMARK.satellite)
+    expect(WORDMARK.strokes).not.toMatch(/Z/)
   })
 
   it('上の帯のロゴはワードマークと、リンクの名前の字。絵は読み上げに出さない', async () => {
