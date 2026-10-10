@@ -51,7 +51,6 @@ export const AdminDashboard = (props: {
   blockCount: number
   blockDrafts: number
   pages: number
-  appearance: string
 }) => (
   <AdminLayout title="概要" active="dashboard" account={props.account}>
     <div class="admin-head">
@@ -225,14 +224,6 @@ export const AdminDashboard = (props: {
             </span>
           ) : null}
           <span class="dashboard-card__action">構成を開く →</span>
-        </a>
-
-        <a class="dashboard-card" href="/admin/appearance">
-          <div class="dashboard-card__head">
-            <h3>色と書体</h3>
-          </div>
-          <span class="dashboard-card__status">{props.appearance}</span>
-          <span class="dashboard-card__action">見た目を開く →</span>
         </a>
       </div>
     </section>

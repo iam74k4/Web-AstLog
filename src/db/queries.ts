@@ -3,7 +3,6 @@ import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import { blockType, DEFAULT_BLOCKS, LEGACY_BLOCK_KEYS } from '../blocks'
 import { ITEM_KIND_KEYS, type ItemKind, type ItemView, type KindCounts } from '../domain'
 import { normalizeSiteSettings, SITE_SETTING_KEYS, type SiteSettings } from '../site'
-import { normalizeTheme, THEME_KEYS, type Theme, type ThemeKey } from '../theme'
 import { guardEdit, settingsSnapshot } from './edit'
 import * as schema from './schema'
 
@@ -235,39 +234,6 @@ export async function countPublishedByKind(
   return Object.fromEntries(
     ITEM_KIND_KEYS.map((kind) => [kind, rows.find((row) => row.type === kind)?.n ?? 0]),
   ) as KindCounts
-}
-
-/* ------------------------------------------------------------- 見た目 */
-
-/*
-  settings は key-value なので、見た目の2つ（アクセント色と書体）は接頭辞を付けて
-  置く。他の設定が増えても、見た目の行だけを拾えるようにするため。
-*/
-const THEME_PREFIX = 'theme.'
-
-const settingKey = (key: ThemeKey) => `${THEME_PREFIX}${key}`
-
-export async function loadTheme(db: Db): Promise<Theme> {
-  const rows = await db.query.settings.findMany()
-  const raw: Partial<Record<ThemeKey, string>> = {}
-  for (const key of THEME_KEYS) {
-    raw[key] = rows.find((row) => row.key === settingKey(key))?.value
-  }
-  return normalizeTheme(raw)
-}
-
-export async function saveTheme(db: Db, theme: Theme, version?: string) {
-  const updatedAt = new Date().toISOString()
-  const write = db
-    .insert(schema.settings)
-    .values(THEME_KEYS.map((key) => ({ key: settingKey(key), value: theme[key], updatedAt })))
-    .onConflictDoUpdate({
-      target: schema.settings.key,
-      set: { value: sql`excluded.value`, updatedAt },
-    })
-  if (version !== undefined)
-    await db.batch([guardEdit(db, sql`${settingsSnapshot('theme.')} = ${version}`), write])
-  else await write
 }
 
 /* ------------------------------------------------------------- サイト設定 */

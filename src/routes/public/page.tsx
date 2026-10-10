@@ -7,7 +7,6 @@ import type { AppEnv } from '../../env'
 import { getSessionUser, SESSION_COOKIE } from '../../lib/auth'
 import type { NavLink, Page } from '../../lib/sequence'
 import { SITE } from '../../site'
-import type { Theme } from '../../theme'
 import { Layout, type OgImage } from '../../ui/Layout'
 
 /*
@@ -103,7 +102,6 @@ export async function screenPage(
       CreativeWork は「この URL が何か」なので、それぞれのページに載せる。
     */
     jsonLd?: unknown
-    theme: Theme
     footer: Child
     // このページの中身を直す管理画面（adminHref が、ログインしている人にだけ出す）
     adminPath: string
@@ -118,7 +116,6 @@ export async function screenPage(
       canonical={`${SITE.origin}${page.canonical}`}
       jsonLd={page.jsonLd}
       nav={page.nav}
-      theme={page.theme}
       footer={page.footer}
       admin={await adminHref(c, page.adminPath)}
       image={page.image}

@@ -21,7 +21,6 @@ export const PreviewLayout = (props: PreviewLayoutProps) => (
     description={props.description}
     canonical=""
     nav={props.nav}
-    theme={props.theme}
     footer={props.footer}
     whole={props.whole}
     preview={

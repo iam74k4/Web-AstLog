@@ -2,7 +2,6 @@ import { Hono } from 'hono'
 import type { AppEnv } from '../../env'
 import { touchSiteOnWrite } from '../../lib/page-cache'
 import { accountRoutes } from './account'
-import { appearanceRoutes } from './appearance'
 import { authRoutes } from './auth'
 import { blockPreviewRoutes } from './block-preview'
 import { blockRoutes } from './blocks'
@@ -42,7 +41,6 @@ walled.route('/', dashboardRoutes)
 walled.route('/', memberRoutes)
 walled.route('/', itemRoutes)
 walled.route('/', blockRoutes)
-walled.route('/', appearanceRoutes)
 walled.route('/', siteSettingsRoutes)
 walled.route('/', accountRoutes)
 

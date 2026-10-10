@@ -6,7 +6,6 @@ import {
   findPublishedItem,
   listPublishedMembers,
   loadSiteSettings,
-  loadTheme,
   publishedBlocks,
 } from '../../db/queries'
 import * as schema from '../../db/schema'
@@ -130,10 +129,9 @@ export async function renderItem(
   story: boolean,
 ) {
   const db = drizzle(c.env.DB, { schema })
-  const [item, members, theme, blocks, site] = await Promise.all([
+  const [item, members, blocks, site] = await Promise.all([
     findPublishedItem(db, slug),
     listPublishedMembers(db),
-    loadTheme(db),
     publishedBlocks(db),
     loadSiteSettings(db),
   ])
@@ -225,7 +223,6 @@ export async function renderItem(
           ? { image: images.map((image) => absoluteUrl(image.url)) }
           : {}),
     },
-    theme,
     footer: <SiteSocials site={site} />,
     adminPath: `/admin/items/${item.id}/edit`,
     // 貼られたときの札は、この作品の画像（あれば）

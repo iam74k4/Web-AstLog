@@ -8,7 +8,6 @@ import {
   listPublishedItems,
   listPublishedMembers,
   loadSiteSettings,
-  loadTheme,
   publishedBlocks,
 } from '../../db/queries'
 import * as schema from '../../db/schema'
@@ -16,7 +15,6 @@ import { ITEM_KIND_KEYS, type ItemView, type KindCounts } from '../../domain'
 import type { AppEnv } from '../../env'
 import { bool, str, yearFrom } from '../../lib/format'
 import { SITE_SETTING_KEYS, type SiteSettings, siteSettingsErrors } from '../../site'
-import { isThemeValue, normalizeTheme, THEME_KEYS, type ThemeKey } from '../../theme'
 import {
   Band,
   Empty,
@@ -63,10 +61,9 @@ export const previewRoutes = new Hono<AppEnv>()
 // 保存関数・画像アップロード・初期ブロック作成は呼ばない。
 async function snapshot(c: Context<AppEnv>) {
   const database = db(c)
-  const [members, items, theme, blocks, site] = await Promise.all([
+  const [members, items, blocks, site] = await Promise.all([
     listPublishedMembers(database),
     listPublishedItems(database),
-    loadTheme(database),
     publishedBlocks(database),
     loadSiteSettings(database),
   ])
@@ -84,7 +81,7 @@ async function snapshot(c: Context<AppEnv>) {
     band: bandOf(blocks, counts),
     profile: profileOf(blocks, members),
   }
-  return { database, members, items, theme, blocks, site, data }
+  return { database, members, items, blocks, site, data }
 }
 
 type Snapshot = Awaited<ReturnType<typeof snapshot>>
@@ -171,7 +168,6 @@ function renderSnapshot(
         description={siteDescription(soloMember(saved.members), saved.site)}
         label="全体"
         nav={nav}
-        theme={saved.theme}
         footer={footer(saved)}
         publicHref="/all"
         whole
@@ -207,7 +203,6 @@ function renderSnapshot(
       label={label}
       // 未保存の値はこの応答だけにある。移動で値が消えることを避け、目次を出さない。
       nav={options.unsaved ? [] : previewNav(saved)}
-      theme={saved.theme}
       footer={footer(saved)}
       publicHref={screen === 'hero' ? '/' : `/${screen}`}
       {...options}
@@ -288,7 +283,6 @@ function memberResponse(
       publicHref={!options.unsaved && member.published === 1 ? memberHref(member.slug) : undefined}
       draft={member.published !== 1}
       nav={options.unsaved ? [] : previewNav(saved)}
-      theme={saved.theme}
       footer={footer(memberContext)}
       {...options}
     >
@@ -320,7 +314,6 @@ function itemResponse(
       }
       draft={item.published !== 1}
       nav={options.unsaved ? [] : previewNav(saved)}
-      theme={saved.theme}
       footer={footer(saved)}
       {...options}
     >
@@ -371,7 +364,6 @@ export async function validationFailure(
       editHref={editHref}
       unsaved
       nav={[]}
-      theme={saved.theme}
       footer={footer(saved)}
     >
       <Screen id="preview-errors" label="入力の確認">
@@ -551,7 +543,6 @@ export async function renderBlockPreview(
       warnings={options.warnings}
       draft={options.draft ?? block.published !== 1}
       nav={options.unsaved ? [] : previewNav(saved)}
-      theme={saved.theme}
       footer={footer(saved)}
     >
       {page.node}
@@ -593,29 +584,6 @@ previewRoutes.post('/preview/site', async (c) => {
   const saved = await snapshot(c)
   return renderSnapshot(c, { ...saved, site, data: { ...saved.data, site } }, screen, {
     editHref: '/admin/site',
-    unsaved: true,
-  })
-})
-
-previewRoutes.post('/preview/appearance', async (c) => {
-  const form = await postedForm(c)
-  if (!form) return c.text('フォームを読み取れませんでした。編集画面から再送してください。', 400)
-  const picked = Object.fromEntries(THEME_KEYS.map((key) => [key, str(form.get(key))])) as Record<
-    ThemeKey,
-    string
-  >
-  const screen = SCREENS.find((one) => one === (str(form.get('previewScreen')) || 'hero'))
-  const errors: Record<string, string> = {}
-  for (const key of THEME_KEYS) {
-    if (!isThemeValue(key, picked[key]))
-      errors[key] = `${key === 'accent' ? 'アクセント色' : '書体'}を選び直してください`
-  }
-  if (!screen) errors.previewScreen = 'プレビューする画面を選び直してください'
-  if (!screen || Object.keys(errors).length)
-    return validationFailure(c, errors, '/admin/appearance')
-  const saved = await snapshot(c)
-  return renderSnapshot(c, { ...saved, theme: normalizeTheme(picked) }, screen, {
-    editHref: '/admin/appearance',
     unsaved: true,
   })
 })

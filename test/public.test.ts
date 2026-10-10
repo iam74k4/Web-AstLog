@@ -3126,7 +3126,7 @@ describe('文書の外枠', () => {
       '/admin/members',
       '/admin/items',
       '/admin/blocks',
-      '/admin/appearance',
+      '/admin/site',
       '/admin/account',
     ]) {
       const response = await signed(path)

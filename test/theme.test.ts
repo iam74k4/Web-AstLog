@@ -2,99 +2,38 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import adminCss from '../public/admin.css'
 import css from '../public/app.css'
 import * as schema from '../src/db/schema'
-import { ACCENTS, THEME_KEYS, TYPEFACES } from '../src/theme'
 import { LOGO_COLORS } from '../src/ui/logo'
-import { db, form, get, okText, resetDb, seedItem, seedMember, signIn } from './helpers'
+import { db, get, okText, resetDb, seedItem, seedMember, signIn, touch } from './helpers'
 
 beforeEach(resetDb)
 
-const save = async (values: Record<string, string>) => {
-  const signed = await signIn()
-  return signed('/admin/appearance', { method: 'POST', body: form(values) })
-}
-
-const PICKED = { accent: 'ember', typeface: 'serif' }
-
-describe('見た目のプリセット', () => {
-  it('何も選んでいなければ既定の姿で出す', async () => {
+/*
+  見た目は1つ。前は管理画面の「見た目」でアクセント色（7色）と見出しの書体（3つ）を
+  選べたが、Cavani を下敷きにした白と墨・Poppins・夜明けの窓に決めたあとは、色の付いた
+  押し手や明朝・等幅の名札がその芯を崩した。選ぶ口ごと外し、前に保存した行は読まない。
+*/
+describe('見た目は1つ', () => {
+  it('公開ページは色や書体の印を持たない。前に保存した行が残っていても読まない', async () => {
+    await db()
+      .insert(schema.settings)
+      .values([
+        { key: 'theme.accent', value: 'ember' },
+        { key: 'theme.typeface', value: 'serif' },
+        { key: 'theme.layout', value: 'magazine' },
+      ])
+    await touch()
     const html = await okText('/')
-    // 既定はモノクロ（黒の上に白。文字もボタンも白）
-    expect(html).toContain('data-accent="mono"')
-    expect(html).toContain('data-typeface="sans"')
-    // 骨格は選ばせない（上の帯・本文・足元の1つだけ）ので、骨格の印は無い
+    expect(html).not.toContain('data-accent')
+    expect(html).not.toContain('data-typeface')
     expect(html).not.toContain('data-layout')
   })
 
-  it('選んだものが公開ページに出る', async () => {
-    const response = await save(PICKED)
-    expect(response.status).toBe(303)
-    expect(response.headers.get('location')).toBe('/admin/appearance?saved=1')
-
-    const html = await okText('/')
-    expect(html).toContain('data-accent="ember"')
-    expect(html).toContain('data-typeface="serif"')
-  })
-
-  it('個人ページも同じ姿になる', async () => {
-    await seedMember()
-    await save(PICKED)
-
-    const html = await okText('/members/okazaki')
-    expect(html).toContain('data-accent="ember"')
-  })
-
-  it('二度保存しても行が増えない', async () => {
-    await save(PICKED)
-    await save({ accent: 'mint', typeface: 'mono' })
-
-    const rows = await db().select().from(schema.settings)
-    expect(rows.filter((row) => row.key.startsWith('theme.'))).toHaveLength(2)
-    expect(await okText('/')).toContain('data-accent="mint"')
-  })
-
-  it('知らない値は保存しない', async () => {
-    const response = await save({ accent: 'chaos', typeface: 'serif' })
-    expect(response.status).toBe(400)
-
-    // 1つでも知らなければ、まとめて受け取らない
-    const html = await okText('/')
-    expect(html).toContain('data-accent="mono"')
-    expect(html).toContain('data-typeface="sans"')
-  })
-
-  it('DB に知らない値が入っていても既定に戻して描く', async () => {
-    // プリセットを1つ減らした後の、選んだままのサイトを想定する
-    await db().insert(schema.settings).values({ key: 'theme.accent', value: '消えた色' })
-    // 前に選べた骨格の行が残っていても、読まずに描く
-    await db().insert(schema.settings).values({ key: 'theme.layout', value: 'magazine' })
-
-    const response = await get('/')
-    expect(response.status).toBe(200)
-    const html = await response.text()
-    expect(html).toContain('data-accent="mono"')
-    expect(html).not.toContain('data-layout')
-  })
-
-  it('ログインしていなければ見た目を変えられない', async () => {
-    const response = await get('/admin/appearance', { method: 'POST', body: form(PICKED) })
-    expect(response.status).toBe(303)
-    expect(response.headers.get('location')).toBe('/admin/login')
-
-    expect(await okText('/')).toContain('data-accent="mono"')
-  })
-
-  it('選べるものだけを並べ、いま選んでいるものに印を付ける', async () => {
-    await save(PICKED)
+  it('管理画面に「見た目」の画面も入口も無い', async () => {
     const signed = await signIn()
-    const html = await (await signed('/admin/appearance')).text()
-
-    expect(html).toContain('value="ember" checked=""')
-    // 見本は全種類ぶん出るので、data-typeface を見ても選択中は分からない
-    expect(html).toContain('value="serif" checked=""')
-    expect(html).not.toContain('value="sans" checked=""')
-    // 骨格の組は並べない
-    expect(html).not.toContain('name="layout"')
-    expect(THEME_KEYS).toEqual(['accent', 'typeface'])
+    expect((await signed('/admin/appearance')).status).toBe(404)
+    const dashboard = await (await signed('/admin')).text()
+    expect(dashboard).not.toContain('/admin/appearance')
+    expect(dashboard).not.toContain('色と書体')
   })
 })
 
@@ -125,11 +64,7 @@ const sheet = bare(css)
 const adminSheet = bare(adminCss)
 const sheets = `${sheet}\n${adminSheet}`
 
-/*
-  選択肢は src/theme.ts が正だが、実際に姿を変えるのは app.css。
-  片方だけ足すと、選べるのに何も変わらない選択肢ができる。
-*/
-describe('プリセットと CSS', () => {
+describe('CSS の読み込み', () => {
   it('CSS を読めている（読めていないと、以下の検査が素通りする）', () => {
     expect(css.length).toBeGreaterThan(1000)
     expect(adminCss.length).toBeGreaterThan(1000)
@@ -144,9 +79,22 @@ describe('プリセットと CSS', () => {
     expect(sheet).toContain('body[data-site]')
   })
 
-  it('アクセント色と書体には [data-accent] / [data-typeface] の指定がある', () => {
-    for (const accent of ACCENTS) expect(sheet).toContain(`[data-accent='${accent.key}']`)
-    for (const typeface of TYPEFACES) expect(sheet).toContain(`[data-typeface='${typeface.key}']`)
+  it('読む段はどれも定義されている（消した段を読み続けない）', () => {
+    /*
+      未定義の var() は黙って既定値（色は継承、aspect-ratio は auto）に倒れ、画面は崩れても
+      テストもブラウザも何も言わない。アクセントの6色を外した日、管理画面の注意の色
+      （--ember）が黙って継承色になっていた。--avatar-size だけは部品が style 属性で渡す
+    */
+    const defined = new Set([...sheets.matchAll(/(--[\w-]+)\s*:/g)].map(([, name]) => name))
+    const missing = [...new Set([...sheets.matchAll(/var\((--[\w-]+)/g)].map(([, name]) => name))]
+      .filter((name) => name && !defined.has(name))
+      .filter((name) => name !== '--avatar-size')
+    expect(missing).toEqual([])
+  })
+
+  it('色と書体のプリセットの指定を持たない', () => {
+    expect(sheets).not.toContain('[data-accent')
+    expect(sheets).not.toContain('[data-typeface')
   })
 })
 
@@ -170,16 +118,7 @@ describe('スタイルシートの分け方', () => {
     const shared = [...classesOf(sheet)].filter((name) => admin.has(name))
     expect(shared).toEqual([])
     // 代表を名指しで（上の突き合わせは、admin.css が空になっても緑になる）
-    for (const name of [
-      'admin-shell',
-      'admin-nav',
-      'btn',
-      'field',
-      'toggle',
-      'row',
-      'login',
-      'preset',
-    ]) {
+    for (const name of ['admin-shell', 'admin-nav', 'btn', 'field', 'toggle', 'row', 'login']) {
       expect(admin.has(name), name).toBe(true)
     }
   })
@@ -218,9 +157,9 @@ describe('スタイルシートの分け方', () => {
     )
   })
 
-  it('強制色では公開状態と見た目の選択を標準の入力部品で見せる', () => {
+  it('強制色では公開状態を標準の入力部品で見せる', () => {
     const forced = blockAt(adminSheet, '@media (forced-colors: active)')
-    for (const selector of ['.toggle input {', '.preset input {']) {
+    for (const selector of ['.toggle input {']) {
       const input = bodyOf(forced, selector)
       expect(input).toContain('opacity: 1')
       expect(input).toContain('width: var(--switch-knob)')
@@ -228,10 +167,8 @@ describe('スタイルシートの分け方', () => {
       expect(input).not.toContain('appearance: none')
     }
     expect(bodyOf(forced, '.toggle__track {')).toContain('display: none')
-    expect(bodyOf(forced, '.preset__box {')).toContain('padding-top: calc(')
     // 通常の表示は既存の装飾を使い続ける。強制色の指定を括りの外へ出さない。
     expect(bodyOf(adminSheet, '.toggle input {')).toContain('opacity: 0')
-    expect(bodyOf(adminSheet, '.preset input {')).toContain('opacity: 0')
   })
 })
 
@@ -1511,20 +1448,19 @@ describe('配色（白い地と夜明けの窓）', () => {
     expect(await login.text()).toContain(meta)
   })
 
-  it('既定のアクセントはモノクロ。リンクもボタンも字と同じ墨で、ボタンの字は白', () => {
+  it('アクセントは墨の1色。リンクもボタンも字と同じ墨で、ボタンの字は白', () => {
     const root = bodyOf(sheet, ':root {')
     const value = (name: string) => root.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1]
     expect(value('--accent')).toBe('var(--mono)')
     expect(value('--accent-ink')).toBe('#ffffff')
     // 墨は字の墨と同じ1色（墨を2種類持たない）
     expect(value('--mono')).toBe(value('--ink'))
-    expect(bodyOf(sheet, "[data-accent='mono'] {")).toContain('--accent: var(--mono);')
   })
 
   it('紙は画面と同じ白い地で刷る。色の段を差し替えず、夜明けの窓だけを刷らない', () => {
     const screen = bodyOf(sheet, ':root {')
-    // 読めているか（地・面・線・字・モノクロとアクセント6色と薄い地・危険・スイッチ・窓）
-    expect(colorTokens(screen).length).toBeGreaterThan(20)
+    // 読めているか（地・面・線・字・墨と薄い地・危険・スイッチ・窓）
+    expect(colorTokens(screen).length).toBeGreaterThan(14)
     const print = blockAt(sheet, '@media print')
     expect(print).not.toContain(':root {')
     expect(bodyOf(print, '.window {')).toContain('display: none')

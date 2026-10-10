@@ -1,11 +1,10 @@
 import { count, desc, inArray, min } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { blockShown } from '../../blocks'
-import { defaultBlocks, listBlocks, loadSiteSettings, loadTheme } from '../../db/queries'
+import { defaultBlocks, listBlocks, loadSiteSettings } from '../../db/queries'
 import * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
 import { hasContact, SITE_SETTING_KEYS } from '../../site'
-import { THEME_CHOICES } from '../../theme'
 import { AdminDashboard, type DashboardAction, type DashboardCounts } from '../../ui/AdminDashboard'
 import { db } from './request'
 
@@ -31,7 +30,7 @@ const countsOf = (rows: CountRow[]): DashboardCounts => {
 // GET は状態を読むだけ。既定の構成を表示しても、初期行を勝手に保存しない。
 dashboardRoutes.get('/', async (c) => {
   const database = db(c)
-  const [memberRows, itemRows, blocks, site, theme, siteRows] = await Promise.all([
+  const [memberRows, itemRows, blocks, site, siteRows] = await Promise.all([
     database
       .select({
         published: schema.members.published,
@@ -51,7 +50,6 @@ dashboardRoutes.get('/', async (c) => {
       .groupBy(schema.items.type, schema.items.published),
     listBlocks(database),
     loadSiteSettings(database),
-    loadTheme(database),
     database
       .select({ key: schema.settings.key })
       .from(schema.settings)
@@ -163,10 +161,6 @@ dashboardRoutes.get('/', async (c) => {
       blockCount={blocks.length}
       blockDrafts={blockDrafts}
       pages={pages}
-      appearance={[
-        THEME_CHOICES.accent.find((option) => option.key === theme.accent)?.label,
-        THEME_CHOICES.typeface.find((option) => option.key === theme.typeface)?.label,
-      ].join(' · ')}
     />,
   )
 })

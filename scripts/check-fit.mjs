@@ -73,8 +73,8 @@
   両方で測る。ログインした姿は、セッションを使い捨ての D1 に直接作り、クッキーを
   渡して開く（OAuth は通らない）。
 
-  書体は body の data-typeface を差し替えて見る（下の measure）。
-  寸法3 × 書体3 = 9通りを、URL ごと・姿ごとに。
+  寸法3通りを、URL ごと・姿ごとに。書体は1つ（見出しの欧文は Poppins。見た目を選ぶ口は
+  持たない）——前は管理画面の「見た目」の3書体を body の data-typeface で差し替えて測っていた。
 
   `npm test` とは分けてある。あちらは workerd の中で D1 と KV ごと動かす場所で、
   こちらは本物の版面が要る。混ぜると、片方のために片方の実行環境を曲げることになる。
@@ -94,7 +94,6 @@ import process from 'node:process'
 import { chromium } from 'playwright'
 import { devServer, ROOT, scratchState } from './lib/dev-server.mjs'
 import { fixture, seedBlocks } from './lib/fit-fixture.mjs'
-import { keysOf } from './lib/theme.mjs'
 import { DESIGN_SIZES } from './lib/viewports.mjs'
 
 // 設計サイズ（390 と 768 は指で測る）。一覧と理由は scripts/lib/viewports.mjs
@@ -175,18 +174,12 @@ async function screenPaths(base, run) {
 /*
   1つの姿を測る。ページの中で動く（page.evaluate）。
 
-  書体は body の data-typeface を差し替えて見る。マークアップはどのプリセットでも
-  同じで、変わるのは app.css の [data-typeface] 側だけ。だから属性を差し替えれば、
-  管理画面で保存したのと同じ姿になる。保存の経路を通すと、測りたい版面ではなく
-  設定の保存を測ることになる。
-
   測り終えたら、足した空きを外してページの頭へ戻す（次の姿を同じ位置から測る）。
 */
-const measure = ([typeface, cfg]) => {
+const measure = ([, cfg]) => {
   const root = document.documentElement
   const scroller = document.scrollingElement ?? root
   const to = (y) => scroller.scrollTo({ top: y, behavior: 'instant' })
-  document.body.dataset.typeface = typeface
   to(0)
   /*
     動き（押した手のばね・ページの切り替え）は終わらせてから測る。測るのは止まった版面で、
@@ -532,11 +525,10 @@ async function wholePass(browser, base, typefaces) {
       failures.push(`${viewport.width}x${viewport.height} /all — 画像を読めない: ${url}`)
     await page.evaluate(() => document.fonts.ready.then(() => true))
     for (const typeface of typefaces) {
-      const wide = await page.evaluate((typeface) => {
-        document.body.dataset.typeface = typeface
+      const wide = await page.evaluate(() => {
         const root = document.documentElement
         return root.scrollWidth - root.clientWidth
-      }, typeface)
+      })
       checked += 1
       if (wide > SLACK) {
         failures.push(
@@ -551,7 +543,7 @@ async function wholePass(browser, base, typefaces) {
 
 /*
   1つの中身（seed か fixture）を測る。base に立っているサーバの sitemap の全 URL を、
-  寸法3 × 姿（訪問者・ログイン）× 書体3 で。
+  寸法3 × 姿（訪問者・ログイン）で。
 */
 async function measureRun(browser, base, run, typefaces) {
   const failures = []
@@ -654,7 +646,8 @@ async function measureRun(browser, base, run, typefaces) {
 }
 
 async function main() {
-  const typefaces = keysOf('TYPEFACES')
+  // 書体は1つ。測った姿の札（失敗の行の頭）にだけ使う
+  const typefaces = ['Poppins']
   const port = Number(process.env.FIT_PORT ?? 8788)
 
   const many = fixture()
@@ -724,7 +717,7 @@ async function main() {
     await browser.close()
   }
 
-  const shape = `${typefaces.length}書体 × ${VIEWPORTS.length}寸法`
+  const shape = `${VIEWPORTS.length}寸法`
   let failed = 0
   for (const result of results) {
     const poses = result.poses > 1 ? ` × ${result.poses}姿` : ''

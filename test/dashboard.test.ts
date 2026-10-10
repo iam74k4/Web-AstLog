@@ -28,7 +28,8 @@ describe('管理画面の概要', () => {
     expect(html).toContain('既定の並び')
     // 既定の並びで出るのは入口だけ（作品・メンバー・連絡先がまだ無いので、Projects・Team・Contact は出ない）
     expect(plain(html)).toContain('目次に表示: 1 ページ')
-    expect(plain(html)).toContain('モノクロ · ゴシック')
+    // 見た目は1つ（選ぶ口を持たない）ので、色と書体のカードは無い
+    expect(plain(html)).not.toContain('色と書体')
     expect(await db().query.settings.findMany()).toHaveLength(0)
     expect(await db().query.blocks.findMany()).toHaveLength(0)
     expect(await db().query.members.findMany()).toHaveLength(0)

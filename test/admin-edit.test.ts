@@ -2,7 +2,7 @@ import { env } from 'cloudflare:test'
 import { eq, sql } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { guardEdit, isEditConflict, settingsVersion } from '../src/db/edit'
-import { loadSiteSettings, loadTheme } from '../src/db/queries'
+import { loadSiteSettings } from '../src/db/queries'
 import * as schema from '../src/db/schema'
 import { MEDIA_RETENTION_SECONDS } from '../src/lib/media-retention'
 import { discardImages } from '../src/routes/admin/images'
@@ -118,27 +118,16 @@ describe('古い編集を上書きしない', () => {
     expect((await db().select().from(schema.blocks))[0]?.body).toBe('新しい本文')
   })
 
-  it('サイト設定と見た目はそれぞれ全体を1つの版として保存する', async () => {
+  it('サイト設定は全体を1つの版として保存する', async () => {
     const signed = await signIn({ rawForms: true })
-    for (const kind of ['site', 'appearance'] as const) {
-      const version = await settingsVersion(db(), kind === 'site' ? 'site.' : 'theme.')
-      const fresh: Record<string, string> =
-        kind === 'site'
-          ? { ...TEST_SITE, tagline: '最新の紹介' }
-          : { accent: 'ember', typeface: 'serif' }
-      const old: Record<string, string> =
-        kind === 'site'
-          ? { ...TEST_SITE, tagline: '未保存の紹介' }
-          : { accent: 'sky', typeface: 'mono' }
-      const save = (values: Record<string, string>) =>
-        signed(`/admin/${kind}`, { method: 'POST', body: form({ ...values, _version: version }) })
-      expect((await save(fresh)).status).toBe(303)
-      const response = await save(old)
-      expect(response.status).toBe(409)
-      expect(await response.text()).toContain('入力内容は残しています')
-    }
+    const version = await settingsVersion(db(), 'site.')
+    const save = (values: Record<string, string>) =>
+      signed('/admin/site', { method: 'POST', body: form({ ...values, _version: version }) })
+    expect((await save({ ...TEST_SITE, tagline: '最新の紹介' })).status).toBe(303)
+    const response = await save({ ...TEST_SITE, tagline: '未保存の紹介' })
+    expect(response.status).toBe(409)
+    expect(await response.text()).toContain('入力内容は残しています')
     expect((await loadSiteSettings(db())).tagline).toBe('最新の紹介')
-    expect(await loadTheme(db())).toMatchObject({ accent: 'ember', typeface: 'serif' })
   })
 })
 

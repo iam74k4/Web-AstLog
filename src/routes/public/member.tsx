@@ -6,7 +6,6 @@ import {
   findPublishedMember,
   listPublishedMembers,
   loadSiteSettings,
-  loadTheme,
   publishedBlocks,
 } from '../../db/queries'
 import * as schema from '../../db/schema'
@@ -62,7 +61,7 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
   */
   if (rest !== null && rest !== 'contact' && !isSection(rest)) return c.notFound()
   const db = drizzle(c.env.DB, { schema })
-  const [member, members, theme, blocks, site] = await Promise.all([
+  const [member, members, blocks, site] = await Promise.all([
     findPublishedMember(db, slug),
     /*
       人数だけを見る。サイトが1人として名乗っているあいだ（soloMember）は、
@@ -72,7 +71,6 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
       持つことになる。
     */
     listPublishedMembers(db),
-    loadTheme(db),
     publishedBlocks(db),
     loadSiteSettings(db),
   ])
@@ -173,7 +171,6 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
               : { worksFor: { '@type': 'Organization', name: SITE.name, url: SITE.origin } }),
           }),
         },
-    theme,
     // 足元はサイトのもの。個人ページだけのものに入れ替えると、別のサイトへ飛んだように見える
     footer: <SiteSocials site={site} />,
     adminPath: `/admin/members/${member.id}/edit`,

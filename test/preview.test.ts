@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:test'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { loadSiteSettings, loadTheme } from '../src/db/queries'
+import { loadSiteSettings } from '../src/db/queries'
 import * as schema from '../src/db/schema'
 import { SITE_VERSION_KEY } from '../src/lib/page-cache'
 import {
@@ -92,9 +92,9 @@ describe('管理プレビューの認証と非公開', () => {
 
   it('認証後も外部サイトからのPOSTは拒否する', async () => {
     const fetch = await signIn()
-    const response = await fetch('/admin/preview/appearance', {
+    const response = await fetch('/admin/preview/site', {
       method: 'POST',
-      body: form({ accent: 'rose', typeface: 'mono' }),
+      body: form(TEST_SITE),
       headers: { origin: 'https://other.example' },
     })
     expect(response.status).toBe(403)
@@ -235,20 +235,20 @@ describe('保存前のサイト設定・見た目', () => {
     },
   )
 
-  it('見た目の保存前プレビューは既定の入口で選択色・書体を描く', async () => {
+  it('サイト設定の保存前プレビューは既定の入口で描く', async () => {
     await seedItem({ slug: 'app' })
     const fetch = await signIn()
     const version = await env.MEDIA.get(SITE_VERSION_KEY)
-    const response = await fetch('/admin/preview/appearance', {
+    const before = await loadSiteSettings(db())
+    const response = await fetch('/admin/preview/site', {
       method: 'POST',
-      body: form({ accent: 'rose', typeface: 'mono' }),
+      body: form({ ...TEST_SITE, heroLead: '保存前のリード文です。' }),
     })
     const html = await previewText(response)
-    expect(html).toContain('data-accent="rose"')
-    expect(html).toContain('data-typeface="mono"')
+    expect(html).toContain('保存前のリード文です。')
     expect(html).toContain('class="hero hero--cover"')
     expect(html).not.toContain('data-whole=')
-    expect(await loadTheme(db())).toEqual({ accent: 'mono', typeface: 'sans' })
+    expect(await loadSiteSettings(db())).toEqual(before)
     expect(await env.MEDIA.get(SITE_VERSION_KEY)).toBe(version)
   })
 
@@ -258,20 +258,20 @@ describe('保存前のサイト設定・見た目', () => {
       await seedItem({ slug: 'app' })
       const fetch = await signIn()
       const html = await previewText(
-        await fetch('/admin/preview/appearance', {
+        await fetch('/admin/preview/site', {
           method: 'POST',
-          body: form({ accent: 'mint', typeface: 'serif', previewScreen: screen }),
+          body: form({ ...TEST_SITE, previewScreen: screen }),
         }),
       )
-      expect(html).toContain('data-accent="mint"')
+      expect(html).toContain('class="preview-notice"')
       expect(html.includes('data-whole=""')).toBe(screen === 'all')
       expect((await fetch(`/admin/preview?screen=${screen}`)).status).toBe(200)
     },
   )
 
-  it('見た目とサイト設定の両方にProfile / Teamと表示人数の説明を出す', async () => {
+  it('サイト設定にProfile / Teamと表示人数の説明を出す', async () => {
     const fetch = await signIn()
-    for (const path of ['/admin/appearance', '/admin/site']) {
+    for (const path of ['/admin/site']) {
       const response = await fetch(path)
       expect(response.status).toBe(200)
       const html = await response.text()
@@ -281,17 +281,14 @@ describe('保存前のサイト設定・見た目', () => {
     }
   })
 
-  const previewValues = (target: string): Record<string, string> =>
-    target === 'appearance'
-      ? { accent: 'rose', typeface: 'serif', previewScreen: 'team' }
-      : {
-          ...TEST_SITE,
-          instagram: 'https://www.instagram.com/preview.profile',
-          email: 'preview-profile@example.test',
-          previewScreen: 'team',
-        }
+  const previewValues = (_target: string): Record<string, string> => ({
+    ...TEST_SITE,
+    instagram: 'https://www.instagram.com/preview.profile',
+    email: 'preview-profile@example.test',
+    previewScreen: 'team',
+  })
 
-  it.each(['appearance', 'site'])(
+  it.each(['site'])(
     '%sのProfileプレビューは未保存設定を反映し、DB・KV全体を変えない',
     async (target) => {
       await seedMember({
@@ -316,23 +313,16 @@ describe('保存前のサイト設定・見た目', () => {
       expect(html).toContain('公開中の自己紹介')
       expect(html).not.toContain('未公開の人')
       expect(html).toContain('このプレビューでは保存されません')
-      if (target === 'appearance') {
-        expect(html).toContain('data-accent="rose"')
-        expect(html).toContain('data-typeface="serif"')
-      } else {
-        expect(html).toContain('href="https://www.instagram.com/preview.profile"')
-        expect(html).toContain('mailto:preview-profile@example.test')
-      }
+      expect(html).toContain('href="https://www.instagram.com/preview.profile"')
+      expect(html).toContain('mailto:preview-profile@example.test')
       expect(await previewStorageState()).toEqual(before)
       const saved = await previewText(await fetch('/admin/preview?screen=team'))
-      expect(saved).toContain('data-accent="mono"')
-      expect(saved).toContain('data-typeface="sans"')
       expect(saved).not.toContain('preview.profile')
       expect(saved).not.toContain('mailto:preview-profile@example.test')
     },
   )
 
-  it.each(['appearance', 'site'])(
+  it.each(['site'])(
     '%sのTeamプレビューは公開中の複数人を表示し、下書きや永続設定を変えない',
     async (target) => {
       await seedMember({ name: '公開の一人目', celestialBody: 'moon' })
@@ -353,13 +343,8 @@ describe('保存前のサイト設定・見た目', () => {
       expect(html).toContain('公開の二人目')
       expect(html).not.toContain('未公開の人')
       expect(html).not.toContain('celestial--art')
-      if (target === 'appearance') {
-        expect(html).toContain('data-accent="rose"')
-        expect(html).toContain('data-typeface="serif"')
-      } else {
-        expect(html).toContain('href="https://www.instagram.com/preview.profile"')
-        expect(html).toContain('mailto:preview-profile@example.test')
-      }
+      expect(html).toContain('href="https://www.instagram.com/preview.profile"')
+      expect(html).toContain('mailto:preview-profile@example.test')
       expect(await previewStorageState()).toEqual(before)
     },
   )
@@ -375,7 +360,7 @@ describe('保存前のサイト設定・見た目', () => {
       }
       const fetch = await signIn()
       const before = await previewStorageState()
-      for (const target of ['appearance', 'site']) {
+      for (const target of ['site']) {
         const html = await previewText(
           await fetch(`/admin/preview/${target}`, {
             method: 'POST',
@@ -391,7 +376,7 @@ describe('保存前のサイト設定・見た目', () => {
     },
   )
 
-  it('不正な宛先・プリセット・表示対象・壊れた本文を400で返し、保存しない', async () => {
+  it('不正な宛先・表示対象・壊れた本文を400で返し、保存しない', async () => {
     const fetch = await signIn()
     const version = await env.MEDIA.get(SITE_VERSION_KEY)
     const savedSite = await loadSiteSettings(db())
@@ -401,11 +386,7 @@ describe('保存前のサイト設定・見た目', () => {
         path: '/admin/preview/site',
         body: form({ ...TEST_SITE, email: 'a@example.test?subject=bad' }),
       },
-      { path: '/admin/preview/appearance', body: form({ accent: 'unknown', typeface: 'sans' }) },
-      {
-        path: '/admin/preview/appearance',
-        body: form({ accent: 'mono', typeface: 'sans', previewScreen: 'unknown' }),
-      },
+      { path: '/admin/preview/site', body: form({ ...TEST_SITE, previewScreen: 'unknown' }) },
     ]
     for (const { path, body } of invalid) {
       const response = await fetch(path, { method: 'POST', body })
@@ -424,7 +405,6 @@ describe('保存前のサイト設定・見た目', () => {
       body: '{}',
     })
     expect(json.status).toBe(400)
-    expect(await loadTheme(db())).toEqual({ accent: 'mono', typeface: 'sans' })
     expect(await loadSiteSettings(db())).toEqual(savedSite)
     expect(await env.MEDIA.get(SITE_VERSION_KEY)).toBe(version)
   })
@@ -458,7 +438,6 @@ describe('保存前プレビューから編集を続ける案内', () => {
   it('設定の入力エラーは欄ごとの理由と元のタブへの案内を示し、設定を変えない', async () => {
     const fetch = await signIn()
     const site = await loadSiteSettings(db())
-    const theme = await loadTheme(db())
     const version = await env.MEDIA.get(SITE_VERSION_KEY)
     const cases = [
       {
@@ -467,13 +446,8 @@ describe('保存前プレビューから編集を続ける案内', () => {
         messages: ['サイトの一言: 文を入れてください', '入口の紹介文: 文を入れてください'],
       },
       {
-        path: '/admin/preview/appearance',
-        body: form({ accent: 'unknown', typeface: 'sans' }),
-        messages: ['アクセント色を選び直してください'],
-      },
-      {
-        path: '/admin/preview/appearance',
-        body: form({ accent: 'mono', typeface: 'sans', previewScreen: 'unknown' }),
+        path: '/admin/preview/site',
+        body: form({ ...TEST_SITE, previewScreen: 'unknown' }),
         messages: ['プレビューする画面を選び直してください'],
       },
     ]
@@ -488,7 +462,6 @@ describe('保存前プレビューから編集を続ける案内', () => {
       for (const message of messages) expect(html).toContain(message)
     }
     expect(await loadSiteSettings(db())).toEqual(site)
-    expect(await loadTheme(db())).toEqual(theme)
     expect(await env.MEDIA.get(SITE_VERSION_KEY)).toBe(version)
   })
 })

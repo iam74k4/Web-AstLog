@@ -624,7 +624,7 @@
   エラー（--danger）と色を分ける——赤は「保存できなかった」と読まれる
 */
 .field__warn {
-  color: var(--ember);
+  color: var(--warn);
   font-size: var(--fs-meta);
   line-height: 1.5;
 }
@@ -717,7 +717,7 @@
 
 .shot-row__image {
   width: 96px;
-  aspect-ratio: var(--strip-ratio);
+  aspect-ratio: var(--thumb-ratio);
   object-fit: contain;
   background: var(--surface);
 }
@@ -1077,107 +1077,6 @@
   flex: 1;
 }
 
-/* --- 見た目のプリセット選び --- */
-
-.presets {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-  padding: var(--sp-5);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: var(--highlight);
-}
-
-.presets__legend {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: var(--sp-3);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-}
-
-.presets__note {
-  color: var(--ink-weak);
-  font-size: var(--fs-meta);
-  font-weight: 400;
-}
-
-.presets__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: var(--sp-3);
-}
-
-.preset {
-  position: relative;
-  display: block;
-  cursor: pointer;
-}
-
-/* ラジオは消さずに視覚の外へ。読み上げと矢印キーでの移動を残すため */
-.preset input {
-  position: absolute;
-  opacity: 0;
-  width: 1px;
-  height: 1px;
-}
-
-.preset__box {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  height: 100%;
-  padding: var(--sp-4);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  transition:
-    border-color var(--dur-fast) var(--ease),
-    background var(--dur-fast) var(--ease),
-    scale var(--dur-spring) var(--ease-spring);
-}
-
-.preset input:checked + .preset__box {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.preset input:focus-visible + .preset__box {
-  outline: var(--focus-ring) solid var(--accent);
-  outline-offset: var(--focus-offset);
-}
-
-.preset__label {
-  font-size: var(--fs-sm);
-}
-
-.preset__note {
-  color: var(--ink-weak);
-  font-size: var(--fs-meta);
-  line-height: 1.5;
-}
-
-.swatch {
-  display: block;
-  aspect-ratio: 16 / 9;
-  border-radius: var(--radius-sm);
-  background: var(--accent);
-}
-
-.sample {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  aspect-ratio: 16 / 9;
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  font-family: var(--font-display);
-  font-size: var(--fs-lg);
-}
-
 /* ============================================================ 600px 以上 */
 
 @media (min-width: 600px) {
@@ -1384,17 +1283,6 @@ html:has(.admin-shell) {
 .input {
   scroll-margin-bottom: var(--admin-bar-space);
 }
-.swatch {
-  aspect-ratio: auto;
-  height: var(--tap);
-}
-.sample {
-  aspect-ratio: auto;
-  min-height: var(--admin-art-size);
-}
-.preset__box {
-  padding: var(--sp-3);
-}
 
 .admin-head h1 {
   font-size: var(--fs-display-xs);
@@ -1491,39 +1379,6 @@ html:has(.admin-shell) {
 }
 .icon-btn {
   gap: var(--sp-2);
-}
-.design-sample {
-  padding: var(--sp-6);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-}
-.design-sample__brand {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: var(--fs-meta);
-  color: var(--ink-weak);
-}
-.design-sample h2 {
-  margin-block: var(--sp-5);
-  font-family: var(--font-display);
-  font-size: var(--fs-display-sm);
-}
-.design-sample p {
-  font-size: var(--fs-sm);
-  color: var(--ink-weak);
-  margin-bottom: var(--sp-5);
-}
-.design-sample__link {
-  color: var(--accent);
-  margin-right: var(--sp-5);
-}
-.design-sample__pill {
-  background: var(--accent-soft);
-  color: var(--accent);
-  border-radius: var(--radius-sm);
-  padding: var(--sp-3);
 }
 .placement-hint {
   border-left: var(--sp-2) solid var(--accent);
@@ -1750,12 +1605,6 @@ html:has(.admin-shell) {
     align-items: start;
   }
 
-  .presets:has([name='accent']) .presets__grid {
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-  }
-  .presets:has([name='typeface']) .presets__grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
   .dashboard-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -1812,34 +1661,8 @@ html:has(.admin-shell) {
 .btn:active,
 .icon-btn:active,
 .move-btn:not(:disabled):active,
-.tabs a:active,
-.preset:active .preset__box {
+.tabs a:active {
   scale: var(--press);
-}
-
-/*
-  選んだ瞬間だけ、ぷるんと揺れる（Jelly Radio）。見た目のプリセットの選択肢に使う。
-  :focus を条件にするのは、読み込んだときに最初から選ばれているものまで揺らさないため。
-  クリックでも矢印キーでも、選んだものにはフォーカスが乗る。
-  fill-mode を付けないのは、揺れ終わったあとも押したら縮むようにするため
-*/
-.preset input:checked:focus + .preset__box {
-  animation: jelly var(--dur-spring) var(--ease);
-}
-
-@keyframes jelly {
-  30% {
-    scale: 1.05 0.95;
-  }
-  45% {
-    scale: 0.97 1.03;
-  }
-  60% {
-    scale: 1.02 0.98;
-  }
-  78% {
-    scale: 0.995 1.005;
-  }
 }
 
 /* ============================================ 入力手段で分ける（幅ではなく） */
@@ -1883,17 +1706,5 @@ html:has(.admin-shell) {
 
   .toggle__track {
     display: none;
-  }
-
-  .preset input {
-    opacity: 1;
-    width: var(--switch-knob);
-    height: var(--switch-knob);
-    top: var(--sp-4);
-    left: var(--sp-4);
-  }
-
-  .preset__box {
-    padding-top: calc(var(--sp-4) + var(--switch-knob) + var(--sp-3));
   }
 }

@@ -162,7 +162,7 @@ Projects、個人ページは Profile か Team）。先頭の Hero へはロゴ�
 
 ログイン後は概要から次の設定に進む。追加・編集・削除は「一覧 → フォーム → 一覧」で閉じ、
 削除は確認を挟む。保存済みの内容は下書きもプレビューできる。メンバー・作品・ブロック・
-サイト設定・見た目の入力中の内容も、選んだ画像とともにダイアログで確認してから保存できる。
+サイト設定の入力中の内容も、選んだ画像とともにダイアログで確認してから保存できる。
 
 ```mermaid
 flowchart TD
@@ -179,7 +179,6 @@ flowchart TD
     Blocks["構成<br>GET /admin/blocks"]
     BForm["ブロックフォーム<br>/blocks/new?type= ・ /:id/edit"]
     BDel["外す確認<br>GET /blocks/:id/delete"]
-    Look["見た目<br>GET /admin/appearance"]
     SiteSettings["サイト設定<br>GET /admin/site"]
     Public["公開ページ<br>/ ・ /all"]
 
@@ -188,19 +187,16 @@ flowchart TD
     Dashboard --> Items
     Dashboard --> Blocks
     Dashboard --> SiteSettings
-    Dashboard --> Look
     Dashboard -->|"保存済み全体を確認"| Preview
     MForm -->|"保存済みは別タブ / 入力中はダイアログ"| Preview
     IForm -->|"保存済みは別タブ / 入力中はダイアログ"| Preview
     BForm -->|"保存済みは別タブ / 入力中はダイアログ"| Preview
     SiteSettings -->|"フォームをプレビューに POST・保存しない"| Preview
-    Look -->|"フォームをプレビューに POST・保存しない"| Preview
     Members <-->|"左ナビの足元の名前"| Account
     Account -->|"すべての端末からログアウト<br>POST /admin/account/logout-all → 303 ?out=all"| Login
     Members <-->|"左ナビ"| Items
     Items <-->|"左ナビ"| Blocks
-    Blocks <-->|"左ナビ"| Look
-    Look <-->|"左ナビ"| SiteSettings
+    Blocks <-->|"左ナビ"| SiteSettings
     SiteSettings -->|"POST → 303 ?saved=1<br>不正な値なら 400"| SiteSettings
 
     Blocks -->|"↑↓ POST /:id/move → 303 #block-id"| Blocks
@@ -218,7 +214,6 @@ flowchart TD
     BForm -->|"外す"| BDel
     BDel -->|"POST → 303 ?deleted=1"| Blocks
     BDel -->|"キャンセル（編集から来たら編集へ）"| BForm
-    Look -->|"POST → 303 ?saved=1<br>選べない値なら 400"| Look
 
     Members -->|"＋ Add / 編集"| MForm
     MForm -->|"POST → 303 ?saved=1 / ?saved=draft"| Members
@@ -303,7 +298,7 @@ flowchart TD
 先にそれを行にしてから触らせる。直接 `POST /admin/blocks` が来たときも、
 足す前に既定の並びを行にする（足したのに4節が消える、を起こさないため）。
 
-見た目とサイト設定は一覧を持たず、保存すると同じ画面に戻る。固定の項目を
+サイト設定は一覧を持たず、保存すると同じ画面に戻る。固定の項目を
 編集するので、「どれを編集中か」を示す一覧が要らない。
 
 ## 認証

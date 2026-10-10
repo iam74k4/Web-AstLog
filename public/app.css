@@ -64,7 +64,6 @@
   --admin-thumb-width: 112px;
   --admin-thumb-height: 70px;
   --admin-bar-space: 136px;
-  --admin-swatch-size: 18px;
   --admin-sample-height: 100px;
 
   --font-sans:
@@ -84,7 +83,6 @@
     英字の札と別の書体に見えた
   */
   --font-mono: ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, Consolas, monospace;
-  --font-serif: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', Georgia, serif;
 
   /*
     欧文の見出しの書体（Poppins。public/assets に同梱した欧文だけの4つの太さ。上の
@@ -95,7 +93,8 @@
 
   /*
     見出しの書体（目次・節の見出し・押し手・作品名も読む）。本文は読みやすさを優先して
-    常に --font-sans。管理画面の「見た目」の書体のプリセットはこの1つを差し替える
+    常に --font-sans。見出しの書体は選ばせない（明朝や等幅に差し替えると、Cavani の
+    字間の広い大文字の名札が別のものに見えた）
   */
   --font-display: var(--font-latin);
 
@@ -348,30 +347,21 @@
   --ink-mid: #4f4f59;
   --ink-weak: #6b6b75;
   /*
-    アクセントの候補。どれを使うかは管理画面の「見た目」で選ぶ。既定はモノクロ
-    （--mono）で、リンク・塗りのボタン・選んだ印がどれも墨になり、塗りのボタンの字
-    （--accent-ink）は白になる。どの色も白い地と淡い面の上で、字が 4.5:1 に届く暗さ
+    アクセントは墨の1色（--mono）。リンク・塗りのボタン・選んだ印がどれも墨になり、
+    塗りのボタンの字（--accent-ink）は白。色は選ばせない——Cavani を下敷きにした白と墨と
+    夜明けの窓で見た目を1つに決めた（前は管理画面の「見た目」で6色から選べたが、色の付いた
+    押し手と目次の印は、この見た目の芯を崩した）
   */
   --mono: #222226;
   --mono-soft: rgba(34, 34, 38, 0.07);
-  --iris: #4c4cd9;
-  --iris-soft: rgba(76, 76, 217, 0.08);
-  --violet: #7445d6;
-  --violet-soft: rgba(116, 69, 214, 0.08);
-  --ember: #a8570b;
-  --ember-soft: rgba(168, 87, 11, 0.08);
-  --mint: #0b7a5a;
-  --mint-soft: rgba(11, 122, 90, 0.08);
-  --sky: #1668b8;
-  --sky-soft: rgba(22, 104, 184, 0.08);
-  --rose: #c02a4d;
-  --rose-soft: rgba(192, 42, 77, 0.08);
 
   --accent: var(--mono);
   --accent-soft: var(--mono-soft);
   --accent-ink: #ffffff;
   --danger: #c0343b;
   --danger-soft: rgba(192, 52, 59, 0.08);
+  /* 保存は止めないが知らせたいこと（管理画面の .field__warn）。赤（--danger）と分ける */
+  --warn: #a8570b;
 
   /*
     夜明けの窓（骨格の .window と「天体の飾り」）。空の写真のように、上は夜の紺、下へ
@@ -591,8 +581,7 @@ img {
 
 /*
   公開ページの骨格は body の直下の3つ——上の帯（.top）・本文の枠（.frame）・足元（.foot）
-  （src/ui/Layout.tsx）。どのページも同じ骨格で、見た目のプリセットで並べ方は
-  変えない（src/theme.ts）。
+  （src/ui/Layout.tsx）。どのページも同じ骨格で、並べ方も色も書体も選ばせない。
 
   3つとも中身を同じ版面の幅（--w-page）にそろえる。左右の余白は --gutter と、版面より
   広い画面で余った幅の半分の大きいほう（--frame-x）。
@@ -2631,71 +2620,6 @@ body[data-site] > .frame {
     grid-column: 1;
     grid-row: 1;
   }
-}
-
-/* ====================================================== 見た目のプリセット */
-
-/*
-  管理画面の「見た目」で選んだものが body の data-* に載る。
-  選べる値は src/theme.ts が正。ここに無い値を保存しても何も変わらない。
-
-  どのプリセットでも HTML は同じ。ここでやるのは :root の段を差し替えることと、
-  同じ部品を別の並べ方にすることだけ。生の色や文字サイズはここに書かない。
-*/
-
-/* --- アクセント色 --- */
-
-/*
-  body だけでなく要素単位でも効かせる。管理画面の見本が、同じ指定で
-  そのまま色を出せるようにするため（見本用の色を別に持たない）。
-*/
-[data-accent='mono'] {
-  --accent: var(--mono);
-  --accent-soft: var(--mono-soft);
-}
-
-[data-accent='iris'] {
-  --accent: var(--iris);
-  --accent-soft: var(--iris-soft);
-}
-
-[data-accent='violet'] {
-  --accent: var(--violet);
-  --accent-soft: var(--violet-soft);
-}
-
-[data-accent='ember'] {
-  --accent: var(--ember);
-  --accent-soft: var(--ember-soft);
-}
-
-[data-accent='mint'] {
-  --accent: var(--mint);
-  --accent-soft: var(--mint-soft);
-}
-
-[data-accent='sky'] {
-  --accent: var(--sky);
-  --accent-soft: var(--sky-soft);
-}
-
-[data-accent='rose'] {
-  --accent: var(--rose);
-  --accent-soft: var(--rose-soft);
-}
-
-/* --- 書体。変えるのは見出しだけで、本文は読みやすさを優先して据え置く --- */
-
-[data-typeface='sans'] {
-  --font-display: var(--font-latin);
-}
-
-[data-typeface='serif'] {
-  --font-display: var(--font-serif);
-}
-
-[data-typeface='mono'] {
-  --font-display: var(--font-mono);
 }
 
 /* ============================================ 押す・選ぶ（手触り） */

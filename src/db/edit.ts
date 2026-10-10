@@ -36,10 +36,10 @@ export function isEditConflict(error: unknown): boolean {
   return false
 }
 
-export const settingsSnapshot = (prefix: 'site.' | 'theme.') =>
+export const settingsSnapshot = (prefix: 'site.') =>
   sql<string>`(SELECT json_group_array(json_array(key, value, updated_at)) FROM (SELECT key, value, updated_at FROM settings WHERE key LIKE ${`${prefix}%`} ORDER BY key))`
 
-export async function settingsVersion(db: Db, prefix: 'site.' | 'theme.') {
+export async function settingsVersion(db: Db, prefix: 'site.') {
   const result = await db.get<{ version: string }>(
     sql`SELECT ${settingsSnapshot(prefix)} AS version`,
   )

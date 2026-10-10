@@ -5,7 +5,6 @@ import {
   listPublishedItems,
   listPublishedMembers,
   loadSiteSettings,
-  loadTheme,
   publishedBlocks,
 } from '../../db/queries'
 import * as schema from '../../db/schema'
@@ -47,10 +46,9 @@ import { pageRows, sitePageLinks, sitePages } from './site'
 */
 export async function renderWholePage(c: Context<AppEnv>) {
   const db = drizzle(c.env.DB, { schema })
-  const [members, items, theme, blocks, site] = await Promise.all([
+  const [members, items, blocks, site] = await Promise.all([
     listPublishedMembers(db),
     listPublishedItems(db),
-    loadTheme(db),
     publishedBlocks(db),
     loadSiteSettings(db),
   ])
@@ -112,7 +110,6 @@ export async function renderWholePage(c: Context<AppEnv>) {
       canonical={`${SITE.origin}/all`}
       jsonLd={siteJsonLd(members, site)}
       nav={nav}
-      theme={theme}
       // 節を縦に積んだ1本の文書。app.css の「ページの外枠」を外す印
       whole
       /*
@@ -152,10 +149,9 @@ export async function renderProfileAlias(c: Context<AppEnv>) {
 */
 export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
   const db = drizzle(c.env.DB, { schema })
-  const [members, byKind, theme, blocks, site] = await Promise.all([
+  const [members, byKind, blocks, site] = await Promise.all([
     listPublishedMembers(db),
     countPublishedByKind(db),
-    loadTheme(db),
     publishedBlocks(db),
     loadSiteSettings(db),
   ])
@@ -191,7 +187,6 @@ export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
         description={siteDescription(solo, site)}
         canonical={`${SITE.origin}/`}
         nav={[]}
-        theme={theme}
         footer={<SiteSocials site={site} />}
         // 何も出ていないのは、構成に公開中のブロックが無いから。直す場所はそこ
         admin={await adminHref(c, '/admin/blocks')}
@@ -241,7 +236,6 @@ export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
     // 説明文はこのページに出ているものから作る（renderBlock が持っている）
     description: rendered.description,
     jsonLd: firstOnly(links, link, siteJsonLd(members, site)),
-    theme,
     // Contact では足元の GitHub / メールを出さない（本文に同じ手がある。SiteSocials）
     footer: <SiteSocials site={site} contact={current.block.type === 'contact'} />,
     adminPath: blockAdminPath(current.block, solo),

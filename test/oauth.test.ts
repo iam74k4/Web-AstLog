@@ -470,8 +470,8 @@ describe('state は1回きり', () => {
 
 describe('戻り先（next）', () => {
   it('start で安全化して D1 に持ち、ログインのあとでそこへ戻す', async () => {
-    const response = await signInWith('github', github().handlers, '/admin/appearance')
-    expect(response.headers.get('location')).toBe('/admin/appearance')
+    const response = await signInWith('github', github().handlers, '/admin/site')
+    expect(response.headers.get('location')).toBe('/admin/site')
   })
 
   it('管理画面の外・ログインの往復そのものには戻さない', async () => {

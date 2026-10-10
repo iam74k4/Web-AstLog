@@ -11,7 +11,7 @@ const details = (html: string, title: string) =>
 describe('管理フォームの入力とプレビュー導線', () => {
   it('共通ナビを飛ばし、管理内容へキーボードのフォーカスを移せる入口を先頭に置く', async () => {
     const signed = await signIn()
-    for (const path of ['/admin', '/admin/members/new', '/admin/appearance']) {
+    for (const path of ['/admin', '/admin/members/new', '/admin/site']) {
       const response = await signed(path)
       expect(response.status).toBe(200)
       const html = await response.text()
@@ -132,9 +132,9 @@ describe('管理フォームの入力とプレビュー導線', () => {
     }
   })
 
-  it('サイト設定と見た目には保存前プレビューと、保存せず確認する説明がある', async () => {
+  it('サイト設定には保存前プレビューと、保存せず確認する説明がある', async () => {
     const signed = await signIn()
-    for (const name of ['site', 'appearance']) {
+    for (const name of ['site']) {
       const response = await signed(`/admin/${name}`)
       expect(response.status).toBe(200)
       const html = await response.text()

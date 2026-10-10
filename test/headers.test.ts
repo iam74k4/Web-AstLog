@@ -120,7 +120,7 @@ describe('応答のヘッダ', () => {
       '/admin/members',
       '/admin/items',
       '/admin/blocks',
-      '/admin/appearance',
+      '/admin/site',
       '/admin/account',
     ]) {
       const response = await fetchAs(path)

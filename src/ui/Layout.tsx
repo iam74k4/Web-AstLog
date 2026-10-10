@@ -1,7 +1,6 @@
 import type { Child } from 'hono/jsx'
 import { yearInJapan } from '../lib/format'
 import { SITE } from '../site'
-import type { Theme } from '../theme'
 import {
   AdminLink,
   Brand,
@@ -86,8 +85,8 @@ const ShareImage = ({ image }: { image: OgImage }) => (
   公開ページの外枠。head と骨格（上の帯・本文・足元）はここだけで決める。
 
   骨格は1つ——上に帯（ロゴと目次。貼り付く）、その下に本文、底に足元（著作権表示と
-  サイトの行き先）。見た目のプリセットで変わるのは色と
-  見出しの書体だけで、並べ方は変えない（src/theme.ts）。
+  サイトの行き先）。色も書体も選ばせない——見た目は1つ（白と墨、見出しの欧文は
+  Poppins、左の夜明けの窓）。
 
   内容・絞り込み・ページの移動はサーバーが決め、公開ページは script を1本も持たない
   （CSP も script-src 'none'。src/index.tsx）。ページを移るときの切り替え（app.css の
@@ -99,7 +98,6 @@ export const Layout = (props: {
   canonical: string
   jsonLd?: unknown
   nav: NavItem[]
-  theme: Theme
   /*
     足元のサイトの行き先（components.tsx の SiteSocials）。どのページにも出るので、
     ここに載せたものは全ページに載る
@@ -161,8 +159,6 @@ export const Layout = (props: {
     */}
     <body
       data-site=""
-      data-accent={props.theme.accent}
-      data-typeface={props.theme.typeface}
       data-whole={props.whole ? '' : undefined}
       data-preview={props.preview ? '' : undefined}
     >
