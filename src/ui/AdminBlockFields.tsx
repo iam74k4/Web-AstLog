@@ -1,4 +1,4 @@
-import { BLOCK_COLUMNS } from '../block-editor'
+import { BLOCK_COLUMNS, BLOCK_ROW_NOTES } from '../block-editor'
 import { Area } from './AdminForm'
 
 export const BlockBodyFields = ({
@@ -38,6 +38,7 @@ export const BlockBodyFields = ({
       <legend>内容を組み立てる</legend>
       <p class="field__hint">
         1行が1件です。空の行は表示されません。保存すると追加の入力欄ができます。
+        {BLOCK_ROW_NOTES[type] ? `${BLOCK_ROW_NOTES[type]}。` : null}
       </p>
       {error ? (
         <p class="field__error" id="field-body-error">

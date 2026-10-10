@@ -213,9 +213,16 @@ export function yearFrom(year: string): number | null {
   期間が「いま」まで続いているか。期間の書き方は「2024.03 — 現在」で、先を空けない
   （CLAUDE.md「文言」）——続いている期間は「現在」で終わる。経歴の星座で、いまの行だけを
   四芒星にするのに使う（src/ui/components.tsx の Timeline）。並びの先頭を「いま」と
-  見なさないのは、先頭がいまとは限らないから（卒業だけの経歴・できごとの一覧）
+  見なさないのは、先頭がいまとは限らないから（卒業だけの経歴・できごとの一覧）。
+  書いた字で決まるので、書き方は管理画面の経歴の欄（src/routes/admin/members.tsx）と、
+  できごとのブロックの案内（src/blocks.ts の hint）と行ごとの入力欄（src/block-editor.ts の
+  BLOCK_ROW_NOTES）が、下の ONGOING_HINT の1文で言う
 */
 export const isOngoing = (period: string) => /現在$/.test(period.trim())
+
+// その書き方を、書く前に言う一文（経歴の欄・できごとのブロックの案内と行ごとの入力欄）
+export const ONGOING_HINT =
+  '続いているものは「2024.03 — 現在」と書く（公開ページで、いまの行に星が付く）'
 
 export function bool(value: FormValue): number {
   return str(value) ? 1 : 0

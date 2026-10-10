@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { blockType, MAX_CHARS } from '../src/blocks'
 import * as schema from '../src/db/schema'
 import { STORY_SECTIONS } from '../src/domain'
-import { yearFrom } from '../src/lib/format'
+import { isOngoing, ONGOING_HINT, yearFrom } from '../src/lib/format'
 import { SITE_VERSION_KEY } from '../src/lib/page-cache'
 import { db, form, get, okText, resetDb, seedItem, seedMember, signIn, touch } from './helpers'
 import { avif, file, gif, heic, jpeg, png, svg, webp } from './images'
@@ -2856,6 +2856,26 @@ describe('メンバーのフォーム', () => {
     })
     expect(added.status).toBe(400)
     expect(await added.text()).toContain('name="published" value="1" checked=""')
+  })
+
+  it('経歴とできごとの欄は、いまの行の書き方（「現在」で終わる）を書く前に言う', async () => {
+    /*
+      公開ページの星座は、期間が「現在」で終わる行だけをいまの星にする（isOngoing）。
+      書いた字で決まるので、欄の案内が書き方を言わないと「2024.03 —」の行に星は
+      黙って付かない
+    */
+    const signed = await signIn()
+    const told = ONGOING_HINT
+    expect(told).toContain('「2024.03 — 現在」')
+    const member = await signed('/admin/members/new')
+    expect(member.status).toBe(200)
+    expect(await member.text()).toContain(told)
+    const timeline = await signed('/admin/blocks/new?type=timeline')
+    expect(timeline.status).toBe(200)
+    expect(await timeline.text()).toContain(told)
+    // 案内どおりに書いた期間が「いま」と読まれる（案内と規則がずれない）
+    expect(isOngoing('2024.03 — 現在')).toBe(true)
+    expect(isOngoing('2024.03 —')).toBe(false)
   })
 })
 

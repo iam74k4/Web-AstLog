@@ -1,9 +1,19 @@
+import { ONGOING_HINT } from './lib/format'
+
 // 入力項目の定義は保存と描画で共有する。DB の本文形式は既存の公開部品と互換のまま。
 export const BLOCK_COLUMNS: Record<string, readonly string[]> = {
   numbers: ['値', '単位', '説明'],
   links: ['ラベル', 'URL', '補足'],
   timeline: ['年月', '出来事', '補足'],
   now: ['取り組み', '補足'],
+}
+
+/*
+  行ごとの入力欄に添える一文。列の名前だけでは伝わらない書き方。できごとは、年月が
+  「現在」で終わる行が公開ページの星座のいまの星になる（src/lib/format.ts の isOngoing）
+*/
+export const BLOCK_ROW_NOTES: Record<string, string> = {
+  timeline: ONGOING_HINT,
 }
 
 export function readBlockBody(form: FormData) {
