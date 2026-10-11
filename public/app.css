@@ -310,6 +310,8 @@
     添えの長さ（「1年以上」と取得年の「2021」）が違っても、塊をまたいで項目の頭がそろう
   */
   --skill-note: 4em;
+  /* 経歴の塊（Experience / Education）を横に並べるときの1列の幅の下限（.career-groups） */
+  --career-col: 280px;
   /* 足元の行き先のアイコンの大きさ（.socials。字を添えずアイコンだけで並べる） */
   --social-icon: 18px;
   /* Contact の連絡先の表（.contact-list）の札の列（「INSTAGRAM」が字間を取っても1行に入る幅） */
@@ -1065,7 +1067,7 @@ body[data-site] > .frame {
   .statement__text,
   .bio p,
   .gallery__description,
-  .career :is(.title, .org)
+  .career :is(.title, .org, .career__item)
 ) {
   word-break: auto-phrase;
   text-wrap: pretty;
@@ -2177,6 +2179,50 @@ body[data-site] > .frame {
 
 .career li:first-child {
   padding-top: 0;
+}
+
+/*
+  経歴の塊（components.tsx の CareerGroups。Experience / Education）。並べる幅があれば横に
+  並べ（1列が --career-col 以上入るとき。1280 の本文の列で2列、電話と 900 前後では縦に積む）、
+  無ければ縦に積む。幅の括りを増やさず、列の数は箱の幅で決まる（auto-fit）。星座の印は
+  左の余白へ吊るすので（--hang）、列のあいだは --sp-7 取る
+*/
+.career-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--career-col)), 1fr));
+  align-items: start;
+  gap: var(--sp-6) var(--sp-7);
+}
+
+/*
+  経歴の行の中身（案件の相手とプロジェクト。parseCareer の「- 」と「・」の行）。行の下に、
+  左へ1本の罫線を引いた段で並べる。相手は小見出しの太さ、プロジェクトは「・」を頭に吊るした
+  小さい字（折り返した行は字の頭にそろう）
+*/
+.career__details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin-top: var(--sp-3);
+  padding-inline-start: var(--sp-4);
+  border-inline-start: 1px solid var(--line);
+}
+
+.career__client {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.career__item {
+  padding-inline-start: 1em;
+  color: var(--ink-mid);
+  font-size: var(--fs-meta);
+  line-height: 1.7;
+  text-indent: -1em;
+}
+
+.career__item::before {
+  content: '・';
 }
 
 /* 期間（「2024.03 — 現在」）。和文を含むので等幅にせず、数字の幅だけそろえる */

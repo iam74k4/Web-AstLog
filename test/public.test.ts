@@ -587,7 +587,7 @@ describe('足元', () => {
     await seedMember()
     const foot = footOf(await okText('/'))
     expect(foot).toMatch(
-      /<a href="https:\/\/github.com\/example" rel="me noreferrer" target="_blank" title="GitHub"><svg[^]*?<\/svg><span class="sr-only"><span lang="en">GitHub<\/span><\/span><\/a>/,
+      /<a href="https:\/\/github.com\/example" rel="me noreferrer" target="_blank" title="GitHub"><svg[\s\S]*?<\/svg><span class="sr-only"><span lang="en">GitHub<\/span><\/span><\/a>/,
     )
     expect(foot).not.toMatch(/<\/svg>\s*(GitHub|Instagram|X|Mail)</)
   })
@@ -2269,6 +2269,33 @@ describe('個人ページは1ページ', () => {
     const siteSocials = foot.slice(foot.indexOf('<div class="socials">'))
     expect(siteSocials.slice(0, siteSocials.indexOf('</div>'))).toContain(`href="${SITE.github}"`)
     expect(siteSocials.slice(0, siteSocials.indexOf('</div>'))).not.toContain('aria-label="')
+  })
+
+  it('経歴を塊（Experience / Education）に分けると、塊ごとに小見出しを付けて並べる', async () => {
+    await seedMember({
+      careerText: [
+        'Experience:',
+        '2024.04 — 現在 | ある会社 | エンジニア',
+        '- 大手の取引先',
+        '・基幹システムの刷新',
+        'Education:',
+        '2021.04 — 2024.03 | ある大学 | 情報学科',
+      ].join('\n'),
+    })
+    const career = mainOf(await okText('/members/okazaki')).slice(
+      mainOf(await okText('/members/okazaki')).indexOf('id="career"'),
+    )
+    expect(career).toContain(
+      '<div class="career-groups"><div class="career-group"><h3 class="side-head" lang="en">Experience</h3><ul class="career">',
+    )
+    expect(career).toContain('<h3 class="side-head" lang="en">Education</h3>')
+    expect(career).toContain(
+      '<div class="career__details"><div class="career__detail"><p class="career__client">大手の取引先</p><p class="career__item">基幹システムの刷新</p></div></div>',
+    )
+    // 塊の見出しは経歴の行にしない
+    expect(career).not.toContain('<span class="period">Experience:</span>')
+    // 全体ページは Profile の Career（h3）の下なので h4
+    expect(await okText('/all')).toContain('<h4 class="side-head" lang="en">Experience</h4>')
   })
 
   it('canonical はそのページ自身。題は人の名前', async () => {

@@ -17,6 +17,8 @@ import {
   type StoryPart,
 } from '../domain'
 import {
+  type CareerDetail,
+  type CareerGroup,
   initials,
   isHttpsUrl,
   isOngoing,
@@ -1316,17 +1318,75 @@ export const LinkList = ({ rows }: { rows: string[][] }) => (
   期間が「現在」で終わる行（isOngoing）には .career__now を付ける——app.css の
   「天体の飾り」が、期間の行ごとに置く星のうち、その行だけを四芒星にする
 */
-export const Timeline = ({ rows }: { rows: string[][] }) => (
+export const Timeline = ({
+  rows,
+  details = [],
+}: {
+  rows: string[][]
+  // 行ごとの中身（経歴の案件の相手とプロジェクト。parseCareer）。「できごと」には無い
+  details?: CareerDetail[][]
+}) => (
   <ul class="career">
-    {rows.map(([period = '', title, org]) => (
+    {rows.map(([period = '', title, org], index) => (
       <li key={`${period}${title}`} class={isOngoing(period) ? 'career__now' : undefined}>
         <span class="period">{period}</span>
         <span class="title">{title}</span>
         {org ? <span class="org">{org}</span> : null}
+        {details[index]?.length ? (
+          <div class="career__details">
+            {details[index]?.map((detail) => (
+              <div class="career__detail" key={detail.heading}>
+                {detail.heading ? <p class="career__client">{detail.heading}</p> : null}
+                {detail.items.map((item) => (
+                  <p class="career__item" key={item}>
+                    {item}
+                  </p>
+                ))}
+              </div>
+            ))}
+          </div>
+        ) : null}
       </li>
     ))}
   </ul>
 )
+
+/*
+  経歴の塊（Experience / Education。src/lib/format.ts の parseCareer）。見出しの無い塊1つ
+  だけなら、前と同じ1本の経歴（Timeline）。塊が分かれていれば、塊ごとに小見出しを付け、
+  並べる幅があれば横に並べる（app.css の .career-groups。持ち主の「企業と Education を2列に」）。
+  小見出しの段は置かれる場所の階層で変わる（SkillGroups と同じ。個人ページは h3、/all は h4）
+*/
+export const CareerGroups = ({ groups, level }: { groups: CareerGroup[]; level: 3 | 4 }) => {
+  const [only] = groups
+  const timeline = (group: CareerGroup) => (
+    <Timeline
+      rows={group.rows.map((row) => row.cells)}
+      details={group.rows.map((row) => row.details)}
+    />
+  )
+  if (groups.length === 1 && only && !only.heading) return timeline(only)
+  return (
+    <div class="career-groups">
+      {groups.map((group) => (
+        <div class="career-group" key={group.heading}>
+          {group.heading ? (
+            level === 3 ? (
+              <h3 class="side-head" lang={langOf(group.heading)}>
+                {group.heading}
+              </h3>
+            ) : (
+              <h4 class="side-head" lang={langOf(group.heading)}>
+                {group.heading}
+              </h4>
+            )
+          ) : null}
+          {timeline(group)}
+        </div>
+      ))}
+    </div>
+  )
+}
 
 /*
   文章の列。段落のあとに、同じ列へ続けたいもの（個人ページのスキル）を
@@ -1371,7 +1431,7 @@ export const ProfileWhole = ({
   member: Member
   bio: string[]
   skills: SkillGroup[]
-  career: string[][]
+  career: CareerGroup[]
   children?: Child
 }) => (
   <div class="profile">
@@ -1397,7 +1457,7 @@ export const ProfileWhole = ({
     {career.length ? (
       <div>
         <SectionHead title="Career" sub={3} />
-        <Timeline rows={career} />
+        <CareerGroups groups={career} level={4} />
       </div>
     ) : null}
   </div>

@@ -676,6 +676,13 @@ describe('部品の作法', () => {
     expect(foot).toContain('justify-content: space-between')
   })
 
+  it('経歴の塊は、並べる幅があるときだけ横に並べる。幅の括りを増やさない', () => {
+    expect(bodyOf(sheet, '.career-groups {')).toContain(
+      'grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--career-col)), 1fr))',
+    )
+    expect(bodyOf(sheet, ':root {')).toContain('--career-col: 280px')
+  })
+
   it('Contact の連絡先の表は、行の面ごと押せて、矢印は行き先で決まる', () => {
     // 行いっぱいの覆い（一覧の行の題と同じ）。矢印はメールが →、外のサイト（別タブ）が ↗
     expect(bodyOf(sheet, '.contact-list__row {')).toContain('position: relative')
@@ -1444,7 +1451,7 @@ describe('文字の段', () => {
       // 画像の説明。細い列で「画 / 面」と1字だけの行が出た
       '.gallery__description',
       // 経歴の会社・学校と役割・学科。電話の幅で「人工知 / 能専攻」と語の途中で折れた
-      '.career :is(.title, .org)',
+      '.career :is(.title, .org, .career__item)',
     ]) {
       expect(wrap.selector, part).toContain(part)
     }
