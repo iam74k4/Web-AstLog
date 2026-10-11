@@ -49,7 +49,7 @@ export const members = sqliteTable(
     // 1行 = 「表示名 | 補足」。末尾が : の行はグループ見出し。
     // 別テーブルにしないのは、並べて出す以外の使い道がないため
     skillsText: text('skills_text').notNull().default(''),
-    // 1行 = 「期間 | 肩書き | 所属」
+    // 1行 = 「期間 | 会社・学校 | 役割・学科」（2列目が太い1行目、3列目が小さい2行目）
     careerText: text('career_text').notNull().default(''),
     // /images/<key>（KV にアップロードしたもの）か /assets/...（同梱）。null なら頭文字
     avatarUrl: text('avatar_url'),
