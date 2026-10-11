@@ -14,7 +14,7 @@ import {
   SkillGroups,
   Timeline,
 } from '../../ui/components'
-import { describe, nameWithRole } from './meta'
+import { describe, nameWithRole, sentences } from './meta'
 
 /*
   個人ページ（/members/<slug>）の中身。1ページに縦に並べる。
@@ -72,10 +72,13 @@ export function memberPage(
   const { bio, skills, career } = memberUnits(member)
 
   /*
-    説明文は大見出し（無ければ紹介文の1段落目）。ページの頭に出ている文で、
-    検索結果と共有カードにもそれが出る
+    説明文は大見出しと紹介文の1段落目をつないだもの（検索結果と共有カードに出る）。
+    大見出しだけにしていたころは、標語の1文（「つくる工程そのものを、速くする。」）
+    しか出ず、検索結果から誰の何のページかが分からなかった。長さは describe が切る
   */
-  const description = describe(member.headline || bio[0] || `${nameWithRole(member)}のプロフィール`)
+  const description = describe(
+    sentences(member.headline, bio[0] ?? '') || `${nameWithRole(member)}のプロフィール`,
+  )
 
   const node = (
     <>

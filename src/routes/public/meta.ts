@@ -63,6 +63,17 @@ const DESCRIPTION_MAX = 110
 // 中身の無い節を落として「。」でつなぐ。0件のページで「。。」を残さないため
 export const joinParts = (...parts: string[]) => parts.filter((part) => part !== '').join('。')
 
+/*
+  打ち込んだ文（言い切りの「。」が付いているとは限らない）を、1つの文章に続ける。
+  joinParts は「。」を足すので、「。」で終わる大見出しに使うと「。。」になる
+*/
+export const sentences = (...parts: string[]) =>
+  parts
+    .map((part) => part.trim())
+    .filter((part) => part !== '')
+    .map((part) => (/[。．.!?！？]$/.test(part) ? part : `${part}。`))
+    .join('')
+
 export const describe = (text: string) => {
   // 打ち込んだ中身には改行が入る。1行に畳んでから数える
   const one = text.replace(/\s+/g, ' ').trim()

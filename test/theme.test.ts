@@ -664,6 +664,28 @@ describe('部品の作法', () => {
     expect(sheet).not.toContain('.foot__meta a')
   })
 
+  it('足元は 600 未満で2段、600 以上で左右の1行。行き先の数で形を変えない', () => {
+    // 折り返しに任せていたころは、行き先が2つの Contact だけ1行で右寄せになった
+    expect(bodyOf(sheet, '.foot {')).toContain('flex-direction: column')
+    const wide = blockAt(sheet, '@media (min-width: 600px)')
+    const foot = bodyOf(wide, '.foot {')
+    expect(foot).toContain('flex-direction: row')
+    expect(foot).toContain('justify-content: space-between')
+  })
+
+  it('Contact の GitHub の ↗ は字から離す', () => {
+    // flex の子の頭の空白は消える。gap が無いと「GitHub↗」と詰まった（ほかは「App Store ↗」）
+    expect(bodyOf(sheet, '.contact__sub {')).toContain('gap: var(--sp-2)')
+  })
+
+  it('画像の説明は番号の右の列いっぱいに使い、「拡大して見る」は説明の下に置く', () => {
+    // 3つを1行に並べていたころは、細い列で説明が4〜5行に割れ、1字だけの行が出た
+    expect(bodyOf(sheet, '.gallery__caption {')).toContain(
+      'grid-template-columns: auto minmax(0, 1fr)',
+    )
+    expect(bodyOf(sheet, '.gallery__open {')).toContain('grid-column: 2')
+  })
+
   it('外に出るリンクは1つの流儀に揃え、記号を薄くしない', () => {
     /*
       作品の中のリンクは、このサイトでいちばん大事な操作子（初めて来た人を
@@ -1194,6 +1216,26 @@ describe('天体の飾り', () => {
     )
   })
 
+  it('すばるは窓の縁で切らない。窓が素材より細いときは素材を右へ寄せる', () => {
+    /*
+      35% に置いていたころは、電話の帯と 900 以上の縦の窓で Electra と Celaeno（右端の
+      2つ）が窓の縁で切れ、星空の巡り（上端で左右に約 36px）で外へ出た。600〜899 の帯は
+      素材より広いので、右へ寄せると左の4割が空だけになる——帯だけ別の段
+    */
+    const root = bodyOf(sheet, ':root {')
+    expect(root).toContain('--window-sky-at: 100% 0%')
+    expect(root).toContain('--window-sky-at-tall: 100% 0%')
+    expect(root).toContain('--window-sky-at-band: 35% 0%')
+    const wide = blockAt(sheet, '@media (min-width: 600px)')
+    expect(bodyOf(wide, '.window {')).toContain('--window-sky-at: var(--window-sky-at-band)')
+    /*
+      縦の窓は素材を上端から敷く。上へのはみ出し（窓の高さの -12%）のままだと、背の高い
+      画面ほど素材が上へずれ、1920x1080 ですばるの上の星が窓の上端で切れた
+    */
+    const tall = blockAt(blockAt(sheet, '@media screen'), '@media (min-width: 900px)')
+    expect(bodyOf(tall, '.frame > .window::before {')).toContain('top: 0')
+  })
+
   it('夜明けの窓は HTML の外の飾り。紙には刷らず、強制色では枠ごと外す', () => {
     expect(bodyOf(blockAt(sheet, '@media print'), '.window {')).toContain('display: none')
     expect(
@@ -1393,6 +1435,8 @@ describe('文字の段', () => {
       '.statement__text',
       '.contact__lead',
       '.bio p',
+      // 画像の説明。細い列で「画 / 面」と1字だけの行が出た
+      '.gallery__description',
     ]) {
       expect(wrap.selector, part).toContain(part)
     }

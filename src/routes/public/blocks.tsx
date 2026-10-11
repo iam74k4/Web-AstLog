@@ -263,7 +263,7 @@ export function renderBlock(
               // 行を縦に並べる（索引）。並びは新しい順（src/db/queries.ts の itemOrder）
               <div class="entries">
                 {projects.rows.map((item) => (
-                  <ItemRow key={item.id} item={item} showMember={showMember} />
+                  <ItemRow key={item.id} item={item} showMember={showMember} showKind={!soleKind} />
                 ))}
               </div>
             ) : (

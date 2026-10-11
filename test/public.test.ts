@@ -1203,15 +1203,29 @@ describe('絞り込み', () => {
     expect(html).toContain('<a href="/projects" aria-current="true">業務</a>')
   })
 
-  it('絞り込みに並ばない区分では絞らない。「すべて」に印を付けたまま全件を出す', async () => {
-    // 個人開発しか無いサイト。業務の手は無いので、効かせると外す手が無くなる
+  it('絞り込みに並ばない区分では絞らない。絞る先の無い一覧には絞り込みを置かない', async () => {
+    /*
+      個人開発しか無いサイト。業務の手は無いので、効かせると外す手が無くなる。並ぶ手が
+      「すべて」だけになるので絞り込みごと出さず（押しても同じページ）、行の札にも区分を
+      出さない（見出しの添えが「個人開発」と言う）
+    */
     await seedItem({ type: 'app', title: '個人のアプリ' })
 
-    for (const path of ['/projects?kind=work', '/projects?kind=nope']) {
-      const html = await okText(path)
-      expect(html, path).toContain('個人のアプリ')
-      expect(html, path).toContain('href="/projects" aria-current="true">すべて</a>')
+    for (const path of ['/projects', '/projects?kind=work', '/projects?kind=nope']) {
+      const main = mainOf(await okText(path))
+      expect(main, path).toContain('個人のアプリ')
+      expect(main, path).not.toContain('class="filters"')
+      expect(main, path).not.toMatch(/class="entry__meta"><li>個人開発<\/li>/)
     }
+  })
+
+  it('区分が2つあるサイトでは、行の札に区分を出す', async () => {
+    await seedItem({ type: 'app', title: '個人のアプリ' })
+    await seedItem({ type: 'work', title: 'ある仕事', slug: 'w' })
+
+    const main = mainOf(await okText('/projects'))
+    expect(main).toContain('class="entry__meta"><li>個人開発</li>')
+    expect(main).toContain('class="entry__meta"><li>業務</li>')
   })
 
   it('メンバーで絞ると、個人開発にも業務にも効く', async () => {
@@ -1452,8 +1466,9 @@ describe('作品1件の恒久リンク', () => {
 
     const html = mainOf(await okText('/projects'))
     for (const slug of ['a', 'b', 'c', 'd', 'e']) {
+      // 区分が1つのサイトなので、札に区分は出ない（見出しの添えが言う）
       expect(html, slug).toContain(
-        `<article class="entry" id="item-${slug}"><ul class="entry__meta"><li>個人開発</li>`,
+        `<article class="entry" id="item-${slug}"><ul class="entry__meta">`,
       )
     }
     // slug の無い作品は、戻ってくる作品のページが無いので id も持たない
@@ -2952,6 +2967,26 @@ describe('共有カードとページごとの説明文', () => {
 
     for (const [index, text] of found.entries()) expect(text, paths[index]).not.toBe('')
     expect(new Set(found).size).toBe(paths.length)
+  })
+
+  /*
+    個人ページの説明文は大見出しと紹介文の1段落目。大見出しだけのころは標語の1文しか
+    出ず、検索結果から誰の何のページかが分からなかった。「。」で終わる大見出しに
+    もう1つ「。」を重ねない
+  */
+  it('個人ページの説明文は、大見出しに紹介文の1段落目を続ける', async () => {
+    await seedMember({
+      headline: 'つくる工程そのものを、速くする。',
+      bio: '2024年からシステム開発に携わっています。\n\n二段落目は説明文に入れない。',
+    })
+    expect(descriptionOf(await okText('/members/okazaki'))).toBe(
+      'つくる工程そのものを、速くする。2024年からシステム開発に携わっています。',
+    )
+  })
+
+  it('言い切りの「。」の無い大見出しは、つなぐときに「。」を足す', async () => {
+    await seedMember({ headline: '速くする', bio: '' })
+    expect(descriptionOf(await okText('/members/okazaki'))).toBe('速くする。')
   })
 
   /*

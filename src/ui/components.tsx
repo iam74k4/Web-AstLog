@@ -554,7 +554,19 @@ export const itemTransition = (item: { slug: string | null }) =>
   （行の面は題のリンクの覆いが受けるので、押せば作品のページへ。リンクの名前と、
   ページを移るときにつなぐ題の字は題だけのまま）。
 */
-export const ItemRow = ({ item, showMember }: { item: ItemView; showMember?: boolean }) => {
+/*
+  showKind は行の札に区分（個人開発 / 業務）を出すか。区分が1つのサイトでは見出しの添えが
+  言うので、行には出さない（同じ「個人開発」が見出しと全部の行に並んだ）
+*/
+export const ItemRow = ({
+  item,
+  showMember,
+  showKind = true,
+}: {
+  item: ItemView
+  showMember?: boolean
+  showKind?: boolean
+}) => {
   const href = itemHref(item)
   const where = item.platformLabel ?? item.category
   const icon = item.iconUrl ? (
@@ -572,7 +584,7 @@ export const ItemRow = ({ item, showMember }: { item: ItemView; showMember?: boo
     // id は作品のページの「← 一覧に戻る」の着地点（itemCardId）
     <article class="entry" id={itemCardId(item)}>
       <ul class="entry__meta">
-        <li>{KIND_LABEL[item.type]}</li>
+        {showKind ? <li>{KIND_LABEL[item.type]}</li> : null}
         {where ? <li lang={langOf(where)}>{where}</li> : null}
         {item.year ? <li class="entry__year">{item.year}</li> : null}
         {showMember && item.memberName && item.memberSlug ? (
@@ -1077,6 +1089,10 @@ export const filterQuery = (filter: ItemFilter) => {
   絞り込む前に実在する区分）。片方しか無いサイトで「業務」を置いても、押した
   先は0件の知らせだけになる。プラットフォーム（macOS / iOS …）は絞り込みの
   軸ではなく、一覧の行の札。
+
+  並べる手が「すべて」だけになる（区分も人も1つ）なら、絞り込みごと出さない——押しても
+  同じページで、手の形をした飾りになる。そのとき URL の絞り込みは効かない（readFilter が
+  並ばない手を読まない）ので、外す手が無くても全件が出ている。
 */
 export const FilterLinks = ({
   base,
@@ -1090,6 +1106,7 @@ export const FilterLinks = ({
   filter: ItemFilter
 }) => {
   const href = (next: ItemFilter) => `${base}${filterQuery(next)}`
+  if (kinds.length < 2 && members.length < 2) return null
   return (
     <nav class="filters" aria-label="一覧を絞り込む">
       <a

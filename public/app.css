@@ -248,9 +248,13 @@
     夜明けの窓（.window）: --window-sky-at / --window-sky-size は空の素材
     （public/assets/sky.svg）の置き場所と幅（窓の幅の 130%。素材の原寸 560px で止める——
     タブレットの横に長い帯で星が膨らみ、すばるが明けた白へ沈まないように。上端を窓の上端にそろえ、
-    すばるが窓の右上——空のまだ暗いところ——に来る）。--window-sky-at-tall は 900 以上の
-    縦に長い窓での置き場所（上端から少し下げ、左上の札の行から離す）。--track-caption は
-    窓の左上の札の字間。
+    すばるが窓の右上——空のまだ暗いところ——に来る）。窓が素材より細い（電話の帯と 900 以上の
+    縦の窓）ときは素材の右端を寄せ（100%）、すばるの右端の星を窓の縁から 40px 以上離す——
+    35% のころは Electra と Celaeno が縁で切れ、星空の巡り（orbit。上端で左右に約 36px）で
+    外へ出た。--window-sky-at-band は 600〜899 の横に長い帯（素材より広いので、右へ寄せると
+    左の4割が空だけになる）。--window-sky-at-tall は 900 以上の縦に長い窓での置き場所
+    （縦の窓は素材を窓の上端から敷くので、すばるは左上の札の行より下に来る）。
+    --track-caption は窓の左上の札の字間。
 
     --spark は四芒星（経歴のいまの行）の大きさ、--sparkle は
     その形。--satellite は軌道の上の衛星（個人ページの顔）、--orbit-cut は輪を
@@ -258,8 +262,9 @@
     同じ角度）。--hang は経歴の星座を左の余白へ吊るす距離——中身は左の軸のまま
     動かさず、印だけを余白に出す（余白 --gutter の最小 16px に四芒星ごと収まる）
   */
-  --window-sky-at: 35% 0%;
-  --window-sky-at-tall: 35% 56px;
+  --window-sky-at: 100% 0%;
+  --window-sky-at-band: 35% 0%;
+  --window-sky-at-tall: 100% 0%;
   --window-sky-size: min(130%, 560px);
   --track-caption: 0.24em;
   --spark: 9px;
@@ -763,14 +768,15 @@ body[data-site] > .frame {
 /* --- 足元 --- */
 
 /*
-  足元。左に著作権表示、右にサイトの行き先（GitHub・Instagram・X・メール）の1行。
-  上に1本の罫線を引き、面は持たない。狭い画面で入りきらなければ折り返す（畳まない）。
+  足元。著作権表示とサイトの行き先（GitHub・Instagram・X・メール）。上に1本の罫線を引き、
+  面は持たない（畳まない）。600 未満は2段に積み、600 以上は左右に分けた1行。折り返しに
+  任せていたころは、行き先の数で形が変わった（行き先が2つの Contact だけ1行で右寄せ、
+  ほかのページは2段で左寄せ）
 */
 .foot {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: flex-start;
   gap: var(--sp-2) var(--sp-6);
   padding-block: var(--sp-6) calc(var(--sp-6) + env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
@@ -979,7 +985,7 @@ body[data-site] > .frame {
 }
 
 /*
-  見出し・一覧の行の説明・段落の折り返し。語の途中で折らない。
+  見出し・一覧の行の説明・段落・画像の説明の折り返し。語の途中で折らない。
 
   和文は既定だとどの字の間でも折れるので、「プラットフォームを1 / つの」
   「置いてお / く。」のように語の途中で行が変わる。word-break: auto-phrase は
@@ -1001,7 +1007,8 @@ body[data-site] > .frame {
   .entry__main :is(h3, p),
   .statement__text,
   .contact__lead,
-  .bio p
+  .bio p,
+  .gallery__description
 ) {
   word-break: auto-phrase;
   text-wrap: pretty;
@@ -1333,11 +1340,16 @@ body[data-site] > .frame {
   outline-offset: var(--focus-offset);
 }
 
+/*
+  キャプションは番号と説明の2列で、「拡大して見る ↗」は説明の下に置く。3つを1行に
+  並べていたころは、900 以上の細い列で説明が「拡大して見る」に幅を取られ、4〜5行に
+  割れて「画 / 面」のように1字だけの行が出た
+*/
 .gallery__caption {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: baseline;
-  gap: var(--sp-3) var(--sp-4);
+  gap: var(--sp-2) var(--sp-4);
   border-top: 1px solid var(--line);
   padding-top: var(--sp-4);
   margin-top: var(--sp-4);
@@ -1351,13 +1363,12 @@ body[data-site] > .frame {
 }
 
 .gallery__description {
-  flex: 1;
-  min-width: 0;
   color: var(--ink-mid);
   overflow-wrap: anywhere;
 }
 
 .gallery__open {
+  grid-column: 2;
   color: var(--ink-weak);
   white-space: nowrap;
 }
@@ -2347,10 +2358,14 @@ body[data-site] > .frame {
   font-size: var(--fs-sm);
 }
 
-/* GitHub。外へ出る脇の道なので、本文の書体の小さな字の手（目次の行き先と同じ段） */
+/*
+  GitHub。外へ出る脇の道なので、本文の書体の小さな字の手（目次の行き先と同じ段）。
+  ↗ との間は gap で取る（flex の子の頭の空白は消え、「GitHub↗」と詰まった）
+*/
 .contact__sub {
   display: inline-flex;
   align-items: center;
+  gap: var(--sp-2);
   min-height: var(--tap);
   color: var(--ink-mid);
   font-size: var(--fs-md);
@@ -2535,6 +2550,19 @@ body[data-site] > .frame {
 /* ============================================================ 600px 以上 */
 
 @media (min-width: 600px) {
+  /* 横に長い帯では空の素材を窓より広く敷けるので、すばるを右へ寄せすぎない（:root の --window-sky-at-band） */
+  .window {
+    --window-sky-at: var(--window-sky-at-band);
+  }
+
+  /* 足元は著作権表示を左、行き先を右に分けた1行（600 未満は2段。素の .foot） */
+  .foot {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+  }
+
   /*
     上の帯の間隔。600 未満は1段詰めて、電話（390）でも3つの行き先（Projects /
     Profile / Contact）とロゴが1行に収まるようにする
@@ -3191,6 +3219,16 @@ body[data-opening]::after {
       top: var(--top-h);
       flex: 0 0 var(--window-w);
       height: calc(var(--screen-h) - var(--top-h) - var(--gutter));
+    }
+
+    /*
+      縦の窓では、空の素材を窓の上端から敷く（上へのはみ出し -12% を持たない）。はみ出しは
+      窓の高さの 12% なので、背の高い画面ほど素材が上へずれ、1920x1080 ですばるの上の星が
+      窓の上端で切れた。巡り（orbit）は回る中心が窓のずっと下にあり、上端はほぼ横にしか
+      動かないので、上のはみ出しは要らない
+    */
+    .frame > .window::before {
+      top: 0;
     }
 
     .frame > main {
