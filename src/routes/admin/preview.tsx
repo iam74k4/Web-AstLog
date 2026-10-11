@@ -143,7 +143,13 @@ function blockNode(saved: Snapshot, block: schema.Block): { node: Child; descrip
     ...saved.data,
     profile: block.type === 'team' ? soloMember(saved.members) : saved.data.profile,
   }
-  if (block.type === 'team' && data.profile) return memberPage(data.profile, null, saved.site)
+  if (block.type === 'team' && data.profile)
+    return memberPage(
+      data.profile,
+      null,
+      saved.site,
+      soloMember(saved.members)?.id === data.profile.id,
+    )
   const rendered = renderBlock(visible, data, false, { projectsBase: PRIVATE_PROJECTS })
   return rendered ?? { node: emptyBlock(block), description: '表示できる内容がありません' }
 }
@@ -274,6 +280,7 @@ function memberResponse(
       />
     ) : null,
     saved.site,
+    soloMember(members)?.id === member.id,
   )
   return c.html(
     <PreviewLayout

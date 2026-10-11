@@ -31,6 +31,13 @@ export const SITE_SETTING_KEYS = [
   'x',
 ] as const
 export type SiteSettingKey = (typeof SITE_SETTING_KEYS)[number]
+
+/*
+  あとから足した欄（Instagram・X）。既定は空（出さない）なので、行がまだ無くても管理画面の
+  概要では「保存済み」に数える——欄を足した日に、保存済みのサイトが「一部保存済み」に戻らない
+  ように（src/routes/admin/dashboard.tsx）
+*/
+export const SITE_SETTING_LATER_KEYS: readonly SiteSettingKey[] = ['instagram', 'x']
 export type SiteSettings = Record<SiteSettingKey, string>
 
 // 大きな見出しと表紙の文は、管理画面から変えても既存のレイアウトに収まる長さにする。

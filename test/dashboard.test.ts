@@ -70,6 +70,23 @@ describe('管理画面の概要', () => {
     expect(html).not.toContain('いまは既定の文章が使われています')
   })
 
+  it('あとから足した欄（Instagram・X）の行が無くても、保存済みに数える', async () => {
+    // 欄を足す前に保存したサイト。足した日に「一部保存済み」へ戻さない
+    await db().delete(schema.settings)
+    await db()
+      .insert(schema.settings)
+      .values(
+        ['tagline', 'heroLead', 'contactLead', 'email', 'github'].map((key) => ({
+          key: `site.${key}`,
+          value: key === 'email' || key === 'github' ? '' : '保存した文です。',
+        })),
+      )
+    const signed = await signIn()
+    const html = await (await signed('/admin')).text()
+    expect(html).not.toContain('一部保存済み')
+    expect(html).toContain('保存済み')
+  })
+
   it('プロフィールだけが下書きなら、その編集を案内する', async () => {
     const member = await seedMember({ published: 0 })
     const signed = await signIn()

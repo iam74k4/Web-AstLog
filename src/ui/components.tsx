@@ -56,8 +56,6 @@ import { GithubIcon, InstagramIcon, MailIcon, PencilIcon, Wordmark, XIcon } from
     - 管理画面: form の余白 14px ぶん詰まった。構成の行では、隣の form の
       余白に引き伸ばされて 50px になっていた編集・外すのアイコンボタンが
       36px に戻った（= 構成 @1440x900）
-    - 404: ロゴの箱だけが strut で 28 → 35.8px に伸びた（.oops__mark を
-      flex にして 28px に戻した）
 
   hono/jsx には <!DOCTYPE> を出す構文が無いので、hono/html の raw で1行だけ
   前置きする（jsx-renderer の docType と同じやり方。あちらはミドルウェア1つの
@@ -551,9 +549,10 @@ export const itemTransition = (item: { slug: string | null }) =>
   slug の無い行（恒久リンクがまだ無い作品）は題を素の字のまま出し、押せる面も
   矢印も付かない——押しても何も起きない行に、押せる合図を出さない。
 
-  アイコン（items.icon_url）は題の左に小さく。飾り（alt=""）で、h3 の中・題の
-  リンクの外に置く（行の面は題のリンクの覆いが受けるので、押せば作品のページへ。
-  リンクの名前と、ページを移るときにつなぐ題の字は題だけのまま）。
+  アイコン（items.icon_url）は題の軸の外に吊るす（app.css の .entry__icon。題の頭は
+  アイコンの有無によらずそろう）。飾り（alt=""）で、h3 の中・題のリンクの外に置く
+  （行の面は題のリンクの覆いが受けるので、押せば作品のページへ。リンクの名前と、
+  ページを移るときにつなぐ題の字は題だけのまま）。
 */
 export const ItemRow = ({ item, showMember }: { item: ItemView; showMember?: boolean }) => {
   const href = itemHref(item)
@@ -585,7 +584,7 @@ export const ItemRow = ({ item, showMember }: { item: ItemView; showMember?: boo
         ) : null}
       </ul>
       <div class="entry__main">
-        <h3 class={icon ? 'entry__title--icon' : undefined}>
+        <h3>
           {icon}
           {href ? (
             <a class="entry__link" href={href} style={itemTransition(item)}>
@@ -872,8 +871,20 @@ export const ItemStories = ({
 
   顔のまわりの軌道の輪と衛星は app.css の「天体の飾り」が描く（顔の箱の疑似要素）。
 */
-export const Nameplate = ({ member, heading }: { member: Member; heading?: boolean }) => (
-  <div class="nameplate">
+export const Nameplate = ({
+  member,
+  heading,
+  title,
+}: {
+  member: Member
+  heading?: boolean
+  /*
+    名前をページの大きな題として出す（.nameplate--title）。1人のサイトの個人ページで、
+    その人の大見出しを入口がもう出しているとき——同じ一文を2つのページの h1 に並べない
+  */
+  title?: boolean
+}) => (
+  <div class={title ? 'nameplate nameplate--title' : 'nameplate'}>
     <Avatar src={member.avatarUrl} name={member.name} size={56} />
     <div class="nameplate__body">
       {heading ? (
@@ -1269,9 +1280,10 @@ export const Note = ({ paragraphs, children }: { paragraphs: string[]; children?
   Hero の h1 → Profile の h2（節の SectionHead）→ About / Skills / Career の h3
   （SectionHead の sub）→ 技術の小見出しの h4（SkillGroups の level）。
 
-  新しい見た目はほとんど持たない——名札（Nameplate）、大見出しは大きな一文
-  （Statement）、紹介（Note）、技術（SkillGroups）、経歴（Timeline）。どれも個人
-  ページと同じ部品。足したのは小節を縦に並べる .profile の間隔と、h3 の段だけ。
+  新しい見た目はほとんど持たない——名札（Nameplate）、大見出し（個人ページの h1 と
+  同じ太さと大きさの1文。.profile__headline。節の中なので見出しの要素にはしない）、
+  紹介（Note）、技術（SkillGroups）、経歴（Timeline）。どれも個人ページと同じ部品。
+  足したのは小節を縦に並べる .profile の間隔と、h3 の段だけ。
 
   中身の無い小節は出さない（見出しだけ残さない）。個人ページの About は空でも
   「準備中です」を出すが、あれは名札の下に何も無いページを作らないためで、
@@ -1293,7 +1305,11 @@ export const ProfileWhole = ({
 }) => (
   <div class="profile">
     <Nameplate member={member} />
-    {member.headline ? <Statement text={member.headline} notes={[]} /> : null}
+    {member.headline ? (
+      <p class="profile__headline">
+        <Phrases text={member.headline} />
+      </p>
+    ) : null}
     {children}
     {bio.length ? (
       <div>

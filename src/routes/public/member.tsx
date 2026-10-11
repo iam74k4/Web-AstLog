@@ -140,6 +140,7 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
     member,
     band ? <Band href={band.href} label="このメンバーのつくったもの" counts={band.counts} /> : null,
     site,
+    solo?.id === member.id,
   )
 
   return screenPage(c, {

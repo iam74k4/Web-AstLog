@@ -801,16 +801,6 @@ describe('部品の作法', () => {
     expect(rule).toContain('border: 0')
   })
 
-  it('404 のロゴの箱は行を作らない。標準モードで字の下がりぶん伸びない', () => {
-    /*
-      DOCTYPE を足して標準モードになった日、.oops__mark だけが 28px → 35.8px に
-      伸びた（= 404 @1440x900, 素の書体, Chromium）。標準モードの行ボックスは
-      字が無くても高さの支え（strut）を持ち、svg がベースラインに座るため。
-      flex にすれば svg は行に載らず、箱はロゴと同じ高さになる
-    */
-    expect(bodyOf(sheet, '.oops__mark {')).toContain('display: flex')
-  })
-
   it('見出しと添えは隣り合わせ。空いた幅ぶん引き離さない', () => {
     // space-between だと 1440 で見出しとラベルが 782px 離れ、1組に見えなくなる
     expect(bodyOf(sheet, '.head {')).not.toContain('space-between')
@@ -966,9 +956,20 @@ describe('部品の作法', () => {
     expect(focus).toContain('outline: var(--focus-ring) solid var(--accent)')
   })
 
-  it('アイコンは題の行の高さを変えない（はみ出しは負の余白で受ける）。見出しの字の真ん中に置く', () => {
-    expect(bodyOf(sheet, '.entry__icon {')).toContain(
-      'margin-block: calc((var(--entry-title-lh) - var(--entry-icon)) / 2)',
+  it('一覧のアイコンは題の軸の外に吊るす。題の頭はアイコンの有無でずれない', () => {
+    /*
+      題の左に並べていたころは、アイコンのある作品の題だけが右へずれ、一覧の題の頭が
+      そろわなかった。絶対配置で行の高さも変えず、1行目の高さの真ん中に置く
+    */
+    const icon = bodyOf(sheet, '.entry__icon {')
+    expect(icon).toContain('position: absolute')
+    expect(icon).toContain(
+      'top: calc(var(--sp-6) + (var(--entry-title-lh) - var(--entry-icon)) / 2)',
+    )
+    expect(sheet).not.toContain('.entry__title--icon')
+    const wide = blockAt(sheet, '@media (min-width: 600px)')
+    expect(bodyOf(wide, '.entry__icon {')).toContain(
+      'left: calc(var(--entry-meta) + var(--sp-7) - var(--entry-icon) - var(--sp-3))',
     )
     /*
       アイコンの隣に見出しと添えの塊（.head__text）を置き、塊を縮めて中で題を折り返す。
@@ -1160,7 +1161,7 @@ describe('天体の飾り', () => {
 
   it('線を切るのに地の色を塗らない。切れ目は形（mask）で作る', () => {
     expect(section).not.toContain('var(--bg)')
-    expect(bodyOf(sheet, ':is(.nameplate .avatar, .oops__mark)::before {')).toContain(
+    expect(bodyOf(sheet, '.nameplate .avatar::before {')).toContain(
       'mask-image: var(--orbit-mask);',
     )
   })
@@ -1178,7 +1179,7 @@ describe('天体の飾り', () => {
       .filter((rule) => rule.decls.some(([name, value]) => name === 'content' && value === "''"))
       .flatMap((rule) => rule.selectors)
     expect(owners.length).toBeGreaterThan(3)
-    for (const part of ['.career li', '.career .period', '.nameplate .avatar', '.oops__mark']) {
+    for (const part of ['.career li', '.career .period', '.nameplate .avatar']) {
       expect(forced, part).toContain(part)
     }
     const hidden = rulesOf(forced).find((rule) =>
@@ -1264,7 +1265,7 @@ describe('文字の段', () => {
     /*
       業界名の札・帯の件数・節の添え・経歴の期間・柱の足元が 11px（しかも等幅）
       で、和文の札がいちばん読みにくかった。11px を使ってよいのは、和文が入らない
-      英大文字の小見出し（技術の LANGUAGES・管理画面の ADMIN・404 の番号）と、
+      英大文字の小見出し（技術の LANGUAGES・管理画面の ADMIN）と、
       英字か数字だけの札（目次の英字の行き先・件数・一覧の番号）だけ。
       ここに足すときは、和文が入らないことを確かめてから
     */
@@ -1274,7 +1275,6 @@ describe('文字の段', () => {
     expect(small.sort()).toEqual(
       [
         '.login__label',
-        '.oops__code',
         '.side-head:lang(en)',
         // 公開ページの数字だけの札（見出しの件数）
         '.head__count',
@@ -1284,46 +1284,27 @@ describe('文字の段', () => {
     )
   })
 
-  it('等幅は英数字の札だけ。和文が入りうる所に --font-mono を書かない', () => {
+  it('等幅の書体を持たない。英字だけの札は節の見出しと同じ Poppins', () => {
     /*
-      等幅の書体は和文の字を持たず、字は結局ほかの書体に落ちる。和文に残るのは
-      等幅のための字間と小ささだけ。打ち込んだ字が入る札（タグ・肩書き・技術の
-      小見出し）は、英字だけのときに付く lang="en"（components.tsx の langOf）で
-      選ぶ
+      前は英字の札（技術の小見出し・見出しの件数・404 の番号・ADMIN）が等幅で、節の見出し
+      （Poppins）と英字の書体が1ページに2つ並んだ。和文が入りうる札には :lang(en) でだけ掛ける
     */
-    const mono = rules
-      .filter((rule) => /font-family:\s*var\(--font-mono\)/.test(rule.body))
+    expect(sheets).not.toContain('--font-mono')
+    const latin = rules
+      .filter((rule) => /font-family:\s*var\(--font-latin\)/.test(rule.body))
       .map((rule) => rule.selector)
-    /*
-      公開ページの目次・札・タグ・実績値・GitHub の札は本文の書体（等幅の小さな大文字は、
-      ページを移る手と作品の札をいちばん読みにくい字にしていた）。残るのは英字だけの小見出しと
-      数字の札と、管理画面・404 の英字の札
-    */
-    expect(mono.sort()).toEqual(
-      [
-        '.side-head:lang(en)',
-        '.oops__code',
-        '.admin-nav__brand',
-        '.row__col--num',
-        '.login__label',
-        '.head__count',
-      ].sort(),
-    )
-    // 年と期間は「2024 — 現在」と和文を含むので、等幅にせず数字の幅だけそろえる
+    for (const selector of [
+      '.side-head:lang(en)',
+      '.head__count',
+      '.admin-nav__brand',
+      '.login__label',
+    ]) {
+      expect(latin, selector).toContain(selector)
+    }
+    // 年と期間は「2024 — 現在」と和文を含むので、数字の幅だけそろえる
     for (const selector of ['.entry__year {', '.career .period {']) {
       expect(bodyOf(sheet, selector), selector).toContain('font-variant-numeric: tabular-nums')
     }
-  })
-
-  it('等幅の書体の並びは Windows の書体（Consolas）も、素の monospace より前に名指しする', () => {
-    /*
-      ui-monospace と Mac の名前は Windows の Chrome に無い。素の monospace に落ちると、
-      lang="en" の無い番号だけの札（一覧の行の番号・見出しの件数）が日本語のページの
-      等幅（MS ゴシック）になり、英字の札と別の書体に見えた
-    */
-    const stack = bodyOf(sheet, ':root {').match(/--font-mono:([^;]+);/)?.[1] ?? ''
-    expect(stack).toContain('Consolas')
-    expect(stack.indexOf('Consolas')).toBeLessThan(stack.lastIndexOf('monospace'))
   })
 
   it('本文の字: 一覧の行の説明は --fs-base、段落は --fs-md で1行 約40字まで', () => {
@@ -1354,7 +1335,12 @@ describe('文字の段', () => {
     expect(bodyOf(sheet, '.head--item :is(h1, h2) {')).toContain('font-size: var(--fs-display-xl)')
     expect(bodyOf(sheet, '.hero h1.hero__headline {')).toContain('font-size: var(--fs-display)')
     expect(sheet).not.toContain('.head--chapter :is(h1, h2) {')
-    expect(bodyOf(sheet, '.head--chapter {')).toContain('margin-top: var(--sp-7)')
+    /*
+      章（About / Skills / Career）のあいだは本文の節の間隔（--section-gap）1つ。章の見出しに
+      上の余白を足すと、電話で章ごとに 100px 近く空いた
+    */
+    expect(sheet).not.toContain('.head--chapter {')
+    expect(bodyOf(sheet, '.frame > main {')).toContain('gap: var(--section-gap)')
     /*
       小節の見出し（作品のページの Story の h2、/all の Profile の h3）は、節の見出しより
       ずっと小さく本文より大きい（大きくすると作品名の h1 と同じ格に見える）

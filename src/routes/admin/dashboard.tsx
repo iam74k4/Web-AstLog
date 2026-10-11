@@ -4,7 +4,7 @@ import { blockShown } from '../../blocks'
 import { defaultBlocks, listBlocks, loadSiteSettings } from '../../db/queries'
 import * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
-import { hasContact, SITE_SETTING_KEYS } from '../../site'
+import { hasContact, SITE_SETTING_KEYS, SITE_SETTING_LATER_KEYS } from '../../site'
 import { AdminDashboard, type DashboardAction, type DashboardCounts } from '../../ui/AdminDashboard'
 import { db } from './request'
 
@@ -64,7 +64,10 @@ dashboardRoutes.get('/', async (c) => {
   const apps = countsOf(itemRows.filter((row) => row.type === 'app'))
   const works = countsOf(itemRows.filter((row) => row.type === 'work'))
   const items = countsOf(itemRows)
-  const siteSaved = siteRows.length === SITE_SETTING_KEYS.length
+  const savedKeys = new Set(siteRows.map((row) => row.key))
+  const siteSaved = SITE_SETTING_KEYS.every(
+    (key) => savedKeys.has(`site.${key}`) || SITE_SETTING_LATER_KEYS.includes(key),
+  )
   const effectiveBlocks = blocks.length ? blocks : defaultBlocks()
   // 公開ページに出るかの数（公開ページ・構成と同じ blockShown を読む）
   const counts = {

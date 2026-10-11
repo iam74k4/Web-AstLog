@@ -3,7 +3,7 @@
   場所の文字色になる。
 */
 
-import { MARK_TRANSFORM, MARK_VIEWBOX, WORDMARK } from './logo'
+import { WORDMARK } from './logo'
 
 /*
   ワードマーク（ΛSTLOG。O は衛星つきの軌道）。形は logo.ts が正で、字の色を継ぐ（currentColor）。大きさは CSS の
@@ -21,24 +21,6 @@ export const Wordmark = ({ class: className }: { class: string }) => (
     <path d={WORDMARK.lambda} />
     <path d={WORDMARK.strokes} fill="none" stroke="currentColor" stroke-width={WORDMARK.stroke} />
     <path d={WORDMARK.satellite} />
-  </svg>
-)
-
-/*
-  印だけ（ワードマークの Λ を1つで）。404 と管理画面の頭で使う。
-  size は必須——app.css は印に寸法を与える規則を持たないので、渡し忘れると素の
-  300x150 に落ちて版面が崩れる
-*/
-export const Mark = ({ size }: { size: number }) => (
-  <svg
-    viewBox={MARK_VIEWBOX}
-    width={size}
-    height={size}
-    fill="currentColor"
-    aria-hidden="true"
-    focusable="false"
-  >
-    <path d={WORDMARK.lambda} transform={MARK_TRANSFORM} />
   </svg>
 )
 

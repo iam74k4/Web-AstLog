@@ -850,8 +850,21 @@ describe('ページごとの見出し', () => {
     expect(html).toContain('<span class="note">金融系 · 2024 — 現在</span>')
   })
 
-  it('個人ページの h1 は本文側。大見出しがあればそれ、無ければ名札の名前', async () => {
+  it('1人のサイトの個人ページは名前が題（h1）。大見出しは入口が出すので、2度並べない', async () => {
     await seedMember({ headline: 'つくる工程そのものを、速くする。' })
+
+    const html = await okText('/members/okazaki')
+    expect(html).toContain('<div class="nameplate nameplate--title">')
+    expect(html).toContain('<h1 class="nameplate__name">岡崎 昂功</h1>')
+    expect(mainOf(html)).not.toContain('つくる工程そのものを')
+    expect(h1s(html)).toHaveLength(1)
+    // 大見出しは入口の h1
+    expect(heroOf(await okText('/'))).toContain('つくる工程そのものを')
+  })
+
+  it('2人以上のサイトの個人ページの h1 は大見出し。無ければ名札の名前', async () => {
+    await seedMember({ headline: 'つくる工程そのものを、速くする。' })
+    await seedMember({ slug: 'hoshino', name: '星野', sortOrder: 20 })
 
     const html = await okText('/members/okazaki')
     // 顔と名前は本文の名札に出る。大見出しのある人では、名前は見出しではない
@@ -2035,7 +2048,7 @@ describe('個人ページは1ページ', () => {
     const main = mainOf(await okText('/members/okazaki'))
     const at = (text: string) => main.indexOf(text)
     for (const text of [
-      '<div class="nameplate">',
+      '<div class="nameplate',
       '<section id="about" role="region" aria-label="About">',
       '<section id="skills" role="region" aria-label="Skills">',
       '<section id="career" role="region" aria-label="Career">',
@@ -2131,6 +2144,7 @@ describe('個人ページは1ページ', () => {
 
   it('名札は Team のカードと同じ顔と名前。大見出しが無ければ名前が h1', async () => {
     await seedMember({ headline: '' })
+    await seedMember({ slug: 'hoshino', name: '星野', sortOrder: 20 })
 
     const main = mainOf(await okText('/members/okazaki'))
     expect(main).toContain('<div class="nameplate">')
@@ -2338,9 +2352,11 @@ describe('1人のサイトのプロフィール', () => {
       '<h3>Career',
     ])
     expect(html.match(/<h1[^>]*>/g) ?? []).toHaveLength(1)
-    // 名札の名前は添え（見出しは節の h2）。大見出しは大きな一文として出る
+    // 名札の名前は添え（見出しは節の h2）。大見出しは個人ページの h1 と同じ太さの1文
     expect(profile).toContain('<strong class="nameplate__name">岡崎 昂功</strong>')
-    expect(profile).toContain('<p class="statement__text">つくる工程そのものを、速くする。</p>')
+    expect(profile).toContain(
+      '<p class="profile__headline"><span class="phrase">つくる工程そのものを、</span><span class="phrase">速くする。</span></p>',
+    )
     expect(profile).toContain('紹介の段落。')
     expect(profile).toContain('入社')
 
@@ -3141,7 +3157,10 @@ describe('文書の外枠', () => {
       const response = await get(path)
       expect(response.status, path).toBe(404)
       const html = await response.text()
-      expect(html, path).toContain('URL が変わったか、打ち間違えているかもしれません。')
+      // 句読点ごとの塊（Phrases）に分けてある。読める文字列としては1文のまま
+      expect(html.replace(/<[^>]+>/g, ''), path).toContain(
+        'URL が変わったか、打ち間違えているかもしれません。',
+      )
       expect(html, path).not.toMatch(/slug/i)
     }
   })

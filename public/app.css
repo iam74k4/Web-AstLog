@@ -69,20 +69,13 @@
   --font-sans:
     'Helvetica Neue', 'Hiragino Sans', 'Noto Sans JP', system-ui, -apple-system, sans-serif;
   /*
-    等幅は英数字の札だけ（実績値の数・タグ・英大文字の小見出し・番号）。和文が入りうる所には使わない——等幅の書体は
-    和文の字を持たず、字は結局ほかの書体に落ちる。残るのは等幅のための字間
-    （letter-spacing）と小ささだけで、和文には読みにくさしか渡さない。
-    打ち込んだ文字が入る札（タグ・肩書き・技術の小見出し）は、日本語を1字も
-    含まないときだけ lang="en" が付き（components.tsx の langOf）、等幅はその
-    :lang(en) にだけ掛ける。年と期間は「2024 — 現在」と和文を含む書き方に
-    決めた（CLAUDE.md「文言」）ので、等幅にせず数字の幅だけそろえる（tabular-nums）。
-
-    Windows の書体（Consolas）も名指しする。ui-monospace と Mac の名前は Windows の Chrome に
-    無く、素の monospace に落ちる——lang="en" の札は Consolas になるが、番号だけの札（一覧の
-    行の番号・見出しの件数）は日本語のページの等幅（MS ゴシック）になり、細い古い数字で
-    英字の札と別の書体に見えた
+    等幅の書体は持たない。英字だけの札（技術の英大文字の小見出し・見出しの件数・
+    管理画面の ADMIN）は節の見出しと同じ Poppins（--font-latin）で組む——前は等幅で、
+    1ページに英字の札の書体が2つ並んだ。打ち込んだ文字が入る札は、日本語を1字も含まない
+    ときだけ lang="en" が付き（components.tsx の langOf）、Poppins の小さな大文字はその
+    :lang(en) にだけ掛ける。年と期間は「2024 — 現在」と和文を含む書き方に決めた
+    （CLAUDE.md「文言」）ので、数字の幅だけそろえる（tabular-nums）。
   */
-  --font-mono: ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, Consolas, monospace;
 
   /*
     欧文の見出しの書体（Poppins。public/assets に同梱した欧文だけの4つの太さ。上の
@@ -105,7 +98,7 @@
     文字の段（静的）。6つだけ。中間値を足さない。
 
     和文の最小は --fs-meta（12px）。--fs-label（11px）は英大文字の小見出し
-    （Skills の LANGUAGES・管理画面の ADMIN・404 の番号）だけに使う。11px の
+    （Skills の LANGUAGES・管理画面の ADMIN・見出しの件数）だけに使う。11px の
     和文は画数の多い字が潰れる——以前は業界名・帯の件数・節の添え・経歴の
     期間・足元が 11px（しかも等幅）で、和文の札がいちばん読みにくかった。
     どこに使ってよいかは test/theme.test.ts の「文字の段」が名指しで数えている。
@@ -161,13 +154,10 @@
   --panel-pad: clamp(24px, 3.5vw, 50px);
   --window-band-h: 200px;
   /*
-    角の丸み。管理画面の面は大きく、操作部品は小さく丸める。公開ページで丸めるのは
-    押せるもの（--radius-pill。押し手と同じ丸い端）と、作品のページの実績値の面
-    （--radius-sm）だけ——罫線で区切った字の並びの中で、丸い形が「押せる」の印になる
+    角は丸めない。公開ページの押し手（Cavani の角の立った墨の四角）に合わせて、管理画面の
+    面・欄・押し手も四角にする——前は管理画面だけ角の丸い面とボタンで、2つの画面が別の
+    道具に見えた。丸いのは顔・状態の点・天体と、公開のスイッチ（つまみが滑る形そのもの）だけ
   */
-  --radius: 16px;
-  --radius-sm: 10px;
-  --radius-pill: 999px;
 
   /*
     画面1つぶんの高さ（body の min-height。足元を画面の底に置く。「ページの外枠」）。
@@ -192,6 +182,12 @@
     空ける（見出しの錨。「ページの外枠」）。
   */
   --page-pad: clamp(32px, 5vw, 72px);
+  /*
+    本文の節と節のあいだ（main の子どうし。個人ページの About / Skills / Career の章の
+    あいだもこれ1つ）。狭い画面では詰める——電話で章ごとに 100px 近く空き、1人の
+    プロフィールが別々の塊に見えた
+  */
+  --section-gap: clamp(calc(var(--sp-6) * 2), 8vw, calc(var(--sp-7) * 2));
   /*
     貼り付いた上の帯の下に、送った先（#about などのフラグメント・フォーカス）を
     止める空き（html の scroll-padding-top。「ページの外枠」）。帯の高さ＋ --sp-5。
@@ -257,7 +253,7 @@
     窓の左上の札の字間。
 
     --spark は四芒星（経歴のいまの行）の大きさ、--sparkle は
-    その形。--satellite は軌道の上の衛星（個人ページの顔と 404 の印）、--orbit-cut は輪を
+    その形。--satellite は軌道の上の衛星（個人ページの顔）、--orbit-cut は輪を
     衛星のまわりだけ切る半角、--orbit-mask はその切れ目（右上 45°。ロゴの O の衛星と
     同じ角度）。--hang は経歴の星座を左の余白へ吊るす距離——中身は左の軸のまま
     動かさず、印だけを余白に出す（余白 --gutter の最小 16px に四芒星ごと収まる）
@@ -609,7 +605,7 @@ body[data-site] > .frame {
   flex: 1 0 auto;
   display: flex;
   flex-direction: column;
-  gap: calc(var(--sp-7) * 2);
+  gap: var(--section-gap);
   min-width: 0;
   padding: var(--page-pad) var(--gutter);
 }
@@ -1038,6 +1034,38 @@ body[data-site] > .frame {
 }
 
 /*
+  名前をページの題として出す名札（1人のサイトの個人ページ。大見出しは入口がもう出している）。
+  名前は頭の大見出しと同じ段（--fs-display）・同じ太さ。3つのクラス（0,3,0）で、上の
+  .nameplate .nameplate__name に勝つ
+*/
+.nameplate.nameplate--title .nameplate__name {
+  font-family: var(--font-display);
+  font-size: var(--fs-display);
+  font-weight: 800;
+  font-feature-settings: 'palt';
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+/*
+  全体ページ（/all）の Profile の節の大見出し（components.tsx の ProfileWhole）。個人ページの
+  頭の大見出し（.hero h1.hero__headline）と同じ段・同じ太さ——前は「ひとこと」の細い字で、
+  同じ一文が2つのページで別の太さに見えた。句読点の塊ごとに行を改める（.hero h1 と同じ）
+*/
+.profile__headline {
+  font-family: var(--font-display);
+  font-size: var(--fs-display);
+  font-weight: 800;
+  font-feature-settings: 'palt';
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.profile__headline .phrase {
+  display: block;
+}
+
+/*
   節の見出し（Cavani の型）。字間の広い大文字の見出しと添え（件数・区分名）を左の軸に
   置き、残りの幅に1本の罫線を右へ伸ばす（::after）。見出しは節の名札で、ページの主役は
   その下の中身——見出しを大きくすると、短い中身のページで名札だけが目立った。
@@ -1133,14 +1161,16 @@ body[data-site] > .frame {
 
 /*
   見出しのすぐ後ろの件数（Projects の「07」。SectionHead の count）。見出しの字の
-  右上に、等幅の小さな数字で添える（英数字の札）。
+  右上に、小さな数字で添える（英数字の札。見出しと同じ Poppins）。
 */
 .head__count {
   align-self: flex-start;
   color: var(--ink-weak);
-  font-family: var(--font-mono);
+  font-family: var(--font-latin);
   font-size: var(--fs-label);
-  letter-spacing: 0.1em;
+  font-weight: 500;
+  letter-spacing: var(--track-caption);
+  font-variant-numeric: tabular-nums;
 }
 
 /*
@@ -1168,23 +1198,6 @@ body[data-site] > .frame {
   font-weight: 600;
   letter-spacing: 0.01em;
   text-transform: none;
-}
-
-/*
-  個人ページの章の見出し（components.tsx の SectionHead の chapter。About /
-  Skills / Career）。節の見出しと同じ型（字間の広い大文字と右へ伸びる罫線）で、
-  上を1段空けて章の切れ目にする。頭の大見出し（h1。--fs-display）とは字の大きさで分かれる
-*/
-.head--chapter {
-  margin-top: var(--sp-7);
-}
-
-/*
-  個人ページの頭（名札・大見出し）のすぐ下の章は、上を空けない。頭と章のあいだは本文
-  （main）の間隔がもう空けていて、章の上の1段を足すと、頭と About のあいだだけが広すぎる
-*/
-.hero--profile + section > .head--chapter {
-  margin-top: 0;
 }
 
 /*
@@ -1533,21 +1546,25 @@ body[data-site] > .frame {
 }
 
 /*
-  題の左のアイコン（components.tsx の ItemRow）。題の1行目の高さの真ん中に置き、はみ出す
-  ぶんは上下の負の余白で受ける——行の高さを変えない（番号と矢印は題の1行目の真ん中に
-  そろえてある。--entry-title-lh）。題が2行に折れても、アイコンは1行目の横のまま
+  作品のアイコン（components.tsx の ItemRow）。題の軸の外に吊るす——題の左に並べると、
+  アイコンのある作品の題だけが右へずれ、一覧の題の頭がそろわなかった。
+    600 未満   行の左上、札の行（区分・プラットフォーム・年）の頭。札の行だけをアイコンの
+               ぶん右へ送る（:has は1本の規則で書く）
+    600 以上   札の列と本文の列のあいだ、題の1行目の横（下の 600 以上の節）
+  どちらも行の1行目の高さの真ん中に置き、はみ出すぶんは行の高さを変えない（絶対配置）。
+  押した手は行の覆い（.entry__link::after）に通す
 */
-.entry__title--icon {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--sp-3);
-}
-
 .entry__icon {
-  flex: none;
+  position: absolute;
+  top: calc(var(--sp-6) + (var(--entry-title-lh) - var(--entry-icon)) / 2);
+  left: 0;
   width: var(--entry-icon);
   height: var(--entry-icon);
-  margin-block: calc((var(--entry-title-lh) - var(--entry-icon)) / 2);
+  pointer-events: none;
+}
+
+.entry:has(.entry__icon) .entry__meta {
+  padding-left: calc(var(--entry-icon) + var(--sp-3));
 }
 
 /*
@@ -1782,16 +1799,15 @@ body[data-site] > .frame {
 }
 
 /*
-  作品のページの実績値は1枚の面に載せる（このサイトの公開ページで面を持つのはここだけ）。
-  一覧の行では1行の字のまま——行を開いた作品のページで、その作品の成果がいちばん先に
-  目に入るように。値は1段大きく
+  作品のページの実績値は、左に墨の太い線を1本引いて際立たせる（入口の大見出しの下の線と
+  同じ太さ）。面には載せない——角の丸い灰色の面は、角の立った墨の四角と罫線で組んだ
+  ほかの部品の中で、ここだけ別のものに見えた。一覧の行では1行の字のまま——行を開いた
+  作品のページで、その作品の成果がいちばん先に目に入るように。値は1段大きく
 */
 .detail__text > .metric {
   justify-self: start;
-  padding: var(--sp-5) var(--sp-6);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--line);
+  padding: var(--sp-2) 0 var(--sp-2) var(--sp-5);
+  border-left: var(--rule-bold) solid var(--ink);
 }
 
 .detail__text > .metric .metric__value {
@@ -1928,7 +1944,8 @@ body[data-site] > .frame {
   読み上げでの移動と、塊と一覧の結び付きであって、太さではない。
 
   英字だけの小見出し（LANGUAGES）は lang="en" が付き（SkillGroups の langOf）、
-  英大文字の小さな等幅にする——--fs-label（11px）を使ってよいのはこの形だけ。
+  節の見出しと同じ Poppins の英大文字を小さく、字間を取って組む——--fs-label（11px）を
+  使ってよいのはこの形だけ。前は等幅で、節の見出し（Poppins）と英字の札の書体が2つ並んだ。
   「言語」と和文で書いた小見出しは本文の書体で和文の最小の段のまま。
 */
 .side-head {
@@ -1939,9 +1956,12 @@ body[data-site] > .frame {
 }
 
 .side-head:lang(en) {
-  font-family: var(--font-mono);
+  color: var(--ink-mid);
+  font-family: var(--font-latin);
   font-size: var(--fs-label);
-  letter-spacing: 0.1em;
+  font-weight: 600;
+  letter-spacing: var(--track-caption);
+  text-transform: uppercase;
 }
 
 .skills {
@@ -2309,57 +2329,6 @@ body[data-site] > .frame {
   font-size: var(--fs-sm);
 }
 
-/* --- 404 / 500 --- */
-
-.oops {
-  min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--sp-3);
-  padding: var(--gutter);
-  text-align: center;
-}
-
-/*
-  ロゴの印（Λ。src/ui/icons.tsx の Mark）。まわりの軌道の輪と衛星は「天体の飾り」が描く。
-
-  display: flex は、印の svg を行に載せないため。この箱は .oops の列の中で block に
-  なり、中の svg は1行ぶんの行ボックスに載る。標準モードの行ボックスは字が無くても
-  書体の高さの支え（strut）を持つので、svg がベースラインに座り、下に字の下がりぶんの
-  隙間が付いて、箱が印より高くなる。flex にすると svg は行ではなく flex の子になり、
-  箱は印と同じ高さに戻る。
-*/
-.oops__mark {
-  display: flex;
-}
-
-.oops__code {
-  font-family: var(--font-mono);
-  font-size: var(--fs-label);
-  color: var(--ink-weak);
-  letter-spacing: 0.1em;
-}
-
-.oops h1 {
-  font-size: var(--fs-lg);
-  font-weight: 600;
-}
-
-.oops p {
-  color: var(--ink-mid);
-  font-size: var(--fs-sm);
-}
-
-.oops a {
-  color: var(--accent);
-  font-size: var(--fs-sm);
-  min-height: var(--tap);
-  display: inline-flex;
-  align-items: center;
-}
-
 /* ============================================================ 天体の飾り */
 
 /*
@@ -2367,8 +2336,8 @@ body[data-site] > .frame {
   HTML は字だけで、飾りは CSS の背景と疑似要素と、静的な SVG の素材（src/ui/astra.ts が正。
   scripts/logo/export.mjs が書き出す）が描く。
 
-  置くのは4か所: 夜明けの窓（骨格の .window。Cavani の左の写真の位置）、経歴の星座、
-  個人ページの顔と 404 の印の軌道の輪。
+  置くのは3か所: 夜明けの窓（骨格の .window。Cavani の左の写真の位置。404 / 500 にも出る）、
+  経歴の星座、個人ページの顔の軌道の輪。
 
   決まり:
   - 夜明けの窓の外は線と点だけ。面・光・影・色相を持たない（字の墨と罫線の段だけ）。
@@ -2479,9 +2448,9 @@ body[data-site] > .frame {
 }
 
 /*
-  軌道の輪と衛星。個人ページの顔（.nameplate の .avatar）と 404 の印（.oops__mark）。
+  軌道の輪と衛星。個人ページの顔（.nameplate の .avatar）。
   輪は右上 45° で衛星のまわりだけ切れていて（--orbit-mask）、衛星はその切れ目に座る。
-  輪の半径はどちらも 32px（顔 56px + 4px、印 40px + 12px）。
+  輪の半径は 32px（顔 56px + 4px）。
 
   顔は輪の外側が左の軸にそろうよう、輪の幅（--orbit-gap）だけ内側へ寄せる。丸く切るのは
   顔の箱ではなく中の画像——箱の overflow: hidden は、箱の外に出る輪と衛星まで切る
@@ -2496,13 +2465,7 @@ body[data-site] > .frame {
   border-radius: 50%;
 }
 
-.oops__mark {
-  --orbit-gap: var(--sp-4);
-  position: relative;
-  margin-block: var(--orbit-gap);
-}
-
-:is(.nameplate .avatar, .oops__mark)::before {
+.nameplate .avatar::before {
   content: '';
   position: absolute;
   inset: calc(var(--orbit-gap) * -1);
@@ -2511,7 +2474,7 @@ body[data-site] > .frame {
   mask-image: var(--orbit-mask);
 }
 
-:is(.nameplate .avatar, .oops__mark)::after {
+.nameplate .avatar::after {
   content: '';
   position: absolute;
   left: calc(50% + (50% + var(--orbit-gap)) * 0.7071);
@@ -2553,6 +2516,14 @@ body[data-site] > .frame {
   .entry__meta {
     flex-direction: column;
     gap: 0;
+  }
+
+  .entry__icon {
+    left: calc(var(--entry-meta) + var(--sp-7) - var(--entry-icon) - var(--sp-3));
+  }
+
+  .entry:has(.entry__icon) .entry__meta {
+    padding-left: 0;
   }
 
   .team-grid {
@@ -2808,7 +2779,7 @@ body[data-site] > .frame {
   @media screen で括るのは、紙には貼り付ける帯も画面の底の足元も要らないため
   （紙の上の姿は末尾の @media print）。幅のメディアクエリ（600 / 900）とは別物。
 
-  当てる相手は公開ページだけ（body[data-site]。管理画面と 404 には付かない）。
+  当てる相手は公開ページと 404 / 500（body[data-site]。管理画面には付かない）。
   [data-whole] が付くのは全体ページ（/all）で、あちらは節を縦に積んだ1本の文書
   なので、帯の貼り付けを持たない。目印の側は :where() で包んで詳細度を 0 に
   してある。
@@ -2994,8 +2965,8 @@ body[data-site] > .frame {
     display: none;
   }
 
-  :is(.career li, .nameplate .avatar, .oops__mark)::after,
-  :is(.career .period, .nameplate .avatar, .oops__mark)::before {
+  :is(.career li, .nameplate .avatar)::after,
+  :is(.career .period, .nameplate .avatar)::before {
     display: none;
   }
 
