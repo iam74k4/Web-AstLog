@@ -69,6 +69,15 @@ const SiteSettingsPage = (props: {
           maxlength={SITE_SETTING_LIMITS.heroLead}
           error={props.errors?.heroLead}
         />
+        <Area
+          rows={4}
+          label="入口で打ち替える言葉"
+          name="heroRoles"
+          value={props.site.heroRoles}
+          hint="1行に1つ、4つまで（例: System Engineer）。入口の大見出しの下で1字ずつ打っては消して入れ替わります。空なら出さず、大見出しの上に肩書きを出します"
+          maxlength={SITE_SETTING_LIMITS.heroRoles}
+          error={props.errors?.heroRoles}
+        />
       </FormSection>
       <FormSection title="お問い合わせ" note="Contact とページ下部に表示する連絡先です。">
         <Area

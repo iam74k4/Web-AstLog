@@ -529,7 +529,8 @@ export function fixture({ solo = false } = {}) {
       連絡先。Contact は連絡先（メールか GitHub）があるときだけ出る（src/blocks.ts の
       blockShown）。無いと /contact が生えず、締めのページを測らないまま緑になる
     */
-    "INSERT OR REPLACE INTO settings (key, value) VALUES ('site.email', 'contact@example.com'), ('site.github', 'https://github.com/example');",
+    // 打ち替える言葉は上限ちょうどの1つ（1つなら動かずに置くだけなので、いつ測っても全部の字が出ている）
+    "INSERT OR REPLACE INTO settings (key, value) VALUES ('site.email', 'contact@example.com'), ('site.github', 'https://github.com/example'), ('site.heroRoles', 'Senior Software Engineer');",
   ].join('\n')
 
   const itemPath = (item) => `/${item.type === 'app' ? 'apps' : 'works'}/item/${item.slug}`
