@@ -46,8 +46,8 @@ const SiteSettingsPage = (props: {
     <form method="post" action="/admin/site" class="form">
       <FormVersion value={props.version} />
       <PlacementHint label="表示される場所">
-        入口の紹介文 → トップページ ／ Contact の案内文 → お問い合わせ ／
-        GitHub・Instagram・X・メール → ページ下部
+        入口の紹介文 → トップページ ／ Contact の案内文 → お問い合わせ ／ GitHub・Instagram・X・Mail
+        → ページ下部
       </PlacementHint>
       <FormSection title="サイトの紹介" note="入口の文章と、サイト全体の短い紹介を設定します。">
         <Field

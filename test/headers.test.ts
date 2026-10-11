@@ -183,7 +183,7 @@ describe('応答のヘッダ', () => {
     expect(values['x-content-type-options']).toBe('nosniff')
     expect(values['referrer-policy']).toBe('strict-origin-when-cross-origin')
     /*
-      何も読み込ませない。ロゴの SVG（ワードマークと favicon）は輪郭の path だけで、
+      何も読み込ませない。ロゴの SVG（ワードマークと favicon）は輪郭の path と塗りだけで、
       ブラウザによっては <img> や favicon で使うときもこの CSP が効く
     */
     expect(values['content-security-policy']).toBe("default-src 'none'; sandbox")

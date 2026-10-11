@@ -131,7 +131,7 @@ export const Stylesheets = ({
 export const ColorSchemeMeta = () => <meta name="color-scheme" content="light" />
 
 /*
-  favicon。ロゴの印（Λ を1つで）を地の色の正方形に載せたもの（src/ui/logo.ts の iconSvg）を
+  favicon。ロゴの印（Λ を1つで）を夜明けの空の正方形に載せたもの（src/ui/logo.ts の iconSvg）を
   SVG のまま読ませ、読めない環境には同じ絵の PNG を渡す（どちらも scripts/logo/export.mjs が
   書き出す）。地を敷くのは、字が白いから——透明のままだと明るいタブの帯では字が消える。
   公開・管理・404 の外枠がどれも置く。
@@ -554,7 +554,19 @@ export const itemTransition = (item: { slug: string | null }) =>
   （行の面は題のリンクの覆いが受けるので、押せば作品のページへ。リンクの名前と、
   ページを移るときにつなぐ題の字は題だけのまま）。
 */
-export const ItemRow = ({ item, showMember }: { item: ItemView; showMember?: boolean }) => {
+/*
+  showKind は行の札に区分（個人開発 / 業務）を出すか。区分が1つのサイトでは見出しの添えが
+  言うので、行には出さない（同じ「個人開発」が見出しと全部の行に並んだ）
+*/
+export const ItemRow = ({
+  item,
+  showMember,
+  showKind = true,
+}: {
+  item: ItemView
+  showMember?: boolean
+  showKind?: boolean
+}) => {
   const href = itemHref(item)
   const where = item.platformLabel ?? item.category
   const icon = item.iconUrl ? (
@@ -572,7 +584,7 @@ export const ItemRow = ({ item, showMember }: { item: ItemView; showMember?: boo
     // id は作品のページの「← 一覧に戻る」の着地点（itemCardId）
     <article class="entry" id={itemCardId(item)}>
       <ul class="entry__meta">
-        <li>{KIND_LABEL[item.type]}</li>
+        {showKind ? <li>{KIND_LABEL[item.type]}</li> : null}
         {where ? <li lang={langOf(where)}>{where}</li> : null}
         {item.year ? <li class="entry__year">{item.year}</li> : null}
         {showMember && item.memberName && item.memberSlug ? (
@@ -979,9 +991,9 @@ export const SkillGroups = ({ groups, level }: { groups: SkillGroup[]; level: 3 
 
   「プロフィール →」は操作の言葉なので日本語（CLAUDE.md「文言」）。英語で
   書くのは節の名前（目次・見出しの Profile / About …）だけ。
-  「Profile →」と英語で書いていたころは、同じページの「作品を見る →」
-  「メールを送る →」と押す手の言葉だけが言語を変えていた（lang="en" を
-  付けて読み上げを直していたが、印を要する英語そのものが要らなかった）。
+  「Profile →」と英語で書いていたころは、同じ入口の「作品を見る →」と
+  押す手の言葉だけが言語を変えていた（lang="en" を付けて読み上げを直して
+  いたが、印を要する英語そのものが要らなかった）。
 */
 export const MemberCardWide = ({ member }: { member: Member }) => (
   <a class="member member--wide" href={`/members/${member.slug}`}>
@@ -1077,6 +1089,10 @@ export const filterQuery = (filter: ItemFilter) => {
   絞り込む前に実在する区分）。片方しか無いサイトで「業務」を置いても、押した
   先は0件の知らせだけになる。プラットフォーム（macOS / iOS …）は絞り込みの
   軸ではなく、一覧の行の札。
+
+  並べる手が「すべて」だけになる（区分も人も1つ）なら、絞り込みごと出さない——押しても
+  同じページで、手の形をした飾りになる。そのとき URL の絞り込みは効かない（readFilter が
+  並ばない手を読まない）ので、外す手が無くても全件が出ている。
 */
 export const FilterLinks = ({
   base,
@@ -1090,6 +1106,7 @@ export const FilterLinks = ({
   filter: ItemFilter
 }) => {
   const href = (next: ItemFilter) => `${base}${filterQuery(next)}`
+  if (kinds.length < 2 && members.length < 2) return null
   return (
     <nav class="filters" aria-label="一覧を絞り込む">
       <a
@@ -1335,13 +1352,13 @@ export const ProfileWhole = ({
 /* ------------------------------------------------------------ 連絡先と足元 */
 
 /*
-  GitHub・Instagram・X・メールの行き先（並びはこの順）。URL は https:// の絶対 URL
+  GitHub・Instagram・X・Mail の行き先（並びはこの順）。URL は https:// の絶対 URL
   だけを描く（isHttpsUrl。保存でも同じ検査で弾いている——src/site.ts の siteSettingsErrors、
   src/routes/admin/members.tsx の memberErrors）。部品の側でも見るのは、その検査より前に
   保存された行を、呼ぶ側に頼らずに落とすため。
 
-  メールの札は「メール」。押す手の言葉は日本語（CLAUDE.md「文言」）で、GitHub・
-  Instagram・X はサービスの固有名なのでそのまま。
+  メールの札は「Mail」。GitHub・Instagram・X（サービスの固有名）と同じ英語の札で並べる
+  （持ち主の「メール→Mail で統一」。「メール」だけが和文で、札の並びが揃わなかった）。
 
   owner は「誰の行き先か」。サイトの行き先（足元）は渡さず、その人だけの
   行き先（OwnSocials）が名前を渡す。読み上げの名前が「青木 春香の GitHub」になる
@@ -1386,8 +1403,8 @@ export const Socials = ({
         </a>
       ) : null}
       {mail ? (
-        <a href={`mailto:${mail}`} aria-label={owner ? `${owner}のメール` : undefined}>
-          <MailIcon /> メール
+        <a href={`mailto:${mail}`} aria-label={owner ? `${owner}の Mail` : undefined}>
+          <MailIcon /> Mail
         </a>
       ) : null}
     </div>
@@ -1421,8 +1438,9 @@ export const OwnSocials = ({ member, site = SITE }: { member: Member; site?: Sit
   - 誘いの1文は、何の相談なら送ってよいかを言う唯一の言葉なので、大きく置く
     （句読点の塊を1行ずつ。入口の大見出しと同じ Phrases）
   - メールの手はアドレスそのものを大きな字にしたリンク（押すとメールを書く画面が開く）。
-    アドレスは字で読めるので、紙に刷っても宛先が残る。操作の言葉「メールを送る」を
-    添える（読み上げの名前にも入る。見た目の字を含む——WCAG 2.5.3）
+    アドレスは字で読めるので、紙に刷っても宛先が残る。操作の言葉「Send Mail」を
+    添える（読み上げの名前にも入る。見た目の字を含む——WCAG 2.5.3）。足元の札「Mail」と
+    同じ英語にそろえる（持ち主の指定。押す手の言葉で英語なのはこれだけ）
   - GitHub は外へ出る脇の道なので、小さな札で添える（↗ は外へ出る・別タブの印）
   - 単独ページは見える h1「Contact」。ページは h1 をちょうど1つ持つ（WCAG 1.3.1）。
     全体ページ（/all）では、ほかの節と同じ見出しを目に見える形で置く
@@ -1453,7 +1471,8 @@ export const Contact = ({
         <a class="contact__mail" href={`mailto:${email}`}>
           <span class="contact__address">{email}</span>
           <span class="contact__go">
-            <span aria-hidden="true">→ </span>メールを送る
+            <span aria-hidden="true">→ </span>
+            <span lang="en">Send Mail</span>
           </span>
         </a>
       ) : null}
@@ -1468,7 +1487,7 @@ export const Contact = ({
 )
 
 /*
-  足元のサイトの行き先（Layout.tsx の footer）。GitHub・Instagram・X・メール。どのページにも
+  足元のサイトの行き先（Layout.tsx の footer）。GitHub・Instagram・X・Mail。どのページにも
   出るので、ここに載せたものは全ページに載る。足元は著作権表示とこの行き先だけで、
   名前や一言は置かない（持ち主の「シンプルに」。誰のサイトかは入口の札と Profile が言う）。
 

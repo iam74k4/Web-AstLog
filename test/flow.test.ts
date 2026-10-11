@@ -142,15 +142,18 @@ describe('1人のサイトの ?member=', () => {
     expect(html).not.toContain('?member=')
   })
 
-  it('URL に付いていても絞り込まない。「すべて」に印が付いたまま全件を出す', async () => {
+  it('URL に付いていても絞り込まない。絞り込みの手を置かずに全件を出す', async () => {
     const member = await seedMember()
     await seedItem({ title: '本人のアプリ', memberId: member.id })
     await seedItem({ title: '担当の無いアプリ', sortOrder: 20 })
 
-    // 名前の絞り込みが無いので、効かせると「すべて」にも名前にも印が付かなくなる
+    /*
+      名前の絞り込みが無いので、効かせると「すべて」にも名前にも印が付かなくなる。区分も
+      1つなので、並ぶ手は「すべて」だけ——絞り込みごと置かない
+    */
     const html = await okText('/projects?member=okazaki')
     expect(html).toContain('担当の無いアプリ')
-    expect(html).toContain('href="/projects" aria-current="true"')
+    expect(html).not.toContain('class="filters"')
   })
 })
 
