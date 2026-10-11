@@ -368,7 +368,13 @@ export function renderBlock(
         title: 'Contact',
         description: describe(site.contactLead),
         node: (
-          <Contact lead={site.contactLead} email={site.email} github={site.github} whole={whole} />
+          <Contact
+            email={site.email}
+            github={site.github}
+            x={site.x}
+            instagram={site.instagram}
+            whole={whole}
+          />
         ),
       }
 

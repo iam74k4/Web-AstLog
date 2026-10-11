@@ -85,7 +85,7 @@ const SiteSettingsPage = (props: {
           label="Contact の案内文"
           name="contactLead"
           value={props.site.contactLead}
-          hint="どのような相談を受けるかを1文で書きます"
+          hint="どのような相談を受けるかを1文で書きます。Contact のページには出さず、検索結果の説明文に使います"
           required
           maxlength={SITE_SETTING_LIMITS.contactLead}
           error={props.errors?.contactLead}

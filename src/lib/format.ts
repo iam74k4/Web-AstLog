@@ -26,6 +26,47 @@ export function parseSkills(text: string): SkillGroup[] {
 }
 
 /*
+  経歴を塊に分ける。書き方は4種類の行:
+    - 末尾が : の行（「|」を含まない）は塊の見出し（Experience: / Education:）。技術
+      （parseSkills）と同じ書き方。個人ページは塊を横に並べる（CareerGroups）
+    - 「期間 | 会社・学校 | 役割・学科」の行（parseLines と同じ開き方）
+    - 「- 」で始まる行は、すぐ上の行の中の小見出し（案件の相手。名前を控えるなら「大手ネット
+      証券」のように書く）
+    - 「・」で始まる行は、その小見出しの下の項目（プロジェクト）。小見出しが無ければ行の直下
+  見出しより前の行は、見出しの無い塊にまとめる。行の無い見出しは塊にしない（見出しだけ残さない）。
+  行より前の「- 」「・」は置き場が無いので捨てる
+*/
+export type CareerDetail = { heading: string; items: string[] }
+export type CareerRow = { cells: string[]; details: CareerDetail[] }
+export type CareerGroup = { heading: string; rows: CareerRow[] }
+export function parseCareer(text: string): CareerGroup[] {
+  const groups: CareerGroup[] = []
+  const lastRow = () => groups.at(-1)?.rows.at(-1)
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    if (/^[-－]\s+/.test(trimmed)) {
+      lastRow()?.details.push({ heading: trimmed.replace(/^[-－]\s+/, ''), items: [] })
+      continue
+    }
+    if (/^[・･]/.test(trimmed)) {
+      const row = lastRow()
+      if (!row) continue
+      if (row.details.length === 0) row.details.push({ heading: '', items: [] })
+      row.details.at(-1)?.items.push(trimmed.replace(/^[・･]\s*/, ''))
+      continue
+    }
+    if (/[:：]$/.test(trimmed) && !trimmed.includes('|')) {
+      groups.push({ heading: trimmed.slice(0, -1).trim(), rows: [] })
+      continue
+    }
+    if (groups.length === 0) groups.push({ heading: '', rows: [] })
+    groups.at(-1)?.rows.push({ cells: trimmed.split('|').map((part) => part.trim()), details: [] })
+  }
+  return groups.filter((group) => group.rows.length > 0)
+}
+
+/*
   技術の塊の中を、経験の添え（note）ごとの行にまとめる。個人ページの Skills と
   全体ページ（/all）の Profile の SkillGroups が、この行を1本ずつ描く。
 

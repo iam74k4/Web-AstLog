@@ -310,6 +310,12 @@
     添えの長さ（「1年以上」と取得年の「2021」）が違っても、塊をまたいで項目の頭がそろう
   */
   --skill-note: 4em;
+  /* 経歴の塊（Experience / Education）を横に並べるときの1列の幅の下限（.career-groups） */
+  --career-col: 280px;
+  /* 足元の行き先のアイコンの大きさ（.socials。字を添えずアイコンだけで並べる） */
+  --social-icon: 18px;
+  /* Contact の連絡先の表（.contact-list）の札の列（「INSTAGRAM」が字間を取っても1行に入る幅） */
+  --contact-label: 112px;
 
   --ease: cubic-bezier(0.23, 1, 0.32, 1);
   --dur-fast: 180ms;
@@ -796,19 +802,25 @@ body[data-site] > .frame {
 .socials {
   display: flex;
   flex-wrap: wrap;
-  gap: 0 var(--sp-5);
+  /* 的（--tap）はアイコンより広いので、両端のアイコンが字の軸にそろうよう的の余白ぶん外へ出す */
+  margin-inline: calc((var(--social-icon) - var(--tap)) / 2);
 }
 
 .socials a {
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-2);
+  justify-content: center;
+  min-width: var(--tap);
   min-height: var(--tap);
   color: var(--ink-mid);
-  font-size: var(--fs-sm);
   transition:
     color var(--dur-fast) var(--ease),
     scale var(--dur-spring) var(--ease-spring);
+}
+
+.socials svg {
+  width: var(--social-icon);
+  height: var(--social-icon);
 }
 
 /* 著作権表示。行き先より1段弱い字（--fs-meta / --ink-weak） */
@@ -1053,10 +1065,9 @@ body[data-site] > .frame {
   .head :is(h1, h2, h3),
   .entry__main :is(h3, p),
   .statement__text,
-  .contact__lead,
   .bio p,
   .gallery__description,
-  .career :is(.title, .org)
+  .career :is(.title, .org, .career__item)
 ) {
   word-break: auto-phrase;
   text-wrap: pretty;
@@ -2170,6 +2181,50 @@ body[data-site] > .frame {
   padding-top: 0;
 }
 
+/*
+  経歴の塊（components.tsx の CareerGroups。Experience / Education）。並べる幅があれば横に
+  並べ（1列が --career-col 以上入るとき。1280 の本文の列で2列、電話と 900 前後では縦に積む）、
+  無ければ縦に積む。幅の括りを増やさず、列の数は箱の幅で決まる（auto-fit）。星座の印は
+  左の余白へ吊るすので（--hang）、列のあいだは --sp-7 取る
+*/
+.career-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--career-col)), 1fr));
+  align-items: start;
+  gap: var(--sp-6) var(--sp-7);
+}
+
+/*
+  経歴の行の中身（案件の相手とプロジェクト。parseCareer の「- 」と「・」の行）。行の下に、
+  左へ1本の罫線を引いた段で並べる。相手は小見出しの太さ、プロジェクトは「・」を頭に吊るした
+  小さい字（折り返した行は字の頭にそろう）
+*/
+.career__details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin-top: var(--sp-3);
+  padding-inline-start: var(--sp-4);
+  border-inline-start: 1px solid var(--line);
+}
+
+.career__client {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.career__item {
+  padding-inline-start: 1em;
+  color: var(--ink-mid);
+  font-size: var(--fs-meta);
+  line-height: 1.7;
+  text-indent: -1em;
+}
+
+.career__item::before {
+  content: '・';
+}
+
 /* 期間（「2024.03 — 現在」）。和文を含むので等幅にせず、数字の幅だけそろえる */
 .career .period {
   color: var(--ink-weak);
@@ -2362,8 +2417,8 @@ body[data-site] > .frame {
 
 /*
   サイトの並びの最後のページ（components.tsx の Contact）。見出し（Contact）の下に、
-  誘いの1文とメールと GitHub の手を縦に積む。ほかのページと同じ節で、見出しの錨を
-  持つ（「ページの外枠」）。箱（枠・面・影）には入れない。
+  連絡先の表だけを置く。ほかのページと同じ節で、見出しの錨を持つ（「ページの外枠」）。
+  箱（枠・面・影）には入れない。
 */
 .contact {
   display: flex;
@@ -2374,67 +2429,77 @@ body[data-site] > .frame {
 }
 
 /*
-  誘いの1文。大きく、句読点の塊を1行ずつ（入口の大見出しと同じ組み）。
-  見出しではない（見出しは読み上げ用の h1 が持つ）ので、太さは本文に近く。
+  連絡先の表（components.tsx の Contact）。行は「札（Email・GitHub …）| 行き先」の2列で、
+  行と行のあいだは罫線（一覧の行と同じ --line）。札は節の見出しと同じ Poppins の英大文字。
+  行き先は字で見せ（アドレスと @名前。紙に刷っても残る）、行の面ごと押せる——リンクの
+  ::before を行いっぱいに被せる（一覧の行の題の覆いと同じ）。矢印は行の右端で、メールは →、
+  外のサイト（別タブ）は ↗。札の列の幅は :root の --contact-label
 */
-.contact__lead {
-  font-size: var(--fs-display-sm);
-  font-weight: 500;
-  font-feature-settings: 'palt';
-  line-height: 1.45;
-  letter-spacing: -0.01em;
+.contact-list {
+  width: min(100%, 40em);
+  border-top: 1px solid var(--line);
 }
 
-.contact__lead .phrase {
-  display: block;
-}
-
-/*
-  メールの手。アドレスそのものを大きな細い字にし、下に1本の罫線を引く。
-  操作の言葉（→ メールを送る）はアドレスの後ろに小さく添える。狭い画面では
-  アドレスの下へ折り返す。アドレスは英数字の札なので、長くても語の途中で
-  折らない（1語が列より長いときだけ、どこででも折る）。
-*/
-.contact__mail {
-  display: flex;
-  flex-wrap: wrap;
+.contact-list__row {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--contact-label) minmax(0, 1fr);
   align-items: baseline;
-  gap: var(--sp-2) var(--sp-5);
-  max-width: 100%;
-  padding-bottom: var(--sp-4);
-  border-bottom: 1px solid var(--line-strong);
-  transition:
-    border-color var(--dur-fast) var(--ease),
-    scale var(--dur-spring) var(--ease-spring);
+  gap: var(--sp-4);
+  min-height: var(--tap);
+  padding-block: var(--sp-4);
+  border-bottom: 1px solid var(--line);
 }
 
-.contact__address {
+.contact-list dt {
+  color: var(--ink-mid);
+  font-family: var(--font-latin);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  letter-spacing: var(--track-caption);
+  text-transform: uppercase;
+}
+
+.contact-list dd {
   min-width: 0;
-  font-size: var(--fs-display-sm);
-  font-weight: 300;
-  letter-spacing: -0.01em;
+  font-size: var(--fs-lg);
   overflow-wrap: anywhere;
 }
 
-.contact__go {
-  color: var(--ink-mid);
-  font-size: var(--fs-sm);
+.contact-list__link {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  text-decoration-line: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: var(--sp-1);
+  transition: text-decoration-color var(--dur) var(--ease);
 }
 
-/*
-  GitHub。外へ出る脇の道なので、本文の書体の小さな字の手（目次の行き先と同じ段）。
-  ↗ との間は gap で取る（flex の子の頭の空白は消え、「GitHub↗」と詰まった）
-*/
-.contact__sub {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  min-height: var(--tap);
+.contact-list__link::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.contact-list__link::after {
+  content: '↗';
+  flex-shrink: 0;
   color: var(--ink-mid);
   font-size: var(--fs-md);
-  transition:
-    color var(--dur-fast) var(--ease),
-    scale var(--dur-spring) var(--ease-spring);
+}
+
+.contact-list__link[href^='mailto:']::after {
+  content: '→';
+}
+
+.contact-list__link:focus-visible {
+  outline: none;
+}
+
+.contact-list__link:focus-visible::before {
+  outline: var(--focus-ring) solid var(--accent);
+  outline-offset: calc(var(--focus-ring) * -1);
 }
 
 .empty {
@@ -2764,9 +2829,12 @@ body[data-site] > .frame {
 .top__admin:active,
 .band:active,
 .member:active,
-.back:active,
-.contact__mail:active,
-.contact__sub:active {
+.back:active {
+  scale: var(--press);
+}
+
+/* 連絡先の表の行は、行き先のリンク（行いっぱいの覆い）を押したときに縮む。:has は列に並べない */
+.contact-list__row:has(.contact-list__link:active) {
   scale: var(--press);
 }
 
@@ -2853,12 +2921,8 @@ body[data-site] > .frame {
     text-decoration-color: currentColor;
   }
 
-  .contact__mail:hover {
-    border-color: var(--ink);
-  }
-
-  .contact__sub:hover {
-    color: var(--ink);
+  .contact-list__row:has(.contact-list__link):hover .contact-list__link {
+    text-decoration-color: currentColor;
   }
 
   .gallery__item:hover .gallery__open {

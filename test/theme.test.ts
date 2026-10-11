@@ -676,9 +676,21 @@ describe('部品の作法', () => {
     expect(foot).toContain('justify-content: space-between')
   })
 
-  it('Contact の GitHub の ↗ は字から離す', () => {
-    // flex の子の頭の空白は消える。gap が無いと「GitHub↗」と詰まった（ほかは「App Store ↗」）
-    expect(bodyOf(sheet, '.contact__sub {')).toContain('gap: var(--sp-2)')
+  it('経歴の塊は、並べる幅があるときだけ横に並べる。幅の括りを増やさない', () => {
+    expect(bodyOf(sheet, '.career-groups {')).toContain(
+      'grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--career-col)), 1fr))',
+    )
+    expect(bodyOf(sheet, ':root {')).toContain('--career-col: 280px')
+  })
+
+  it('Contact の連絡先の表は、行の面ごと押せて、矢印は行き先で決まる', () => {
+    // 行いっぱいの覆い（一覧の行の題と同じ）。矢印はメールが →、外のサイト（別タブ）が ↗
+    expect(bodyOf(sheet, '.contact-list__row {')).toContain('position: relative')
+    expect(bodyOf(sheet, '.contact-list__link::before {')).toContain('inset: 0')
+    expect(bodyOf(sheet, '.contact-list__link::after {')).toContain("content: '↗'")
+    expect(bodyOf(sheet, ".contact-list__link[href^='mailto:']::after {")).toContain("content: '→'")
+    // 札の列の幅は :root の段
+    expect(bodyOf(sheet, '.contact-list__row {')).toContain('var(--contact-label)')
   })
 
   it('画像の説明は番号の右の列いっぱいに使い、「Full size」は説明の下に置く', () => {
@@ -862,11 +874,10 @@ describe('部品の作法', () => {
     expect(sheet).not.toMatch(/^\.hero__headline\s*[,{]/m)
   })
 
-  it('句読点までの塊は中で折らせない。大見出しと締めの1文は塊を1行ずつに積む', () => {
+  it('句読点までの塊は中で折らせない。大見出しは塊を1行ずつに積む', () => {
     // 頭の改行は必須。.hero h1 .phrase { に当てないため
     expect(bodyOf(sheet, '\n.phrase {')).toContain('display: inline-block')
     expect(bodyOf(sheet, '.hero h1 .phrase {')).toContain('display: block')
-    expect(bodyOf(sheet, '.contact__lead .phrase {')).toContain('display: block')
   })
 
   it('技術の小見出しは、見出しに上げても太さを変えない', () => {
@@ -1436,12 +1447,11 @@ describe('文字の段', () => {
       '.head :is(h1, h2, h3)',
       '.entry__main :is(h3, p)',
       '.statement__text',
-      '.contact__lead',
       '.bio p',
       // 画像の説明。細い列で「画 / 面」と1字だけの行が出た
       '.gallery__description',
       // 経歴の会社・学校と役割・学科。電話の幅で「人工知 / 能専攻」と語の途中で折れた
-      '.career :is(.title, .org)',
+      '.career :is(.title, .org, .career__item)',
     ]) {
       expect(wrap.selector, part).toContain(part)
     }

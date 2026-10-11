@@ -7,6 +7,7 @@ import seedSql from 'virtual:repo:seed.sql'
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import css from '../public/app.css'
+import { saveSiteSettings } from '../src/db/queries'
 import * as schema from '../src/db/schema'
 import { ITEM_KINDS } from '../src/domain'
 import { publicRoutes } from '../src/routes/public/routes'
@@ -581,6 +582,16 @@ describe('足元', () => {
     expect(topOf(await okText('/projects'))).not.toContain('岡崎 昂功')
   })
 
+  it('足元の行き先はアイコンだけ。名前は読み上げにだけ渡し、重ねると出る', async () => {
+    // 印のあとに字を並べていたころは、X の印と「X」の字が二重に読めた（持ち主の「アイコンだけでよい」）
+    await seedMember()
+    const foot = footOf(await okText('/'))
+    expect(foot).toMatch(
+      /<a href="https:\/\/github.com\/example" rel="me noreferrer" target="_blank" title="GitHub"><svg[\s\S]*?<\/svg><span class="sr-only"><span lang="en">GitHub<\/span><\/span><\/a>/,
+    )
+    expect(foot).not.toMatch(/<\/svg>\s*(GitHub|Instagram|X|Mail)</)
+  })
+
   it('2人以上のサイトでも同じ足元', async () => {
     await seedMember()
     await seedMember({ slug: 'hoshino', name: '星野', role: 'Designer' })
@@ -976,7 +987,7 @@ describe('技術の小見出しと、英語の塊', () => {
   it('押す手と札の言葉は英語にそろえる。読み上げのため lang="en" を付ける', async () => {
     /*
       持ち主の「文言統一」。節の名前（目次・見出し）と同じく、押す手（Projects → / Profile → /
-      ← Projects / Full size ↗ / Send Mail / Home →）と区分の札（All / Personal / Work）も英語。
+      ← Projects / Full size ↗ / Home →）と区分の札（All / Personal / Work）も英語。
       お知らせの文と本文は日本語のまま
     */
     await seedMember()
@@ -1009,15 +1020,30 @@ describe('連絡先の行き先', () => {
     }
   })
 
-  it('メールの手はアドレスそのもの。紙に刷っても宛先が字で残る', async () => {
+  it('連絡先の表は行き先を字で見せる。紙に刷っても宛先が残る', async () => {
     await seedMember()
+    await saveSiteSettings(db(), {
+      ...SITE,
+      x: 'https://x.com/example_x',
+      instagram: 'https://www.instagram.com/example.ig',
+    })
+    await touch()
 
-    // 添える言葉は足元の札「Mail」と同じ英語（持ち主の指定）。読み上げのため lang="en"
-    const mail = `<a class="contact__mail" href="mailto:${SITE.email}"><span class="contact__address">${SITE.email}</span><span class="contact__go"><span aria-hidden="true">→ </span><span lang="en">Send Mail</span></span></a>`
-    expect(mainOf(await okText('/contact'))).toContain(mail)
-    // 全体ページ（印刷の宛先）も同じ手
+    const contact = mainOf(await okText('/contact'))
+    // 札と行き先は dt / dd の組。メールはアドレス、外のサイトは名前（X は @ を付ける）
+    expect(contact).toContain(
+      `<div class="contact-list__row"><dt lang="en">Email</dt><dd><a class="contact-list__link" href="mailto:${SITE.email}">${SITE.email}</a></dd></div>`,
+    )
+    expect(contact).toContain(
+      `<dt lang="en">GitHub</dt><dd><a class="contact-list__link" href="${SITE.github}" rel="me noreferrer" target="_blank">example</a></dd>`,
+    )
+    expect(contact).toContain('target="_blank">@example_x</a>')
+    expect(contact).toContain('target="_blank">example.ig</a>')
+    // 全体ページ（印刷の宛先）も同じ表
     const whole = await okText('/all')
-    expect(whole.slice(whole.indexOf('<section id="contact"'))).toContain(mail)
+    expect(whole.slice(whole.indexOf('<section id="contact"'))).toContain(
+      `href="mailto:${SITE.email}">${SITE.email}</a>`,
+    )
   })
 })
 
@@ -1033,48 +1059,44 @@ describe('締めのページ（Contact）', () => {
     expect(main).not.toMatch(/<img|<svg|<style|<script/)
   })
 
-  it('Contact の見出し、誘いの1文、メールと GitHub の手を並べる', async () => {
+  it('Contact は見出しと連絡先の表だけ。誘いの1文は説明文に、足元には行き先を出さない', async () => {
     /*
-      字を1つも置かなかったころは、ボタンが2つあるだけで、何の相談なら
-      送ってよいのかを言う言葉がページのどこにも無かった（description にしか
-      無かった）。入口と対になるページとして、見出しを見せたうえで誘いの文を置く。
+      持ち主の「シンプルに」。大見出し・誘いの1文・所在地を置いた形から、表だけに削った。
+      何の相談なら送ってよいかを言う1文（contactLead）は、検索結果の説明文に残す。
       ページは h1 をちょうど1つ持つ決まり（WCAG 1.3.1）も保つ。
     */
-    await seedMember()
+    await seedMember({ location: 'Kanagawa, Japan' })
 
-    const main = mainOf(await okText('/contact'))
+    const html = await okText('/contact')
+    const main = mainOf(html)
     expect(main.match(/<h1[^>]*>/g)).toEqual(['<h1>'])
     expect(main).toContain('<div class="head"><h1>Contact</h1></div>')
     const contact = main.slice(main.indexOf('<div class="contact">'))
-    // ページに出る p はリードの1つだけ（札は置かない）
-    expect(contact.match(/<p\b[^>]*>/g)).toEqual(['<p class="contact__lead">'])
-    // 句読点までの塊に分けてある（Phrases）。読める文字列としては site.ts の1文のまま
-    const lead = contact.match(/<p class="contact__lead">(.*?)<\/p>/)?.[1] ?? ''
-    expect(lead.replace(/<[^>]+>/g, '')).toBe(SITE.contactLead)
-    // リードは手の上（読んでから押す）。GitHub は脇の道なので最後
-    expect(contact.indexOf('contact__lead')).toBeLessThan(contact.indexOf('contact__mail'))
-    expect(contact.indexOf('contact__mail')).toBeLessThan(contact.indexOf('contact__sub'))
-    // GitHub は外へ出る・別タブ（↗ は読み上げに流さない）
-    expect(contact).toContain(
-      `<a class="contact__sub" href="${SITE.github}" rel="me noreferrer" target="_blank"><span lang="en">GitHub</span><span aria-hidden="true"> ↗</span></a>`,
-    )
+    expect(contact.startsWith('<div class="contact"><dl class="contact-list">')).toBe(true)
+    expect(contact).not.toMatch(/<p\b/)
+    expect(contact).not.toContain('Location')
+    expect(html).toContain(`<meta name="description" content="${SITE.contactLead}"/>`)
     expect(main).toContain('aria-label="Contact"')
+    // 足元は著作権表示だけ（表と同じ行き先を2つ並べない）
+    const foot = html.slice(html.indexOf('<footer'))
+    expect(foot).not.toContain('class="socials"')
   })
 
-  it('全体ページの Contact にも同じ誘いの1文を置く', async () => {
+  it('全体ページの Contact にも同じ表を置く', async () => {
     await seedMember()
 
     const whole = await okText('/all')
     const contact = whole.slice(whole.indexOf('<section id="contact"'))
-    const lead = contact.match(/<p class="contact__lead">(.*?)<\/p>/)?.[1] ?? ''
-    expect(lead.replace(/<[^>]+>/g, '')).toBe(SITE.contactLead)
+    expect(contact).toContain(`href="mailto:${SITE.email}">${SITE.email}</a>`)
+    expect(contact).not.toContain('contact__lead')
   })
 
   it('全体ページでは、ほかの節と同じ見出しを目に見える形で置く', async () => {
     await seedMember()
 
     const whole = await okText('/all')
-    const contact = whole.slice(whole.indexOf('<section id="contact"'))
+    const from = whole.indexOf('<section id="contact"')
+    const contact = whole.slice(from, whole.indexOf('</section>', from))
     expect(contact).toContain('<div class="head"><h2>Contact</h2></div>')
     expect(contact).not.toContain('sr-only')
   })
@@ -2235,15 +2257,45 @@ describe('個人ページは1ページ', () => {
 
     const html = await okText('/members/tanaka')
     const own = mainOf(html)
+    // 見た目はアイコンだけ。名前は読み上げにだけ（.sr-only）、その人の名前を添える
     expect(own).toMatch(
-      /<a href="https:\/\/github.com\/tanaka-example"[^>]* aria-label="田中 未来の GitHub">/,
+      /<a href="https:\/\/github.com\/tanaka-example"[^>]*>.*?<span class="sr-only">田中 未来の <span lang="en">GitHub<\/span><\/span><\/a>/,
     )
-    expect(own).toContain('<a href="mailto:tanaka@example.test" aria-label="田中 未来の Mail">')
+    expect(own).toMatch(
+      /<a href="mailto:tanaka@example.test" title="Mail">.*?<span class="sr-only">田中 未来の <span lang="en">Mail<\/span><\/span><\/a>/,
+    )
     // 足元のサイトの行き先は名乗らない（サイトの行き先で、誰か1人のものではない）
     const foot = footOf(html)
     const siteSocials = foot.slice(foot.indexOf('<div class="socials">'))
     expect(siteSocials.slice(0, siteSocials.indexOf('</div>'))).toContain(`href="${SITE.github}"`)
     expect(siteSocials.slice(0, siteSocials.indexOf('</div>'))).not.toContain('aria-label="')
+  })
+
+  it('経歴を塊（Experience / Education）に分けると、塊ごとに小見出しを付けて並べる', async () => {
+    await seedMember({
+      careerText: [
+        'Experience:',
+        '2024.04 — 現在 | ある会社 | エンジニア',
+        '- 大手の取引先',
+        '・基幹システムの刷新',
+        'Education:',
+        '2021.04 — 2024.03 | ある大学 | 情報学科',
+      ].join('\n'),
+    })
+    const career = mainOf(await okText('/members/okazaki')).slice(
+      mainOf(await okText('/members/okazaki')).indexOf('id="career"'),
+    )
+    expect(career).toContain(
+      '<div class="career-groups"><div class="career-group"><h3 class="side-head" lang="en">Experience</h3><ul class="career">',
+    )
+    expect(career).toContain('<h3 class="side-head" lang="en">Education</h3>')
+    expect(career).toContain(
+      '<div class="career__details"><div class="career__detail"><p class="career__client">大手の取引先</p><p class="career__item">基幹システムの刷新</p></div></div>',
+    )
+    // 塊の見出しは経歴の行にしない
+    expect(career).not.toContain('<span class="period">Experience:</span>')
+    // 全体ページは Profile の Career（h3）の下なので h4
+    expect(await okText('/all')).toContain('<h4 class="side-head" lang="en">Experience</h4>')
   })
 
   it('canonical はそのページ自身。題は人の名前', async () => {

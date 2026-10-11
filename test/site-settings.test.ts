@@ -109,7 +109,8 @@ describe('サイト設定', () => {
     expect(plain(top)).toContain(configured.heroLead)
     expect(top).toContain(`"description":"${configured.heroLead}"`)
     const contact = await okText('/contact')
-    expect(plain(contact)).toContain(configured.contactLead)
+    // 案内文はページには出さず（表だけ。持ち主の「シンプルに」）、説明文にだけ使う
+    expect(plain(contact)).not.toContain(configured.contactLead)
     expect(contact).toContain(`name="description" content="${configured.contactLead}"`)
     expect((contact.match(/href="mailto:/g) ?? []).length).toBe(1)
     expect((await okText(`/members/${member.slug}`)).match(/href="mailto:/g)).toHaveLength(1)

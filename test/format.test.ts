@@ -5,6 +5,7 @@ import {
   isHttpsUrl,
   isSafeUrl,
   paragraphs,
+  parseCareer,
   parseLines,
   parseSkills,
   parseTags,
@@ -236,5 +237,56 @@ describe('chunk', () => {
 
   it('size が 1 未満でも止まる', () => {
     expect(chunk(['a', 'b'], 0)).toEqual([['a'], ['b']])
+  })
+})
+
+/*
+  経歴の書き方（parseCareer）。末尾が : の行が塊の見出し、「- 」が行の中の小見出し（案件の
+  相手）、「・」がその下の項目（プロジェクト）。個人ページは塊を横に並べる。
+*/
+describe('経歴の塊と行の中身', () => {
+  it('塊の見出し・行・小見出し・項目を開く', () => {
+    expect(
+      parseCareer(
+        [
+          'Experience:',
+          '2024.04 — 現在 | ある会社 | エンジニア',
+          '- 大手の取引先',
+          '・基幹システムの刷新',
+          '・テスト',
+          '- 製造業',
+          '・問い合わせ対応の仕組み',
+          'Education:',
+          '2021.04 — 2024.03 | ある大学 | 情報学科',
+        ].join('\n'),
+      ),
+    ).toEqual([
+      {
+        heading: 'Experience',
+        rows: [
+          {
+            cells: ['2024.04 — 現在', 'ある会社', 'エンジニア'],
+            details: [
+              { heading: '大手の取引先', items: ['基幹システムの刷新', 'テスト'] },
+              { heading: '製造業', items: ['問い合わせ対応の仕組み'] },
+            ],
+          },
+        ],
+      },
+      {
+        heading: 'Education',
+        rows: [{ cells: ['2021.04 — 2024.03', 'ある大学', '情報学科'], details: [] }],
+      },
+    ])
+  })
+
+  it('見出しの無い経歴は見出しの無い塊1つ。行の無い見出しと、行より前の中身は捨てる', () => {
+    expect(parseCareer('・置き場の無い項目\n2024 | 入社 | ある会社\nEducation:')).toEqual([
+      { heading: '', rows: [{ cells: ['2024', '入社', 'ある会社'], details: [] }] },
+    ])
+    // 小見出しの無い項目は、行の直下に並べる
+    expect(parseCareer('2024 | 入社 | ある会社\n・項目')[0]?.rows[0]?.details).toEqual([
+      { heading: '', items: ['項目'] },
+    ])
   })
 })

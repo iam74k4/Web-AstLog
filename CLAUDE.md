@@ -245,7 +245,7 @@ admin.css が `navigation: none` で打ち消し、動きを減らす設定で�
 **トップは決まったブロックの並び。** 置く・外す・並べ替えるのは管理画面の「構成」から。
 見た目を変える口は作らない（どう並べても統一感が崩れない）。
 
-**同じ行き先を1つのページに2つ置かない。** Contact のページで足元の GitHub / メールを出さない、
+**同じ行き先を1つのページに2つ置かない。** Contact のページの足元に行き先を出さない、
 1人のサイトのプロフィールに帯を出さない（入口の「Projects →」と同じ行き先・同じ件数）、
 作品のページに「くわしく読む →」を置かない（本文はすぐ下の小節）。
 
@@ -318,7 +318,7 @@ Projects・Profile・Contact・打ち込むブロックがそれぞれ1ページ
 ### 足元と個人ページ
 
 **足元は著作権表示とサイトの行き先だけ**（「© 年 AstLog」と、GitHub → Instagram → X → Mail の
-順の行き先。`src/ui/components.tsx` の `SiteSocials`。持ち主の「シンプルに」）。名前・職種・一言と
+順の行き先。アイコンだけで、名前は読み上げに渡す。`src/ui/components.tsx` の `SiteSocials`。持ち主の「シンプルに」）。名前・職種・一言と
 全体ページ（`/all`）への1本は置かない——`/all` は sitemap と管理画面の「構成」から開く。
 Instagram と X はサイト設定の欄で、空なら出さない（Contact のページを出すかはメールと GitHub
 だけで決める）。誰のサイトかは入口の札（1人のサイトなら「名前・職種・所在地」）と Profile が
@@ -382,10 +382,9 @@ HTML に絵・件数の帯は置かない（持ち主の「シンプル・モダ
 （`src/site.ts` の `hasContact`）、`blockShown` が数える。無ければページも目次の行も作らない
 （誘いの1文だけで、送る手の無いページになる）。
 
-**Contact のページに置く字は、見える h1、誘いの1文と手だけ**（サイト設定の `contactLead`、メールの手、
-GitHub の手）。HTML に絵は置かない。メールの手はアドレスそのものを大きな字にしたリンクで「Send Mail」を添える
-（紙に刷っても宛先が字で残る。`/all` も同じ手）。`/all` では節見出しを置く。
-`contactLead` は `/contact` の description にも使う。
+**Contact は見える h1 と連絡先の表だけ**（持ち主の「シンプルに」）。表は Email / GitHub / X /
+Instagram の `dt` / `dd` で、行き先は字（紙に刷っても残る）。誘いの1文（`contactLead`）はページに
+出さず description にだけ使う。HTML に絵は置かない。`/all` も同じ。
 
 **ロゴは字で組む ΛSTLOG**（横棒の無い A と、線の太さをそろえた幾何の大文字。O は同じ太さの輪を
 軌道に見立て、右上 45° に衛星を1つ。Λ の頂は平らに切る）。上の帯・ログイン・共有カード・素材は
@@ -411,7 +410,7 @@ GitHub の手）。HTML に絵は置かない。メールの手はアドレス�
 - **実績値の添えは、値と単位のあとに続けて読んで意味が通る形**（「20 人日 見込み 40人日から半減」。
   `Metric` / `metricDigest`）
 - **公開ページの節の名前・押す手・札は英語。** 目次・見出し（Projects / Profile /
-  About …）、押す手（Projects → / ← Projects / Full size ↗ / Send Mail / Home → / Skip to content）、
+  About …）、押す手（Projects → / ← Projects / Full size ↗ / Home → / Skip to content）、
   区分の札（All / Personal / Work。`KIND_NAME`）。英字だけなら `lang="en"`（`langOf`）。お知らせの
   文と本文、管理画面は日本語
 - **見出しに訳語だけの添えを置かない。** 添え（`SectionHead` の `note`）は見出しに無い情報のとき

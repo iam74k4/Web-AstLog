@@ -3,6 +3,7 @@ import { memberUnits } from '../../blocks'
 import type * as schema from '../../db/schema'
 import { SITE, type SiteSettings } from '../../site'
 import {
+  CareerGroups,
   Empty,
   Hero,
   Nameplate,
@@ -12,7 +13,6 @@ import {
   Screen,
   SectionHead,
   SkillGroups,
-  Timeline,
 } from '../../ui/components'
 import { describe, nameWithRole, sentences } from './meta'
 
@@ -120,8 +120,8 @@ export function memberPage(
       {career.length ? (
         <Screen id="career" label="Career">
           <SectionHead title="Career" chapter />
-          {/* トップの「できごと」と同じ部品。同じ形のものを2度書かない */}
-          <Timeline rows={career} />
+          {/* 小節の見出しが h2 なので、塊の小見出しは h3。行はトップの「できごと」と同じ部品 */}
+          <CareerGroups groups={career} level={3} />
         </Screen>
       ) : null}
     </>
