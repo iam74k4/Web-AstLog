@@ -17,7 +17,7 @@ export const SITE = {
 } as const
 
 /*
-  足元の行き先は GitHub → Instagram → X → メール の順（components.tsx の Socials）。
+  足元の行き先は GitHub → Instagram → X → Mail の順（components.tsx の Socials）。
   Contact のページを出すかを決めるのはメールと GitHub だけ（hasContact）——Instagram と X は
   足元に添える行き先で、Contact の本文には置かない
 */

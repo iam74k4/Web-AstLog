@@ -75,7 +75,7 @@ flowchart LR
 
     Whole -->|"上の帯のロゴ"| Top
 
-    Contact -->|"アドレスの手（メールを送る）/ GitHub"| Mail
+    Contact -->|"アドレスの手（Send Mail）/ GitHub"| Mail
     Profile -.->|"下書き / 存在しない slug"| NotFound
     OldMember -.->|"知らない続きの名前"| NotFound
     Screen -.->|"ページの名前の形でない（D1 に聞かずに）"| NotFound

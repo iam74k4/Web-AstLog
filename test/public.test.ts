@@ -952,7 +952,7 @@ describe('技術の小見出しと、英語の塊', () => {
     /*
       操作の言葉は日本語、英語で書くのは節の名前だけ（CLAUDE.md「文言」）。
       「Profile →」のころは lang="en" で読み上げを直していたが、同じページの
-      「一覧で見る →」「メールを送る →」と押す手の言葉だけ言語が違っていた
+      「一覧で見る →」と押す手の言葉だけ言語が違っていた
     */
     await seedMember()
     await seedMember({ slug: 'hoshino', name: '星野' })
@@ -981,7 +981,8 @@ describe('連絡先の行き先', () => {
   it('メールの手はアドレスそのもの。紙に刷っても宛先が字で残る', async () => {
     await seedMember()
 
-    const mail = `<a class="contact__mail" href="mailto:${SITE.email}"><span class="contact__address">${SITE.email}</span><span class="contact__go"><span aria-hidden="true">→ </span>メールを送る</span></a>`
+    // 添える言葉は足元の札「Mail」と同じ英語（持ち主の指定）。読み上げのため lang="en"
+    const mail = `<a class="contact__mail" href="mailto:${SITE.email}"><span class="contact__address">${SITE.email}</span><span class="contact__go"><span aria-hidden="true">→ </span><span lang="en">Send Mail</span></span></a>`
     expect(mainOf(await okText('/contact'))).toContain(mail)
     // 全体ページ（印刷の宛先）も同じ手
     const whole = await okText('/all')
@@ -2206,7 +2207,7 @@ describe('個人ページは1ページ', () => {
     expect(own).toMatch(
       /<a href="https:\/\/github.com\/tanaka-example"[^>]* aria-label="田中 未来の GitHub">/,
     )
-    expect(own).toContain('<a href="mailto:tanaka@example.test" aria-label="田中 未来のメール">')
+    expect(own).toContain('<a href="mailto:tanaka@example.test" aria-label="田中 未来の Mail">')
     // 足元のサイトの行き先は名乗らない（サイトの行き先で、誰か1人のものではない）
     const foot = footOf(html)
     const siteSocials = foot.slice(foot.indexOf('<div class="socials">'))

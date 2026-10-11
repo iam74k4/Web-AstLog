@@ -991,9 +991,9 @@ export const SkillGroups = ({ groups, level }: { groups: SkillGroup[]; level: 3 
 
   「プロフィール →」は操作の言葉なので日本語（CLAUDE.md「文言」）。英語で
   書くのは節の名前（目次・見出しの Profile / About …）だけ。
-  「Profile →」と英語で書いていたころは、同じページの「作品を見る →」
-  「メールを送る →」と押す手の言葉だけが言語を変えていた（lang="en" を
-  付けて読み上げを直していたが、印を要する英語そのものが要らなかった）。
+  「Profile →」と英語で書いていたころは、同じ入口の「作品を見る →」と
+  押す手の言葉だけが言語を変えていた（lang="en" を付けて読み上げを直して
+  いたが、印を要する英語そのものが要らなかった）。
 */
 export const MemberCardWide = ({ member }: { member: Member }) => (
   <a class="member member--wide" href={`/members/${member.slug}`}>
@@ -1352,13 +1352,13 @@ export const ProfileWhole = ({
 /* ------------------------------------------------------------ 連絡先と足元 */
 
 /*
-  GitHub・Instagram・X・メールの行き先（並びはこの順）。URL は https:// の絶対 URL
+  GitHub・Instagram・X・Mail の行き先（並びはこの順）。URL は https:// の絶対 URL
   だけを描く（isHttpsUrl。保存でも同じ検査で弾いている——src/site.ts の siteSettingsErrors、
   src/routes/admin/members.tsx の memberErrors）。部品の側でも見るのは、その検査より前に
   保存された行を、呼ぶ側に頼らずに落とすため。
 
-  メールの札は「メール」。押す手の言葉は日本語（CLAUDE.md「文言」）で、GitHub・
-  Instagram・X はサービスの固有名なのでそのまま。
+  メールの札は「Mail」。GitHub・Instagram・X（サービスの固有名）と同じ英語の札で並べる
+  （持ち主の「メール→Mail で統一」。「メール」だけが和文で、札の並びが揃わなかった）。
 
   owner は「誰の行き先か」。サイトの行き先（足元）は渡さず、その人だけの
   行き先（OwnSocials）が名前を渡す。読み上げの名前が「青木 春香の GitHub」になる
@@ -1403,8 +1403,8 @@ export const Socials = ({
         </a>
       ) : null}
       {mail ? (
-        <a href={`mailto:${mail}`} aria-label={owner ? `${owner}のメール` : undefined}>
-          <MailIcon /> メール
+        <a href={`mailto:${mail}`} aria-label={owner ? `${owner}の Mail` : undefined}>
+          <MailIcon /> Mail
         </a>
       ) : null}
     </div>
@@ -1438,8 +1438,9 @@ export const OwnSocials = ({ member, site = SITE }: { member: Member; site?: Sit
   - 誘いの1文は、何の相談なら送ってよいかを言う唯一の言葉なので、大きく置く
     （句読点の塊を1行ずつ。入口の大見出しと同じ Phrases）
   - メールの手はアドレスそのものを大きな字にしたリンク（押すとメールを書く画面が開く）。
-    アドレスは字で読めるので、紙に刷っても宛先が残る。操作の言葉「メールを送る」を
-    添える（読み上げの名前にも入る。見た目の字を含む——WCAG 2.5.3）
+    アドレスは字で読めるので、紙に刷っても宛先が残る。操作の言葉「Send Mail」を
+    添える（読み上げの名前にも入る。見た目の字を含む——WCAG 2.5.3）。足元の札「Mail」と
+    同じ英語にそろえる（持ち主の指定。押す手の言葉で英語なのはこれだけ）
   - GitHub は外へ出る脇の道なので、小さな札で添える（↗ は外へ出る・別タブの印）
   - 単独ページは見える h1「Contact」。ページは h1 をちょうど1つ持つ（WCAG 1.3.1）。
     全体ページ（/all）では、ほかの節と同じ見出しを目に見える形で置く
@@ -1470,7 +1471,8 @@ export const Contact = ({
         <a class="contact__mail" href={`mailto:${email}`}>
           <span class="contact__address">{email}</span>
           <span class="contact__go">
-            <span aria-hidden="true">→ </span>メールを送る
+            <span aria-hidden="true">→ </span>
+            <span lang="en">Send Mail</span>
           </span>
         </a>
       ) : null}
@@ -1485,7 +1487,7 @@ export const Contact = ({
 )
 
 /*
-  足元のサイトの行き先（Layout.tsx の footer）。GitHub・Instagram・X・メール。どのページにも
+  足元のサイトの行き先（Layout.tsx の footer）。GitHub・Instagram・X・Mail。どのページにも
   出るので、ここに載せたものは全ページに載る。足元は著作権表示とこの行き先だけで、
   名前や一言は置かない（持ち主の「シンプルに」。誰のサイトかは入口の札と Profile が言う）。
 

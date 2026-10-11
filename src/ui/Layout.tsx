@@ -228,7 +228,7 @@ export const Layout = (props: {
         </main>
       </div>
       {/*
-        足元。著作権表示とサイトの行き先（GitHub・Instagram・X・メール）だけ——持ち主の
+        足元。著作権表示とサイトの行き先（GitHub・Instagram・X・Mail）だけ——持ち主の
         「シンプルに」。どの幅でも畳まない（上の帯にはロゴと目次しか置かないので、
         連絡先はここが受ける）。全体ページ（/all）への1本は置かない（sitemap.xml が載せる）。
       */}
