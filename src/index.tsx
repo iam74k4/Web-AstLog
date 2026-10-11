@@ -1,11 +1,11 @@
 import { Hono } from 'hono'
 import type { AppEnv } from './env'
+import { yearInJapan } from './lib/format'
 import { pageCache } from './lib/page-cache'
 import { adminRoutes } from './routes/admin/index'
 import { publicRoutes } from './routes/public/routes'
 import { SITE } from './site'
 import { ADMIN_CSP } from './ui/admin-behavior'
-import { yearInJapan } from './lib/format'
 import {
   Brand,
   ColorSchemeMeta,
