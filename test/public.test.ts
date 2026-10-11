@@ -7,6 +7,7 @@ import seedSql from 'virtual:repo:seed.sql'
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import css from '../public/app.css'
+import { saveSiteSettings } from '../src/db/queries'
 import * as schema from '../src/db/schema'
 import { ITEM_KINDS } from '../src/domain'
 import { publicRoutes } from '../src/routes/public/routes'
@@ -976,7 +977,7 @@ describe('技術の小見出しと、英語の塊', () => {
   it('押す手と札の言葉は英語にそろえる。読み上げのため lang="en" を付ける', async () => {
     /*
       持ち主の「文言統一」。節の名前（目次・見出し）と同じく、押す手（Projects → / Profile → /
-      ← Projects / Full size ↗ / Send Mail / Home →）と区分の札（All / Personal / Work）も英語。
+      ← Projects / Full size ↗ / Home →）と区分の札（All / Personal / Work）も英語。
       お知らせの文と本文は日本語のまま
     */
     await seedMember()
@@ -1009,15 +1010,32 @@ describe('連絡先の行き先', () => {
     }
   })
 
-  it('メールの手はアドレスそのもの。紙に刷っても宛先が字で残る', async () => {
-    await seedMember()
+  it('連絡先の表は行き先を字で見せる。紙に刷っても宛先が残る', async () => {
+    await seedMember({ location: 'Kanagawa, Japan' })
+    await saveSiteSettings(db(), {
+      ...SITE,
+      x: 'https://x.com/example_x',
+      instagram: 'https://www.instagram.com/example.ig',
+    })
+    await touch()
 
-    // 添える言葉は足元の札「Mail」と同じ英語（持ち主の指定）。読み上げのため lang="en"
-    const mail = `<a class="contact__mail" href="mailto:${SITE.email}"><span class="contact__address">${SITE.email}</span><span class="contact__go"><span aria-hidden="true">→ </span><span lang="en">Send Mail</span></span></a>`
-    expect(mainOf(await okText('/contact'))).toContain(mail)
-    // 全体ページ（印刷の宛先）も同じ手
+    const contact = mainOf(await okText('/contact'))
+    // 札と行き先は dt / dd の組。メールはアドレス、外のサイトは名前（X は @ を付ける）
+    expect(contact).toContain(
+      `<div class="contact-list__row"><dt lang="en">Email</dt><dd><a class="contact-list__link" href="mailto:${SITE.email}">${SITE.email}</a></dd></div>`,
+    )
+    expect(contact).toContain(
+      `<dt lang="en">GitHub</dt><dd><a class="contact-list__link" href="${SITE.github}" rel="me noreferrer" target="_blank">example</a></dd>`,
+    )
+    expect(contact).toContain('target="_blank">@example_x</a>')
+    expect(contact).toContain('target="_blank">example.ig</a>')
+    // 所在地は1人のサイトのその人のもの（押せない行）
+    expect(contact).toContain('<dt lang="en">Location</dt><dd lang="en">Kanagawa, Japan</dd>')
+    // 全体ページ（印刷の宛先）も同じ表
     const whole = await okText('/all')
-    expect(whole.slice(whole.indexOf('<section id="contact"'))).toContain(mail)
+    expect(whole.slice(whole.indexOf('<section id="contact"'))).toContain(
+      `href="mailto:${SITE.email}">${SITE.email}</a>`,
+    )
   })
 })
 
@@ -1033,7 +1051,7 @@ describe('締めのページ（Contact）', () => {
     expect(main).not.toMatch(/<img|<svg|<style|<script/)
   })
 
-  it('Contact の見出し、誘いの1文、メールと GitHub の手を並べる', async () => {
+  it('Contact の見出し、誘いの1文、連絡先の表を並べる。足元には行き先を出さない', async () => {
     /*
       字を1つも置かなかったころは、ボタンが2つあるだけで、何の相談なら
       送ってよいのかを言う言葉がページのどこにも無かった（description にしか
@@ -1042,23 +1060,34 @@ describe('締めのページ（Contact）', () => {
     */
     await seedMember()
 
-    const main = mainOf(await okText('/contact'))
+    const html = await okText('/contact')
+    const main = mainOf(html)
     expect(main.match(/<h1[^>]*>/g)).toEqual(['<h1>'])
     expect(main).toContain('<div class="head"><h1>Contact</h1></div>')
     const contact = main.slice(main.indexOf('<div class="contact">'))
-    // ページに出る p はリードの1つだけ（札は置かない）
+    // 大見出しが空なら、誘いの1文を大きく置く（p はその1つだけ）
     expect(contact.match(/<p\b[^>]*>/g)).toEqual(['<p class="contact__lead">'])
     // 句読点までの塊に分けてある（Phrases）。読める文字列としては site.ts の1文のまま
     const lead = contact.match(/<p class="contact__lead">(.*?)<\/p>/)?.[1] ?? ''
     expect(lead.replace(/<[^>]+>/g, '')).toBe(SITE.contactLead)
-    // リードは手の上（読んでから押す）。GitHub は脇の道なので最後
-    expect(contact.indexOf('contact__lead')).toBeLessThan(contact.indexOf('contact__mail'))
-    expect(contact.indexOf('contact__mail')).toBeLessThan(contact.indexOf('contact__sub'))
-    // GitHub は外へ出る・別タブ（↗ は読み上げに流さない）
-    expect(contact).toContain(
-      `<a class="contact__sub" href="${SITE.github}" rel="me noreferrer" target="_blank"><span lang="en">GitHub</span><span aria-hidden="true"> ↗</span></a>`,
-    )
+    // リードは表の上（読んでから押す）
+    expect(contact.indexOf('contact__lead')).toBeLessThan(contact.indexOf('contact-list'))
     expect(main).toContain('aria-label="Contact"')
+    // 足元は著作権表示だけ（表と同じ行き先を2つ並べない）
+    const foot = html.slice(html.indexOf('<footer'))
+    expect(foot).not.toContain('class="socials"')
+  })
+
+  it('Contact の大見出しがあれば頭に大きく置き、誘いの1文はリード文の大きさに下げる', async () => {
+    await seedMember()
+    await saveSiteSettings(db(), { ...SITE, contactTitle: 'Let’s build something faster.' })
+    await touch()
+    const contact = mainOf(await okText('/contact'))
+    expect(contact).toContain(
+      '<p class="contact__title" lang="en"><span class="phrase">Let’s build something faster.</span></p>',
+    )
+    expect(contact).toContain('<p class="contact__lead contact__lead--quiet">')
+    expect(contact.indexOf('contact__title')).toBeLessThan(contact.indexOf('contact__lead'))
   })
 
   it('全体ページの Contact にも同じ誘いの1文を置く', async () => {

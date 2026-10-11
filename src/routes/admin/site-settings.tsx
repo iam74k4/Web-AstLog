@@ -80,6 +80,14 @@ const SiteSettingsPage = (props: {
         />
       </FormSection>
       <FormSection title="お問い合わせ" note="Contact とページ下部に表示する連絡先です。">
+        <Field
+          label="Contact の大見出し"
+          name="contactTitle"
+          value={props.site.contactTitle}
+          hint="Contact の頭に大きく出す一文（例: Let’s build something faster.）。空なら案内文を大きく出します"
+          maxlength={SITE_SETTING_LIMITS.contactTitle}
+          error={props.errors?.contactTitle}
+        />
         <Area
           rows={3}
           label="Contact の案内文"

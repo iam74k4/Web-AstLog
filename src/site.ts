@@ -11,6 +11,8 @@ export const SITE = {
   heroLead: 'つくったものと、取り組んできたことをまとめています。',
   // 入口の大見出しの下で打ち替える言葉（1行に1つ）。空なら出さない
   heroRoles: '',
+  // Contact の大見出し（英字の一文。Cavani の「Get in touch」）。空なら誘いの1文を大きく出す
+  contactTitle: '',
   contactLead: 'お仕事のご相談や取り組みについて、話しませんか。',
   email: '',
   github: '',
@@ -27,6 +29,7 @@ export const SITE_SETTING_KEYS = [
   'tagline',
   'heroLead',
   'heroRoles',
+  'contactTitle',
   'contactLead',
   'email',
   'github',
@@ -36,11 +39,16 @@ export const SITE_SETTING_KEYS = [
 export type SiteSettingKey = (typeof SITE_SETTING_KEYS)[number]
 
 /*
-  あとから足した欄（入口の打ち替える言葉・Instagram・X）。既定は空（出さない）なので、行がまだ無くても管理画面の
+  あとから足した欄（入口の打ち替える言葉・Contact の大見出し・Instagram・X）。既定は空（出さない）なので、行がまだ無くても管理画面の
   概要では「保存済み」に数える——欄を足した日に、保存済みのサイトが「一部保存済み」に戻らない
   ように（src/routes/admin/dashboard.tsx）
 */
-export const SITE_SETTING_LATER_KEYS: readonly SiteSettingKey[] = ['heroRoles', 'instagram', 'x']
+export const SITE_SETTING_LATER_KEYS: readonly SiteSettingKey[] = [
+  'heroRoles',
+  'contactTitle',
+  'instagram',
+  'x',
+]
 export type SiteSettings = Record<SiteSettingKey, string>
 
 // 大きな見出しと表紙の文は、管理画面から変えても既存のレイアウトに収まる長さにする。
@@ -49,6 +57,7 @@ export const SITE_SETTING_LIMITS = {
   heroLead: 160,
   // 4つ × 24 字と改行（フォームからは \r\n で届く）。1つの言葉の長さは HERO_ROLES が見る
   heroRoles: 110,
+  contactTitle: 60,
   contactLead: 120,
   email: 254,
   github: 2048,
@@ -101,6 +110,7 @@ export function siteSettingsErrors(site: SiteSettings): Record<string, string> |
     if (!site[key]) errors[key] = '文を入れてください'
     else if (CONTROL.test(site[key])) errors[key] = '改行や制御文字を含めないでください'
   }
+  if (CONTROL.test(site.contactTitle)) errors.contactTitle = '改行や制御文字を含めないでください'
   const roles = heroRoleWords(site)
   if (CONTROL_BUT_NEWLINE.test(site.heroRoles)) errors.heroRoles = '制御文字を含めないでください'
   else if (roles.length > HERO_ROLES.words) {

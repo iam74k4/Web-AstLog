@@ -310,6 +310,8 @@
     添えの長さ（「1年以上」と取得年の「2021」）が違っても、塊をまたいで項目の頭がそろう
   */
   --skill-note: 4em;
+  /* Contact の連絡先の表（.contact-list）の札の列（「INSTAGRAM」が字間を取っても1行に入る幅） */
+  --contact-label: 112px;
 
   --ease: cubic-bezier(0.23, 1, 0.32, 1);
   --dur-fast: 180ms;
@@ -1053,6 +1055,7 @@ body[data-site] > .frame {
   .head :is(h1, h2, h3),
   .entry__main :is(h3, p),
   .statement__text,
+  .contact__title,
   .contact__lead,
   .bio p,
   .gallery__description,
@@ -2390,51 +2393,103 @@ body[data-site] > .frame {
 }
 
 /*
-  メールの手。アドレスそのものを大きな細い字にし、下に1本の罫線を引く。
-  操作の言葉（→ メールを送る）はアドレスの後ろに小さく添える。狭い画面では
-  アドレスの下へ折り返す。アドレスは英数字の札なので、長くても語の途中で
-  折らない（1語が列より長いときだけ、どこででも折る）。
+  Contact の大見出し（サイト設定の contactTitle。「Let’s build something faster.」）。
+  入口の大見出しと同じ書体と字詰めで、段は1つ下（--fs-display）。句読点の塊を1行ずつ
 */
-.contact__mail {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--sp-2) var(--sp-5);
-  max-width: 100%;
-  padding-bottom: var(--sp-4);
-  border-bottom: 1px solid var(--line-strong);
-  transition:
-    border-color var(--dur-fast) var(--ease),
-    scale var(--dur-spring) var(--ease-spring);
+.contact__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-display);
+  font-weight: 800;
+  font-feature-settings: 'palt';
+  line-height: 1.15;
+  letter-spacing: -0.02em;
 }
 
-.contact__address {
-  min-width: 0;
-  font-size: var(--fs-display-sm);
-  font-weight: 300;
-  letter-spacing: -0.01em;
-  overflow-wrap: anywhere;
+.contact__title .phrase {
+  display: block;
 }
 
-.contact__go {
+/* 大見出しがあるときの誘いの1文。入口のリード文と同じ段（大見出しと大きさを競わせない） */
+.contact__lead.contact__lead--quiet {
   color: var(--ink-mid);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-md);
+  font-weight: 400;
+  line-height: 1.9;
+  letter-spacing: normal;
 }
 
 /*
-  GitHub。外へ出る脇の道なので、本文の書体の小さな字の手（目次の行き先と同じ段）。
-  ↗ との間は gap で取る（flex の子の頭の空白は消え、「GitHub↗」と詰まった）
+  連絡先の表（components.tsx の Contact）。行は「札（Email・GitHub …）| 行き先」の2列で、
+  行と行のあいだは罫線（一覧の行と同じ --line）。札は節の見出しと同じ Poppins の英大文字。
+  行き先は字で見せ（アドレスと @名前。紙に刷っても残る）、行の面ごと押せる——リンクの
+  ::before を行いっぱいに被せる（一覧の行の題の覆いと同じ）。矢印は行の右端で、メールは →、
+  外のサイト（別タブ）は ↗。札の列の幅は :root の --contact-label
 */
-.contact__sub {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
+.contact-list {
+  width: min(100%, 40em);
+  border-top: 1px solid var(--line);
+}
+
+.contact-list__row {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--contact-label) minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--sp-4);
   min-height: var(--tap);
+  padding-block: var(--sp-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.contact-list dt {
+  color: var(--ink-mid);
+  font-family: var(--font-latin);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  letter-spacing: var(--track-caption);
+  text-transform: uppercase;
+}
+
+.contact-list dd {
+  min-width: 0;
+  font-size: var(--fs-lg);
+  overflow-wrap: anywhere;
+}
+
+.contact-list__link {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  text-decoration-line: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: var(--sp-1);
+  transition: text-decoration-color var(--dur) var(--ease);
+}
+
+.contact-list__link::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.contact-list__link::after {
+  content: '↗';
+  flex-shrink: 0;
   color: var(--ink-mid);
   font-size: var(--fs-md);
-  transition:
-    color var(--dur-fast) var(--ease),
-    scale var(--dur-spring) var(--ease-spring);
+}
+
+.contact-list__link[href^='mailto:']::after {
+  content: '→';
+}
+
+.contact-list__link:focus-visible {
+  outline: none;
+}
+
+.contact-list__link:focus-visible::before {
+  outline: var(--focus-ring) solid var(--accent);
+  outline-offset: calc(var(--focus-ring) * -1);
 }
 
 .empty {
@@ -2764,9 +2819,12 @@ body[data-site] > .frame {
 .top__admin:active,
 .band:active,
 .member:active,
-.back:active,
-.contact__mail:active,
-.contact__sub:active {
+.back:active {
+  scale: var(--press);
+}
+
+/* 連絡先の表の行は、行き先のリンク（行いっぱいの覆い）を押したときに縮む。:has は列に並べない */
+.contact-list__row:has(.contact-list__link:active) {
   scale: var(--press);
 }
 
@@ -2853,12 +2911,8 @@ body[data-site] > .frame {
     text-decoration-color: currentColor;
   }
 
-  .contact__mail:hover {
-    border-color: var(--ink);
-  }
-
-  .contact__sub:hover {
-    color: var(--ink);
+  .contact-list__row:has(.contact-list__link):hover .contact-list__link {
+    text-decoration-color: currentColor;
   }
 
   .gallery__item:hover .gallery__open {

@@ -506,12 +506,13 @@ export const ScreenSection = ({
   日本語が1文字も混じっていないものだけを英語と見なす——「言語」と書いた人の
   見出しに lang="en" を付けると、今度はそちらが読めなくなる。
 
-  見た目もこの印で分ける。等幅の書体は英字の札（技術の小見出し・タグ・入口の
-  肩書き）にだけ掛け、app.css はそれを :lang(en) で選ぶ——打ち込んだ字が
-  和文なら、等幅の字間も 11px の段も付かない（app.css の :root の --font-mono）。
-  使うのは SkillGroups・Tags と、入口の肩書き（src/routes/public/blocks.tsx の case 'hero'）。
+  見た目もこの印で分ける。英字の小見出し（技術の LANGUAGES …）の Poppins の大文字と
+  11px の段は、app.css が :lang(en) で選ぶ——打ち込んだ字が和文なら付かない。
+
+  英字の組版の約物（’ ‘ ” “ – — …。U+2010〜U+2026）も英字のうちに数える——
+  「Let’s build …」の ’ で英語と見なされなかった。
 */
-const LATIN_ONLY = /^[ -~]+$/
+const LATIN_ONLY = /^[ -~\u2010-\u2026]+$/
 export const langOf = (text: string) => (LATIN_ONLY.test(text) ? 'en' : undefined)
 
 // タグ。英字だけの札にだけ lang="en"（等幅になる。langOf を見ること）
@@ -1484,70 +1485,114 @@ export const OwnSocials = ({ member, site = SITE }: { member: Member; site?: Sit
 /*
   連絡先のページ。サイトの並びの最後で、入口と対になる締め。
 
-  見える h1「Contact」、誘う1文（サイト設定の contactLead）、メールと GitHub の手だけを置く。
-  HTML に絵は置かない（前は天体の絵と星雲を右に敷き、字の後ろに暗がりの覆いを重ねていた）。
-  いまの軌道は、字の無い右下に app.css の「天体の飾り」が main の背景として描く。
+  見える h1「Contact」の下に、英字の大見出し（サイト設定の contactTitle。Cavani の
+  「Get in touch」）、誘う1文（contactLead）、連絡先の表（Email / GitHub / X / Instagram /
+  Location）を縦に積む。HTML に絵は置かない。
 
-  - 誘いの1文は、何の相談なら送ってよいかを言う唯一の言葉なので、大きく置く
-    （句読点の塊を1行ずつ。入口の大見出しと同じ Phrases）
-  - メールの手はアドレスそのものを大きな字にしたリンク（押すとメールを書く画面が開く）。
-    アドレスは字で読めるので、紙に刷っても宛先が残る。操作の言葉「Send Mail」を
-    添える（読み上げの名前にも入る。見た目の字を含む——WCAG 2.5.3）。足元の札「Mail」と
-    同じ英語にそろえる（持ち主の指定。押す手の言葉で英語なのはこれだけ）
-  - GitHub は外へ出る脇の道なので、小さな札で添える（↗ は外へ出る・別タブの印）
+  - 大見出しが空なら、誘いの1文を大きく置く（前の形。何の相談なら送ってよいかを言う
+    唯一の言葉なので）。大見出しがあるときは、誘いの1文はリード文の大きさに下げる
+  - 表は dt / dd の組（読み上げで「Email、iam74k4@gmail.com」と組で読む）。行き先は字で
+    見せる——アドレスと @名前が字で残るので、紙に刷っても宛先が分かる。行は面ごと押せる
+    （題の覆いと同じ。app.css の .contact-list）。矢印は行き先で決める: メールは →、
+    外のサイト（別タブ）は ↗
+  - Location は1人のサイトのその人の所在地（押せない行）
   - 単独ページは見える h1「Contact」。ページは h1 をちょうど1つ持つ（WCAG 1.3.1）。
     全体ページ（/all）では、ほかの節と同じ見出しを目に見える形で置く
-  - このページでは足元の GitHub / メールを出さない（SiteSocials の contact。同じ
-    行き先が1つのページに2つ並ぶ）
+  - このページの足元には行き先を出さない（SiteSocials の contact。表と同じ行き先が
+    1つのページに2つ並ぶ）
 
   whole は「全体ページ（/all）の1節として描くか」。全体ページでは見出しを目に見える
   h2 で置く（SectionHead）。
 */
+// 外のサイトの URL から、見せる名前（github.com/iam74k4 → iam74k4）。読めなければ所在そのもの
+const handleOf = (url: string) => {
+  try {
+    const { hostname, pathname } = new URL(url)
+    return pathname.split('/').filter(Boolean).at(-1) ?? hostname
+  } catch {
+    return url
+  }
+}
+
 export const Contact = ({
+  title = '',
   lead = SITE.contactLead,
   email,
   github,
+  x,
+  instagram,
+  location,
   whole,
 }: {
+  title?: string
   lead?: string
   email: string
   github?: string | null
+  x?: string | null
+  instagram?: string | null
+  location?: string | null
   whole?: boolean
-}) => (
-  <Screen id="contact" label="Contact">
-    <SectionHead title="Contact" h1={!whole} />
-    <div class="contact">
-      <p class="contact__lead">
-        <Phrases text={lead} />
-      </p>
-      {email && isContactEmail(email) ? (
-        <a class="contact__mail" href={`mailto:${email}`}>
-          <span class="contact__address">{email}</span>
-          <span class="contact__go">
-            <span aria-hidden="true">→ </span>
-            <span lang="en">Send Mail</span>
-          </span>
-        </a>
-      ) : null}
-      {isHttpsUrl(github) ? (
-        <a class="contact__sub" href={github} rel="me noreferrer" target="_blank">
-          <span lang="en">GitHub</span>
-          <span aria-hidden="true"> ↗</span>
-        </a>
-      ) : null}
-    </div>
-  </Screen>
-)
+}) => {
+  const away = [
+    ['GitHub', github, (url: string) => handleOf(url)],
+    ['X', x, (url: string) => `@${handleOf(url)}`],
+    ['Instagram', instagram, (url: string) => handleOf(url)],
+  ] as const
+  return (
+    <Screen id="contact" label="Contact">
+      <SectionHead title="Contact" h1={!whole} />
+      <div class="contact">
+        {title ? (
+          <p class="contact__title" lang={langOf(title)}>
+            <Phrases text={title} />
+          </p>
+        ) : null}
+        <p class={title ? 'contact__lead contact__lead--quiet' : 'contact__lead'}>
+          <Phrases text={lead} />
+        </p>
+        <dl class="contact-list">
+          {email && isContactEmail(email) ? (
+            <div class="contact-list__row">
+              <dt lang="en">Email</dt>
+              <dd>
+                <a class="contact-list__link" href={`mailto:${email}`}>
+                  {email}
+                </a>
+              </dd>
+            </div>
+          ) : null}
+          {away.map(([label, url, shown]) =>
+            isHttpsUrl(url) ? (
+              <div class="contact-list__row" key={label}>
+                <dt lang="en">{label}</dt>
+                <dd>
+                  <a class="contact-list__link" href={url} rel="me noreferrer" target="_blank">
+                    {shown(url)}
+                  </a>
+                </dd>
+              </div>
+            ) : null,
+          )}
+          {location ? (
+            <div class="contact-list__row">
+              <dt lang="en">Location</dt>
+              <dd lang={langOf(location)}>{location}</dd>
+            </div>
+          ) : null}
+        </dl>
+      </div>
+    </Screen>
+  )
+}
 
 /*
   足元のサイトの行き先（Layout.tsx の footer）。GitHub・Instagram・X・Mail。どのページにも
   出るので、ここに載せたものは全ページに載る。足元は著作権表示とこの行き先だけで、
   名前や一言は置かない（持ち主の「シンプルに」。誰のサイトかは入口の札と Profile が言う）。
 
-  contact は「Contact のページか」。本文にメールと GitHub の手があるので、
-  足元の GitHub / メールは出さない（同じ行き先を1つのページに2つ置かない）。Instagram と
-  X は本文に無いので出す。全体ページ（/all）では全部出す（あそこの Contact は節の1つで、
-  足元は全体の足元）。
+  contact は「Contact のページか」。本文の連絡先の表に全部の行き先があるので、足元には
+  出さない（同じ行き先を1つのページに2つ置かない。足元は著作権表示だけになる）。全体ページ
+  （/all）では全部出す（あそこの Contact は節の1つで、足元は全体の足元）。
 */
 export const SiteSocials = ({
   contact,
@@ -1555,11 +1600,7 @@ export const SiteSocials = ({
 }: {
   contact?: boolean
   site?: SiteSettings
-}) => (
-  <Socials
-    github={contact ? null : site.github}
-    instagram={site.instagram}
-    x={site.x}
-    email={contact ? null : site.email}
-  />
-)
+}) =>
+  contact ? null : (
+    <Socials github={site.github} instagram={site.instagram} x={site.x} email={site.email} />
+  )

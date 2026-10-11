@@ -676,9 +676,14 @@ describe('部品の作法', () => {
     expect(foot).toContain('justify-content: space-between')
   })
 
-  it('Contact の GitHub の ↗ は字から離す', () => {
-    // flex の子の頭の空白は消える。gap が無いと「GitHub↗」と詰まった（ほかは「App Store ↗」）
-    expect(bodyOf(sheet, '.contact__sub {')).toContain('gap: var(--sp-2)')
+  it('Contact の連絡先の表は、行の面ごと押せて、矢印は行き先で決まる', () => {
+    // 行いっぱいの覆い（一覧の行の題と同じ）。矢印はメールが →、外のサイト（別タブ）が ↗
+    expect(bodyOf(sheet, '.contact-list__row {')).toContain('position: relative')
+    expect(bodyOf(sheet, '.contact-list__link::before {')).toContain('inset: 0')
+    expect(bodyOf(sheet, '.contact-list__link::after {')).toContain("content: '↗'")
+    expect(bodyOf(sheet, ".contact-list__link[href^='mailto:']::after {")).toContain("content: '→'")
+    // 札の列の幅は :root の段
+    expect(bodyOf(sheet, '.contact-list__row {')).toContain('var(--contact-label)')
   })
 
   it('画像の説明は番号の右の列いっぱいに使い、「Full size」は説明の下に置く', () => {
