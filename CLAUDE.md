@@ -318,7 +318,7 @@ Projects・Profile・Contact・打ち込むブロックがそれぞれ1ページ
 ### 足元と個人ページ
 
 **足元は著作権表示とサイトの行き先だけ**（「© 年 AstLog」と、GitHub → Instagram → X → Mail の
-順の行き先。`src/ui/components.tsx` の `SiteSocials`。持ち主の「シンプルに」）。名前・職種・一言と
+順の行き先。アイコンだけで、名前は読み上げに渡す。`src/ui/components.tsx` の `SiteSocials`。持ち主の「シンプルに」）。名前・職種・一言と
 全体ページ（`/all`）への1本は置かない——`/all` は sitemap と管理画面の「構成」から開く。
 Instagram と X はサイト設定の欄で、空なら出さない（Contact のページを出すかはメールと GitHub
 だけで決める）。誰のサイトかは入口の札（1人のサイトなら「名前・職種・所在地」）と Profile が

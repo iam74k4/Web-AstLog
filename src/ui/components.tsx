@@ -1411,13 +1411,21 @@ export const ProfileWhole = ({
   src/routes/admin/members.tsx の memberErrors）。部品の側でも見るのは、その検査より前に
   保存された行を、呼ぶ側に頼らずに落とすため。
 
-  メールの札は「Mail」。GitHub・Instagram・X（サービスの固有名）と同じ英語の札で並べる
-  （持ち主の「メール→Mail で統一」。「メール」だけが和文で、札の並びが揃わなかった）。
+  見た目はアイコンだけ（持ち主の「アイコンだけでよい」。X は印も字も「X」で、二重に読めた）。
+  名前は読み上げにだけ渡す（.sr-only。英字なので lang="en"）。マウスで重ねたときは title で
+  名前を出す。押す的はアイコンより広い --tap の四角（app.css の .socials）。並びと名前は
+  GitHub・Instagram・X・Mail（メールの名前も英語でそろえる）。
 
-  owner は「誰の行き先か」。サイトの行き先（足元）は渡さず、その人だけの
-  行き先（OwnSocials）が名前を渡す。読み上げの名前が「青木 春香の GitHub」になる
-  （見た目の札は「GitHub」のまま。名前は見た目の字を含む——WCAG 2.5.3）。
+  owner は「誰の行き先か」。サイトの行き先（足元）は渡さず、その人だけの行き先
+  （OwnSocials）が名前を渡す。読み上げの名前が「青木 春香の GitHub」になる。
 */
+const SocialName = ({ owner, name }: { owner?: string; name: string }) => (
+  <span class="sr-only">
+    {owner ? `${owner}の ` : ''}
+    <span lang="en">{name}</span>
+  </span>
+)
+
 export const Socials = ({
   github,
   instagram,
@@ -1437,28 +1445,27 @@ export const Socials = ({
   return (
     <div class="socials">
       {isHttpsUrl(github) ? (
-        <a
-          href={github}
-          rel="me noreferrer"
-          target="_blank"
-          aria-label={owner ? `${owner}の GitHub` : undefined}
-        >
-          <GithubIcon /> GitHub
+        <a href={github} rel="me noreferrer" target="_blank" title="GitHub">
+          <GithubIcon />
+          <SocialName owner={owner} name="GitHub" />
         </a>
       ) : null}
       {isHttpsUrl(instagram) ? (
-        <a href={instagram} rel="me noreferrer" target="_blank">
-          <InstagramIcon /> Instagram
+        <a href={instagram} rel="me noreferrer" target="_blank" title="Instagram">
+          <InstagramIcon />
+          <SocialName owner={owner} name="Instagram" />
         </a>
       ) : null}
       {isHttpsUrl(x) ? (
-        <a href={x} rel="me noreferrer" target="_blank">
-          <XIcon /> X
+        <a href={x} rel="me noreferrer" target="_blank" title="X">
+          <XIcon />
+          <SocialName owner={owner} name="X" />
         </a>
       ) : null}
       {mail ? (
-        <a href={`mailto:${mail}`} aria-label={owner ? `${owner}の Mail` : undefined}>
-          <MailIcon /> Mail
+        <a href={`mailto:${mail}`} title="Mail">
+          <MailIcon />
+          <SocialName owner={owner} name="Mail" />
         </a>
       ) : null}
     </div>

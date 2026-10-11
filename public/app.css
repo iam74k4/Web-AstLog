@@ -310,6 +310,8 @@
     添えの長さ（「1年以上」と取得年の「2021」）が違っても、塊をまたいで項目の頭がそろう
   */
   --skill-note: 4em;
+  /* 足元の行き先のアイコンの大きさ（.socials。字を添えずアイコンだけで並べる） */
+  --social-icon: 18px;
   /* Contact の連絡先の表（.contact-list）の札の列（「INSTAGRAM」が字間を取っても1行に入る幅） */
   --contact-label: 112px;
 
@@ -798,19 +800,25 @@ body[data-site] > .frame {
 .socials {
   display: flex;
   flex-wrap: wrap;
-  gap: 0 var(--sp-5);
+  /* 的（--tap）はアイコンより広いので、両端のアイコンが字の軸にそろうよう的の余白ぶん外へ出す */
+  margin-inline: calc((var(--social-icon) - var(--tap)) / 2);
 }
 
 .socials a {
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-2);
+  justify-content: center;
+  min-width: var(--tap);
   min-height: var(--tap);
   color: var(--ink-mid);
-  font-size: var(--fs-sm);
   transition:
     color var(--dur-fast) var(--ease),
     scale var(--dur-spring) var(--ease-spring);
+}
+
+.socials svg {
+  width: var(--social-icon);
+  height: var(--social-icon);
 }
 
 /* 著作権表示。行き先より1段弱い字（--fs-meta / --ink-weak） */

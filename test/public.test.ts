@@ -582,6 +582,16 @@ describe('足元', () => {
     expect(topOf(await okText('/projects'))).not.toContain('岡崎 昂功')
   })
 
+  it('足元の行き先はアイコンだけ。名前は読み上げにだけ渡し、重ねると出る', async () => {
+    // 印のあとに字を並べていたころは、X の印と「X」の字が二重に読めた（持ち主の「アイコンだけでよい」）
+    await seedMember()
+    const foot = footOf(await okText('/'))
+    expect(foot).toMatch(
+      /<a href="https:\/\/github.com\/example" rel="me noreferrer" target="_blank" title="GitHub"><svg[^]*?<\/svg><span class="sr-only"><span lang="en">GitHub<\/span><\/span><\/a>/,
+    )
+    expect(foot).not.toMatch(/<\/svg>\s*(GitHub|Instagram|X|Mail)</)
+  })
+
   it('2人以上のサイトでも同じ足元', async () => {
     await seedMember()
     await seedMember({ slug: 'hoshino', name: '星野', role: 'Designer' })
@@ -1085,7 +1095,8 @@ describe('締めのページ（Contact）', () => {
     await seedMember()
 
     const whole = await okText('/all')
-    const contact = whole.slice(whole.indexOf('<section id="contact"'))
+    const from = whole.indexOf('<section id="contact"')
+    const contact = whole.slice(from, whole.indexOf('</section>', from))
     expect(contact).toContain('<div class="head"><h2>Contact</h2></div>')
     expect(contact).not.toContain('sr-only')
   })
@@ -2246,10 +2257,13 @@ describe('個人ページは1ページ', () => {
 
     const html = await okText('/members/tanaka')
     const own = mainOf(html)
+    // 見た目はアイコンだけ。名前は読み上げにだけ（.sr-only）、その人の名前を添える
     expect(own).toMatch(
-      /<a href="https:\/\/github.com\/tanaka-example"[^>]* aria-label="田中 未来の GitHub">/,
+      /<a href="https:\/\/github.com\/tanaka-example"[^>]*>.*?<span class="sr-only">田中 未来の <span lang="en">GitHub<\/span><\/span><\/a>/,
     )
-    expect(own).toContain('<a href="mailto:tanaka@example.test" aria-label="田中 未来の Mail">')
+    expect(own).toMatch(
+      /<a href="mailto:tanaka@example.test" title="Mail">.*?<span class="sr-only">田中 未来の <span lang="en">Mail<\/span><\/span><\/a>/,
+    )
     // 足元のサイトの行き先は名乗らない（サイトの行き先で、誰か1人のものではない）
     const foot = footOf(html)
     const siteSocials = foot.slice(foot.indexOf('<div class="socials">'))
