@@ -850,6 +850,26 @@ describe('部品の作法', () => {
     expect(bodyOf(sheet, '.side-head {')).toContain('font-weight: 400')
   })
 
+  it('技術の塊は罫線で区切り、600 以上は小見出しを左の列に立てる', () => {
+    /*
+      余白だけで分けていたころは、小さな英字の小見出しが項目の字に紛れ、塊の境目が
+      見えなかった。線は2つ目からの塊の頭にだけ（節の見出しの線と2本並べない）
+    */
+    expect(bodyOf(sheet, '.skill-group + .skill-group {')).toContain(
+      'border-top: 1px solid var(--line)',
+    )
+    expect(sheet).not.toMatch(/^\.skill-group\s*\{/m)
+    // 列の幅は一覧の行の札の列と同じ。行は小見出しの無い塊でも右の列
+    const wide = blockAt(sheet, '@media (min-width: 600px)')
+    expect(bodyOf(wide, '.skill-group {')).toContain(
+      'grid-template-columns: var(--entry-meta) minmax(0, 1fr)',
+    )
+    expect(bodyOf(wide, '.skill-group > :not(.side-head) {')).toContain('grid-column: 2')
+    // 添えの長さ（「3年以上」と取得年）が違っても、項目の頭を1本の縦の線にそろえる
+    expect(bodyOf(sheet, '.skill-row__note {')).toContain('min-inline-size: var(--skill-note)')
+    expect(bodyOf(sheet, ':root {')).toContain('--skill-note: 4em')
+  })
+
   it('Story のテンプレートの欄は、技術の塊と同じ間隔で縦に積む（小見出しは同じ .side-head）', () => {
     const parts = bodyOf(sheet, '.story-parts {')
     expect(parts).toContain('flex-direction: column')
