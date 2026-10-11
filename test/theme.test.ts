@@ -681,7 +681,7 @@ describe('部品の作法', () => {
     expect(bodyOf(sheet, '.contact__sub {')).toContain('gap: var(--sp-2)')
   })
 
-  it('画像の説明は番号の右の列いっぱいに使い、「拡大して見る」は説明の下に置く', () => {
+  it('画像の説明は番号の右の列いっぱいに使い、「Full size」は説明の下に置く', () => {
     // 3つを1行に並べていたころは、細い列で説明が4〜5行に割れ、1字だけの行が出た
     expect(bodyOf(sheet, '.gallery__caption {')).toContain(
       'grid-template-columns: auto minmax(0, 1fr)',
@@ -794,7 +794,7 @@ describe('部品の作法', () => {
     expect(bodyOf(sheet, '.entry:has(.entry__link:active) {')).toContain('scale: var(--press)')
   })
 
-  it('「← 一覧に戻る」は字の手。列いっぱいに伸びず、当たり判定は --tap', () => {
+  it('「← Projects」は字の手。列いっぱいに伸びず、当たり判定は --tap', () => {
     // 節は grid。子の inline-flex は blockify され、既定の stretch で幅いっぱいに伸びる
     const back = bodyOf(sheet, '.back {')
     expect(back).toContain('justify-self: start')

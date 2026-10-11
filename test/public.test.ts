@@ -506,7 +506,7 @@ describe('入口の画面', () => {
     }
     // 一覧が主、プロフィールは枠線だけの2本目。絵も件数の帯も置かない
     expect(hero).toContain(
-      '<div class="hero__actions"><a class="cta" href="/projects">作品を見る<span class="cta__arrow" aria-hidden="true">→</span></a><a class="cta cta--quiet" href="/members/okazaki">プロフィール<span class="cta__arrow" aria-hidden="true">→</span></a></div>',
+      '<div class="hero__actions"><a class="cta" href="/projects" lang="en">Projects<span class="cta__arrow" aria-hidden="true">→</span></a><a class="cta cta--quiet" href="/members/okazaki" lang="en">Profile<span class="cta__arrow" aria-hidden="true">→</span></a></div>',
     )
     expect(hero).not.toMatch(/<img|<svg|class="tally/)
   })
@@ -621,7 +621,7 @@ describe('足元', () => {
 })
 
 /*
-  入口の押し手（「作品を見る →」と「プロフィール →」）。作品そのものは一覧（Projects）の
+  入口の押し手（「Projects →」と「Profile →」）。作品そのものは一覧（Projects）の
   ページにあり、その人のことは個人ページにある。件数の帯（「07 Projects」「Since 2024」）は
   置かない——数の少なさを目立たせるだけだった（components.tsx の Hero）。
 */
@@ -632,8 +632,8 @@ describe('入口の押し手', () => {
     await seedItem({ type: 'work', title: 'ある仕事' })
 
     const hero = heroOf(await okText('/'))
-    expect(hero).toContain('<a class="cta" href="/projects">')
-    expect(hero).toContain('<a class="cta cta--quiet" href="/members/okazaki">')
+    expect(hero).toContain('<a class="cta" href="/projects" lang="en">')
+    expect(hero).toContain('<a class="cta cta--quiet" href="/members/okazaki" lang="en">')
     expect(hero).not.toContain('class="tally')
     expect(hero).not.toContain('Since')
   })
@@ -648,7 +648,7 @@ describe('入口の押し手', () => {
 
   it('全体ページの Projects には絞り込みを置かない。Projects のページには置く', async () => {
     /*
-      全体ページの絞り込みは /projects?kind=… へ移るリンクで、「すべて」の印（aria-current）が
+      全体ページの絞り込みは /projects?kind=… へ移るリンクで、「All」の印（aria-current）が
       別のページを「いまのページ」と名乗っていた。全体ページは中身を全部載せる場所
     */
     await seedMember()
@@ -672,7 +672,7 @@ describe('入口の押し手', () => {
 
     const hero = heroOf(await okText('/'))
     expect(hero).not.toContain('href="/projects"')
-    expect(hero).toContain('<a class="cta" href="/members/okazaki">プロフィール')
+    expect(hero).toContain('<a class="cta" href="/members/okazaki" lang="en">Profile')
   })
 
   it('一覧もプロフィールも並びに無ければ、押し手の並びごと置かない', async () => {
@@ -691,7 +691,7 @@ describe('入口の押し手', () => {
 
 /*
   ページの移動。公開ページは節ごとに1ページで、行き来するのは目次（上の帯）と
-  ページの中のリンク（入口の一覧への1本・一覧の行・「← 一覧に戻る」）だけ。画面の底の左右の手
+  ページの中のリンク（入口の一覧への1本・一覧の行・「← Projects」）だけ。画面の底の左右の手
   （ページャ）は外した——持ち主が触って「スクロールできず、底の左右の手でしか
   めくれないのが面倒すぎる」と判断した（CLAUDE.md の「公開ページは縦に読む」）。
 */
@@ -843,7 +843,7 @@ describe('ページごとの見出し', () => {
   })
 
   it('Projects の添えは、区分の絞り込みが無いときだけ。そのときは区分の名前', async () => {
-    // 区分が2つ: 見出しに並ぶ絞り込み（すべて / 個人開発 / 業務）が同じ言葉を並べるので添えない
+    // 区分が2つ: 見出しに並ぶ絞り込み（All / Personal / Work）が同じ言葉を並べるので添えない
     await seedItem({ type: 'app' })
     await seedItem({ type: 'work', title: '業務の実績' })
     // 見出しのすぐ後ろは件数（いま並んでいる行の数。2桁と、読み上げの「件」）
@@ -858,7 +858,7 @@ describe('ページごとの見出し', () => {
     await touch()
     const only = await okText('/projects')
     expect(only).toContain(
-      `<div class="head"><h1>Projects</h1>${count(1)}<span class="note">個人開発</span></div>`,
+      `<div class="head"><h1>Projects</h1>${count(1)}<span class="note" lang="en">Personal</span></div>`,
     )
     expect(only).not.toContain('kind=')
   })
@@ -973,17 +973,23 @@ describe('技術の小見出しと、英語の塊', () => {
     }
   })
 
-  it('Team のカードの押す手は日本語（プロフィール →）。英語の印は要らない', async () => {
+  it('押す手と札の言葉は英語にそろえる。読み上げのため lang="en" を付ける', async () => {
     /*
-      操作の言葉は日本語、英語で書くのは節の名前だけ（CLAUDE.md「文言」）。
-      「Profile →」のころは lang="en" で読み上げを直していたが、同じページの
-      「一覧で見る →」と押す手の言葉だけ言語が違っていた
+      持ち主の「文言統一」。節の名前（目次・見出し）と同じく、押す手（Projects → / Profile → /
+      ← Projects / Full size ↗ / Send Mail / Home →）と区分の札（All / Personal / Work）も英語。
+      お知らせの文と本文は日本語のまま
     */
     await seedMember()
     await seedMember({ slug: 'hoshino', name: '星野' })
-    const html = await okText('/team')
-    expect(html).toContain('<span class="member__go">プロフィール →</span>')
-    expect(html).not.toContain('Profile →')
+    const team = await okText('/team')
+    expect(team).toContain('<span class="member__go" lang="en">Profile →</span>')
+    expect(team).not.toContain('プロフィール')
+    await seedItem({ slug: 'one', memberId: null })
+    const item = await okText('/apps/item/one')
+    expect(item).toContain(
+      '<a class="back" href="/projects#item-one" lang="en"><span aria-hidden="true">←</span>Projects</a>',
+    )
+    expect(item).not.toContain('一覧に戻る')
   })
 })
 
@@ -1226,13 +1232,13 @@ describe('絞り込み', () => {
     expect(html).toContain('ある仕事')
     expect(html).not.toContain('個人のアプリ')
     // 押した手に印が付く。もう一度押すと外れるので、行き先は絞り込み無しの URL
-    expect(html).toContain('<a href="/projects" aria-current="true">業務</a>')
+    expect(html).toContain('<a href="/projects" aria-current="true" lang="en">Work</a>')
   })
 
   it('絞り込みに並ばない区分では絞らない。絞る先の無い一覧には絞り込みを置かない', async () => {
     /*
       個人開発しか無いサイト。業務の手は無いので、効かせると外す手が無くなる。並ぶ手が
-      「すべて」だけになるので絞り込みごと出さず（押しても同じページ）、行の札にも区分を
+      「All」だけになるので絞り込みごと出さず（押しても同じページ）、行の札にも区分を
       出さない（見出しの添えが「個人開発」と言う）
     */
     await seedItem({ type: 'app', title: '個人のアプリ' })
@@ -1241,7 +1247,7 @@ describe('絞り込み', () => {
       const main = mainOf(await okText(path))
       expect(main, path).toContain('個人のアプリ')
       expect(main, path).not.toContain('class="filters"')
-      expect(main, path).not.toMatch(/class="entry__meta"><li>個人開発<\/li>/)
+      expect(main, path).not.toMatch(/class="entry__meta"><li lang="en">Personal<\/li>/)
     }
   })
 
@@ -1250,8 +1256,8 @@ describe('絞り込み', () => {
     await seedItem({ type: 'work', title: 'ある仕事', slug: 'w' })
 
     const main = mainOf(await okText('/projects'))
-    expect(main).toContain('class="entry__meta"><li>個人開発</li>')
-    expect(main).toContain('class="entry__meta"><li>業務</li>')
+    expect(main).toContain('class="entry__meta"><li lang="en">Personal</li>')
+    expect(main).toContain('class="entry__meta"><li lang="en">Work</li>')
   })
 
   it('メンバーで絞ると、個人開発にも業務にも効く', async () => {
@@ -1297,7 +1303,7 @@ describe('絞り込み', () => {
 
     // 入口の一覧への1本は絞り込みを見ない（入口から送るのはいつも一覧の全件）
     expect(heroOf(await okText(`/?member=${member.slug}`))).toContain(
-      '<a class="cta" href="/projects">',
+      '<a class="cta" href="/projects" lang="en">',
     )
   })
 
@@ -1328,7 +1334,7 @@ describe('絞り込み', () => {
 
     const html = await response.text()
     expect(html).toContain('この条件に当てはまるものはまだありません')
-    expect(html).toContain('href="/projects">すべて</a>')
+    expect(html).toContain('href="/projects" lang="en">All</a>')
     expect(html).not.toContain('この人のアプリ')
   })
 
@@ -1482,7 +1488,7 @@ describe('作品1件の恒久リンク', () => {
   it('一覧は全件を1ページに並べる。行は id を持ち、作品のページから戻る的になる', async () => {
     /*
       以前は1画面2件で /projects/2 … に割っていた。いまは全件が1ページに並び、
-      作品のページの「← 一覧に戻る」はその行（#item-<slug>）へ戻る。番号は振らない
+      作品のページの「← Projects」はその行（#item-<slug>）へ戻る。番号は振らない
       （並び順でしかなく、行を見分ける手がかりにならなかった。components.tsx の ItemRow）
     */
     for (const [index, title] of ['A', 'B', 'C', 'D', 'E'].entries()) {
@@ -1662,7 +1668,7 @@ describe('作品1件の恒久リンク', () => {
 })
 
 /*
-  作品1件のページの行き来。行き来の手は目次と「← 一覧に戻る」。作品同士を画面の底の
+  作品1件のページの行き来。行き来の手は目次と「← Projects」。作品同士を画面の底の
   左右の手でめくっていたころのページャは外した（一覧は全件を1ページに並べるので、
   隣の作品は戻った一覧のすぐ隣の行にある）。
 */
@@ -1754,8 +1760,8 @@ describe('作品の画像の見せ方', () => {
     expect(html).toContain(
       '<img src="/images/items/many-cccccccc.png" alt="三" loading="lazy" decoding="async"/>',
     )
-    expect(html).toContain('aria-label="画像1「メイン」を拡大して見る（別タブ）"')
-    expect(html).toContain('aria-label="画像2「二」を拡大して見る（別タブ）"')
+    expect(html).toContain('aria-label="Full size: 画像1「メイン」（別タブ）"')
+    expect(html).toContain('aria-label="Full size: 画像2「二」（別タブ）"')
     expect(html).toContain(
       'href="/images/items/many-aaaaaaaa.png" target="_blank" rel="noreferrer"',
     )
@@ -1773,7 +1779,7 @@ describe('作品の画像の見せ方', () => {
 })
 
 describe('作品1件のページの行き来', () => {
-  // 本文の頭の「← 一覧に戻る」の行き先。無ければ null
+  // 本文の頭の「← Projects」の行き先。無ければ null
   const backOf = (html: string) => mainOf(html).match(/<a class="back" href="([^"]*)"/)?.[1] ?? null
 
   it('作品同士をめくる手は置かない。目次はサイトのまま、作品のページは目次に並ばない', async () => {
@@ -1788,7 +1794,7 @@ describe('作品1件のページの行き来', () => {
     expect(toc).not.toContain('/apps/item/')
   })
 
-  it('「← 一覧に戻る」は、一覧のその作品の行へ送る', async () => {
+  it('「← Projects」は、一覧のその作品の行へ送る', async () => {
     /*
       一覧の頭へ戻すと、何件目の行から入った人も最初から探し直すことになる。
       行は id="item-<slug>" を持っている（components.tsx の itemCardId）
@@ -1939,7 +1945,7 @@ describe('作品の本文（Story）', () => {
 
     const whole = mainOf(await okText('/all'))
     expect(whole).toContain(
-      '<div class="stories"><div><div class="head head--sub"><h3>AppMixer</h3><span class="note">Story</span></div><div class="story-parts"><div class="bio"><p>背景の段落です。</p>',
+      '<div class="stories"><div><div class="head head--sub"><h3>AppMixer</h3><span class="note" lang="en">Story</span></div><div class="story-parts"><div class="bio"><p>背景の段落です。</p>',
     )
     // 一覧の行のあと（行の中には入れない。行は面ごと作品のページへのリンク）
     expect(whole.indexOf('class="entries"')).toBeGreaterThan(-1)
@@ -2070,7 +2076,7 @@ describe('メンバーページ', () => {
 
     const html = await okText('/members/okazaki')
     expect(html).toContain('class="band" href="/projects?member=okazaki"')
-    expect(html).toContain('<span class="band__meta">業務 1</span>')
+    expect(html).toContain('<span class="band__meta">Work 1</span>')
   })
 })
 
@@ -2446,7 +2452,7 @@ describe('1人のサイトのプロフィール', () => {
     // 目次はサイトのもの。Profile の行も印も無い
     expect(tocOf(html)).not.toContain('Profile')
     expect(html).not.toContain('aria-current="page"')
-    // 帯はこちらでは出る（入口の「作品を見る →」と行き先が同じでも、このページはサイトの並びの外）
+    // 帯はこちらでは出る（入口の「Projects →」と行き先が同じでも、このページはサイトの並びの外）
     expect(mainOf(html)).toContain('class="band"')
     // カードの担当者名から入る（Team が無いので、個人ページへの道はそこだけ）
     expect(mainOf(await okText('/projects'))).toContain('href="/members/okazaki"')
@@ -2507,12 +2513,12 @@ describe('キーボードで読む', () => {
     expect(await okText('/projects')).toContain('role="region" aria-label="Projects"')
   })
 
-  it('main は tabindex="-1"。「本文へスキップ」の行き先', async () => {
+  it('main は tabindex="-1"。「Skip to content」の行き先', async () => {
     await seedItem()
     const html = await okText('/')
     expect(html).toContain('<main id="main" tabindex="-1">')
     // 迂回路はこの1本しか無い
-    expect(html).toContain('<a class="skip" href="#main">')
+    expect(html).toContain('<a class="skip" href="#main" lang="en">')
   })
 })
 
@@ -3007,6 +3013,17 @@ describe('共有カードとページごとの説明文', () => {
     })
     expect(descriptionOf(await okText('/members/okazaki'))).toBe(
       'つくる工程そのものを、速くする。2024年からシステム開発に携わっています。',
+    )
+  })
+
+  it('英字だけの大見出しは英語として読ませ、説明文では和文とのあいだを空ける', async () => {
+    await seedMember({
+      headline: 'Harder, Better, Faster, Stronger.',
+      bio: '2024年からシステム開発に携わっています。',
+    })
+    expect(await okText('/')).toContain('<h1 lang="en">')
+    expect(descriptionOf(await okText('/members/okazaki'))).toBe(
+      'Harder, Better, Faster, Stronger. 2024年からシステム開発に携わっています。',
     )
   })
 

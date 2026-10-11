@@ -11,7 +11,7 @@ import {
   type ItemKind,
   type ItemView,
   itemImages,
-  KIND_LABEL,
+  KIND_NAME,
   KIND_PATH,
   type KindCounts,
   type StoryPart,
@@ -276,7 +276,11 @@ export const SectionHead = ({
           <span class="sr-only"> 件</span>
         </span>
       )}
-      {note ? <span class="note">{note}</span> : null}
+      {note ? (
+        <span class="note" lang={langOf(note)}>
+          {note}
+        </span>
+      ) : null}
     </>
   )
   const kind = sub
@@ -317,7 +321,7 @@ export const HiddenHeading = ({ text, h1 }: { text: string; h1?: boolean }) =>
   tabindex は付けない。ページそのものが縦にスクロールするので、節は
   スクロール箱ではなく、キーボードではページごと動かせる（以前は節そのものが
   溢れの弁で、WebKit では弁にフォーカスできないために tabindex="0" を付けていた）。
-  「本文へスキップ」の行き先は main（Layout.tsx の tabindex="-1"）。
+  「Skip to content」の行き先は main（Layout.tsx の tabindex="-1"）。
 
   label を渡すと、その名前の付いた region として読み上げに出る。名前の無い
   region は読み上げに現れないので、見出しを持たない箱（ひとこと・帯）には
@@ -444,7 +448,7 @@ export const TypedWords = ({ words }: { words: string[] }) => (
 )
 
 /*
-  押し手（入口の「作品を見る →」「プロフィール →」）。塗りはページでいちばん強い1本にだけ
+  押し手（入口の「Projects →」「Profile →」）。塗りはページでいちばん強い1本にだけ
   使い、2本目は枠線だけの quiet にする（同じ強さが2本並ぶと、どちらが先か分からない）。
   矢印は飾りなので読み上げには流さない。サイトの中の続きなので ↗ ではなく →。
 */
@@ -457,7 +461,11 @@ export const Cta = ({
   quiet?: boolean
   children: Child
 }) => (
-  <a class={quiet ? 'cta cta--quiet' : 'cta'} href={href}>
+  <a
+    class={quiet ? 'cta cta--quiet' : 'cta'}
+    href={href}
+    lang={typeof children === 'string' ? langOf(children) : undefined}
+  >
     {children}
     <span class="cta__arrow" aria-hidden="true">
       →
@@ -533,7 +541,7 @@ export const itemHref = (item: { type: ItemKind; slug: string | null }) =>
   item.slug ? `/${KIND_PATH[item.type]}/item/${item.slug}` : null
 
 /*
-  一覧の行の id（/projects#item-<slug>）。作品のページの「← 一覧に戻る」が、
+  一覧の行の id（/projects#item-<slug>）。作品のページの「← Projects」が、
   一覧の頭ではなくその行へ戻る的（src/routes/public/item.tsx の renderItem）。
   一覧は全件を1ページに並べるので、戻った人は開いた行の所から読み続けられる。
 
@@ -612,10 +620,10 @@ export const ItemRow = ({
     />
   ) : null
   return (
-    // id は作品のページの「← 一覧に戻る」の着地点（itemCardId）
+    // id は作品のページの「← Projects」の着地点（itemCardId）
     <article class="entry" id={itemCardId(item)}>
       <ul class="entry__meta">
-        {showKind ? <li>{KIND_LABEL[item.type]}</li> : null}
+        {showKind ? <li lang="en">{KIND_NAME[item.type]}</li> : null}
         {where ? <li lang={langOf(where)}>{where}</li> : null}
         {item.year ? <li class="entry__year">{item.year}</li> : null}
         {showMember && item.memberName && item.memberSlug ? (
@@ -799,7 +807,7 @@ export const ItemShots = ({ images }: { images: ItemImage[] }) =>
               href={image.url}
               target="_blank"
               rel="noreferrer"
-              aria-label={`画像${index + 1}「${image.alt}」を拡大して見る（別タブ）`}
+              aria-label={`Full size: 画像${index + 1}「${image.alt}」（別タブ）`}
             >
               <span class="gallery__frame">
                 <img
@@ -815,7 +823,9 @@ export const ItemShots = ({ images }: { images: ItemImage[] }) =>
             <figcaption class="gallery__caption" aria-hidden="true">
               <span class="gallery__number">{twoDigits(index + 1)}</span>
               <span class="gallery__description">{image.alt}</span>
-              <span class="gallery__open">拡大して見る ↗</span>
+              <span class="gallery__open" lang="en">
+                Full size ↗
+              </span>
             </figcaption>
           </figure>
         ))}
@@ -1029,11 +1039,8 @@ export const SkillGroups = ({ groups, level }: { groups: SkillGroup[]; level: 3 
   矢印は → にする。↗ はこのサイトでは「外へ出る・別タブ」の印（リンク集・
   作品のリンク・サイトを見る ↗）で、同じサイトの中の続きには使わない。
 
-  「プロフィール →」は操作の言葉なので日本語（CLAUDE.md「文言」）。英語で
-  書くのは節の名前（目次・見出しの Profile / About …）だけ。
-  「Profile →」と英語で書いていたころは、同じ入口の「作品を見る →」と
-  押す手の言葉だけが言語を変えていた（lang="en" を付けて読み上げを直して
-  いたが、印を要する英語そのものが要らなかった）。
+  「Profile →」は入口の押し手（Projects → / Profile →）と同じ英語の言葉（CLAUDE.md「文言」。
+  公開ページの押す手は英語にそろえる）。英字だけなので lang="en"（読み上げを英語の読みに）。
 */
 export const MemberCardWide = ({ member }: { member: Member }) => (
   <a class="member member--wide" href={`/members/${member.slug}`}>
@@ -1048,7 +1055,9 @@ export const MemberCardWide = ({ member }: { member: Member }) => (
       </span>
       {member.headline ? <span class="member__lead">{member.headline}</span> : null}
     </span>
-    <span class="member__go">プロフィール →</span>
+    <span class="member__go" lang="en">
+      Profile →
+    </span>
   </a>
 )
 
@@ -1057,19 +1066,21 @@ export const MemberCardCompact = ({ member }: { member: Member }) => (
     <Avatar src={member.avatarUrl} name={member.name} size={44} />
     <strong class="member__name">{member.name}</strong>
     <span class="member__role">{member.role}</span>
-    <span class="member__go">プロフィール →</span>
+    <span class="member__go" lang="en">
+      Profile →
+    </span>
   </a>
 )
 
 /*
   一覧への帯。件数を添えて、押す前に「ここに何件あるか」を見せる。
 
-  使うのは、2人以上のサイトの個人ページの名札の下（入口は同じことを「作品を見る →」
+  使うのは、2人以上のサイトの個人ページの名札の下（入口は同じことを「Projects →」
   と件数の帯 Tally で言う）。作品そのものは別の URL（その人で絞った一覧）にあるので、
   そこに何があるかを数で示してから送り出す。行き先は呼ぶ側が決める（項目のある側へ
   送ること。0件の側へ送ると、0件の知らせだけのページに着く）。
 
-  題（label）は「何が入っているか」、右端は「どうするか（一覧で見る）」で、言葉を
+  題（label）は「何が入っているか」、右端は「どうするか（Projects →）」で、言葉を
   分ける。「つくったものの一覧」と書くと、1枚の札の中で「一覧」を2度言う。
 */
 export const Band = ({
@@ -1087,13 +1098,13 @@ export const Band = ({
       {/* 0件の区分は数えない。呼ぶ側は、一覧を置いていないサイトでは帯ごと出さない */}
       <span class="band__meta">
         {ITEM_KIND_KEYS.filter((kind) => counts[kind] > 0)
-          .map((kind) => `${KIND_LABEL[kind]} ${counts[kind]}`)
+          .map((kind) => `${KIND_NAME[kind]} ${counts[kind]}`)
           .join(' · ')}
       </span>
     </span>
-    {/* 矢印は飾り。読み上げには「一覧で見る」だけを流す */}
-    <span class="band__go">
-      一覧で見る{' '}
+    {/* 矢印は飾り。読み上げには「Projects」だけを流す */}
+    <span class="band__go" lang="en">
+      Projects{' '}
       <span class="band__arrow" aria-hidden="true">
         →
       </span>
@@ -1123,14 +1134,14 @@ export const filterQuery = (filter: ItemFilter) => {
   持っているのはサーバーで、公開ページは JavaScript を1バイトも持たない。
 
   2つの軸は独立に効く。いま効いている手をもう一度押すと、その軸だけ外れる。
-  「すべて」は両方外す。
+  「All」は両方外す。
 
   区分の手は、公開中の項目が両方の区分にあるときだけ並べる（kinds は
   絞り込む前に実在する区分）。片方しか無いサイトで「業務」を置いても、押した
   先は0件の知らせだけになる。プラットフォーム（macOS / iOS …）は絞り込みの
   軸ではなく、一覧の行の札。
 
-  並べる手が「すべて」だけになる（区分も人も1つ）なら、絞り込みごと出さない——押しても
+  並べる手が「All」だけになる（区分も人も1つ）なら、絞り込みごと出さない——押しても
   同じページで、手の形をした飾りになる。そのとき URL の絞り込みは効かない（readFilter が
   並ばない手を読まない）ので、外す手が無くても全件が出ている。
 */
@@ -1152,8 +1163,9 @@ export const FilterLinks = ({
       <a
         href={href({ kind: null, member: null })}
         aria-current={!filter.kind && !filter.member ? 'true' : undefined}
+        lang="en"
       >
-        すべて
+        All
       </a>
       {kinds.length > 1
         ? ITEM_KIND_KEYS.filter((kind) => kinds.includes(kind)).map((kind) => {
@@ -1163,8 +1175,9 @@ export const FilterLinks = ({
                 key={kind}
                 href={href({ kind: on ? null : kind, member: filter.member })}
                 aria-current={on ? 'true' : undefined}
+                lang="en"
               >
-                {KIND_LABEL[kind]}
+                {KIND_NAME[kind]}
               </a>
             )
           })
@@ -1200,10 +1213,10 @@ export const Empty = ({ children }: { children: Child }) => <p class="empty">{ch
   リンクから直接着いた人には一覧へ戻る手にならない。
 
   見た目は面を持たない字の手で、当たり判定は --tap（pointer: coarse では 44px）。
-  矢印は飾りなので読み上げには流さない（入口の「作品を見る →」と同じ）。
+  矢印は飾りなので読み上げには流さない（入口の「Projects →」と同じ）。
 */
 export const BackLink = ({ href, label }: { href: string; label: string }) => (
-  <a class="back" href={href}>
+  <a class="back" href={href} lang={langOf(label)}>
     <span aria-hidden="true">←</span>
     {label}
   </a>
@@ -1270,8 +1283,8 @@ export const Numbers = ({ rows }: { rows: string[][] }) => (
 
   矢印は行き先で変える。↗ はこのサイトでは「外へ出る・別タブで開く」の印
   （一覧の行の .links、管理画面の「サイトを見る ↗」）で、サイトの中の続き——
-  / で始まる URL——には → を付ける（Team のカードの「プロフィール →」、入口の
-  「作品を見る →」、LinkRow の「担当」と同じ）。
+  / で始まる URL——には → を付ける（Team のカードの「Profile →」、入口の
+  「Projects →」、LinkRow の「担当」と同じ）。
   中の行き先にも ↗ を付けていたころは、同じタブで開くのに「外へ出る」と
   言っていた。別タブで開くか（target）と rel も同じ1つの条件で決める。
 */

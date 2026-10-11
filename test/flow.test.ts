@@ -108,7 +108,7 @@ describe('個人ページ → 一覧', () => {
 
     const band = bandOf(await okText('/members/okazaki'))
     expect(band).toContain('href="/projects"')
-    expect(band).toContain('個人開発 1')
+    expect(band).toContain('Personal 1')
     // 業務はほかの人のもの。その人の帯で「業務 1」と出すと、どこにも無い1件になる
     expect(band).not.toContain('業務')
     /*
@@ -124,7 +124,7 @@ describe('個人ページ → 一覧', () => {
     await place(['hero', 'projects', 'contact'])
 
     const html = await okText('/')
-    expect(html).toContain('<a class="cta" href="/projects">')
+    expect(html).toContain('<a class="cta" href="/projects" lang="en">')
     // 件数（07 Projects・Since 2024）は数の少なさを目立たせるだけだった（components.tsx の Hero）
     expect(html).not.toContain('class="tally')
   })
@@ -148,8 +148,8 @@ describe('1人のサイトの ?member=', () => {
     await seedItem({ title: '担当の無いアプリ', sortOrder: 20 })
 
     /*
-      名前の絞り込みが無いので、効かせると「すべて」にも名前にも印が付かなくなる。区分も
-      1つなので、並ぶ手は「すべて」だけ——絞り込みごと置かない
+      名前の絞り込みが無いので、効かせると「All」にも名前にも印が付かなくなる。区分も
+      1つなので、並ぶ手は「All」だけ——絞り込みごと置かない
     */
     const html = await okText('/projects?member=okazaki')
     expect(html).toContain('担当の無いアプリ')

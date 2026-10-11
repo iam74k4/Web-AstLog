@@ -1,7 +1,7 @@
 import type { Child } from 'hono/jsx'
 import { blockLines, blockShown, blockTexts, blockType, itemStory, memberUnits } from '../../blocks'
 import type * as schema from '../../db/schema'
-import { KIND_LABEL } from '../../domain'
+import { KIND_LABEL, KIND_NAME } from '../../domain'
 import { heroRoleWords, SITE } from '../../site'
 import {
   Contact,
@@ -13,6 +13,7 @@ import {
   ItemRow,
   ItemStories,
   LinkList,
+  langOf,
   MemberCardCompact,
   MemberCardWide,
   Note,
@@ -181,7 +182,8 @@ export function renderBlock(
         node: (
           <Hero cover>
             {eyebrow.length ? <Eyebrow parts={eyebrow} /> : null}
-            <h1>
+            {/* 英字だけの大見出し（「Harder, Better, Faster, Stronger.」）は英語の読みで読ませる */}
+            <h1 lang={langOf(statement)}>
               <Phrases text={statement} />
             </h1>
             {typed.length ? <TypedWords words={typed} /> : null}
@@ -190,10 +192,10 @@ export function renderBlock(
             </p>
             {band || profile ? (
               <div class="hero__actions">
-                {band ? <Cta href={band.href}>作品を見る</Cta> : null}
+                {band ? <Cta href={band.href}>Projects</Cta> : null}
                 {profile ? (
                   <Cta href={memberHref(profile.slug)} quiet={Boolean(band)}>
-                    プロフィール
+                    Profile
                   </Cta>
                 ) : null}
               </div>
@@ -241,20 +243,20 @@ export function renderBlock(
               <>
                 {/*
                   添えは、区分の絞り込みが無いときだけ。区分が2つあるサイトでは
-                  隣の絞り込み（すべて / 個人開発 / 業務）が同じ言葉を並べる。
+                  隣の絞り込み（All / Personal / Work）が同じ言葉を並べる。
                   区分が1つのサイトでは絞り込みが並ばない（FilterLinks）ので、何の
                   一覧かを言うのはこの添えだけになる。見出しのすぐ後ろには、
                   いま並んでいる行の数（count）
                 */}
                 <SectionHead
                   title="Projects"
-                  note={soleKind ? KIND_LABEL[soleKind] : undefined}
+                  note={soleKind ? KIND_NAME[soleKind] : undefined}
                   count={projects.rows.length}
                   h1={!whole}
                 />
                 {/*
                   全体ページには絞り込みを置かない。中身を全部載せる場所で、絞り込みの手は
-                  Projects のページ（/projects?kind=…）へ移るリンクになり、「すべて」の印
+                  Projects のページ（/projects?kind=…）へ移るリンクになり、「All」の印
                   （aria-current）が別のページを「いまのページ」と名乗っていた
                 */}
                 {whole ? null : (

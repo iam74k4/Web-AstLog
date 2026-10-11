@@ -79,7 +79,8 @@ export const sentences = (...parts: string[]) =>
     .map((part) => part.trim())
     .filter((part) => part !== '')
     .map((part) => (/[。．.!?！？]$/.test(part) ? part : `${part}。`))
-    .join('')
+    // 英字の文（「… Stronger.」）のあとは半角の空きを1つ置く（和文の「。」のあとは詰める）
+    .reduce((all, part) => (/[.!?]$/.test(all) ? `${all} ${part}` : `${all}${part}`), '')
 
 export const describe = (text: string) => {
   // 打ち込んだ中身には改行が入る。1行に畳んでから数える

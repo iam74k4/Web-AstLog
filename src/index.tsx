@@ -130,8 +130,8 @@ const ErrorPage = ({
       <Stylesheets />
     </head>
     <body data-site="">
-      <a class="skip" href="#main">
-        本文へスキップ
+      <a class="skip" href="#main" lang="en">
+        Skip to content
       </a>
       <header class="top">
         <Brand />
@@ -146,7 +146,7 @@ const ErrorPage = ({
               <Phrases text={detail} />
             </p>
             <div class="hero__actions">
-              <Cta href="/">トップへ戻る</Cta>
+              <Cta href="/">Home</Cta>
             </div>
           </Hero>
         </main>

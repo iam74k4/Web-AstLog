@@ -19,17 +19,25 @@ import type { Item } from './db/schema'
   区分を指さない要求（/admin/items）の既定でもある。
 */
 export const ITEM_KINDS = [
-  { key: 'app', path: 'apps', label: '個人開発' },
-  { key: 'work', path: 'works', label: '業務' },
+  { key: 'app', path: 'apps', label: '個人開発', name: 'Personal' },
+  { key: 'work', path: 'works', label: '業務', name: 'Work' },
 ] as const
 
 export type ItemKind = (typeof ITEM_KINDS)[number]['key']
 
 export const ITEM_KIND_KEYS = ITEM_KINDS.map((kind) => kind.key) as [ItemKind, ...ItemKind[]]
 
-// 画面での呼び名。入口の件数の帯（Tally）・個人ページの帯（「個人開発 5 · 業務 2」）と管理画面のタブも同じ言葉
+// 和名。管理画面のタブと、公開ページの説明文（検索結果に出る文）の中で使う
 export const KIND_LABEL = Object.fromEntries(
   ITEM_KINDS.map((kind) => [kind.key, kind.label]),
+) as Record<ItemKind, string>
+
+/*
+  公開ページの札の呼び名（英語）。絞り込み・見出しの添え・一覧の行の札・個人ページの帯
+  （「Personal 5 · Work 2」）。押す手と札の言葉は英語にそろえる（持ち主の「文言統一」）
+*/
+export const KIND_NAME = Object.fromEntries(
+  ITEM_KINDS.map((kind) => [kind.key, kind.name]),
 ) as Record<ItemKind, string>
 
 // 恒久リンクの1語目
