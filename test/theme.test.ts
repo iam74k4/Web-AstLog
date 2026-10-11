@@ -723,18 +723,17 @@ describe('部品の作法', () => {
     expect(sheet).not.toContain('outline: 2px')
   })
 
-  it('一覧の行の題と行き先の下線は、透明の線に色を入れて溶かすように出す', () => {
+  it('一覧の行の題の下線は左から伸び、行き先の下線は透明の線に色を入れて出す', () => {
     /*
-      線の有り無しを切り替えると、色は送れず、下線がその場に現れる。ふだんから透明の線を
-      引いておき、マウスを重ねたときに色だけを入れる
+      線の有り無しを切り替えると、下線がその場に現れる。題はふだんから幅 0 の線を持ち、
+      マウスを重ねたときに左から伸ばす（押し手の色が左から満ちるのと同じ向き）
     */
     const title = bodyOf(sheet, '.entry__link {')
-    expect(title).toContain('text-decoration-line: underline')
-    expect(title).toContain('text-decoration-color: transparent')
-    expect(title).toContain('transition: text-decoration-color var(--dur) var(--ease)')
+    expect(title).toContain('/ 0% 1px no-repeat')
+    expect(title).toContain('transition: background-size var(--dur) var(--ease)')
     const hover = blockAt(sheet, '@media (hover: hover)')
     const lit = bodyOf(hover, ':is(.entry:has(.entry__link)):hover .entry__link {')
-    expect(lit).toContain('text-decoration-color: currentColor')
+    expect(lit).toContain('background-size: 100% 1px')
     expect(lit).not.toContain('text-decoration: underline')
     expect(bodyOf(sheet, '.links a {')).toContain('text-decoration-color: transparent')
     expect(bodyOf(hover, '.links a:hover {')).toContain('text-decoration-color: currentColor')
@@ -1148,7 +1147,16 @@ describe('天体の飾り', () => {
         .flatMap((value) => [...value.matchAll(/var\((--[\w-]+)\)/g)].map(([, name = '']) => name))
         .filter((name) => /^--(ink|line|accent|mono|bg|surface|panel|dawn)/.test(name)),
     )
-    expect([...colors].sort()).toEqual(['--dawn', '--dawn-faint', '--dawn-star'])
+    expect([...colors].sort()).toEqual([
+      '--dawn-day',
+      '--dawn-dusk',
+      '--dawn-faint',
+      '--dawn-haze',
+      '--dawn-mist',
+      '--dawn-night',
+      '--dawn-shift',
+      '--dawn-star',
+    ])
   })
 
   it('星は素材を形として読み、色は段で塗る', () => {
@@ -1460,9 +1468,11 @@ describe('配色（白い地と夜明けの窓）', () => {
     const root = bodyOf(sheet, ':root {')
     const value = (name: string) => root.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1]
     expect(value('--dawn-day')).toBe('var(--bg)')
-    const dawn = root.slice(root.indexOf('--dawn:'), root.indexOf(');', root.indexOf('--dawn:')))
-    expect(dawn).toContain('linear-gradient(')
-    expect(dawn.trim().split('\n').at(-1)?.trim()).toBe('var(--dawn-day) 100%')
+    // 窓の空は上から明けていき、最後の色は地の白（読み進めて明けても、底は動かない）
+    const sky = ruleWith(sheet, 'var(--dawn-night) 0%').body
+    expect(sky).toContain('linear-gradient(')
+    expect(sky).toContain('var(--dawn-day) 100%')
+    expect(sky).toContain('var(--dawn-night) 0%')
     expect(sheet).not.toContain('--night')
     expect(sheet).not.toContain('--starmap')
   })
@@ -1478,5 +1488,69 @@ describe('配色（白い地と夜明けの窓）', () => {
     // 素材（favicon・共有カード）は塗りの押し手と同じ組——墨の面に白い字
     expect(value('--accent-ink')).toBe(LOGO_COLORS.ink)
     expect(value('--mono')).toBe(LOGO_COLORS.ground)
+  })
+})
+
+/*
+  動き（app.css の「動き」の節）。持ち主が動画で見て選んだ組。前は「装飾の動きは置かない」
+  だったが、持ち主が動きを入れると決めた。崩れ方は3つ——動きを減らす設定に動きが残る／
+  スクロールに連動する動きを知らないブラウザで、現れる途中の姿（透明）のまま止まる／終わらない
+  動きが窓の外へ広がる——をここで止める。
+*/
+describe('動き', () => {
+  const motion = bare(
+    css.slice(css.indexOf('= 動き */'), css.indexOf('= ページの外枠（公開ページ） */')),
+  )
+
+  it('動きを減らす設定では、全部止める（animation も transition も）', () => {
+    const reduce = blockAt(sheet, '@media (prefers-reduced-motion: reduce)')
+    expect(reduce).toContain('animation: none !important')
+    expect(reduce).toContain('transition: none !important')
+  })
+
+  it('スクロールと画面に入る動きは @supports の中だけ。知らないブラウザで透明のまま止めない', () => {
+    const outside = motion.replace(
+      /@supports \(animation-timeline: (?:scroll|view)\(\)\) \{[\s\S]*?\n\}/g,
+      '',
+    )
+    expect(outside).not.toContain('animation-timeline')
+    expect(motion).toContain('@supports (animation-timeline: scroll())')
+    expect(motion).toContain('@supports (animation-timeline: view())')
+  })
+
+  it('終わらない動きは、窓の星と経歴のいまの行の星だけ', () => {
+    const forever = rulesOf(sheet)
+      .filter((rule) =>
+        rule.decls.some(([name, value]) => name === 'animation' && /infinite/.test(value)),
+      )
+      .flatMap((rule) => rule.selectors)
+    expect([...new Set(forever)].sort()).toEqual([
+      '.career__now .period::before',
+      '.window::before',
+    ])
+  })
+
+  it('入口の幕開けは1回だけ。札・大見出し・リード文・押し手が順に現れる', () => {
+    expect(bodyOf(sheet, '.hero--cover > .eyebrow,')).toContain(
+      'animation: rise var(--dur-reveal) var(--ease) both',
+    )
+    expect(ruleWith(sheet, 'animation-delay: calc(var(--stagger) * 6)').selector).toContain(
+      '.hero__actions',
+    )
+    expect(motion).not.toMatch(/\.hero[^{]*\{[^}]*infinite/)
+  })
+
+  it('目次の印は移った先で左から満ちる。横に滑らせる名前を付けない', () => {
+    expect(bodyOf(sheet, ".toc a[aria-current='page'] {")).toContain('animation: chip-fill')
+    expect(sheets).not.toContain('toc-current')
+  })
+
+  it('押し手は2本とも左から色が満ちる。塗りの1本目は白、枠線の2本目は墨', () => {
+    expect(bodyOf(sheet, '.cta {')).toContain('0 0 / 0% 100% no-repeat var(--accent)')
+    expect(bodyOf(sheet, '.cta--quiet {')).toContain(
+      'linear-gradient(var(--ink), var(--ink)) 0 0 / 0% 100%',
+    )
+    const hover = blockAt(sheet, '@media (hover: hover)')
+    expect(bodyOf(hover, '.cta:hover {')).toContain('background-size: 100% 100%')
   })
 })
