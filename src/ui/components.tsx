@@ -131,7 +131,7 @@ export const Stylesheets = ({
 export const ColorSchemeMeta = () => <meta name="color-scheme" content="light" />
 
 /*
-  favicon。ロゴの印（Λ を1つで）を地の色の正方形に載せたもの（src/ui/logo.ts の iconSvg）を
+  favicon。ロゴの印（Λ を1つで）を夜明けの空の正方形に載せたもの（src/ui/logo.ts の iconSvg）を
   SVG のまま読ませ、読めない環境には同じ絵の PNG を渡す（どちらも scripts/logo/export.mjs が
   書き出す）。地を敷くのは、字が白いから——透明のままだと明るいタブの帯では字が消える。
   公開・管理・404 の外枠がどれも置く。

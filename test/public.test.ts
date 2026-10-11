@@ -271,7 +271,7 @@ describe('名乗り', () => {
       （実際にそう書いて通ってしまった）。ファイルの中身は
       vitest.config.ts の assetPlugin が渡す。
 
-      どちらも輪郭の path だけで、絵も外のものも抱えない（public/_headers の CSP は
+      どちらも輪郭の path と塗り（favicon の空のグラデーション）だけで、絵も外のものも抱えない（public/_headers の CSP は
       何も読み込ませない）
     */
     expect(wordmarkFile).toBe(wordmarkSvg())

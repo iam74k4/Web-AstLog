@@ -393,8 +393,8 @@ GitHub の手）。HTML に絵は置かない。メールの手はアドレス�
 印だけのとき（favicon・apple-touch-icon）は Λ を1つ。絵も動きも持たない。形は
 `src/ui/logo.ts` が正で、ページは `src/ui/icons.tsx` の `Wordmark` が直に描き、素材
 （ワードマークと favicon の SVG、favicon・apple-touch-icon・共有カードの PNG）は
-`scripts/logo/export.mjs` が書く。favicon・apple-touch-icon・共有カードは塗りの押し手と同じ
-墨の地に白い字（`LOGO_COLORS`）。
+`scripts/logo/export.mjs` が書く。favicon・apple-touch-icon は夜明けの窓の空
+（`ICON_SKY`）、共有カードは墨の地（`LOGO_COLORS`）に白い字。
 
 **メンバーの天体（`members.celestial_body` / `celestial_accent`）は使わない列。** 読む口も書く口も
 外し、列だけを残している（前のコードが読む。expand → contract の contract を次のリリースで出す）。

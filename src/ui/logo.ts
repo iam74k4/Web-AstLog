@@ -82,7 +82,7 @@ export const WORDMARK = {
 } as const
 
 /*
-  印だけのとき（favicon・404・管理画面の頭）は Λ を1つで使う。字の中でいちばん形が立ち、
+  印だけのとき（favicon・iPhone のホーム画面）は Λ を1つで使う。字の中でいちばん形が立ち、
   16px のタブでも潰れない。MARK_HALF は印の枠（正方形）の半分の幅
 */
 export const MARK_HALF = 14
@@ -98,6 +98,18 @@ export const MARK_TRANSFORM = `translate(${-LAMBDA.width / 2} ${round(LAMBDA.hei
 */
 export const LOGO_COLORS = { ink: '#ffffff', ground: '#222226' } as const
 
+/*
+  アイコンの地の空。夜明けの窓（app.css の .window）の上から中ほどまでと同じ色の並び
+  （--dawn-night → --dawn-dusk → --dawn-haze）で、明けきった白（--dawn-mist 以降）までは
+  入れない——白い Λ の足が明るい地に溶ける。offset は窓の 0%・30%・56% を、アイコンの
+  高さに引き伸ばした位置（test/theme.test.ts が :root の段と突き合わせる）
+*/
+export const ICON_SKY = [
+  { offset: 0, color: '#0c1122' },
+  { offset: 0.55, color: '#18213d' },
+  { offset: 1, color: '#4b5675' },
+] as const
+
 const svg = (viewBox: string, body: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}"><title>AstLog</title>${body}</svg>\n`
 
@@ -111,13 +123,18 @@ export const wordmarkSvg = () => svg(WORDMARK.viewBox, wordmarkPaths(LOGO_COLORS
 
 /*
   アイコン（favicon.svg と、favicon・iPhone のホーム画面の PNG）。どれも同じ1枚で、
-  地の色の正方形に Λ を載せる——白い字が明るいタブに溶けず、サイトと同じ姿で見えるように
+  夜明けの空（ICON_SKY）の正方形に白い Λ を載せる——白い字が明るいタブに溶けず、
+  ページの左の窓と同じ空がタブにも出る（持ち主が4案から選んだ）。地は塗りで、角は丸めない
 */
 export const iconSvg = () => {
   const edge = 2 * MARK_HALF
+  const stops = ICON_SKY.map(
+    (stop) => `<stop offset="${stop.offset}" stop-color="${stop.color}"/>`,
+  ).join('')
   return svg(
     MARK_VIEWBOX,
-    `<rect x="${-MARK_HALF}" y="${-MARK_HALF}" width="${edge}" height="${edge}" fill="${LOGO_COLORS.ground}"/>` +
+    `<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">${stops}</linearGradient></defs>` +
+      `<rect x="${-MARK_HALF}" y="${-MARK_HALF}" width="${edge}" height="${edge}" fill="url(#sky)"/>` +
       `<path d="${WORDMARK.lambda}" transform="${MARK_TRANSFORM}" fill="${LOGO_COLORS.ink}"/>`,
   )
 }

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import adminCss from '../public/admin.css'
 import css from '../public/app.css'
 import * as schema from '../src/db/schema'
-import { LOGO_COLORS } from '../src/ui/logo'
+import { ICON_SKY, LOGO_COLORS } from '../src/ui/logo'
 import { db, get, okText, resetDb, seedItem, seedMember, signIn, touch } from './helpers'
 
 beforeEach(resetDb)
@@ -1549,9 +1549,15 @@ describe('配色（白い地と夜明けの窓）', () => {
     */
     const root = bodyOf(sheet, ':root {')
     const value = (name: string) => root.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1]
-    // 素材（favicon・共有カード）は塗りの押し手と同じ組——墨の面に白い字
+    // 共有カードとワードマークは塗りの押し手と同じ組——墨の面に白い字
     expect(value('--accent-ink')).toBe(LOGO_COLORS.ink)
     expect(value('--mono')).toBe(LOGO_COLORS.ground)
+    // アイコン（favicon・iPhone のホーム画面）の地は夜明けの窓の空。明けきった白までは入れない
+    expect(ICON_SKY.map((stop) => stop.color)).toEqual([
+      value('--dawn-night'),
+      value('--dawn-dusk'),
+      value('--dawn-haze'),
+    ])
   })
 })
 
