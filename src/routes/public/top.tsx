@@ -239,5 +239,6 @@ export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
     // Contact では足元の GitHub / メールを出さない（本文に同じ手がある。SiteSocials）
     footer: <SiteSocials site={site} contact={current.block.type === 'contact'} />,
     adminPath: blockAdminPath(current.block, solo),
+    opening: current.block.type === 'hero',
   })
 }

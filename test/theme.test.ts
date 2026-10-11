@@ -1534,10 +1534,36 @@ describe('動き', () => {
     expect(bodyOf(sheet, '.hero--cover > .eyebrow,')).toContain(
       'animation: rise var(--dur-reveal) var(--ease) both',
     )
-    expect(ruleWith(sheet, 'animation-delay: calc(var(--stagger) * 6)').selector).toContain(
-      '.hero__actions',
-    )
+    expect(
+      ruleWith(sheet, 'animation-delay: calc(var(--reveal-from) + var(--stagger) * 6)').selector,
+    ).toContain('.hero__actions')
     expect(motion).not.toMatch(/\.hero[^{]*\{[^}]*infinite/)
+  })
+
+  it('読み込んだときの幕は入口だけ。合成だけで動き、押す手を通し、止める設定では出さない', () => {
+    // 幕は body の2つの疑似要素、光は html の ::after。HTML にも script にも足さない
+    const curtain = bodyOf(sheet, 'body[data-opening]::before,')
+    expect(curtain).toContain('position: fixed')
+    expect(curtain).toContain('pointer-events: none')
+    expect(bodyOf(sheet, ':root:has(> body[data-opening])::after {')).toContain(
+      'pointer-events: none',
+    )
+    // 動かすのは位置・倍率・透明度だけ（幅や高さを動かすと毎コマ描き直しになる）
+    for (const name of ['opening-up', 'opening-down', 'horizon', 'horizon-out']) {
+      const frames = bare(css).slice(bare(css).indexOf(`@keyframes ${name} {`))
+      const body = frames.slice(0, frames.indexOf('}\n}') + 3)
+      expect(body, name).not.toMatch(/\b(width|height|top|left|bottom|right|inset)\s*:/)
+    }
+    // 字は幕が開き始めると同時に現れ始める
+    expect(bodyOf(sheet, 'body[data-opening] {')).toContain('--reveal-from: var(--opening-hold)')
+    // 素の動きを止めるだけだと幕が閉じたまま残るので、幕ごと出さない
+    const off = blockAt(
+      sheet,
+      '@media (prefers-reduced-motion: reduce), print, (forced-colors: active)',
+    )
+    expect(off).toContain('body[data-opening]::before')
+    expect(off).toContain(':root:has(> body[data-opening])::after')
+    expect(off).toContain('content: none')
   })
 
   it('目次の印は移った先で左から満ちる。横に滑らせる名前を付けない', () => {

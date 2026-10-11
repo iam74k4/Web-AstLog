@@ -107,6 +107,8 @@ export async function screenPage(
     adminPath: string
     // 共有カードの画像。渡さなければサイトの1枚（src/ui/Layout.tsx の OgImage）
     image?: OgImage
+    // 入口（Hero のページ）だけ。読み込んだときの幕を出す（src/ui/Layout.tsx の opening）
+    opening?: boolean
   },
 ) {
   return c.html(
@@ -119,6 +121,7 @@ export async function screenPage(
       footer={page.footer}
       admin={await adminHref(c, page.adminPath)}
       image={page.image}
+      opening={page.opening}
     >
       {page.node}
     </Layout>,
