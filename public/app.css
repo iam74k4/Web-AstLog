@@ -1032,7 +1032,7 @@ body[data-site] > .frame {
 }
 
 /*
-  見出し・一覧の行の説明・段落・画像の説明の折り返し。語の途中で折らない。
+  見出し・一覧の行の説明・段落・画像の説明・経歴の行の折り返し。語の途中で折らない。
 
   和文は既定だとどの字の間でも折れるので、「プラットフォームを1 / つの」
   「置いてお / く。」のように語の途中で行が変わる。word-break: auto-phrase は
@@ -1055,7 +1055,8 @@ body[data-site] > .frame {
   .statement__text,
   .contact__lead,
   .bio p,
-  .gallery__description
+  .gallery__description,
+  .career :is(.title, .org)
 ) {
   word-break: auto-phrase;
   text-wrap: pretty;

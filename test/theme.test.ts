@@ -1440,6 +1440,8 @@ describe('文字の段', () => {
       '.bio p',
       // 画像の説明。細い列で「画 / 面」と1字だけの行が出た
       '.gallery__description',
+      // 経歴の会社・学校と役割・学科。電話の幅で「人工知 / 能専攻」と語の途中で折れた
+      '.career :is(.title, .org)',
     ]) {
       expect(wrap.selector, part).toContain(part)
     }

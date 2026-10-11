@@ -257,7 +257,7 @@ const MemberForm = (props: {
               （src/lib/format.ts の isOngoing）。書いた字で決まるので、書き方をここで言う
               ——「2024.03 —」と先を空けて書くと、星は黙って付かない
             */
-            hint={`1行に1件。「期間 | 肩書き | 所属」。${ONGOING_HINT}`}
+            hint={`1行に1件。「期間 | 会社・学校 | 役割・学科」（例: 2021.04 — 2024.03 | 東京工科大学 | コンピュータサイエンス学部）。${ONGOING_HINT}`}
           />
           <label class="field">
             <span class="field__label">アバター画像</span>
