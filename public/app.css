@@ -311,6 +311,17 @@
   */
   --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
   --dur-spring: 640ms;
+  /*
+    動きの段（下の「動き」の節）。--rise は現れるときに下から上がる量、--dur-reveal はその長さ、
+    --stagger は入口の字が順に現れる間、--twinkle は星のまたたきの周期、--orbit は
+    星空が巡る周期、--dawn-reach は読み終えたときに空が明ける量
+  */
+  --rise: var(--sp-5);
+  --dur-reveal: 720ms;
+  --stagger: 120ms;
+  --twinkle: 5s;
+  --orbit: 160s;
+  --dawn-reach: 26%;
   --press: 0.96;
   --dot: 6px;
 
@@ -370,14 +381,6 @@
   --dawn-haze: #4b5675;
   --dawn-mist: #b9c0cf;
   --dawn-day: var(--bg);
-  --dawn: linear-gradient(
-    180deg,
-    var(--dawn-night) 0%,
-    var(--dawn-dusk) 30%,
-    var(--dawn-haze) 56%,
-    var(--dawn-mist) 80%,
-    var(--dawn-day) 100%
-  );
   --dawn-star: #ffffff;
   --dawn-faint: rgba(255, 255, 255, 0.6);
 
@@ -719,7 +722,8 @@ body[data-site] > .frame {
 .toc a[aria-current='page'] {
   color: var(--accent-ink);
   background:
-    linear-gradient(var(--accent), var(--accent)) center / 100% var(--toc-chip-h) no-repeat;
+    linear-gradient(var(--accent), var(--accent)) left center / 100% var(--toc-chip-h) no-repeat;
+  animation: chip-fill var(--dur-reveal) var(--ease) both;
 }
 
 /*
@@ -921,16 +925,20 @@ body[data-site] > .frame {
   gap: var(--sp-3);
   min-height: var(--cta-h);
   padding-inline: var(--sp-6);
-  background: var(--accent);
+  background: linear-gradient(var(--bg), var(--bg)) 0 0 / 0% 100% no-repeat var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
   color: var(--accent-ink);
   font-family: var(--font-display);
   font-size: var(--fs-md);
   font-weight: 500;
-  transition: scale var(--dur-spring) var(--ease-spring);
+  transition:
+    background-size var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
 }
 
 .cta--quiet {
-  background: transparent;
+  background: linear-gradient(var(--ink), var(--ink)) 0 0 / 0% 100% no-repeat transparent;
   color: var(--ink);
   box-shadow: inset 0 0 0 1px var(--ink);
 }
@@ -1607,11 +1615,8 @@ body[data-site] > .frame {
   切り替えると、色は送れない（前はそうしていて、下線がその場に現れた）
 */
 .entry__link {
-  text-decoration-line: underline;
-  text-decoration-color: transparent;
-  text-decoration-thickness: 1px;
-  text-underline-offset: var(--sp-2);
-  transition: text-decoration-color var(--dur) var(--ease);
+  background: linear-gradient(currentColor, currentColor) 0 100% / 0% 1px no-repeat;
+  transition: background-size var(--dur) var(--ease);
 }
 
 /*
@@ -2358,7 +2363,14 @@ body[data-site] > .frame {
 .window {
   position: relative;
   overflow: hidden;
-  background: var(--dawn);
+  background: linear-gradient(
+    180deg,
+    var(--dawn-night) 0%,
+    var(--dawn-dusk) calc(30% - var(--dawn-shift)),
+    var(--dawn-haze) calc(56% - var(--dawn-shift)),
+    var(--dawn-mist) calc(80% - var(--dawn-shift)),
+    var(--dawn-day) 100%
+  );
 }
 
 /*
@@ -2368,9 +2380,13 @@ body[data-site] > .frame {
 .window::before {
   content: '';
   position: absolute;
-  inset: 0;
+  inset: -12%;
   background: var(--dawn-star);
   mask: url('/assets/sky.svg') no-repeat var(--window-sky-at) / var(--window-sky-size) auto;
+  transform-origin: 50% 160%;
+  animation:
+    twinkle var(--twinkle) ease-in-out infinite alternate,
+    orbit var(--orbit) ease-in-out infinite alternate;
 }
 
 .window::after {
@@ -2641,7 +2657,7 @@ body[data-site] > .frame {
   }
 
   :is(.entry:has(.entry__link)):hover .entry__link {
-    text-decoration-color: currentColor;
+    background-size: 100% 1px;
   }
 
   .member:hover {
@@ -2656,6 +2672,20 @@ body[data-site] > .frame {
   .band:hover .band__arrow,
   .cta:hover .cta__arrow {
     translate: var(--sp-2) 0;
+  }
+
+  /*
+    押し手は、左から色が満ちて字の色が返る（満ちる面は素の .cta が 0% の幅で持つ）。
+    枠線だけの2本目は墨が満ちて字が白に、墨で塗った1本目は白が満ちて字が墨に——同じ動きで、
+    色だけが逆。目次のいまのページの印も、移った先で同じ向きに満ちる（chip-fill）
+  */
+  .cta:hover {
+    background-size: 100% 100%;
+    color: var(--ink);
+  }
+
+  .cta--quiet:hover {
+    color: var(--accent-ink);
   }
 
   .toc a:hover,
@@ -2761,6 +2791,187 @@ body[data-site] > .frame {
 @media (prefers-reduced-motion: reduce) {
   @view-transition {
     navigation: none;
+  }
+}
+
+/* ====================================================== 動き */
+
+/*
+  サイトの動き。どれも CSS だけで（公開ページは script を持たない）、動きを減らす設定では
+  上の @media (prefers-reduced-motion: reduce) が全部止め、止まった姿は動きの終わりの姿と
+  同じになる。持ち主が動画で見て選んだ組:
+    - 夜明けの窓: 読み進めるほど空が明けて星が薄れる（スクロールに連動）、星がまたたき、
+      星空がゆっくり巡る。終わらない動きはこの窓の星と、経歴のいまの行の星だけ
+    - 入口の幕開け: 札・大見出し・線・リード文・押し手が順に1回だけ現れる
+    - ページを移るとき: 本文が少し下から入り、目次の印が左から満ちる（横に滑らせると字ごと
+      伸び縮みして見えた）。作品名は作品のページの見出しへつながる（itemTransition）
+    - 画面に入るとき: 節の見出しの罫線が伸び、一覧の行が入り、経歴の線が描かれる
+    - 触ったとき（入力手段の節）: 行の題に下線が伸び、押し手は左から色が満ちる
+  スクロールに連動するものは @supports で括る（知らないブラウザでは止まった姿のまま）。
+*/
+
+/*
+  夜明けの窓（天体の飾りの .window の空）。--dawn-shift だけ明るい帯が上へ昇る。登録した
+  性質（@property）にしてあるのは、グラデーションの止まりを補間して動かすため
+*/
+@property --dawn-shift {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 0%;
+}
+
+@keyframes twinkle {
+  from {
+    filter: brightness(1);
+  }
+  to {
+    filter: brightness(0.62);
+  }
+}
+
+@keyframes orbit {
+  from {
+    rotate: -1.6deg;
+  }
+  to {
+    rotate: 1.6deg;
+  }
+}
+
+@supports (animation-timeline: scroll()) {
+  .window {
+    animation: dawn-rise linear both;
+    animation-timeline: scroll(root);
+  }
+
+  .window::before {
+    animation:
+      star-fade linear both,
+      twinkle var(--twinkle) ease-in-out infinite alternate,
+      orbit var(--orbit) ease-in-out infinite alternate;
+    animation-timeline: scroll(root), auto, auto;
+  }
+}
+
+@keyframes dawn-rise {
+  to {
+    --dawn-shift: var(--dawn-reach);
+  }
+}
+
+@keyframes star-fade {
+  to {
+    opacity: 0.35;
+  }
+}
+
+/* 入口の幕開け。札 → 大見出し（句読点の塊ごと）→ 線 → リード文 → 押し手の順に、1回だけ */
+@keyframes rise {
+  from {
+    opacity: 0;
+    translate: 0 var(--rise);
+  }
+}
+
+@keyframes draw-x {
+  from {
+    scale: 0 1;
+  }
+}
+
+@keyframes draw-y {
+  from {
+    scale: 1 0;
+  }
+}
+
+.hero--cover > .eyebrow,
+.hero--cover h1 .phrase,
+.hero--cover > .hero__lead,
+.hero--cover > .hero__actions {
+  animation: rise var(--dur-reveal) var(--ease) both;
+}
+
+.hero--cover h1 .phrase:nth-child(1) {
+  animation-delay: var(--stagger);
+}
+
+.hero--cover h1 .phrase:nth-child(2) {
+  animation-delay: calc(var(--stagger) * 2);
+}
+
+.hero--cover h1 .phrase:nth-child(n + 3) {
+  animation-delay: calc(var(--stagger) * 3);
+}
+
+.hero--cover h1::after {
+  transform-origin: left;
+  animation: draw-x var(--dur-reveal) var(--ease) calc(var(--stagger) * 4) both;
+}
+
+.hero--cover > .hero__lead {
+  animation-delay: calc(var(--stagger) * 5);
+}
+
+.hero--cover > .hero__actions {
+  animation-delay: calc(var(--stagger) * 6);
+}
+
+/* 目次の印は、移った先で左から満ちる（.toc a[aria-current='page'] が使う） */
+@keyframes chip-fill {
+  from {
+    color: var(--ink);
+    background-size: 0% var(--toc-chip-h);
+  }
+}
+
+/* ページの切り替え: 本文は少し下から入る */
+::view-transition-new(root) {
+  animation-name: page-in;
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    translate: 0 var(--sp-3);
+  }
+}
+
+/* 画面に入るときに現れる。画面に入るぶんだけ進む（知らないブラウザでは止まった姿のまま） */
+@supports (animation-timeline: view()) {
+  /* 節の見出しの罫線が左から伸びる */
+  .head::after {
+    transform-origin: left;
+    animation: draw-x linear both;
+    animation-timeline: view();
+    animation-range: entry 20% cover 35%;
+  }
+
+  /* 一覧の行が下からふわっと入る */
+  .entry {
+    animation: rise linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 70%;
+  }
+
+  /* 経歴の星座の線が上から描かれる */
+  .career li::after {
+    transform-origin: top;
+    animation: draw-y linear both;
+    animation-timeline: view();
+    animation-range: entry 10% cover 45%;
+  }
+}
+
+/* 経歴のいまの行の四芒星は弱くまたたく */
+.career__now .period::before {
+  animation: twinkle-star var(--twinkle) ease-in-out infinite alternate;
+}
+
+@keyframes twinkle-star {
+  to {
+    opacity: 0.45;
+    scale: 0.8;
   }
 }
 

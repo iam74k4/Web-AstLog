@@ -34,9 +34,10 @@ workers.dev とプレビュー URL は無効。公開はデプロイ後で、購
 ランタイム依存は Hono と Drizzle だけ。
 開発ツールの間接依存（undici・sharp・旧 esbuild loader）は、セキュリティ修正版へ
 `package.json` の overrides で固定し、型・テスト・ビルドと Drizzle の schema export を確認する。**内容と導線は JavaScript なしで成立する**。
-公開ページは実行する script を1本も持たない（JSON-LD はデータ）。装飾の動きは置かず、
-HTML は字だけで組む——入口の HTML は約 4.5KB。天体の飾り（夜明けの窓のすばると星・経歴の
-星座・顔の軌道）は、静止したまま CSS の背景と疑似要素が描く（`CLAUDE.md` の「天体の飾り」）。
+公開ページは実行する script を1本も持たない（JSON-LD はデータ）。動き（入口の幕開け・夜明けの
+窓・画面に入るときの現れ方・ページの切り替え）は CSS だけで付け、HTML は字だけで組む——入口の
+HTML は約 4.5KB。天体の飾り（夜明けの窓のすばると星・経歴の星座・顔の軌道）は CSS の背景と
+疑似要素が描く（`CLAUDE.md` の「動き」「天体の飾り」）。
 絞り込みとページの移動は URL とサーバー、管理画面は HTML フォームと 303 で動く。
 全部の応答に CSP（管理画面の HTML は補助1本の exact SHA-256 だけ、それ以外は `script-src 'none'`）と
 `X-Content-Type-Options: nosniff`・`Referrer-Policy: strict-origin-when-cross-origin`
@@ -659,8 +660,8 @@ public/
   app.css            全画面のスタイル。値は :root のトークンだけで決める
                      末尾の「ページの外枠」が足元の位置と貼り付く上の帯、900 以上の
                      2分割（左の夜明けの窓・右の本文）を作る。
-                     「天体の飾り」の節が、夜明けの窓と静止した線と点の飾りを背景と疑似要素で描く。
-                     ページを移るときの切り替え（@view-transition）もここ
+                     「天体の飾り」の節が、夜明けの窓と線と点の飾りを背景と疑似要素で描く。
+                     「動き」の節と、ページを移るときの切り替え（@view-transition）もここ
   admin.css          管理画面だけの規則。管理画面は app.css のあとにこれを読み、
                      公開ページは読まない（:root は持たず、app.css の段を読む）
   preview.css        管理プレビューの案内。公開の部品は app.css を使う
