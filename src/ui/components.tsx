@@ -1485,17 +1485,15 @@ export const OwnSocials = ({ member, site = SITE }: { member: Member; site?: Sit
 /*
   連絡先のページ。サイトの並びの最後で、入口と対になる締め。
 
-  見える h1「Contact」の下に、英字の大見出し（サイト設定の contactTitle。Cavani の
-  「Get in touch」）、誘う1文（contactLead）、連絡先の表（Email / GitHub / X / Instagram /
-  Location）を縦に積む。HTML に絵は置かない。
+  見える h1「Contact」の下に、連絡先の表（Email / GitHub / X / Instagram）だけを置く
+  （持ち主の「シンプルに」。大見出しと誘いの1文を置いた形から削った）。誘いの1文
+  （サイト設定の contactLead）はページには出さず、検索結果の説明文にだけ使う。
+  HTML に絵は置かない。
 
-  - 大見出しが空なら、誘いの1文を大きく置く（前の形。何の相談なら送ってよいかを言う
-    唯一の言葉なので）。大見出しがあるときは、誘いの1文はリード文の大きさに下げる
   - 表は dt / dd の組（読み上げで「Email、iam74k4@gmail.com」と組で読む）。行き先は字で
     見せる——アドレスと @名前が字で残るので、紙に刷っても宛先が分かる。行は面ごと押せる
     （題の覆いと同じ。app.css の .contact-list）。矢印は行き先で決める: メールは →、
     外のサイト（別タブ）は ↗
-  - Location は1人のサイトのその人の所在地（押せない行）
   - 単独ページは見える h1「Contact」。ページは h1 をちょうど1つ持つ（WCAG 1.3.1）。
     全体ページ（/all）では、ほかの節と同じ見出しを目に見える形で置く
   - このページの足元には行き先を出さない（SiteSocials の contact。表と同じ行き先が
@@ -1515,22 +1513,16 @@ const handleOf = (url: string) => {
 }
 
 export const Contact = ({
-  title = '',
-  lead = SITE.contactLead,
   email,
   github,
   x,
   instagram,
-  location,
   whole,
 }: {
-  title?: string
-  lead?: string
   email: string
   github?: string | null
   x?: string | null
   instagram?: string | null
-  location?: string | null
   whole?: boolean
 }) => {
   const away = [
@@ -1542,14 +1534,6 @@ export const Contact = ({
     <Screen id="contact" label="Contact">
       <SectionHead title="Contact" h1={!whole} />
       <div class="contact">
-        {title ? (
-          <p class="contact__title" lang={langOf(title)}>
-            <Phrases text={title} />
-          </p>
-        ) : null}
-        <p class={title ? 'contact__lead contact__lead--quiet' : 'contact__lead'}>
-          <Phrases text={lead} />
-        </p>
         <dl class="contact-list">
           {email && isContactEmail(email) ? (
             <div class="contact-list__row">
@@ -1573,12 +1557,6 @@ export const Contact = ({
               </div>
             ) : null,
           )}
-          {location ? (
-            <div class="contact-list__row">
-              <dt lang="en">Location</dt>
-              <dd lang={langOf(location)}>{location}</dd>
-            </div>
-          ) : null}
         </dl>
       </div>
     </Screen>

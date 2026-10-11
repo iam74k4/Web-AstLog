@@ -382,9 +382,9 @@ HTML に絵・件数の帯は置かない（持ち主の「シンプル・モダ
 （`src/site.ts` の `hasContact`）、`blockShown` が数える。無ければページも目次の行も作らない
 （誘いの1文だけで、送る手の無いページになる）。
 
-**Contact は見える h1・英字の大見出し（`contactTitle`。空なら誘いの1文を大きく）・誘いの1文
-（`contactLead`。description にも使う）・連絡先の表だけ**。表は Email / GitHub / X / Instagram /
-Location の `dt` / `dd` で、行き先は字（紙に刷っても残る）。HTML に絵は置かない。`/all` も同じ。
+**Contact は見える h1 と連絡先の表だけ**（持ち主の「シンプルに」）。表は Email / GitHub / X /
+Instagram の `dt` / `dd` で、行き先は字（紙に刷っても残る）。誘いの1文（`contactLead`）はページに
+出さず description にだけ使う。HTML に絵は置かない。`/all` も同じ。
 
 **ロゴは字で組む ΛSTLOG**（横棒の無い A と、線の太さをそろえた幾何の大文字。O は同じ太さの輪を
 軌道に見立て、右上 45° に衛星を1つ。Λ の頂は平らに切る）。上の帯・ログイン・共有カード・素材は

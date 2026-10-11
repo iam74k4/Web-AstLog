@@ -21,7 +21,6 @@ const configured: SiteSettings = {
   tagline: '小さなものを、丁寧につくる。',
   heroLead: '開発したサービスと取り組みを紹介しています。',
   heroRoles: 'System Engineer\niOS Developer',
-  contactTitle: 'Let’s build something.',
   contactLead: '開発に関するご相談をお待ちしています。',
   email: 'hello@example.test',
   github: 'https://github.com/astlog-example',
@@ -39,7 +38,6 @@ describe('サイト設定', () => {
       tagline: SITE.tagline,
       heroLead: SITE.heroLead,
       heroRoles: '',
-      contactTitle: '',
       contactLead: SITE.contactLead,
       email: '',
       github: '',
@@ -111,7 +109,8 @@ describe('サイト設定', () => {
     expect(plain(top)).toContain(configured.heroLead)
     expect(top).toContain(`"description":"${configured.heroLead}"`)
     const contact = await okText('/contact')
-    expect(plain(contact)).toContain(configured.contactLead)
+    // 案内文はページには出さず（表だけ。持ち主の「シンプルに」）、説明文にだけ使う
+    expect(plain(contact)).not.toContain(configured.contactLead)
     expect(contact).toContain(`name="description" content="${configured.contactLead}"`)
     expect((contact.match(/href="mailto:/g) ?? []).length).toBe(1)
     expect((await okText(`/members/${member.slug}`)).match(/href="mailto:/g)).toHaveLength(1)

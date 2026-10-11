@@ -867,11 +867,10 @@ describe('部品の作法', () => {
     expect(sheet).not.toMatch(/^\.hero__headline\s*[,{]/m)
   })
 
-  it('句読点までの塊は中で折らせない。大見出しと締めの1文は塊を1行ずつに積む', () => {
+  it('句読点までの塊は中で折らせない。大見出しは塊を1行ずつに積む', () => {
     // 頭の改行は必須。.hero h1 .phrase { に当てないため
     expect(bodyOf(sheet, '\n.phrase {')).toContain('display: inline-block')
     expect(bodyOf(sheet, '.hero h1 .phrase {')).toContain('display: block')
-    expect(bodyOf(sheet, '.contact__lead .phrase {')).toContain('display: block')
   })
 
   it('技術の小見出しは、見出しに上げても太さを変えない', () => {
@@ -1441,7 +1440,6 @@ describe('文字の段', () => {
       '.head :is(h1, h2, h3)',
       '.entry__main :is(h3, p)',
       '.statement__text',
-      '.contact__lead',
       '.bio p',
       // 画像の説明。細い列で「画 / 面」と1字だけの行が出た
       '.gallery__description',

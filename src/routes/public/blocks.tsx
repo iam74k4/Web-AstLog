@@ -359,9 +359,7 @@ export function renderBlock(
       }
     }
 
-    case 'contact': {
-      // 所在地は1人のサイトのその人のもの（連絡先の表の Location。2人以上なら置かない）
-      const solo = soloMember(members)
+    case 'contact':
       return {
         id,
         slug: id,
@@ -371,18 +369,14 @@ export function renderBlock(
         description: describe(site.contactLead),
         node: (
           <Contact
-            title={site.contactTitle}
-            lead={site.contactLead}
             email={site.email}
             github={site.github}
             x={site.x}
             instagram={site.instagram}
-            location={solo?.location}
             whole={whole}
           />
         ),
       }
-    }
 
     // 打ち込むもの。独立ページには必ず目次の行き先を持たせる
 

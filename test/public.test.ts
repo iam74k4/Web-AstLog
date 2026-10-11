@@ -1011,7 +1011,7 @@ describe('連絡先の行き先', () => {
   })
 
   it('連絡先の表は行き先を字で見せる。紙に刷っても宛先が残る', async () => {
-    await seedMember({ location: 'Kanagawa, Japan' })
+    await seedMember()
     await saveSiteSettings(db(), {
       ...SITE,
       x: 'https://x.com/example_x',
@@ -1029,8 +1029,6 @@ describe('連絡先の行き先', () => {
     )
     expect(contact).toContain('target="_blank">@example_x</a>')
     expect(contact).toContain('target="_blank">example.ig</a>')
-    // 所在地は1人のサイトのその人のもの（押せない行）
-    expect(contact).toContain('<dt lang="en">Location</dt><dd lang="en">Kanagawa, Japan</dd>')
     // 全体ページ（印刷の宛先）も同じ表
     const whole = await okText('/all')
     expect(whole.slice(whole.indexOf('<section id="contact"'))).toContain(
@@ -1051,52 +1049,36 @@ describe('締めのページ（Contact）', () => {
     expect(main).not.toMatch(/<img|<svg|<style|<script/)
   })
 
-  it('Contact の見出し、誘いの1文、連絡先の表を並べる。足元には行き先を出さない', async () => {
+  it('Contact は見出しと連絡先の表だけ。誘いの1文は説明文に、足元には行き先を出さない', async () => {
     /*
-      字を1つも置かなかったころは、ボタンが2つあるだけで、何の相談なら
-      送ってよいのかを言う言葉がページのどこにも無かった（description にしか
-      無かった）。入口と対になるページとして、見出しを見せたうえで誘いの文を置く。
+      持ち主の「シンプルに」。大見出し・誘いの1文・所在地を置いた形から、表だけに削った。
+      何の相談なら送ってよいかを言う1文（contactLead）は、検索結果の説明文に残す。
       ページは h1 をちょうど1つ持つ決まり（WCAG 1.3.1）も保つ。
     */
-    await seedMember()
+    await seedMember({ location: 'Kanagawa, Japan' })
 
     const html = await okText('/contact')
     const main = mainOf(html)
     expect(main.match(/<h1[^>]*>/g)).toEqual(['<h1>'])
     expect(main).toContain('<div class="head"><h1>Contact</h1></div>')
     const contact = main.slice(main.indexOf('<div class="contact">'))
-    // 大見出しが空なら、誘いの1文を大きく置く（p はその1つだけ）
-    expect(contact.match(/<p\b[^>]*>/g)).toEqual(['<p class="contact__lead">'])
-    // 句読点までの塊に分けてある（Phrases）。読める文字列としては site.ts の1文のまま
-    const lead = contact.match(/<p class="contact__lead">(.*?)<\/p>/)?.[1] ?? ''
-    expect(lead.replace(/<[^>]+>/g, '')).toBe(SITE.contactLead)
-    // リードは表の上（読んでから押す）
-    expect(contact.indexOf('contact__lead')).toBeLessThan(contact.indexOf('contact-list'))
+    expect(contact.startsWith('<div class="contact"><dl class="contact-list">')).toBe(true)
+    expect(contact).not.toMatch(/<p\b/)
+    expect(contact).not.toContain('Location')
+    expect(html).toContain(`<meta name="description" content="${SITE.contactLead}"/>`)
     expect(main).toContain('aria-label="Contact"')
     // 足元は著作権表示だけ（表と同じ行き先を2つ並べない）
     const foot = html.slice(html.indexOf('<footer'))
     expect(foot).not.toContain('class="socials"')
   })
 
-  it('Contact の大見出しがあれば頭に大きく置き、誘いの1文はリード文の大きさに下げる', async () => {
-    await seedMember()
-    await saveSiteSettings(db(), { ...SITE, contactTitle: 'Let’s build something faster.' })
-    await touch()
-    const contact = mainOf(await okText('/contact'))
-    expect(contact).toContain(
-      '<p class="contact__title" lang="en"><span class="phrase">Let’s build something faster.</span></p>',
-    )
-    expect(contact).toContain('<p class="contact__lead contact__lead--quiet">')
-    expect(contact.indexOf('contact__title')).toBeLessThan(contact.indexOf('contact__lead'))
-  })
-
-  it('全体ページの Contact にも同じ誘いの1文を置く', async () => {
+  it('全体ページの Contact にも同じ表を置く', async () => {
     await seedMember()
 
     const whole = await okText('/all')
     const contact = whole.slice(whole.indexOf('<section id="contact"'))
-    const lead = contact.match(/<p class="contact__lead">(.*?)<\/p>/)?.[1] ?? ''
-    expect(lead.replace(/<[^>]+>/g, '')).toBe(SITE.contactLead)
+    expect(contact).toContain(`href="mailto:${SITE.email}">${SITE.email}</a>`)
+    expect(contact).not.toContain('contact__lead')
   })
 
   it('全体ページでは、ほかの節と同じ見出しを目に見える形で置く', async () => {

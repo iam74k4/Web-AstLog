@@ -1055,8 +1055,6 @@ body[data-site] > .frame {
   .head :is(h1, h2, h3),
   .entry__main :is(h3, p),
   .statement__text,
-  .contact__title,
-  .contact__lead,
   .bio p,
   .gallery__description,
   .career :is(.title, .org)
@@ -2365,8 +2363,8 @@ body[data-site] > .frame {
 
 /*
   サイトの並びの最後のページ（components.tsx の Contact）。見出し（Contact）の下に、
-  誘いの1文とメールと GitHub の手を縦に積む。ほかのページと同じ節で、見出しの錨を
-  持つ（「ページの外枠」）。箱（枠・面・影）には入れない。
+  連絡先の表だけを置く。ほかのページと同じ節で、見出しの錨を持つ（「ページの外枠」）。
+  箱（枠・面・影）には入れない。
 */
 .contact {
   display: flex;
@@ -2374,48 +2372,6 @@ body[data-site] > .frame {
   align-items: flex-start;
   gap: var(--sp-6);
   min-width: 0;
-}
-
-/*
-  誘いの1文。大きく、句読点の塊を1行ずつ（入口の大見出しと同じ組み）。
-  見出しではない（見出しは読み上げ用の h1 が持つ）ので、太さは本文に近く。
-*/
-.contact__lead {
-  font-size: var(--fs-display-sm);
-  font-weight: 500;
-  font-feature-settings: 'palt';
-  line-height: 1.45;
-  letter-spacing: -0.01em;
-}
-
-.contact__lead .phrase {
-  display: block;
-}
-
-/*
-  Contact の大見出し（サイト設定の contactTitle。「Let’s build something faster.」）。
-  入口の大見出しと同じ書体と字詰めで、段は1つ下（--fs-display）。句読点の塊を1行ずつ
-*/
-.contact__title {
-  font-family: var(--font-display);
-  font-size: var(--fs-display);
-  font-weight: 800;
-  font-feature-settings: 'palt';
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-}
-
-.contact__title .phrase {
-  display: block;
-}
-
-/* 大見出しがあるときの誘いの1文。入口のリード文と同じ段（大見出しと大きさを競わせない） */
-.contact__lead.contact__lead--quiet {
-  color: var(--ink-mid);
-  font-size: var(--fs-md);
-  font-weight: 400;
-  line-height: 1.9;
-  letter-spacing: normal;
 }
 
 /*

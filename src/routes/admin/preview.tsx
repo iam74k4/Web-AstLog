@@ -577,7 +577,6 @@ previewRoutes.post('/preview/site', async (c) => {
     tagline: 'サイトの一言',
     heroLead: '入口の紹介文',
     heroRoles: '入口で打ち替える言葉',
-    contactTitle: 'Contact の大見出し',
     contactLead: 'Contact の案内文',
     email: '公開するメールアドレス',
     github: '公開する GitHub URL',
