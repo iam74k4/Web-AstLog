@@ -115,6 +115,11 @@ export const Layout = (props: {
   admin?: string
   // 共有カードの画像。渡さなければサイトの1枚（SITE_IMAGE）
   image?: OgImage
+  /*
+    読み込んだときの幕（app.css の「動き」の .opening）。入口（Hero のページ）だけに立てる——
+    どのページにも出すと、ページを移るたびに幕を待たされる
+  */
+  opening?: boolean
   // 認証済みプレビューの案内。検索・共有用のメタ情報は出さない。
   preview?: Child
   children?: Child
@@ -160,6 +165,7 @@ export const Layout = (props: {
     <body
       data-site=""
       data-whole={props.whole ? '' : undefined}
+      data-opening={props.opening && !props.preview ? '' : undefined}
       data-preview={props.preview ? '' : undefined}
     >
       <a class="skip" href="#main">

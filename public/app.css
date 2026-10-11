@@ -322,6 +322,18 @@
   --twinkle: 5s;
   --orbit: 160s;
   --dawn-reach: 26%;
+  /*
+    読み込んだときの幕（入口だけ。「動き」の節の body[data-opening]）。--opening-hold は地平の
+    光が伸びるあいだ（幕は閉じたまま）、--opening-open は幕が上下に開く長さ。入口の字は幕が
+    開き始めると同時に現れ始める（--reveal-from。幕の無いページでは 0）
+  */
+  --opening-hold: 760ms;
+  --opening-open: 560ms;
+  --opening-line: 62vw;
+  --opening-glow: 0 0 18px 2px rgba(255, 255, 255, 0.55);
+  --opening-sky-at: 62% 85%;
+  --ease-curtain: cubic-bezier(0.7, 0, 0.2, 1);
+  --reveal-from: 0ms;
   --press: 0.96;
   --dot: 6px;
 
@@ -2892,29 +2904,129 @@ body[data-site] > .frame {
   animation: rise var(--dur-reveal) var(--ease) both;
 }
 
+.hero--cover > .eyebrow {
+  animation-delay: var(--reveal-from);
+}
+
 .hero--cover h1 .phrase:nth-child(1) {
-  animation-delay: var(--stagger);
+  animation-delay: calc(var(--reveal-from) + var(--stagger));
 }
 
 .hero--cover h1 .phrase:nth-child(2) {
-  animation-delay: calc(var(--stagger) * 2);
+  animation-delay: calc(var(--reveal-from) + var(--stagger) * 2);
 }
 
 .hero--cover h1 .phrase:nth-child(n + 3) {
-  animation-delay: calc(var(--stagger) * 3);
+  animation-delay: calc(var(--reveal-from) + var(--stagger) * 3);
 }
 
 .hero--cover h1::after {
   transform-origin: left;
-  animation: draw-x var(--dur-reveal) var(--ease) calc(var(--stagger) * 4) both;
+  animation: draw-x var(--dur-reveal) var(--ease) calc(var(--reveal-from) + var(--stagger) * 4) both;
 }
 
 .hero--cover > .hero__lead {
-  animation-delay: calc(var(--stagger) * 5);
+  animation-delay: calc(var(--reveal-from) + var(--stagger) * 5);
 }
 
 .hero--cover > .hero__actions {
-  animation-delay: calc(var(--stagger) * 6);
+  animation-delay: calc(var(--reveal-from) + var(--stagger) * 6);
+}
+
+/*
+  読み込んだときの幕（入口だけ。src/ui/Layout.tsx の opening が body に data-opening を立てる）。
+  夜の幕の真ん中に地平の光が横へ伸び、幕が上下に開いて夜が明ける——左の夜明けの窓と同じ話。
+  Cavani の読み込みの幕（黒い幕に白い縦線、左右に開く）を下敷きにした、持ち主の選んだ形。
+
+  軽さのために: HTML にも JavaScript にも何も足さない（body の2つの疑似要素が幕、html の
+  ::after が光）。星は窓と同じ素材（sky.svg）なので新しい取得は無い。動かすのは位置
+  （translate）・倍率（scale）・透明度だけで、描き直しの要らない合成だけで動く。押す手は
+  幕を通り抜ける（pointer-events: none）。開き終えたら隠す（visibility）。入口の字は幕が開き
+  始めると同時に現れ始めるので、待つのは光が伸びるあいだ（--opening-hold）だけ。
+
+  動きを減らす設定・紙・強制色では幕ごと出さない（下の @media。素の動きを止めるだけだと、
+  幕が閉じたまま残る）。
+*/
+body[data-opening] {
+  --reveal-from: var(--opening-hold);
+}
+
+body[data-opening]::before,
+body[data-opening]::after {
+  content: '';
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  height: 50%;
+  pointer-events: none;
+  animation: opening-up var(--opening-open) var(--ease-curtain) var(--opening-hold) both;
+}
+
+body[data-opening]::before {
+  top: 0;
+  background:
+    url('/assets/sky.svg') no-repeat var(--opening-sky-at) / var(--window-sky-size) auto,
+    linear-gradient(180deg, var(--dawn-night), var(--dawn-dusk));
+}
+
+body[data-opening]::after {
+  bottom: 0;
+  background: linear-gradient(180deg, var(--dawn-dusk), var(--dawn-haze));
+  animation-name: opening-down;
+}
+
+:root:has(> body[data-opening])::after {
+  content: '';
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 11;
+  width: var(--opening-line);
+  height: 1px;
+  translate: -50% -50%;
+  background: linear-gradient(90deg, transparent, var(--dawn-star) 30% 70%, transparent);
+  box-shadow: var(--opening-glow);
+  pointer-events: none;
+  animation:
+    horizon var(--opening-hold) var(--ease) both,
+    horizon-out var(--opening-open) var(--ease) var(--opening-hold) forwards;
+}
+
+@keyframes opening-up {
+  to {
+    translate: 0 -100%;
+    visibility: hidden;
+  }
+}
+
+@keyframes opening-down {
+  to {
+    translate: 0 100%;
+    visibility: hidden;
+  }
+}
+
+@keyframes horizon {
+  from {
+    scale: 0 1;
+    opacity: 0.2;
+  }
+}
+
+@keyframes horizon-out {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce), print, (forced-colors: active) {
+  body[data-opening]::before,
+  body[data-opening]::after,
+  :root:has(> body[data-opening])::after {
+    content: none;
+  }
 }
 
 /* 目次の印は、移った先で左から満ちる（.toc a[aria-current='page'] が使う） */

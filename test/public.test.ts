@@ -3109,6 +3109,20 @@ it('知らない URL は 404 ページを返す', async () => {
   書けないので、書かないまま誰も気づかない種類の抜けで、外枠を1つ足せば
   また起きる。だから本文の先頭を見る。500 は 404 と同じ ErrorPage から出る。
 */
+describe('読み込んだときの幕', () => {
+  it('入口のページだけに立てる。ほかのページ・404・プレビューには立てない', async () => {
+    await seedMember()
+    await seedItem({ slug: 'appmixer' })
+    expect(await okText('/')).toContain('<body data-site="" data-opening="">')
+    for (const path of ['/projects', '/members/okazaki', '/apps/item/appmixer', '/all']) {
+      expect(await okText(path), path).not.toContain('data-opening')
+    }
+    expect(await (await get('/no-such-page')).text()).not.toContain('data-opening')
+    const signed = await signIn()
+    expect(await (await signed('/admin/preview?screen=hero')).text()).not.toContain('data-opening')
+  })
+})
+
 describe('文書の外枠', () => {
   const expectDoctype = (html: string, path: string) => {
     expect(html.startsWith('<!DOCTYPE html><html lang="ja">'), path).toBe(true)
