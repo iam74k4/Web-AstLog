@@ -35,6 +35,12 @@ export const members = sqliteTable(
     */
     slug: text('slug').notNull().unique(),
     name: text('name').notNull(),
+    /*
+      名前のローマ字（「Okazaki Takanari」）。個人ページの名札の名前の下と、ページの題、
+      構造化データの alternateName に出す——ローマ字で検索した人にも、同じ人のページだと
+      分かるように。空なら出さない
+    */
+    nameLatin: text('name_latin').notNull().default(''),
     role: text('role').notNull().default(''),
     location: text('location').notNull().default(''),
     headline: text('headline').notNull().default(''),

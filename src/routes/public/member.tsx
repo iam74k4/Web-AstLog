@@ -22,7 +22,7 @@ import {
   memberPage,
   memberSectionHref,
 } from './member-page'
-import { pageTitle, personJsonLd, siteJsonLd } from './meta'
+import { nameWithLatin, pageTitle, personJsonLd, siteJsonLd } from './meta'
 import { firstOnly, movedTo, screenPage } from './page'
 import { PROFILE_KEY, sitePageLinks, sitePages } from './site'
 
@@ -144,7 +144,7 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
   )
 
   return screenPage(c, {
-    title: inSite?.title ?? pageTitle(member.name),
+    title: inSite?.title ?? pageTitle(nameWithLatin(member)),
     canonical: href,
     /*
       目次はサイトのもの。印は1人のサイトなら Profile、2人以上なら Team（作品のページが

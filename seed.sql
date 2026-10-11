@@ -22,11 +22,12 @@ INSERT INTO blocks (type, published, sort_order) VALUES
   ('team',     1, 30),
   ('contact',  1, 40);
 
-INSERT INTO members (id, slug, name, role, location, headline, bio, skills_text, career_text, avatar_url, github, email, published, sort_order)
+INSERT INTO members (id, slug, name, name_latin, role, location, headline, bio, skills_text, career_text, avatar_url, github, email, published, sort_order)
 VALUES (
   1,
   'okazaki',
   '岡崎 昂功',
+  'Okazaki Takanari',
   'System Engineer',
   'Kanagawa, Japan',
   'つくる工程そのものを、速くする。',
