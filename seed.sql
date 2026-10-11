@@ -172,6 +172,7 @@ INSERT INTO item_slug_redirects (old_slug, item_id) VALUES
 INSERT OR REPLACE INTO settings (key, value) VALUES
   ('site.tagline', 'つくったものを、ひとつずつ記録する。'),
   ('site.heroLead', 'つくったアプリと、仕事で取り組んだ開発効率化をまとめています。'),
+  ('site.heroRoles', 'System Engineer' || char(10) || 'iOS / macOS Developer' || char(10) || 'AI Workflow Engineer'),
   ('site.contactLead', '生成AIを使った開発効率化や個人開発について、話しませんか。お仕事のご相談も歓迎します。'),
   ('site.email', 'iam74k4@gmail.com'),
   ('site.github', 'https://github.com/iam74k4'),

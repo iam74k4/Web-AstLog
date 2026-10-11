@@ -2,13 +2,25 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { loadSiteSettings, saveSiteSettings } from '../src/db/queries'
 import * as schema from '../src/db/schema'
 import { SITE, SITE_SETTING_LIMITS, type SiteSettings } from '../src/site'
-import { db, form, get, okText, resetDb, seedItem, seedMember, signIn, touch } from './helpers'
+import {
+  db,
+  form,
+  get,
+  okText,
+  resetDb,
+  seedItem,
+  seedMember,
+  signIn,
+  TEST_SITE,
+  touch,
+} from './helpers'
 
 beforeEach(resetDb)
 
 const configured: SiteSettings = {
   tagline: '小さなものを、丁寧につくる。',
   heroLead: '開発したサービスと取り組みを紹介しています。',
+  heroRoles: 'System Engineer\niOS Developer',
   contactLead: '開発に関するご相談をお待ちしています。',
   email: 'hello@example.test',
   github: 'https://github.com/astlog-example',
@@ -25,6 +37,7 @@ describe('サイト設定', () => {
     expect(await loadSiteSettings(db())).toEqual({
       tagline: SITE.tagline,
       heroLead: SITE.heroLead,
+      heroRoles: '',
       contactLead: SITE.contactLead,
       email: '',
       github: '',
@@ -180,5 +193,71 @@ describe('サイト設定', () => {
     expect(response.status).toBe(400)
     expect(await response.text()).toContain('メールアドレスを1つ')
     expect(await db().query.members.findMany()).toHaveLength(0)
+  })
+})
+
+/*
+  入口で打ち替える言葉（サイト設定の heroRoles。Cavani の入口）。言葉は1行に1つで、
+  大見出しの下で1字ずつ打っては消す。改行させずに組むので、言葉の数と長さに上限がある
+  （src/site.ts の HERO_ROLES）。
+*/
+describe('入口で打ち替える言葉', () => {
+  const words = ['System Engineer', 'iOS / macOS Developer', 'AI Workflow Engineer']
+  const withRoles = (heroRoles: string) => saveSiteSettings(db(), { ...TEST_SITE, heroRoles })
+
+  it('言葉を1字ずつの列にして大見出しの下に置き、読み上げには1行で渡す', async () => {
+    await seedMember()
+    await withRoles(words.join('\r\n'))
+    await touch()
+    const html = await okText('/')
+    expect(html).toContain('<p class="typed" lang="en">')
+    expect(html).toContain(`<span class="sr-only">${words.join(' / ')}</span>`)
+    expect(html).toContain(
+      '<span class="typed__words typed__words--3" aria-hidden="true" style="--words: 3">',
+    )
+    expect(html).toContain('<span class="typed__word" style="--k: 2; --len: 20">')
+    // 大見出しのあと、リード文の前
+    expect(html.indexOf('class="typed"')).toBeGreaterThan(html.indexOf('</h1>'))
+    expect(html.indexOf('class="typed"')).toBeLessThan(html.indexOf('class="hero__lead"'))
+    // 札から肩書きを外す（打ち替える言葉の1つ目と同じ語を2度言わない）
+    expect(html).not.toContain('<span lang="en">System Engineer</span>')
+  })
+
+  it('言葉が無ければ出さず、札に肩書きを出す。1つなら打ち替えずに置くだけ', async () => {
+    await seedMember()
+    const none = await okText('/')
+    expect(none).not.toContain('class="typed"')
+    expect(none).toContain('<span lang="en">System Engineer</span>')
+
+    await withRoles('System Engineer')
+    await touch()
+    const one = await okText('/')
+    expect(one).toContain('<span class="typed__words" aria-hidden="true" style="--words: 1">')
+    expect(one).not.toContain('typed__words--')
+  })
+
+  it('言葉は4つまで、1つは半角24字（全角12字）まで。管理画面で止めて欄を示す', async () => {
+    const signed = await signIn()
+    for (const [heroRoles, message] of [
+      ['a\nb\nc\nd\ne', '言葉は 4 つまで'],
+      ['Senior Software Engineers', '半角 24 字'],
+      ['とても長い日本語の肩書きの言葉です', '全角 12 字'],
+    ] as const) {
+      const response = await signed('/admin/site', {
+        method: 'POST',
+        body: form({ ...TEST_SITE, heroRoles }),
+      })
+      expect(response.status, heroRoles).toBe(400)
+      expect(await response.text(), heroRoles).toContain(message)
+    }
+    // 上限ちょうどは通る（4つ・半角24字・全角12字）
+    const ok = await signed('/admin/site', {
+      method: 'POST',
+      body: form({
+        ...TEST_SITE,
+        heroRoles: 'Senior Software Engineer\r\n日本語の肩書きは十二字迄\r\nC\r\nD',
+      }),
+    })
+    expect(ok.status).toBe(303)
   })
 })

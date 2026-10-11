@@ -2,7 +2,7 @@ import type { Child } from 'hono/jsx'
 import { blockLines, blockShown, blockTexts, blockType, itemStory, memberUnits } from '../../blocks'
 import type * as schema from '../../db/schema'
 import { KIND_LABEL } from '../../domain'
-import { SITE } from '../../site'
+import { heroRoleWords, SITE } from '../../site'
 import {
   Contact,
   Cta,
@@ -26,6 +26,7 @@ import {
   SectionHead,
   Statement,
   Timeline,
+  TypedWords,
 } from '../../ui/components'
 import { siteCountsOf, soloMember, type TopData } from './data'
 import { memberHref } from './member-page'
@@ -160,7 +161,14 @@ export function renderBlock(
         枠線だけの2本目（Cta の quiet）。
       */
       const statement = solo ? solo.headline || solo.name : site.tagline
-      const eyebrow = solo ? [solo.name, solo.role, solo.location].filter(Boolean) : []
+      /*
+        大見出しの下で打ち替える言葉（サイト設定の heroRoles。Cavani の入口）。言葉があるときは、
+        札から肩書きを外す——打ち替える言葉の1つ目が肩書きと同じ字になり、同じ語を2度言う
+      */
+      const typed = heroRoleWords(site)
+      const eyebrow = solo
+        ? [solo.name, typed.length ? '' : solo.role, solo.location].filter(Boolean)
+        : []
       const profile = data.profile
       return {
         id,
@@ -176,6 +184,7 @@ export function renderBlock(
             <h1>
               <Phrases text={statement} />
             </h1>
+            {typed.length ? <TypedWords words={typed} /> : null}
             <p class="hero__lead">
               <Phrases text={site.heroLead} />
             </p>

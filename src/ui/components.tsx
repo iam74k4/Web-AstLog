@@ -413,6 +413,37 @@ export const Eyebrow = ({ parts }: { parts: string[] }) => (
 )
 
 /*
+  打ち替える言葉（入口の大見出しの下。Cavani の入口の「I'm a Developer|」）。言葉を1字ずつ
+  打っては消し、次の言葉へ移る。JavaScript を持たないので、字を1つずつの span に分け、
+  打った字数を CSS の数（--typed、0 → 1 → 0）から決める（app.css の「動き」の typed）。
+
+  読み上げと検索エンジンには、言葉を「 / 」でつないだ1行を渡し、打つ字の列は隠す
+  （1字ずつの読み上げにしない）。動きを止める設定では、最初の言葉が打ち終わった姿で止まる。
+  言葉が1つなら打ち替えず、その言葉を置くだけ（--N の印が無いので動かず、カーソルも無い）。
+  巡りの形は言葉の数で決まる（app.css の typed-2〜4。数は src/site.ts の HERO_ROLES）。
+*/
+export const TypedWords = ({ words }: { words: string[] }) => (
+  <p class="typed" lang={langOf(words.join(''))}>
+    <span class="sr-only">{words.join(' / ')}</span>
+    <span
+      class={words.length > 1 ? `typed__words typed__words--${words.length}` : 'typed__words'}
+      aria-hidden="true"
+      style={`--words: ${words.length}`}
+    >
+      {words.map((word, k) => (
+        <span class="typed__word" key={word} style={`--k: ${k}; --len: ${[...word].length}`}>
+          {[...word].map((letter, i) => (
+            <span key={`${i}`} style={`--i: ${i}`}>
+              {letter}
+            </span>
+          ))}
+        </span>
+      ))}
+    </span>
+  </p>
+)
+
+/*
   押し手（入口の「作品を見る →」「プロフィール →」）。塗りはページでいちばん強い1本にだけ
   使い、2本目は枠線だけの quiet にする（同じ強さが2本並ぶと、どちらが先か分からない）。
   矢印は飾りなので読み上げには流さない。サイトの中の続きなので ↗ ではなく →。

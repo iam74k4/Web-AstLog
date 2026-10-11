@@ -576,6 +576,7 @@ previewRoutes.post('/preview/site', async (c) => {
   const labels: Record<keyof SiteSettings, string> = {
     tagline: 'サイトの一言',
     heroLead: '入口の紹介文',
+    heroRoles: '入口で打ち替える言葉',
     contactLead: 'Contact の案内文',
     email: '公開するメールアドレス',
     github: '公開する GitHub URL',

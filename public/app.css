@@ -344,6 +344,12 @@
   --opening-sky-at: 62% 85%;
   --ease-curtain: cubic-bezier(0.7, 0, 0.2, 1);
   --reveal-from: 0ms;
+  /*
+    入口の打ち替える言葉（.typed）。--typed-window は言葉1つぶんの長さ（打つ・止まる・消す・
+    間）で、1巡りは言葉の数ぶん。--caret-blink はカーソルの点滅の1回
+  */
+  --typed-window: 4.3s;
+  --caret-blink: 1.06s;
   --press: 0.96;
   --dot: 6px;
 
@@ -917,6 +923,47 @@ body[data-site] > .frame {
 }
 
 /* リード文。入口と全体ページの頭の1文。小さい字なので 4.5:1 が要る（--ink-mid） */
+/*
+  打ち替える言葉（components.tsx の TypedWords）。節の見出しと同じ Poppins で、大見出しの
+  下の線とリード文のあいだに1行。字は1字ずつの span で、打った字数（--typed × 字数）より
+  後ろの字は大きさ 0（幅も取らない——カーソルが打った字のすぐ後ろに付く）。動かない姿は
+  最初の言葉を打ち終えたところ（.typed__word:first-child）。改行させない（打っている
+  途中で行が変わると、下のリード文が上下に動く）
+*/
+.typed {
+  color: var(--ink);
+  font-family: var(--font-latin);
+  font-size: var(--fs-display-xs);
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.typed__word {
+  --typed: 0;
+}
+
+.typed__word:first-child {
+  --typed: 1;
+}
+
+.typed__word > span {
+  font-size: calc(
+    clamp(0, (var(--typed) * var(--len) - var(--i)) * 1000, 1) *
+    var(--fs-display-xs)
+  );
+}
+
+:is(.typed__words--2, .typed__words--3, .typed__words--4)::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  margin-inline-start: var(--sp-1);
+  vertical-align: text-bottom;
+  background: currentColor;
+}
+
 .hero__lead {
   max-width: 32em;
   color: var(--ink-mid);
@@ -2894,8 +2941,9 @@ body[data-site] > .frame {
   上の @media (prefers-reduced-motion: reduce) が全部止め、止まった姿は動きの終わりの姿と
   同じになる。持ち主が動画で見て選んだ組:
     - 夜明けの窓: 読み進めるほど空が明けて星が薄れる（スクロールに連動）、星がまたたき、
-      星空がゆっくり巡る。終わらない動きはこの窓の星と、経歴のいまの行の星だけ
-    - 入口の幕開け: 札・大見出し・線・リード文・押し手が順に1回だけ現れる
+      星空がゆっくり巡る。終わらない動きはこの窓の星と、経歴のいまの行の星と、入口の打ち替える言葉だけ
+    - 入口の幕開け: 札・大見出し・線・打ち替える言葉・リード文・押し手が順に1回だけ現れる
+    - 入口の打ち替える言葉: 大見出しの下で言葉を1字ずつ打っては消し、次の言葉へ（Cavani の入口）
     - ページを移るとき: 本文が少し下から入り、目次の印が左から満ちる（横に滑らせると字ごと
       伸び縮みして見えた）。作品名は作品のページの見出しへつながる（itemTransition）
     - 画面に入るとき: 節の見出しの罫線が伸び、一覧の行が入り、経歴の線が描かれる
@@ -3008,6 +3056,109 @@ body[data-site] > .frame {
 
 .hero--cover > .hero__lead {
   animation-delay: calc(var(--reveal-from) + var(--stagger) * 5);
+}
+
+/*
+  打ち替える言葉。行は線のあとに現れ、言葉は1つずつ打っては消す（Cavani の入口）。
+  打った字数は --typed（0 → 1 → 0）で、字の側が「--typed × 字数 > 自分の番号」で出る。
+  言葉ごとに同じ形の巡りを、言葉1つぶん（--typed-window）ずつずらして回す。巡りの形は
+  言葉の数で違うので、数ごとの keyframes を持つ（2〜4）
+*/
+@property --typed {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
+.hero--cover > .typed {
+  animation: rise var(--dur-reveal) var(--ease) both;
+  animation-delay: calc(var(--reveal-from) + var(--stagger) * 4.5);
+}
+
+:is(.typed__words--2, .typed__words--3, .typed__words--4) > .typed__word {
+  animation: none calc(var(--typed-window) * var(--words)) linear
+    calc(var(--reveal-from) + var(--stagger) * 5 + var(--typed-window) * var(--k)) infinite
+    backwards;
+}
+
+.typed__words--2 > .typed__word {
+  animation-name: typed-2;
+}
+
+.typed__words--3 > .typed__word {
+  animation-name: typed-3;
+}
+
+.typed__words--4 > .typed__word {
+  animation-name: typed-4;
+}
+
+:is(.typed__words--2, .typed__words--3, .typed__words--4)::after {
+  animation: caret var(--caret-blink) steps(1) infinite;
+}
+
+/*
+  巡りの形（言葉1つぶんの窓 --typed-window = 4.3 秒の中で、1.5 秒で打ち、1.8 秒止まり、
+  0.7 秒で消し、0.3 秒あける）を、言葉の数で割った位置に置いたもの
+*/
+@keyframes typed-2 {
+  0% {
+    --typed: 0;
+  }
+  17.44% {
+    --typed: 1;
+  }
+  38.37% {
+    --typed: 1;
+  }
+  46.51% {
+    --typed: 0;
+  }
+  100% {
+    --typed: 0;
+  }
+}
+
+@keyframes typed-3 {
+  0% {
+    --typed: 0;
+  }
+  11.63% {
+    --typed: 1;
+  }
+  25.58% {
+    --typed: 1;
+  }
+  31.01% {
+    --typed: 0;
+  }
+  100% {
+    --typed: 0;
+  }
+}
+
+@keyframes typed-4 {
+  0% {
+    --typed: 0;
+  }
+  8.72% {
+    --typed: 1;
+  }
+  19.19% {
+    --typed: 1;
+  }
+  23.26% {
+    --typed: 0;
+  }
+  100% {
+    --typed: 0;
+  }
+}
+
+@keyframes caret {
+  50% {
+    opacity: 0;
+  }
 }
 
 .hero--cover > .hero__actions {
@@ -3349,6 +3500,11 @@ body[data-opening]::after {
 
   /* 紙は画面と同じ白い地で刷る（色の段は差し替えない）。夜明けの窓は刷らない */
   .window {
+    display: none;
+  }
+
+  /* 打ち替える言葉のカーソルは刷らない（紙の上では打っていない） */
+  .typed__words::after {
     display: none;
   }
 

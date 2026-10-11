@@ -9,6 +9,8 @@ export const SITE = {
   origin: 'https://astlog.dev',
   tagline: 'つくったものを、ひとつずつ記録する。',
   heroLead: 'つくったものと、取り組んできたことをまとめています。',
+  // 入口の大見出しの下で打ち替える言葉（1行に1つ）。空なら出さない
+  heroRoles: '',
   contactLead: 'お仕事のご相談や取り組みについて、話しませんか。',
   email: '',
   github: '',
@@ -24,6 +26,7 @@ export const SITE = {
 export const SITE_SETTING_KEYS = [
   'tagline',
   'heroLead',
+  'heroRoles',
   'contactLead',
   'email',
   'github',
@@ -33,17 +36,19 @@ export const SITE_SETTING_KEYS = [
 export type SiteSettingKey = (typeof SITE_SETTING_KEYS)[number]
 
 /*
-  あとから足した欄（Instagram・X）。既定は空（出さない）なので、行がまだ無くても管理画面の
+  あとから足した欄（入口の打ち替える言葉・Instagram・X）。既定は空（出さない）なので、行がまだ無くても管理画面の
   概要では「保存済み」に数える——欄を足した日に、保存済みのサイトが「一部保存済み」に戻らない
   ように（src/routes/admin/dashboard.tsx）
 */
-export const SITE_SETTING_LATER_KEYS: readonly SiteSettingKey[] = ['instagram', 'x']
+export const SITE_SETTING_LATER_KEYS: readonly SiteSettingKey[] = ['heroRoles', 'instagram', 'x']
 export type SiteSettings = Record<SiteSettingKey, string>
 
 // 大きな見出しと表紙の文は、管理画面から変えても既存のレイアウトに収まる長さにする。
 export const SITE_SETTING_LIMITS = {
   tagline: 80,
   heroLead: 160,
+  // 4つ × 24 字と改行（フォームからは \r\n で届く）。1つの言葉の長さは HERO_ROLES が見る
+  heroRoles: 110,
   contactLead: 120,
   email: 254,
   github: 2048,
@@ -53,6 +58,23 @@ export const SITE_SETTING_LIMITS = {
 
 // biome-ignore lint/suspicious/noControlCharactersInRegex: 制御文字を弾くのがこの検査の目的
 const CONTROL = /[\u0000-\u001f\u007f]/
+// 改行だけは通す（1行に1つ書く欄）
+// biome-ignore lint/suspicious/noControlCharactersInRegex: 同上
+const CONTROL_BUT_NEWLINE = /[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f]/
+
+/*
+  入口で打ち替える言葉（components.tsx の TypedWords）。言葉は4つまで、1つの言葉は半角で
+  24 字（全角は2字に数える）まで——打っている途中で行が変わらないよう改行させずに組むので、
+  電話の幅（390）の大見出しの段（--fs-display-xs）で1行に収まる長さで止める
+*/
+export const HERO_ROLES = { words: 4, width: 24 } as const
+const roleWidth = (word: string) =>
+  [...word].reduce((sum, letter) => sum + (/[\u0020-\u007e]/.test(letter) ? 1 : 2), 0)
+export const heroRoleWords = (site: Pick<SiteSettings, 'heroRoles'>) =>
+  site.heroRoles
+    .split(/\r?\n/)
+    .map((word) => word.trim())
+    .filter(Boolean)
 
 // mailto にヘッダや複数の宛先を混ぜさせない。空は連絡先を掲載しない指定。
 export const isContactEmail = (email: string) =>
@@ -78,6 +100,13 @@ export function siteSettingsErrors(site: SiteSettings): Record<string, string> |
   for (const key of ['tagline', 'heroLead', 'contactLead'] as const) {
     if (!site[key]) errors[key] = '文を入れてください'
     else if (CONTROL.test(site[key])) errors[key] = '改行や制御文字を含めないでください'
+  }
+  const roles = heroRoleWords(site)
+  if (CONTROL_BUT_NEWLINE.test(site.heroRoles)) errors.heroRoles = '制御文字を含めないでください'
+  else if (roles.length > HERO_ROLES.words) {
+    errors.heroRoles = `言葉は ${HERO_ROLES.words} つまでにしてください`
+  } else if (roles.some((word) => roleWidth(word) > HERO_ROLES.width)) {
+    errors.heroRoles = `1つの言葉は半角 ${HERO_ROLES.width} 字（全角 ${HERO_ROLES.width / 2} 字）までにしてください`
   }
   if (site.email && !isContactEmail(site.email)) errors.email = 'メールアドレスを1つ入れてください'
   for (const key of ['github', 'instagram', 'x'] as const) {

@@ -83,12 +83,15 @@ describe('CSS の読み込み', () => {
     /*
       未定義の var() は黙って既定値（色は継承、aspect-ratio は auto）に倒れ、画面は崩れても
       テストもブラウザも何も言わない。アクセントの6色を外した日、管理画面の注意の色
-      （--ember）が黙って継承色になっていた。--avatar-size だけは部品が style 属性で渡す
+      （--ember）が黙って継承色になっていた。部品が style 属性で渡すものだけは除く——顔の
+      大きさ（--avatar-size）と、打ち替える言葉の数・何番目の言葉か・字数・何番目の字か
+      （components.tsx の TypedWords）
     */
+    const fromStyle = ['--avatar-size', '--words', '--k', '--len', '--i']
     const defined = new Set([...sheets.matchAll(/(--[\w-]+)\s*:/g)].map(([, name]) => name))
     const missing = [...new Set([...sheets.matchAll(/var\((--[\w-]+)/g)].map(([, name]) => name))]
       .filter((name) => name && !defined.has(name))
-      .filter((name) => name !== '--avatar-size')
+      .filter((name) => !fromStyle.includes(name ?? ''))
     expect(missing).toEqual([])
   })
 
@@ -1588,16 +1591,38 @@ describe('動き', () => {
     expect(motion).toContain('@supports (animation-timeline: view())')
   })
 
-  it('終わらない動きは、窓の星と経歴のいまの行の星だけ', () => {
+  it('終わらない動きは、窓の星と経歴のいまの行の星と、入口の打ち替える言葉だけ', () => {
+    /*
+      打ち替える言葉（言葉を打っては消す巡りと、カーソルの点滅）は、持ち主が動画で見て選んだ
+      Cavani の入口。数ごとの巡り（typed-2〜4）は animation-name だけを差し替える
+    */
     const forever = rulesOf(sheet)
       .filter((rule) =>
         rule.decls.some(([name, value]) => name === 'animation' && /infinite/.test(value)),
       )
       .flatMap((rule) => rule.selectors)
-    expect([...new Set(forever)].sort()).toEqual([
-      '.career__now .period::before',
-      '.window::before',
-    ])
+    expect([...new Set(forever)].sort()).toEqual(
+      [
+        '.career__now .period::before',
+        '.window::before',
+        ':is(.typed__words--2, .typed__words--3, .typed__words--4) > .typed__word',
+        ':is(.typed__words--2, .typed__words--3, .typed__words--4)::after',
+      ].sort(),
+    )
+  })
+
+  it('打ち替える言葉は、止まった姿で最初の言葉を打ち終えている。行は折らず、カーソルは刷らない', () => {
+    // 動きを減らす設定では animation が外れ、素の値だけが残る
+    expect(bodyOf(sheet, '.typed__word {')).toContain('--typed: 0')
+    expect(bodyOf(sheet, '.typed__word:first-child {')).toContain('--typed: 1')
+    // 言葉の数ごとの巡り（src/site.ts の HERO_ROLES.words まで）
+    for (const n of [2, 3, 4]) expect(sheet, `typed-${n}`).toContain(`@keyframes typed-${n}`)
+    expect(sheet).toContain('@property --typed')
+    // 打っている途中で行が変わると、下のリード文が上下に動く
+    expect(bodyOf(sheet, '.typed {')).toContain('white-space: nowrap')
+    expect(bodyOf(blockAt(sheet, '@media print'), '.typed__words::after {')).toContain(
+      'display: none',
+    )
   })
 
   it('入口の幕開けは1回だけ。札・大見出し・リード文・押し手が順に現れる', () => {
