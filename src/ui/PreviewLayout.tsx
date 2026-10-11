@@ -4,7 +4,7 @@ type PublicLayoutProps = Parameters<typeof Layout>[0]
 
 export type PreviewLayoutProps = Omit<
   PublicLayoutProps,
-  'canonical' | 'jsonLd' | 'admin' | 'image' | 'preview' | 'previewUnsaved'
+  'canonical' | 'jsonLd' | 'admin' | 'image' | 'preview'
 > & {
   label: string
   editHref: string
@@ -21,10 +21,8 @@ export const PreviewLayout = (props: PreviewLayoutProps) => (
     description={props.description}
     canonical=""
     nav={props.nav}
-    theme={props.theme}
     footer={props.footer}
     whole={props.whole}
-    previewUnsaved={props.unsaved}
     preview={
       <aside class="preview-notice" aria-label="管理プレビュー">
         <div class="preview-notice__inner">

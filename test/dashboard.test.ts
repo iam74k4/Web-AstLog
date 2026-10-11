@@ -28,7 +28,8 @@ describe('管理画面の概要', () => {
     expect(html).toContain('既定の並び')
     // 既定の並びで出るのは入口だけ（作品・メンバー・連絡先がまだ無いので、Projects・Team・Contact は出ない）
     expect(plain(html)).toContain('目次に表示: 1 ページ')
-    expect(plain(html)).toContain('モノクロ · ゴシック')
+    // 見た目は1つ（選ぶ口を持たない）ので、色と書体のカードは無い
+    expect(plain(html)).not.toContain('色と書体')
     expect(await db().query.settings.findMany()).toHaveLength(0)
     expect(await db().query.blocks.findMany()).toHaveLength(0)
     expect(await db().query.members.findMany()).toHaveLength(0)
@@ -67,6 +68,23 @@ describe('管理画面の概要', () => {
     expect(html).toContain('一部保存済み')
     expect(html).toContain('サイトの紹介文を確認する')
     expect(html).not.toContain('いまは既定の文章が使われています')
+  })
+
+  it('あとから足した欄（Instagram・X）の行が無くても、保存済みに数える', async () => {
+    // 欄を足す前に保存したサイト。足した日に「一部保存済み」へ戻さない
+    await db().delete(schema.settings)
+    await db()
+      .insert(schema.settings)
+      .values(
+        ['tagline', 'heroLead', 'contactLead', 'email', 'github'].map((key) => ({
+          key: `site.${key}`,
+          value: key === 'email' || key === 'github' ? '' : '保存した文です。',
+        })),
+      )
+    const signed = await signIn()
+    const html = await (await signed('/admin')).text()
+    expect(html).not.toContain('一部保存済み')
+    expect(html).toContain('保存済み')
   })
 
   it('プロフィールだけが下書きなら、その編集を案内する', async () => {

@@ -150,7 +150,13 @@ itemRoutes.get('/items', async (c) => {
                   height={70}
                   loading="lazy"
                 />
-              ) : null}
+              ) : (
+                /*
+                  絵の無い作品にも同じ大きさの空の枠を置く。枠が行によって有ったり無かったりすると、
+                  題の頭と行の高さがそろわなかった（管理画面の一覧だけ。公開ページには代わりの絵を置かない）
+                */
+                <span class="row__thumb row__thumb--empty" aria-hidden="true" />
+              )}
               <span class="row__main">
                 <strong>{item.title}</strong>
                 {/*

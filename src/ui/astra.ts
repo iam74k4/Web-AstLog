@@ -1,11 +1,12 @@
 /*
-  天体の飾りの素材の形（ここが正）。入口の空（sky.svg）と Contact の軌道（orbit.svg）。
+  天体の飾りの素材の形（ここが正）。夜明けの窓の空（sky.svg。すばるとまばらな星）。
   ファイルは scripts/logo/export.mjs がここから public/assets に書き出し、ページは
-  app.css の「天体の飾り」が背景として読む——HTML には置かない（本文の HTML は字だけ。
-  test/public.test.ts が main に svg が無いことを見ている）。
+  app.css の「天体の飾り」が夜明けの窓（骨格の .window）の星の形（mask）として読む——HTML には
+  置かない（本文の HTML は字だけ。test/public.test.ts が main に svg が無いことを見ている）。
 
-  どちらも線と点だけの図で、面・光・影を持たない（公開ページは面も影も持たない）。
-  色はロゴの素材と同じ字の白（LOGO_COLORS.ink）を不透明度で薄めるだけで、色相を持たない
+  点だけの図で、面・光・影を持たない。ページが読むのは点の形と濃さ（不透明度）だけで、
+  色は app.css の段（--dawn-star）が塗る。ファイルに焼く色はロゴの素材の白（LOGO_COLORS.ink）
+  で、窓の星と同じ色。点に色相は持たせない
   ——既定のモノクロの中に1色だけ色の点を置くと、目がそこへ寄り道した。
 
   JSX を持たない（scripts から読むため）。
@@ -36,7 +37,12 @@ const PLEIADES: [x: number, y: number, magnitude: number][] = [
   [36.7, -11, 5.45], // Celaeno
 ]
 
-// まばらな星（x, y, 半径, 不透明度）。すばるの周りを空け、明るさは揃えない
+/*
+  まばらな星（x, y, 半径, 不透明度）。すばるの周りと、窓の左上の札（M45 — PLEIADES）の
+  下を空け、明るさは揃えない。上の 300 は
+  狭い画面の入口の帯に出るぶん、その下は 900 以上の縦に長い窓を埋めるぶん（窓の下の
+  ほうは空が明けて、白い星は見えなくなる）
+*/
 const FIELD: [number, number, number, number][] = [
   [40, 250, 0.9, 0.35],
   [96, 168, 1.1, 0.45],
@@ -50,15 +56,43 @@ const FIELD: [number, number, number, number][] = [
   [530, 40, 1.2, 0.5],
   [546, 160, 0.8, 0.3],
   [70, 70, 0.8, 0.28],
-  [140, 24, 1.0, 0.35],
   [252, 132, 0.7, 0.25],
   [508, 272, 0.8, 0.3],
   [356, 264, 0.9, 0.32],
   [24, 136, 0.7, 0.25],
+  [60, 330, 0.9, 0.35],
+  [188, 352, 1.1, 0.45],
+  [318, 318, 0.8, 0.3],
+  [452, 368, 1.0, 0.4],
+  [522, 334, 0.7, 0.25],
+  [104, 418, 0.8, 0.3],
+  [246, 446, 1.2, 0.5],
+  [398, 432, 0.8, 0.3],
+  [36, 508, 1.0, 0.4],
+  [170, 532, 0.7, 0.25],
+  [300, 516, 0.9, 0.35],
+  [486, 498, 1.1, 0.45],
+  [122, 612, 0.9, 0.32],
+  [262, 640, 0.7, 0.25],
+  [414, 596, 1.0, 0.38],
+  [540, 652, 0.8, 0.3],
+  [58, 716, 1.1, 0.42],
+  [208, 742, 0.8, 0.3],
+  [352, 702, 0.9, 0.35],
+  [476, 760, 0.7, 0.25],
+  [132, 830, 0.9, 0.32],
+  [286, 866, 1.0, 0.38],
+  [430, 846, 0.8, 0.28],
+  [30, 924, 0.7, 0.25],
+  [226, 958, 0.9, 0.32],
+  [512, 934, 1.0, 0.36],
 ]
 
-// 入口の空。惑星の縁（app.css の背景の弧）の上、右下の字の無い所に置く
-export const SKY = { width: 560, height: 300 } as const
+/*
+  夜明けの窓の空。窓の右上にすばるが来るように、app.css が窓の幅に合わせて置く（上端を
+  窓の上端にそろえる）。縦に長いのは、900 以上の窓が画面の高さまで伸びるため
+*/
+export const SKY = { width: 560, height: 1000 } as const
 export const skySvg = () => {
   const center = { x: 392, y: 92, scale: 1.9 }
   const cluster = PLEIADES.map(([x, y, magnitude]) =>
@@ -71,54 +105,4 @@ export const skySvg = () => {
   )
   const field = FIELD.map(([x, y, r, opacity]) => dot(x, y, r, opacity))
   return svg(SKY.width, SKY.height, 'すばると星', [...field, ...cluster].join(''))
-}
-
-/*
-  Contact の軌道。傾いた軌道が2本（内は実線、外は点線）、中心の星と、軌道の上の惑星と月。
-  軌道は惑星と月のまわりだけ途切れさせる——切れ目は形で作り、地の色の円を重ねない
-  （地の違う所で黒い円が浮く）。中心の星も惑星も、本文のメールの手より目立たない明るさに抑える
-*/
-export const ORBIT = { width: 380, height: 230 } as const
-export const orbitSvg = () => {
-  const cx = ORBIT.width / 2
-  const cy = ORBIT.height / 2
-  const tilt = -14
-  const t = (tilt * Math.PI) / 180
-  // 傾いた楕円の上の、媒介変数 deg の点
-  const at = (rx: number, ry: number, deg: number) => {
-    const a = (deg * Math.PI) / 180
-    const x = rx * Math.cos(a)
-    const y = ry * Math.sin(a)
-    return [cx + x * Math.cos(t) - y * Math.sin(t), cy + x * Math.sin(t) + y * Math.cos(t)]
-  }
-  // 楕円の弧。body（半径 r）のまわりを、縁から clear だけ空けて切る
-  const orbit = (rx: number, ry: number, deg: number, r: number, clear: number, style: string) => {
-    const a = (deg * Math.PI) / 180
-    const speed = Math.hypot(rx * Math.sin(a), ry * Math.cos(a))
-    const half = (((r + clear) / speed) * 180) / Math.PI
-    const [x1 = 0, y1 = 0] = at(rx, ry, deg + half)
-    const [x2 = 0, y2 = 0] = at(rx, ry, deg - half)
-    return `<path d="M${round(x1)} ${round(y1)}A${rx} ${ry} ${tilt} 1 1 ${round(x2)} ${round(y2)}" fill="none" stroke="${LOGO_COLORS.ink}" ${style}/>`
-  }
-  const planet = { rx: 140, ry: 40, deg: 62, r: 4 }
-  const moon = { rx: 178, ry: 54, deg: 206, r: 1.8 }
-  const [px = 0, py = 0] = at(planet.rx, planet.ry, planet.deg)
-  const [mx = 0, my = 0] = at(moon.rx, moon.ry, moon.deg)
-  return svg(
-    ORBIT.width,
-    ORBIT.height,
-    '軌道',
-    orbit(
-      moon.rx,
-      moon.ry,
-      moon.deg,
-      moon.r,
-      3.5,
-      'stroke-opacity="0.14" stroke-dasharray="1.5 5" stroke-linecap="round"',
-    ) +
-      orbit(planet.rx, planet.ry, planet.deg, planet.r, 4, 'stroke-opacity="0.2"') +
-      dot(cx, cy, 2.2, 0.5) +
-      dot(px, py, planet.r, 0.7) +
-      dot(mx, my, moon.r, 0.5),
-  )
 }

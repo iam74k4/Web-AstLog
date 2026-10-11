@@ -177,13 +177,13 @@ describe('トップ → 個人ページ', () => {
 
 describe('ログインの戻り先', () => {
   it('弾かれた画面は、ログイン画面の提供元のリンクへ持ち回される', async () => {
-    const bounced = await get('/admin/appearance')
-    expect(bounced.headers.get('location')).toBe('/admin/login?next=%2Fadmin%2Fappearance')
+    const bounced = await get('/admin/site')
+    expect(bounced.headers.get('location')).toBe('/admin/login?next=%2Fadmin%2Fsite')
 
     // ログイン画面はフォームではなく、提供元ごとの GET のリンク。戻り先はその query に乗る
-    const page = await okText('/admin/login?next=%2Fadmin%2Fappearance')
-    expect(page).toContain('href="/admin/auth/github/start?next=%2Fadmin%2Fappearance"')
-    expect(page).toContain('href="/admin/auth/google/start?next=%2Fadmin%2Fappearance"')
+    const page = await okText('/admin/login?next=%2Fadmin%2Fsite')
+    expect(page).toContain('href="/admin/auth/github/start?next=%2Fadmin%2Fsite"')
+    expect(page).toContain('href="/admin/auth/google/start?next=%2Fadmin%2Fsite"')
     // 往復のあとで実際にそこへ戻ることは test/oauth.test.ts（next の安全化）
   })
 
@@ -246,7 +246,7 @@ describe('管理画面からサイトへ', () => {
 
   it('どの画面の左ナビにもプレビューと公開サイトへの入口がある', async () => {
     const signed = await signIn()
-    for (const path of ['/admin/members', '/admin/items', '/admin/blocks', '/admin/appearance']) {
+    for (const path of ['/admin/members', '/admin/items', '/admin/blocks', '/admin/site']) {
       const html = await (await signed(path)).text()
       expect(html, path).toContain('href="/admin/preview"')
       expect(html, path).toContain('公開サイト ↗')

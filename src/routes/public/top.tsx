@@ -5,7 +5,6 @@ import {
   listPublishedItems,
   listPublishedMembers,
   loadSiteSettings,
-  loadTheme,
   publishedBlocks,
 } from '../../db/queries'
 import * as schema from '../../db/schema'
@@ -13,7 +12,7 @@ import { ITEM_KIND_KEYS, type KindCounts } from '../../domain'
 import type { AppEnv } from '../../env'
 import { tableOfContents } from '../../lib/sequence'
 import { SITE } from '../../site'
-import { Empty, SiteIdentity } from '../../ui/components'
+import { Empty, SiteSocials } from '../../ui/components'
 import { Layout, type NavItem } from '../../ui/Layout'
 import { renderBlock } from './blocks'
 import {
@@ -47,10 +46,9 @@ import { pageRows, sitePageLinks, sitePages } from './site'
 */
 export async function renderWholePage(c: Context<AppEnv>) {
   const db = drizzle(c.env.DB, { schema })
-  const [members, items, theme, blocks, site] = await Promise.all([
+  const [members, items, blocks, site] = await Promise.all([
     listPublishedMembers(db),
     listPublishedItems(db),
-    loadTheme(db),
     publishedBlocks(db),
     loadSiteSettings(db),
   ])
@@ -112,14 +110,13 @@ export async function renderWholePage(c: Context<AppEnv>) {
       canonical={`${SITE.origin}/all`}
       jsonLd={siteJsonLd(members, site)}
       nav={nav}
-      theme={theme}
       // 節を縦に積んだ1本の文書。app.css の「ページの外枠」を外す印
       whole
       /*
         足元で名乗る。Hero の h1 は同じページにあるが、印刷した紙の
         終わりや Ctrl-F で飛んだ先では、足元が誰のサイトかを言う
       */
-      footer={<SiteIdentity site={site} solo={solo} />}
+      footer={<SiteSocials site={site} />}
       // 全部の節が並ぶページなので、節の並び（構成）へ送る
       admin={await adminHref(c, '/admin/blocks')}
     >
@@ -152,10 +149,9 @@ export async function renderProfileAlias(c: Context<AppEnv>) {
 */
 export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
   const db = drizzle(c.env.DB, { schema })
-  const [members, byKind, theme, blocks, site] = await Promise.all([
+  const [members, byKind, blocks, site] = await Promise.all([
     listPublishedMembers(db),
     countPublishedByKind(db),
-    loadTheme(db),
     publishedBlocks(db),
     loadSiteSettings(db),
   ])
@@ -191,8 +187,7 @@ export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
         description={siteDescription(solo, site)}
         canonical={`${SITE.origin}/`}
         nav={[]}
-        theme={theme}
-        footer={<SiteIdentity site={site} solo={solo} />}
+        footer={<SiteSocials site={site} />}
         // 何も出ていないのは、構成に公開中のブロックが無いから。直す場所はそこ
         admin={await adminHref(c, '/admin/blocks')}
       >
@@ -241,9 +236,8 @@ export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
     // 説明文はこのページに出ているものから作る（renderBlock が持っている）
     description: rendered.description,
     jsonLd: firstOnly(links, link, siteJsonLd(members, site)),
-    theme,
-    // Contact では足元の GitHub / メールを出さない（本文に同じ手がある。SiteIdentity）
-    footer: <SiteIdentity site={site} solo={solo} contact={current.block.type === 'contact'} />,
+    // Contact では足元の GitHub / メールを出さない（本文に同じ手がある。SiteSocials）
+    footer: <SiteSocials site={site} contact={current.block.type === 'contact'} />,
     adminPath: blockAdminPath(current.block, solo),
   })
 }

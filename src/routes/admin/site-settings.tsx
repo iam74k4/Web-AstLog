@@ -46,14 +46,15 @@ const SiteSettingsPage = (props: {
     <form method="post" action="/admin/site" class="form">
       <FormVersion value={props.version} />
       <PlacementHint label="表示される場所">
-        入口の紹介文 → トップページ ／ Contact の案内文 → お問い合わせ ／ サイトの一言 → ページ下部
+        入口の紹介文 → トップページ ／ Contact の案内文 → お問い合わせ ／
+        GitHub・Instagram・X・メール → ページ下部
       </PlacementHint>
       <FormSection title="サイトの紹介" note="入口の文章と、サイト全体の短い紹介を設定します。">
         <Field
           label="サイトの一言"
           name="tagline"
           value={props.site.tagline}
-          hint="ページ下部に出ます。公開中のメンバーが1人の場合、入口の大見出しはそのメンバーの見出しになります"
+          hint="公開中のメンバーが2人以上の場合に、入口の大見出しになります。1人の場合はそのメンバーの見出しが出ます"
           required
           maxlength={SITE_SETTING_LIMITS.tagline}
           error={props.errors?.tagline}
@@ -97,6 +98,24 @@ const SiteSettingsPage = (props: {
           hint="https:// で始まる URL。空なら GitHub のリンクを出しません"
           maxlength={SITE_SETTING_LIMITS.github}
           error={props.errors?.github}
+        />
+        <Field
+          label="公開する Instagram URL"
+          name="instagram"
+          type="url"
+          value={props.site.instagram}
+          hint="https:// で始まる URL。ページ下部にだけ出ます。空なら出しません"
+          maxlength={SITE_SETTING_LIMITS.instagram}
+          error={props.errors?.instagram}
+        />
+        <Field
+          label="公開する X URL"
+          name="x"
+          type="url"
+          value={props.site.x}
+          hint="https:// で始まる URL。ページ下部にだけ出ます。空なら出しません"
+          maxlength={SITE_SETTING_LIMITS.x}
+          error={props.errors?.x}
         />
       </FormSection>
       <Select

@@ -2,99 +2,38 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import adminCss from '../public/admin.css'
 import css from '../public/app.css'
 import * as schema from '../src/db/schema'
-import { ACCENTS, THEME_KEYS, TYPEFACES } from '../src/theme'
 import { LOGO_COLORS } from '../src/ui/logo'
-import { db, form, get, okText, resetDb, seedItem, seedMember, signIn } from './helpers'
+import { db, get, okText, resetDb, seedItem, seedMember, signIn, touch } from './helpers'
 
 beforeEach(resetDb)
 
-const save = async (values: Record<string, string>) => {
-  const signed = await signIn()
-  return signed('/admin/appearance', { method: 'POST', body: form(values) })
-}
-
-const PICKED = { accent: 'ember', typeface: 'serif' }
-
-describe('見た目のプリセット', () => {
-  it('何も選んでいなければ既定の姿で出す', async () => {
+/*
+  見た目は1つ。前は管理画面の「見た目」でアクセント色（7色）と見出しの書体（3つ）を
+  選べたが、Cavani を下敷きにした白と墨・Poppins・夜明けの窓に決めたあとは、色の付いた
+  押し手や明朝・等幅の名札がその芯を崩した。選ぶ口ごと外し、前に保存した行は読まない。
+*/
+describe('見た目は1つ', () => {
+  it('公開ページは色や書体の印を持たない。前に保存した行が残っていても読まない', async () => {
+    await db()
+      .insert(schema.settings)
+      .values([
+        { key: 'theme.accent', value: 'ember' },
+        { key: 'theme.typeface', value: 'serif' },
+        { key: 'theme.layout', value: 'magazine' },
+      ])
+    await touch()
     const html = await okText('/')
-    // 既定はモノクロ（黒の上に白。文字もボタンも白）
-    expect(html).toContain('data-accent="mono"')
-    expect(html).toContain('data-typeface="sans"')
-    // 骨格は選ばせない（上の帯・本文・足元の1つだけ）ので、骨格の印は無い
+    expect(html).not.toContain('data-accent')
+    expect(html).not.toContain('data-typeface')
     expect(html).not.toContain('data-layout')
   })
 
-  it('選んだものが公開ページに出る', async () => {
-    const response = await save(PICKED)
-    expect(response.status).toBe(303)
-    expect(response.headers.get('location')).toBe('/admin/appearance?saved=1')
-
-    const html = await okText('/')
-    expect(html).toContain('data-accent="ember"')
-    expect(html).toContain('data-typeface="serif"')
-  })
-
-  it('個人ページも同じ姿になる', async () => {
-    await seedMember()
-    await save(PICKED)
-
-    const html = await okText('/members/okazaki')
-    expect(html).toContain('data-accent="ember"')
-  })
-
-  it('二度保存しても行が増えない', async () => {
-    await save(PICKED)
-    await save({ accent: 'mint', typeface: 'mono' })
-
-    const rows = await db().select().from(schema.settings)
-    expect(rows.filter((row) => row.key.startsWith('theme.'))).toHaveLength(2)
-    expect(await okText('/')).toContain('data-accent="mint"')
-  })
-
-  it('知らない値は保存しない', async () => {
-    const response = await save({ accent: 'chaos', typeface: 'serif' })
-    expect(response.status).toBe(400)
-
-    // 1つでも知らなければ、まとめて受け取らない
-    const html = await okText('/')
-    expect(html).toContain('data-accent="mono"')
-    expect(html).toContain('data-typeface="sans"')
-  })
-
-  it('DB に知らない値が入っていても既定に戻して描く', async () => {
-    // プリセットを1つ減らした後の、選んだままのサイトを想定する
-    await db().insert(schema.settings).values({ key: 'theme.accent', value: '消えた色' })
-    // 前に選べた骨格の行が残っていても、読まずに描く
-    await db().insert(schema.settings).values({ key: 'theme.layout', value: 'magazine' })
-
-    const response = await get('/')
-    expect(response.status).toBe(200)
-    const html = await response.text()
-    expect(html).toContain('data-accent="mono"')
-    expect(html).not.toContain('data-layout')
-  })
-
-  it('ログインしていなければ見た目を変えられない', async () => {
-    const response = await get('/admin/appearance', { method: 'POST', body: form(PICKED) })
-    expect(response.status).toBe(303)
-    expect(response.headers.get('location')).toBe('/admin/login')
-
-    expect(await okText('/')).toContain('data-accent="mono"')
-  })
-
-  it('選べるものだけを並べ、いま選んでいるものに印を付ける', async () => {
-    await save(PICKED)
+  it('管理画面に「見た目」の画面も入口も無い', async () => {
     const signed = await signIn()
-    const html = await (await signed('/admin/appearance')).text()
-
-    expect(html).toContain('value="ember" checked=""')
-    // 見本は全種類ぶん出るので、data-typeface を見ても選択中は分からない
-    expect(html).toContain('value="serif" checked=""')
-    expect(html).not.toContain('value="sans" checked=""')
-    // 骨格の組は並べない
-    expect(html).not.toContain('name="layout"')
-    expect(THEME_KEYS).toEqual(['accent', 'typeface'])
+    expect((await signed('/admin/appearance')).status).toBe(404)
+    const dashboard = await (await signed('/admin')).text()
+    expect(dashboard).not.toContain('/admin/appearance')
+    expect(dashboard).not.toContain('色と書体')
   })
 })
 
@@ -125,11 +64,7 @@ const sheet = bare(css)
 const adminSheet = bare(adminCss)
 const sheets = `${sheet}\n${adminSheet}`
 
-/*
-  選択肢は src/theme.ts が正だが、実際に姿を変えるのは app.css。
-  片方だけ足すと、選べるのに何も変わらない選択肢ができる。
-*/
-describe('プリセットと CSS', () => {
+describe('CSS の読み込み', () => {
   it('CSS を読めている（読めていないと、以下の検査が素通りする）', () => {
     expect(css.length).toBeGreaterThan(1000)
     expect(adminCss.length).toBeGreaterThan(1000)
@@ -144,9 +79,22 @@ describe('プリセットと CSS', () => {
     expect(sheet).toContain('body[data-site]')
   })
 
-  it('アクセント色と書体には [data-accent] / [data-typeface] の指定がある', () => {
-    for (const accent of ACCENTS) expect(sheet).toContain(`[data-accent='${accent.key}']`)
-    for (const typeface of TYPEFACES) expect(sheet).toContain(`[data-typeface='${typeface.key}']`)
+  it('読む段はどれも定義されている（消した段を読み続けない）', () => {
+    /*
+      未定義の var() は黙って既定値（色は継承、aspect-ratio は auto）に倒れ、画面は崩れても
+      テストもブラウザも何も言わない。アクセントの6色を外した日、管理画面の注意の色
+      （--ember）が黙って継承色になっていた。--avatar-size だけは部品が style 属性で渡す
+    */
+    const defined = new Set([...sheets.matchAll(/(--[\w-]+)\s*:/g)].map(([, name]) => name))
+    const missing = [...new Set([...sheets.matchAll(/var\((--[\w-]+)/g)].map(([, name]) => name))]
+      .filter((name) => name && !defined.has(name))
+      .filter((name) => name !== '--avatar-size')
+    expect(missing).toEqual([])
+  })
+
+  it('色と書体のプリセットの指定を持たない', () => {
+    expect(sheets).not.toContain('[data-accent')
+    expect(sheets).not.toContain('[data-typeface')
   })
 })
 
@@ -170,16 +118,7 @@ describe('スタイルシートの分け方', () => {
     const shared = [...classesOf(sheet)].filter((name) => admin.has(name))
     expect(shared).toEqual([])
     // 代表を名指しで（上の突き合わせは、admin.css が空になっても緑になる）
-    for (const name of [
-      'admin-shell',
-      'admin-nav',
-      'btn',
-      'field',
-      'toggle',
-      'row',
-      'login',
-      'preset',
-    ]) {
+    for (const name of ['admin-shell', 'admin-nav', 'btn', 'field', 'toggle', 'row', 'login']) {
       expect(admin.has(name), name).toBe(true)
     }
   })
@@ -218,9 +157,9 @@ describe('スタイルシートの分け方', () => {
     )
   })
 
-  it('強制色では公開状態と見た目の選択を標準の入力部品で見せる', () => {
+  it('強制色では公開状態を標準の入力部品で見せる', () => {
     const forced = blockAt(adminSheet, '@media (forced-colors: active)')
-    for (const selector of ['.toggle input {', '.preset input {']) {
+    for (const selector of ['.toggle input {']) {
       const input = bodyOf(forced, selector)
       expect(input).toContain('opacity: 1')
       expect(input).toContain('width: var(--switch-knob)')
@@ -228,10 +167,8 @@ describe('スタイルシートの分け方', () => {
       expect(input).not.toContain('appearance: none')
     }
     expect(bodyOf(forced, '.toggle__track {')).toContain('display: none')
-    expect(bodyOf(forced, '.preset__box {')).toContain('padding-top: calc(')
     // 通常の表示は既存の装飾を使い続ける。強制色の指定を括りの外へ出さない。
     expect(bodyOf(adminSheet, '.toggle input {')).toContain('opacity: 0')
-    expect(bodyOf(adminSheet, '.preset input {')).toContain('opacity: 0')
   })
 })
 
@@ -513,7 +450,9 @@ describe('ページの外枠', () => {
     */
     const frame = blockAt(sheet, '@media screen')
     expect(ruleWith(frame, 'min-height: var(--screen-h)').selector).toBe('body[data-site]')
-    expect(sheet.match(/var\(--screen-h\)/g)).toHaveLength(1)
+    // 読むのは body の min-height と、900 以上で画面に貼り付ける夜明けの窓の高さの2か所だけ
+    expect(sheet.match(/var\(--screen-h\)/g)).toHaveLength(2)
+    expect(ruleWith(frame, 'height: calc(var(--screen-h)').selector).toBe('.frame > .window')
     /*
       表紙（1画面ぶんの高さを下限に持つ入口と締め）は持たない。入口の字の下が空いたまま
       足元が次の画面へ押し出されていた。足元は body の min-height が画面の底に置く
@@ -526,7 +465,7 @@ describe('ページの外枠', () => {
     const body = bodyOf(frame, 'body[data-site] {')
     expect(body).toContain('display: flex')
     expect(body).toContain('flex-direction: column')
-    expect(bodyOf(frame, 'body[data-site] > main {')).toContain('flex: 1 0 auto')
+    expect(bodyOf(frame, 'body[data-site] > .frame {')).toContain('flex: 1 0 auto')
   })
 
   it('節は grid で上から置く。flex のままだと寄せ方が黙って効かなくなる', () => {
@@ -575,9 +514,7 @@ describe('ページの外枠', () => {
     expect(bodyOf(frame, ':where(body[data-site]) main > :is(.hero, section) {')).toContain(
       'align-content: safe start',
     )
-    expect(ruleWith(sheet, 'padding-block: var(--page-pad)').selector).toBe(
-      'body[data-site] > main',
-    )
+    expect(ruleWith(sheet, 'padding: var(--page-pad) var(--gutter)').selector).toBe('.frame > main')
 
     // 外枠のどの寄せ方にも safe を付ける。素の center / end は、中身が容器を超えた
     // 瞬間に上端を容器の外へ押し出す
@@ -669,12 +606,16 @@ describe('ページの外枠', () => {
     /*
       骨格のプリセットは無くなったので、外枠が部品の規則に勝つための強さは要らない。
       目印（body[data-site]）は全部 :where() の中に置き、外枠の規則の強さは部品の
-      セレクタだけで決まるようにする（body と main の名指しの2本だけは例外——
-      骨格そのもので、部品が上書きする相手が居ない）
+      セレクタだけで決まるようにする（body と本文の枠の名指しの2本だけは例外——
+      骨格そのもので、部品が上書きする相手が居ない。900 以上の枠の並べ方も同じ1本）
     */
     const frame = blockAt(sheet, '@media screen')
     const bare = (frame.match(/^\s*body\[data-site\][^\n]*\{/gm) ?? []).map((line) => line.trim())
-    expect(bare).toEqual(['body[data-site] {', 'body[data-site] > main {'])
+    expect(bare).toEqual([
+      'body[data-site] {',
+      'body[data-site] > .frame {',
+      'body[data-site] > .frame {',
+    ])
   })
 })
 
@@ -712,15 +653,15 @@ describe('部品の作法', () => {
     expect(projects).not.toContain('class="pager')
   })
 
-  it('足元のリンクは、著作権表示と見分けが付く', () => {
+  it('足元の行き先は、著作権表示と見分けが付く', () => {
     /*
-      素の a は color: inherit / text-decoration: none。全体ページへの1本を
-      .foot__meta に置くだけでは、隣の「© 2026 AstLog」とまったく同じ姿に
-      なり、押せるものだと分からない（色の違いすら無い状態）
+      足元は著作権表示と行き先（GitHub・Instagram・X・メール）だけ。行き先は印を添え、
+      字も著作権表示より1段濃くする——同じ色の字が並ぶと、押せるものだと分からない
     */
-    const link = bodyOf(sheet, '.foot__meta a {')
-    expect(link).toContain('text-decoration: underline')
-    expect(link).toContain('color: var(--ink-mid)')
+    expect(bodyOf(sheet, '.socials a {')).toContain('color: var(--ink-mid)')
+    expect(bodyOf(sheet, '.foot__meta {')).toContain('color: var(--ink-weak)')
+    // 著作権表示の中にリンクは置かない（全体ページへの1本は外した）
+    expect(sheet).not.toContain('.foot__meta a')
   })
 
   it('外に出るリンクは1つの流儀に揃え、記号を薄くしない', () => {
@@ -860,16 +801,6 @@ describe('部品の作法', () => {
     expect(rule).toContain('border: 0')
   })
 
-  it('404 のロゴの箱は行を作らない。標準モードで字の下がりぶん伸びない', () => {
-    /*
-      DOCTYPE を足して標準モードになった日、.oops__mark だけが 28px → 35.8px に
-      伸びた（= 404 @1440x900, 素の書体, Chromium）。標準モードの行ボックスは
-      字が無くても高さの支え（strut）を持ち、svg がベースラインに座るため。
-      flex にすれば svg は行に載らず、箱はロゴと同じ高さになる
-    */
-    expect(bodyOf(sheet, '.oops__mark {')).toContain('display: flex')
-  })
-
   it('見出しと添えは隣り合わせ。空いた幅ぶん引き離さない', () => {
     // space-between だと 1440 で見出しとラベルが 782px 離れ、1組に見えなくなる
     expect(bodyOf(sheet, '.head {')).not.toContain('space-between')
@@ -885,7 +816,8 @@ describe('部品の作法', () => {
       何も言わないので、気づくのは見た目が跳ねたときだけ。
     */
     expect(sheet).not.toContain('.head h2 {')
-    expect(bodyOf(sheet, '.head :is(h1, h2) {')).toContain('font-size: var(--fs-display-xl)')
+    expect(bodyOf(sheet, '.head :is(h1, h2) {')).toContain('font-size: var(--fs-md)')
+    expect(bodyOf(sheet, '.head--item :is(h1, h2) {')).toContain('font-size: var(--fs-display-xl)')
   })
 
   it('個人ページの名乗りは、要素とクラスの両方で段を下げる', () => {
@@ -927,12 +859,12 @@ describe('部品の作法', () => {
     expect(bodyOf(adminSheet, '.fieldset--story {')).toContain('gap: var(--sp-4)')
   })
 
-  it('名乗りと連絡先は足元に置き、どの幅でも畳まない', () => {
+  it('連絡先は足元に置き、どの幅でも畳まない', () => {
     /*
       柱のころは 899 以下で肩書き・一言・GitHub / メールを畳み、畳んだぶんが
       「どこにも無くなる」ものを入れないよう見張っていた（素の .socials を隠して、
       GitHub のプロフィールが電話から辿れなくなったことがある。WCAG 1.4.10）。
-      いまは上の帯にロゴと目次しか置かず、名乗りと連絡先は足元が受ける——
+      いまは上の帯にロゴと目次しか置かず、連絡先は足元が受ける——
       幅で畳む規則を1本も持たない
     */
     const folds = rulesOf(sheet).filter(
@@ -1024,9 +956,20 @@ describe('部品の作法', () => {
     expect(focus).toContain('outline: var(--focus-ring) solid var(--accent)')
   })
 
-  it('アイコンは題の行の高さを変えない（はみ出しは負の余白で受ける）。見出しの字の真ん中に置く', () => {
-    expect(bodyOf(sheet, '.entry__icon {')).toContain(
-      'margin-block: calc((var(--entry-title-lh) - var(--entry-icon)) / 2)',
+  it('一覧のアイコンは題の軸の外に吊るす。題の頭はアイコンの有無でずれない', () => {
+    /*
+      題の左に並べていたころは、アイコンのある作品の題だけが右へずれ、一覧の題の頭が
+      そろわなかった。絶対配置で行の高さも変えず、1行目の高さの真ん中に置く
+    */
+    const icon = bodyOf(sheet, '.entry__icon {')
+    expect(icon).toContain('position: absolute')
+    expect(icon).toContain(
+      'top: calc(var(--sp-6) + (var(--entry-title-lh) - var(--entry-icon)) / 2)',
+    )
+    expect(sheet).not.toContain('.entry__title--icon')
+    const wide = blockAt(sheet, '@media (min-width: 600px)')
+    expect(bodyOf(wide, '.entry__icon {')).toContain(
+      'left: calc(var(--entry-meta) + var(--sp-7) - var(--entry-icon) - var(--sp-3))',
     )
     /*
       アイコンの隣に見出しと添えの塊（.head__text）を置き、塊を縮めて中で題を折り返す。
@@ -1159,13 +1102,13 @@ describe('一覧の行', () => {
   画像の無い作品は文の列だけ。規則と値の段を残すと、使われない図の決まりが残り続ける。
 */
 /*
-  天体の飾り（app.css の同名の節）。サイトの名の天体を、線と点だけで添える。
+  天体の飾り（app.css の同名の節）。サイトの名の天体を添える。
 
   前に置いた天体の絵・星空・軌道図は、最初の画面の6割を占めて動き続け、持ち主の
-  「シンプル・モダンに」で外した。戻したのは線と点だけで、面・光・影・色相と動きを
-  持たない形。試作のレビューで落ちた3つ——地の色を塗って線を切ると強制色で黒い円が
-  浮く／目印の詳細度が高くて紙と強制色で外せない／星の印が章にも付いて箇条書きに
-  下がる——をここで止める。効いているか（字と重ならないか）は npm run check:fit。
+  「シンプル・モダンに」で外した。いまの飾りは、Cavani の左の写真の位置に置いた夜明けの
+  窓と、その外の線と点だけで、どれも動かない。試作のレビューで落ちた2つ——地の色を
+  塗って線を切ると強制色で黒い円が浮く／紙と強制色で外せない——をここで止める。
+  効いているか（字と重ならないか）は npm run check:fit。
 */
 describe('天体の飾り', () => {
   // 節の見出しの行の直後から次の節の見出しまで（コメントの途中で切らない）
@@ -1173,44 +1116,61 @@ describe('天体の飾り', () => {
   const section = bare(css.slice(from, css.lastIndexOf('/*', css.indexOf('= 600px 以上 */'))))
 
   it('節を読めている（読めていないと、以下の検査が素通りする）', () => {
-    expect(section).toContain('.head--page')
+    expect(section).toContain('.window {')
     expect(section).toContain("url('/assets/sky.svg')")
-    expect(section).toContain("url('/assets/orbit.svg')")
+    expect(section).toContain('.career__now')
   })
 
-  it('線と点だけ。面・光・影・色相・動きを持たない。色は字の白と罫線の段だけ', () => {
+  it('夜明けの窓の外は線と点だけ。面・光・影・色相・動きを持たない。色は字の墨と罫線の段だけ', () => {
     expect(section).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(/)
-    expect(section).not.toMatch(/box-shadow|filter|text-shadow|animation|transition|opacity/)
+    const outside = rulesOf(section).filter(
+      (rule) => !rule.selectors.some((selector) => selector.startsWith('.window')),
+    )
+    const outsideText = outside.map((rule) => rule.decls.map(([n, v]) => `${n}: ${v}`).join('; '))
+    expect(outsideText.join('\n')).not.toMatch(
+      /box-shadow|filter|text-shadow|animation|transition|opacity/,
+    )
     const colors = new Set(
-      [...section.matchAll(/var\((--[\w-]+)\)/g)]
-        .map(([, name = '']) => name)
-        .filter((name) => /^--(ink|line|accent|mono|bg|surface)/.test(name)),
+      outsideText
+        .flatMap((text) => [...text.matchAll(/var\((--[\w-]+)\)/g)].map(([, name = '']) => name))
+        .filter((name) => /^--(ink|line|accent|mono|bg|surface|dawn)/.test(name)),
     )
     expect([...colors].sort()).toEqual(['--ink', '--ink-weak', '--line-strong'])
   })
 
+  it('夜明けの窓は窓の段（--dawn）だけで描く。字の墨や地の色を直に持ち込まない', () => {
+    const window = rulesOf(section).filter((rule) =>
+      rule.selectors.some((selector) => selector.startsWith('.window')),
+    )
+    const colors = new Set(
+      window
+        .flatMap((rule) => rule.decls.map(([, value]) => value))
+        .flatMap((value) => [...value.matchAll(/var\((--[\w-]+)\)/g)].map(([, name = '']) => name))
+        .filter((name) => /^--(ink|line|accent|mono|bg|surface|panel|dawn)/.test(name)),
+    )
+    expect([...colors].sort()).toEqual(['--dawn', '--dawn-faint', '--dawn-star'])
+  })
+
+  it('星は素材を形として読み、色は段で塗る', () => {
+    // 素材に色を焼いて背景に敷くと、段を変えた日に星だけが前の色で残る
+    const stars = bodyOf(section, '.window::before {')
+    expect(stars).toContain('background: var(--dawn-star);')
+    expect(stars).toContain("mask: url('/assets/sky.svg')")
+    expect(bodyOf(section, '.window {')).not.toContain('url(')
+  })
+
   it('線を切るのに地の色を塗らない。切れ目は形（mask）で作る', () => {
     expect(section).not.toContain('var(--bg)')
-    expect(bodyOf(sheet, ':is(.nameplate .avatar, .oops__mark)::before {')).toContain(
+    expect(bodyOf(sheet, '.nameplate .avatar::before {')).toContain(
       'mask-image: var(--orbit-mask);',
     )
   })
 
-  it('入口と Contact の飾りは main の背景。目印の詳細度は 0 で、紙と強制色の1本が外す', () => {
-    const backgrounds = rulesOf(section).filter(
-      (rule) =>
-        rule.selectors.some((selector) => selector.includes('main')) &&
-        rule.decls.some(([name]) => name === 'background'),
-    )
-    expect(backgrounds.flatMap((rule) => rule.selectors)).toEqual([
-      ':where(body[data-site]) > main:where(:has(> .hero--cover))',
-      ':where(body[data-site]:not([data-whole])) > main:where(:has(> #contact))',
-    ])
-    for (const marker of ['@media print', '@media (forced-colors: active)']) {
-      expect(bodyOf(blockAt(sheet, marker), 'body[data-site] > main {'), marker).toContain(
-        'background: none',
-      )
-    }
+  it('夜明けの窓は HTML の外の飾り。紙には刷らず、強制色では枠ごと外す', () => {
+    expect(bodyOf(blockAt(sheet, '@media print'), '.window {')).toContain('display: none')
+    expect(
+      bodyOf(blockAt(sheet, '@media (forced-colors: active)'), '.frame > .window {'),
+    ).toContain('display: none')
   })
 
   it('強制色では飾りの疑似要素を全部外す', () => {
@@ -1218,28 +1178,22 @@ describe('天体の飾り', () => {
     const owners = rulesOf(section)
       .filter((rule) => rule.decls.some(([name, value]) => name === 'content' && value === "''"))
       .flatMap((rule) => rule.selectors)
-    expect(owners.length).toBeGreaterThan(4)
-    for (const part of [
-      '.head--page',
-      '.screen-head',
-      '.career li',
-      '.career .period',
-      '.nameplate .avatar',
-      '.oops__mark',
-    ]) {
+    expect(owners.length).toBeGreaterThan(3)
+    for (const part of ['.career li', '.career .period', '.nameplate .avatar']) {
       expect(forced, part).toContain(part)
     }
-    expect(ruleWith(forced, 'display: none').selector).toMatch(/::after[\s\S]*::before/)
+    const hidden = rulesOf(forced).find((rule) =>
+      rule.selectors.some((selector) => selector.endsWith('::after')),
+    )
+    expect(hidden?.selectors.join(', ')).toMatch(/::after[\s\S]*::before/)
+    expect(hidden?.decls).toContainEqual(['display', 'none'])
   })
 
-  it('四芒星はページの見出しの罫線と、経歴のいまの行だけ', () => {
+  it('四芒星は経歴のいまの行だけ', () => {
     const stars = rulesOf(section).filter((rule) =>
       rule.decls.some(([name, value]) => name === 'clip-path' && value === 'var(--sparkle)'),
     )
-    expect(stars.flatMap((rule) => rule.selectors)).toEqual([
-      ':is(.head--page, .screen-head:has(> .head--page))::after',
-      '.career__now .period::before',
-    ])
+    expect(stars.flatMap((rule) => rule.selectors)).toEqual(['.career__now .period::before'])
   })
 
   it('経歴の星座は左の余白へ吊るし、中身を左の軸から動かさない', () => {
@@ -1311,7 +1265,7 @@ describe('文字の段', () => {
     /*
       業界名の札・帯の件数・節の添え・経歴の期間・柱の足元が 11px（しかも等幅）
       で、和文の札がいちばん読みにくかった。11px を使ってよいのは、和文が入らない
-      英大文字の小見出し（技術の LANGUAGES・管理画面の ADMIN・404 の番号）と、
+      英大文字の小見出し（技術の LANGUAGES・管理画面の ADMIN）と、
       英字か数字だけの札（目次の英字の行き先・件数・一覧の番号）だけ。
       ここに足すときは、和文が入らないことを確かめてから
     */
@@ -1321,54 +1275,36 @@ describe('文字の段', () => {
     expect(small.sort()).toEqual(
       [
         '.login__label',
-        '.oops__code',
         '.side-head:lang(en)',
         // 公開ページの数字だけの札（見出しの件数）
         '.head__count',
+        // 夜明けの窓の英字だけの札（M45 — PLEIADES）
+        '.window::after',
       ].sort(),
     )
   })
 
-  it('等幅は英数字の札だけ。和文が入りうる所に --font-mono を書かない', () => {
+  it('等幅の書体を持たない。英字だけの札は節の見出しと同じ Poppins', () => {
     /*
-      等幅の書体は和文の字を持たず、字は結局ほかの書体に落ちる。和文に残るのは
-      等幅のための字間と小ささだけ。打ち込んだ字が入る札（タグ・肩書き・技術の
-      小見出し）は、英字だけのときに付く lang="en"（components.tsx の langOf）で
-      選ぶ
+      前は英字の札（技術の小見出し・見出しの件数・404 の番号・ADMIN）が等幅で、節の見出し
+      （Poppins）と英字の書体が1ページに2つ並んだ。和文が入りうる札には :lang(en) でだけ掛ける
     */
-    const mono = rules
-      .filter((rule) => /font-family:\s*var\(--font-mono\)/.test(rule.body))
+    expect(sheets).not.toContain('--font-mono')
+    const latin = rules
+      .filter((rule) => /font-family:\s*var\(--font-latin\)/.test(rule.body))
       .map((rule) => rule.selector)
-    /*
-      公開ページの目次・札・タグ・実績値・GitHub の札は本文の書体（等幅の小さな大文字は、
-      ページを移る手と作品の札をいちばん読みにくい字にしていた）。残るのは英字だけの小見出しと
-      数字の札と、管理画面・404 の英字の札
-    */
-    expect(mono.sort()).toEqual(
-      [
-        '.side-head:lang(en)',
-        '.oops__code',
-        '.admin-nav__brand',
-        '.row__col--num',
-        '.login__label',
-        '.head__count',
-      ].sort(),
-    )
-    // 年と期間は「2024 — 現在」と和文を含むので、等幅にせず数字の幅だけそろえる
+    for (const selector of [
+      '.side-head:lang(en)',
+      '.head__count',
+      '.admin-nav__brand',
+      '.login__label',
+    ]) {
+      expect(latin, selector).toContain(selector)
+    }
+    // 年と期間は「2024 — 現在」と和文を含むので、数字の幅だけそろえる
     for (const selector of ['.entry__year {', '.career .period {']) {
       expect(bodyOf(sheet, selector), selector).toContain('font-variant-numeric: tabular-nums')
     }
-  })
-
-  it('等幅の書体の並びは Windows の書体（Consolas）も、素の monospace より前に名指しする', () => {
-    /*
-      ui-monospace と Mac の名前は Windows の Chrome に無い。素の monospace に落ちると、
-      lang="en" の無い番号だけの札（一覧の行の番号・見出しの件数）が日本語のページの
-      等幅（MS ゴシック）になり、英字の札と別の書体に見えた
-    */
-    const stack = bodyOf(sheet, ':root {').match(/--font-mono:([^;]+);/)?.[1] ?? ''
-    expect(stack).toContain('Consolas')
-    expect(stack.indexOf('Consolas')).toBeLessThan(stack.lastIndexOf('monospace'))
   })
 
   it('本文の字: 一覧の行の説明は --fs-base、段落は --fs-md で1行 約40字まで', () => {
@@ -1384,18 +1320,27 @@ describe('文字の段', () => {
     expect(bodyOf(sheet, ':root {')).toMatch(/--measure:\s*\d+em/)
   })
 
-  it('見出しの段: 節は最上段、個人ページの頭はその下、章はさらに下、小節と行の題は小さく', () => {
+  it('見出しの段: 節と章は字間の広い名札、作品名と頭の大見出しは大きく、小節と行の題は小さく', () => {
     /*
-      ページの名前（Projects…）は大きな字で1つだけ置く（入口の大見出しと同じ段）。
-      個人ページは頭の大見出し（h1）が --fs-display で、章（About / Skills / Career の
-      h2）はそれより小さい --fs-display-sm——同じ大きさだと章が h1 と同じ格に見える
+      節の名前（Projects…）と個人ページの章（About / Skills / Career）は Cavani の名札——
+      --fs-md の大文字を字間を広く取り、右へ罫線を伸ばす。ページの主役はその下の中身。
+      作品のページの作品名（.head--item）は名札ではなく中身の名前なので、はしごの最上段の
+      まま。個人ページの頭の大見出し（h1）は --fs-display
     */
-    expect(bodyOf(sheet, '.head :is(h1, h2) {')).toContain('font-size: var(--fs-display-xl)')
+    const label = bodyOf(sheet, '.head :is(h1, h2) {')
+    expect(label).toContain('font-size: var(--fs-md)')
+    expect(label).toContain('letter-spacing: var(--track-label)')
+    expect(label).toContain('text-transform: uppercase')
+    expect(bodyOf(sheet, '.head::after {')).toContain('background: var(--line-strong)')
+    expect(bodyOf(sheet, '.head--item :is(h1, h2) {')).toContain('font-size: var(--fs-display-xl)')
     expect(bodyOf(sheet, '.hero h1.hero__headline {')).toContain('font-size: var(--fs-display)')
-    expect(bodyOf(sheet, '.head--chapter :is(h1, h2) {')).toContain(
-      'font-size: var(--fs-display-sm)',
-    )
-    expect(bodyOf(sheet, '.head--chapter {')).toContain('margin-top: var(--sp-7)')
+    expect(sheet).not.toContain('.head--chapter :is(h1, h2) {')
+    /*
+      章（About / Skills / Career）のあいだは本文の節の間隔（--section-gap）1つ。章の見出しに
+      上の余白を足すと、電話で章ごとに 100px 近く空いた
+    */
+    expect(sheet).not.toContain('.head--chapter {')
+    expect(bodyOf(sheet, '.frame > main {')).toContain('gap: var(--section-gap)')
     /*
       小節の見出し（作品のページの Story の h2、/all の Profile の h3）は、節の見出しより
       ずっと小さく本文より大きい（大きくすると作品名の h1 と同じ格に見える）
@@ -1458,16 +1403,13 @@ describe('文字の段', () => {
 })
 
 /*
-  配色は黒基調の1つで、OS がライトでも白い地に切り替えない（「黒の上に白」が見た目の
-  芯。持ち主が白い地の姿を見て「黒基調で文字やボタンは白のつもりだった」と戻した）。
-  紙だけは白い地で刷る——黒い地のまま刷ると、白に近い字が白い紙に乗る（地の色は
-  既定では刷られない）。
-
-  紙の配色（@media print の :root）は同じ名前の色の段を差し替えるだけ。片方にしか
-  無い色の段があると、その色だけが紙に黒い地の色のまま残る（白い紙に白に近い字）。
+  配色は白い地の1つで、OS が暗い配色でも黒い地に切り替えない。前は黒基調だったが、
+  Cavani を下敷きにした作り替えで持ち主が明るい配色を選んだ。左の夜明けの窓も淡い地に
+  墨の星で、暗い面は置かない（窓だけ黒にしたら、白いページの中で1枚だけ浮いた）。紙にも
+  画面と同じ白い地で刷り、夜明けの窓だけを刷らない。
 */
-describe('配色（黒基調と紙）', () => {
-  // 帯の右端のぼかしと、軌道の輪の切れ目は不透明度の坂で、紙に差し替える色の段ではない。
+describe('配色（白い地と夜明けの窓）', () => {
+  // 帯の右端のぼかしと、軌道の輪の切れ目は不透明度の坂で、色の段ではない。
   const MASKS = new Set(['--fade-right', '--orbit-mask'])
   const colorTokens = (body: string) =>
     [...body.matchAll(/(--[\w-]+):\s*([^;]+);/g)]
@@ -1478,11 +1420,11 @@ describe('配色（黒基調と紙）', () => {
       .map(([, name = '']) => name)
       .sort()
 
-  it('画面は黒基調の1つ。OS の配色の申告で白い地に切り替えない', async () => {
+  it('画面は白い地の1つ。OS の配色の申告で黒い地に切り替えない', async () => {
     expect(sheets).not.toContain('prefers-color-scheme')
-    expect(bodyOf(sheet, ':root {')).toContain('color-scheme: dark;')
+    expect(bodyOf(sheet, ':root {')).toContain('color-scheme: light;')
     // 公開・404・管理画面の外枠がどれも同じ1本（components.tsx の ColorSchemeMeta）を置く
-    const meta = '<meta name="color-scheme" content="dark"/>'
+    const meta = '<meta name="color-scheme" content="light"/>'
     expect(await okText('/')).toContain(meta)
     const missing = await get('/no-such-page')
     expect(missing.status).toBe(404)
@@ -1492,28 +1434,40 @@ describe('配色（黒基調と紙）', () => {
     expect(await login.text()).toContain(meta)
   })
 
-  it('既定のアクセントはモノクロ。リンクもボタンも字と同じ白で、ボタンの字は黒', () => {
+  it('アクセントは墨の1色。リンクもボタンも字と同じ墨で、ボタンの字は白', () => {
     const root = bodyOf(sheet, ':root {')
     const value = (name: string) => root.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1]
     expect(value('--accent')).toBe('var(--mono)')
-    // 白は字の白と同じ1色（白を2種類持たない）
+    expect(value('--accent-ink')).toBe('#ffffff')
+    // 墨は字の墨と同じ1色（墨を2種類持たない）
     expect(value('--mono')).toBe(value('--ink'))
-    expect(bodyOf(sheet, "[data-accent='mono'] {")).toContain('--accent: var(--mono);')
   })
 
-  it('紙の色の段は、黒い地の色の段をどれも差し替える。紙だけの段は作らない', () => {
+  it('紙は画面と同じ白い地で刷る。色の段を差し替えず、夜明けの窓だけを刷らない', () => {
     const screen = bodyOf(sheet, ':root {')
-    const paper = bodyOf(blockAt(sheet, '@media print'), ':root {')
-    const screenColors = colorTokens(screen)
-    // 読めているか（地・面・線・字・モノクロとアクセント6色と薄い地・危険・スイッチ）
-    expect(screenColors.length).toBeGreaterThan(20)
-    expect(colorTokens(paper)).toEqual(screenColors)
-    for (const [, name] of paper.matchAll(/(--[\w-]+):/g)) {
-      expect(screen, `${name} は :root に無い`).toContain(`${name}:`)
-    }
+    // 読めているか（地・面・線・字・墨と薄い地・危険・スイッチ・窓）
+    expect(colorTokens(screen).length).toBeGreaterThan(14)
+    const print = blockAt(sheet, '@media print')
+    expect(print).not.toContain(':root {')
+    expect(bodyOf(print, '.window {')).toContain('display: none')
   })
 
-  it('ロゴの素材に焼く色は、画面の :root の段と同じ', () => {
+  it('夜明けの窓の空は、底で地の白に溶ける。平らな夜の板を置かない', () => {
+    /*
+      窓を平らな夜の黒で塗ったら、白いページの中で1枚の板が浮いた。空は上から下へ
+      明けていき、最後の色は地と同じ白（--dawn-day は --bg）
+    */
+    const root = bodyOf(sheet, ':root {')
+    const value = (name: string) => root.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1]
+    expect(value('--dawn-day')).toBe('var(--bg)')
+    const dawn = root.slice(root.indexOf('--dawn:'), root.indexOf(');', root.indexOf('--dawn:')))
+    expect(dawn).toContain('linear-gradient(')
+    expect(dawn.trim().split('\n').at(-1)?.trim()).toBe('var(--dawn-day) 100%')
+    expect(sheet).not.toContain('--night')
+    expect(sheet).not.toContain('--starmap')
+  })
+
+  it('ロゴの素材に焼く色は、塗りの押し手の :root の段と同じ', () => {
     /*
       favicon とワードマークのファイルは貼る先の字の色を継げないので、色を決め打って
       焼く（src/ui/logo.ts の LOGO_COLORS）。段を変えた日に素材だけが前の色で残らない
@@ -1521,7 +1475,8 @@ describe('配色（黒基調と紙）', () => {
     */
     const root = bodyOf(sheet, ':root {')
     const value = (name: string) => root.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1]
-    expect(value('--ink')).toBe(LOGO_COLORS.ink)
-    expect(value('--bg')).toBe(LOGO_COLORS.ground)
+    // 素材（favicon・共有カード）は塗りの押し手と同じ組——墨の面に白い字
+    expect(value('--accent-ink')).toBe(LOGO_COLORS.ink)
+    expect(value('--mono')).toBe(LOGO_COLORS.ground)
   })
 })

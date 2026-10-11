@@ -1,12 +1,22 @@
 import { Hono } from 'hono'
 import type { AppEnv } from './env'
+import { yearInJapan } from './lib/format'
 import { pageCache } from './lib/page-cache'
 import { adminRoutes } from './routes/admin/index'
 import { publicRoutes } from './routes/public/routes'
 import { SITE } from './site'
 import { ADMIN_CSP } from './ui/admin-behavior'
-import { ColorSchemeMeta, FaviconLinks, HtmlDocument, Stylesheets } from './ui/components'
-import { Mark } from './ui/icons'
+import {
+  Brand,
+  ColorSchemeMeta,
+  Cta,
+  Eyebrow,
+  FaviconLinks,
+  Hero,
+  HtmlDocument,
+  Phrases,
+  Stylesheets,
+} from './ui/components'
 
 const app = new Hono<AppEnv>()
 
@@ -91,7 +101,23 @@ app.use(pageCache)
 app.route('/admin', adminRoutes)
 app.route('/', publicRoutes)
 
-const ErrorPage = ({ code, title, detail }: { code: string; title: string; detail: string }) => (
+/*
+  404 と 500。公開ページと同じ骨格（上の帯・本文の枠・足元）と入口と同じ型（札・大見出し・
+  リード文・押し手）で組む——前は帯も足元も無い中央寄せの1枚で、作り替えたサイトの中で
+  ここだけが前の姿のままだった。D1 には聞かない（障害の 500 もここから出る）ので、目次と
+  足元の行き先は置かず、ロゴと著作権表示だけ。左の夜明けの窓は入口と同じに出る
+*/
+const ErrorPage = ({
+  code,
+  label,
+  title,
+  detail,
+}: {
+  code: string
+  label: string
+  title: string
+  detail: string
+}) => (
   <HtmlDocument>
     <head>
       <meta charset="UTF-8" />
@@ -103,16 +129,33 @@ const ErrorPage = ({ code, title, detail }: { code: string; title: string; detai
       <FaviconLinks />
       <Stylesheets />
     </head>
-    <body>
-      <div class="oops">
-        <span class="oops__mark">
-          <Mark size={40} />
-        </span>
-        <span class="oops__code">{code}</span>
-        <h1>{title}</h1>
-        <p>{detail}</p>
-        <a href="/">トップへ戻る →</a>
+    <body data-site="">
+      <a class="skip" href="#main">
+        本文へスキップ
+      </a>
+      <header class="top">
+        <Brand />
+      </header>
+      <div class="frame">
+        <div class="window" aria-hidden="true" />
+        <main id="main" tabindex={-1}>
+          <Hero cover>
+            <Eyebrow parts={[code, label]} />
+            <h1>{title}</h1>
+            <p class="hero__lead">
+              <Phrases text={detail} />
+            </p>
+            <div class="hero__actions">
+              <Cta href="/">トップへ戻る</Cta>
+            </div>
+          </Hero>
+        </main>
       </div>
+      <footer class="foot">
+        <p class="foot__meta">
+          © {yearInJapan()} {SITE.name}
+        </p>
+      </footer>
     </body>
   </HtmlDocument>
 )
@@ -131,6 +174,7 @@ app.notFound((c) =>
   c.html(
     <ErrorPage
       code="404"
+      label="Not Found"
       title="ページが見つかりません"
       detail="URL が変わったか、打ち間違えているかもしれません。"
     />,
@@ -143,6 +187,7 @@ app.onError((error, c) => {
   return c.html(
     <ErrorPage
       code="500"
+      label="Server Error"
       title="うまく表示できませんでした"
       detail="時間をおいてもう一度お試しください。"
     />,

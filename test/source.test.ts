@@ -30,7 +30,7 @@ const sourceFiles = Object.keys(texts).filter((file) => /^src\/.*\.tsx?$/.test(f
 describe('層の向き', () => {
   /*
     DB の層（src/db）と規則（src/blocks.ts・src/domain.ts・src/lib・
-    src/theme.ts・src/site.ts）は、UI（src/ui）とルート（src/routes）を読まない。UI と DB が
+    src/site.ts）は、UI（src/ui）とルート（src/routes）を読まない。UI と DB が
     共有する型は src/domain.ts に置く。
 
     queries.ts が components.tsx から作品の型を借りていたころは、DB の問い合わせが
@@ -41,7 +41,7 @@ describe('層の向き', () => {
       (file) =>
         file.startsWith('src/db/') ||
         file.startsWith('src/lib/') ||
-        ['src/blocks.ts', 'src/domain.ts', 'src/theme.ts', 'src/site.ts'].includes(file),
+        ['src/blocks.ts', 'src/domain.ts', 'src/site.ts'].includes(file),
     )
     expect(lower.length).toBeGreaterThan(5)
     const upward = lower.flatMap((file) =>

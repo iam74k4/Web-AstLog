@@ -11,7 +11,7 @@
   O は軌道に見立て、右上 45° に衛星を1つ置く。上の帯・ログイン・共有カード・素材のどれも
   この1つの形で、大きさで形を変えない。上の帯の 15px では、等倍の画面で衛星が O の上の
   アクセント（Ó）に読める恐れがある——それを並べて見たうえで、持ち主が衛星を選んだ。
-  衛星の角度は、個人ページの顔と 404 の印の軌道（app.css の「天体の飾り」）と同じ。
+  衛星の角度は、個人ページの顔の軌道（app.css の「天体の飾り」）と同じ。
 
   - Λ だけは塗りの形で描く。線で描くと足の切り口が脚に直角になり、片方の角が
     字の底より下へ出る。塗りなら足を水平に切れる
@@ -93,10 +93,10 @@ export const MARK_TRANSFORM = `translate(${-LAMBDA.width / 2} ${round(LAMBDA.hei
 /*
   素材のファイルの文字と地に焼き込む色。ファイルは貼る先の字の色を継げない
   （currentColor が効くのはページに直に描いた SVG だけで、<img> や favicon では黒になる）ので、
-  サイトと同じ黒基調の色を決め打つ。app.css の :root の --ink・--bg と同じ値
-  （test/theme.test.ts が突き合わせる）
+  色を決め打つ。サイトの塗りの押し手と同じ組——墨の面（--mono）に白い字（--accent-ink）。
+  貼る先の地が白でも黒でも札として立つ（test/theme.test.ts が :root の段と突き合わせる）
 */
-export const LOGO_COLORS = { ink: '#ededef', ground: '#0a0a0b' } as const
+export const LOGO_COLORS = { ink: '#ffffff', ground: '#222226' } as const
 
 const svg = (viewBox: string, body: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}"><title>AstLog</title>${body}</svg>\n`

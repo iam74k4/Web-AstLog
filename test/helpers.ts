@@ -161,8 +161,8 @@ export async function signIn(options: { rawForms?: boolean } = {}) {
             ? await db().select().from(table).where(eq(table.formKey, key))
             : []
         version = rows[0]?.updatedAt ?? 'new'
-      } else if (path === '/admin/site' || path === '/admin/appearance') {
-        version = await settingsVersion(db(), path === '/admin/site' ? 'site.' : 'theme.')
+      } else if (path === '/admin/site') {
+        version = await settingsVersion(db(), 'site.')
       }
       if (version !== undefined) body.set('_version', version)
       init = { ...init, body }

@@ -151,8 +151,8 @@ export function renderBlock(
 
         大見出しは1人のサイトならその人の大見出し（members.headline。無ければ名前）、
         2人以上ならサイトの一言。名前を真ん中に据えた前の入口は、持ち主が「ださい。
-        Profile で出る」と外した——名前は大見出しの上の札（「名前・職種・所在地」）と
-        足元（SiteIdentity）が受ける。札は採る側が最初に探すもの。
+        Profile で出る」と外した——名前は大見出しの上の札（「名前・職種・所在地」）が
+        受ける。札は採る側が最初に探すもの。
 
         一覧への1本は、一覧（Projects）のページがあって作品があるときだけ（data.ts の
         bandOf。0件の知らせだけのページへ送らない）。プロフィールへの1本は、1人のサイトで
@@ -181,7 +181,7 @@ export function renderBlock(
             </p>
             {band || profile ? (
               <div class="hero__actions">
-                {band ? <Cta href={band.href}>一覧で見る</Cta> : null}
+                {band ? <Cta href={band.href}>作品を見る</Cta> : null}
                 {profile ? (
                   <Cta href={memberHref(profile.slug)} quiet={Boolean(band)}>
                     プロフィール

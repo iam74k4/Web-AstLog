@@ -25,7 +25,7 @@ import {
   skillRows,
 } from '../lib/format'
 import { isContactEmail, SITE, type SiteSettings } from '../site'
-import { GithubIcon, MailIcon, PencilIcon, Wordmark } from './icons'
+import { GithubIcon, InstagramIcon, MailIcon, PencilIcon, Wordmark, XIcon } from './icons'
 
 /*
   画面はこの部品だけで組む。新しい見た目が要るときは、まずここに足してから使う。
@@ -56,8 +56,6 @@ import { GithubIcon, MailIcon, PencilIcon, Wordmark } from './icons'
     - 管理画面: form の余白 14px ぶん詰まった。構成の行では、隣の form の
       余白に引き伸ばされて 50px になっていた編集・外すのアイコンボタンが
       36px に戻った（= 構成 @1440x900）
-    - 404: ロゴの箱だけが strut で 28 → 35.8px に伸びた（.oops__mark を
-      flex にして 28px に戻した）
 
   hono/jsx には <!DOCTYPE> を出す構文が無いので、hono/html の raw で1行だけ
   前置きする（jsx-renderer の docType と同じやり方。あちらはミドルウェア1つの
@@ -126,11 +124,11 @@ export const Stylesheets = ({
 )
 
 /*
-  このページの配色（黒基調の1つ。OS がライトでも切り替えない）。app.css の :root の
+  このページの配色（白い地の1つ。OS が暗い配色でも切り替えない）。app.css の :root の
   color-scheme と同じ値で、CSS より先に読まれるので、CSS が届くまでの一瞬の地も
-  暗い側で出る（白い地が一瞬光らない）。公開・管理・404 の外枠がどれもこれを置く。
+  明るい側で出る（暗い地が一瞬出ない）。公開・管理・404 の外枠がどれもこれを置く。
 */
-export const ColorSchemeMeta = () => <meta name="color-scheme" content="dark" />
+export const ColorSchemeMeta = () => <meta name="color-scheme" content="light" />
 
 /*
   favicon。ロゴの印（Λ を1つで）を地の色の正方形に載せたもの（src/ui/logo.ts の iconSvg）を
@@ -217,8 +215,10 @@ export const Avatar = ({
   そちらは h2（h1 は Hero が1つ持つ）。
 
   出し分けの元は renderBlock が受け取る whole（全体ページの節として描くか）で、
-  ここでは数えない。h1 の見出しは .head--page を持ち、app.css の「天体の飾り」が
-  その罫線の左端に四芒星を1つ置く（ページの見出しだけ。1ページに1つ）。
+  ここでは数えない。
+
+  見た目は Cavani の節の見出し（字間の広い大文字と、右へ伸びる罫線）。item（作品の
+  ページの作品名）だけは名札ではなく中身の名前なので、大きな字のまま（.head--item）。
 
   note（添え）は見出しに無い情報のときだけ渡す——作品のページの「業界 · 年」、
   全体ページの作品の本文の「Story」、区分の絞り込みが並ばない Projects の区分名。
@@ -253,6 +253,7 @@ export const SectionHead = ({
   chapter,
   transition,
   icon,
+  item,
 }: {
   title: string
   note?: string
@@ -263,6 +264,8 @@ export const SectionHead = ({
   // ページを移るときにつなぐ名前（作品のページの h1。itemTransition）
   transition?: string
   icon?: string | null
+  // 作品のページの作品名か（.head--item。大きな字のまま）
+  item?: boolean
 }) => {
   const text = (
     <>
@@ -280,8 +283,8 @@ export const SectionHead = ({
     ? 'head head--sub'
     : chapter
       ? 'head head--chapter'
-      : h1
-        ? 'head head--page'
+      : item
+        ? 'head head--item'
         : 'head'
   return icon ? (
     <div class={`${kind} head--icon`}>
@@ -342,8 +345,8 @@ export const Screen = ({
 
   cover は入口（.hero--cover）。札・大見出し・リード文・押し手を左の軸に積む。
   HTML に絵は置かない——字が最初の画面の主役（前は右半分に天体の絵と軌道図を置き、
-  最初の画面の6割を装飾が占めていた）。いまの惑星の縁と空は、字の無い右下に
-  app.css の「天体の飾り」が main の背景として描く（線と点だけで、動かない）。
+  最初の画面の6割を装飾が占めていた）。天体は本文の外、左の夜明けの窓が描く
+  （app.css の「天体の飾り」。動かない）。
 */
 export const Hero = ({
   profile,
@@ -410,7 +413,7 @@ export const Eyebrow = ({ parts }: { parts: string[] }) => (
 )
 
 /*
-  押し手（入口の「一覧で見る →」「プロフィール →」）。塗りはページでいちばん強い1本にだけ
+  押し手（入口の「作品を見る →」「プロフィール →」）。塗りはページでいちばん強い1本にだけ
   使い、2本目は枠線だけの quiet にする（同じ強さが2本並ぶと、どちらが先か分からない）。
   矢印は飾りなので読み上げには流さない。サイトの中の続きなので ↗ ではなく →。
 */
@@ -546,9 +549,10 @@ export const itemTransition = (item: { slug: string | null }) =>
   slug の無い行（恒久リンクがまだ無い作品）は題を素の字のまま出し、押せる面も
   矢印も付かない——押しても何も起きない行に、押せる合図を出さない。
 
-  アイコン（items.icon_url）は題の左に小さく。飾り（alt=""）で、h3 の中・題の
-  リンクの外に置く（行の面は題のリンクの覆いが受けるので、押せば作品のページへ。
-  リンクの名前と、ページを移るときにつなぐ題の字は題だけのまま）。
+  アイコン（items.icon_url）は題の軸の外に吊るす（app.css の .entry__icon。題の頭は
+  アイコンの有無によらずそろう）。飾り（alt=""）で、h3 の中・題のリンクの外に置く
+  （行の面は題のリンクの覆いが受けるので、押せば作品のページへ。リンクの名前と、
+  ページを移るときにつなぐ題の字は題だけのまま）。
 */
 export const ItemRow = ({ item, showMember }: { item: ItemView; showMember?: boolean }) => {
   const href = itemHref(item)
@@ -580,7 +584,7 @@ export const ItemRow = ({ item, showMember }: { item: ItemView; showMember?: boo
         ) : null}
       </ul>
       <div class="entry__main">
-        <h3 class={icon ? 'entry__title--icon' : undefined}>
+        <h3>
           {icon}
           {href ? (
             <a class="entry__link" href={href} style={itemTransition(item)}>
@@ -859,16 +863,28 @@ export const ItemStories = ({
   個人ページの頭に置く名札。顔・名前・肩書きと所在地を、Team のカード
   （MemberCardWide）と同じ並びで出す——カードを押した先で、同じ顔と名前に着く。
 
-  個人ページの足元はサイトの足元のまま。1人のサイトなら足元にも名前は出る
-  （どのページでも。SiteIdentity）が、顔が出るのはここだけ。heading は「名前がこのページの見出しか」。
+  個人ページの足元はサイトの足元のまま（著作権表示とサイトの行き先。SiteSocials）。
+  顔が出るのはここだけ。heading は「名前がこのページの見出しか」。
   大見出し（headline）を書いていない人では名前が h1 になる——書いている人では
   大見出しが h1 で、名前は添え。全体ページ（/all）の Profile の節でも使い、
   そこでは見出しは節の h2 なので、名前は添えのまま。
 
   顔のまわりの軌道の輪と衛星は app.css の「天体の飾り」が描く（顔の箱の疑似要素）。
 */
-export const Nameplate = ({ member, heading }: { member: Member; heading?: boolean }) => (
-  <div class="nameplate">
+export const Nameplate = ({
+  member,
+  heading,
+  title,
+}: {
+  member: Member
+  heading?: boolean
+  /*
+    名前をページの大きな題として出す（.nameplate--title）。1人のサイトの個人ページで、
+    その人の大見出しを入口がもう出しているとき——同じ一文を2つのページの h1 に並べない
+  */
+  title?: boolean
+}) => (
+  <div class={title ? 'nameplate nameplate--title' : 'nameplate'}>
     <Avatar src={member.avatarUrl} name={member.name} size={56} />
     <div class="nameplate__body">
       {heading ? (
@@ -963,7 +979,7 @@ export const SkillGroups = ({ groups, level }: { groups: SkillGroup[]; level: 3 
 
   「プロフィール →」は操作の言葉なので日本語（CLAUDE.md「文言」）。英語で
   書くのは節の名前（目次・見出しの Profile / About …）だけ。
-  「Profile →」と英語で書いていたころは、同じページの「一覧で見る →」
+  「Profile →」と英語で書いていたころは、同じページの「作品を見る →」
   「メールを送る →」と押す手の言葉だけが言語を変えていた（lang="en" を
   付けて読み上げを直していたが、印を要する英語そのものが要らなかった）。
 */
@@ -996,7 +1012,7 @@ export const MemberCardCompact = ({ member }: { member: Member }) => (
 /*
   一覧への帯。件数を添えて、押す前に「ここに何件あるか」を見せる。
 
-  使うのは、2人以上のサイトの個人ページの名札の下（入口は同じことを「一覧で見る →」
+  使うのは、2人以上のサイトの個人ページの名札の下（入口は同じことを「作品を見る →」
   と件数の帯 Tally で言う）。作品そのものは別の URL（その人で絞った一覧）にあるので、
   そこに何があるかを数で示してから送り出す。行き先は呼ぶ側が決める（項目のある側へ
   送ること。0件の側へ送ると、0件の知らせだけのページに着く）。
@@ -1127,7 +1143,7 @@ export const Empty = ({ children }: { children: Child }) => <p class="empty">{ch
   リンクから直接着いた人には一覧へ戻る手にならない。
 
   見た目は面を持たない字の手で、当たり判定は --tap（pointer: coarse では 44px）。
-  矢印は飾りなので読み上げには流さない（入口の「一覧で見る →」と同じ）。
+  矢印は飾りなので読み上げには流さない（入口の「作品を見る →」と同じ）。
 */
 export const BackLink = ({ href, label }: { href: string; label: string }) => (
   <a class="back" href={href}>
@@ -1198,7 +1214,7 @@ export const Numbers = ({ rows }: { rows: string[][] }) => (
   矢印は行き先で変える。↗ はこのサイトでは「外へ出る・別タブで開く」の印
   （一覧の行の .links、管理画面の「サイトを見る ↗」）で、サイトの中の続き——
   / で始まる URL——には → を付ける（Team のカードの「プロフィール →」、入口の
-  「一覧で見る →」、LinkRow の「担当」と同じ）。
+  「作品を見る →」、LinkRow の「担当」と同じ）。
   中の行き先にも ↗ を付けていたころは、同じタブで開くのに「外へ出る」と
   言っていた。別タブで開くか（target）と rel も同じ1つの条件で決める。
 */
@@ -1264,9 +1280,10 @@ export const Note = ({ paragraphs, children }: { paragraphs: string[]; children?
   Hero の h1 → Profile の h2（節の SectionHead）→ About / Skills / Career の h3
   （SectionHead の sub）→ 技術の小見出しの h4（SkillGroups の level）。
 
-  新しい見た目はほとんど持たない——名札（Nameplate）、大見出しは大きな一文
-  （Statement）、紹介（Note）、技術（SkillGroups）、経歴（Timeline）。どれも個人
-  ページと同じ部品。足したのは小節を縦に並べる .profile の間隔と、h3 の段だけ。
+  新しい見た目はほとんど持たない——名札（Nameplate）、大見出し（個人ページの h1 と
+  同じ太さと大きさの1文。.profile__headline。節の中なので見出しの要素にはしない）、
+  紹介（Note）、技術（SkillGroups）、経歴（Timeline）。どれも個人ページと同じ部品。
+  足したのは小節を縦に並べる .profile の間隔と、h3 の段だけ。
 
   中身の無い小節は出さない（見出しだけ残さない）。個人ページの About は空でも
   「準備中です」を出すが、あれは名札の下に何も無いページを作らないためで、
@@ -1288,7 +1305,11 @@ export const ProfileWhole = ({
 }) => (
   <div class="profile">
     <Nameplate member={member} />
-    {member.headline ? <Statement text={member.headline} notes={[]} /> : null}
+    {member.headline ? (
+      <p class="profile__headline">
+        <Phrases text={member.headline} />
+      </p>
+    ) : null}
     {children}
     {bio.length ? (
       <div>
@@ -1314,44 +1335,64 @@ export const ProfileWhole = ({
 /* ------------------------------------------------------------ 連絡先と足元 */
 
 /*
-  GitHub とメールの行き先。GitHub は https:// の絶対 URL だけを描く（isHttpsUrl。
-  保存でも同じ検査で弾いている——src/routes/admin/members.tsx の memberErrors）。
-  部品の側でも見るのは、その検査より前に保存された行を、呼ぶ側に頼らずに落とすため。
+  GitHub・Instagram・X・メールの行き先（並びはこの順）。URL は https:// の絶対 URL
+  だけを描く（isHttpsUrl。保存でも同じ検査で弾いている——src/site.ts の siteSettingsErrors、
+  src/routes/admin/members.tsx の memberErrors）。部品の側でも見るのは、その検査より前に
+  保存された行を、呼ぶ側に頼らずに落とすため。
 
-  メールの札は「メール」。押す手の言葉は日本語（CLAUDE.md「文言」）で、GitHub は
-  サービスの固有名なのでそのまま。
+  メールの札は「メール」。押す手の言葉は日本語（CLAUDE.md「文言」）で、GitHub・
+  Instagram・X はサービスの固有名なのでそのまま。
 
-  owner は「誰の行き先か」。サイトの行き先（足元と Contact）は渡さず、その人だけの
+  owner は「誰の行き先か」。サイトの行き先（足元）は渡さず、その人だけの
   行き先（OwnSocials）が名前を渡す。読み上げの名前が「青木 春香の GitHub」になる
   （見た目の札は「GitHub」のまま。名前は見た目の字を含む——WCAG 2.5.3）。
 */
 export const Socials = ({
   github,
+  instagram,
+  x,
   email,
   owner,
 }: {
   github?: string | null
+  instagram?: string | null
+  x?: string | null
   email?: string | null
   owner?: string
-}) => (
-  <div class="socials">
-    {isHttpsUrl(github) ? (
-      <a
-        href={github}
-        rel="me noreferrer"
-        target="_blank"
-        aria-label={owner ? `${owner}の GitHub` : undefined}
-      >
-        <GithubIcon /> GitHub
-      </a>
-    ) : null}
-    {email && isContactEmail(email) ? (
-      <a href={`mailto:${email}`} aria-label={owner ? `${owner}のメール` : undefined}>
-        <MailIcon /> メール
-      </a>
-    ) : null}
-  </div>
-)
+}) => {
+  const mail = email && isContactEmail(email) ? email : null
+  // 1つも無ければ枠も置かない（Contact のページの足元は、Instagram も X も無いと空になる）
+  if (!isHttpsUrl(github) && !isHttpsUrl(instagram) && !isHttpsUrl(x) && !mail) return null
+  return (
+    <div class="socials">
+      {isHttpsUrl(github) ? (
+        <a
+          href={github}
+          rel="me noreferrer"
+          target="_blank"
+          aria-label={owner ? `${owner}の GitHub` : undefined}
+        >
+          <GithubIcon /> GitHub
+        </a>
+      ) : null}
+      {isHttpsUrl(instagram) ? (
+        <a href={instagram} rel="me noreferrer" target="_blank">
+          <InstagramIcon /> Instagram
+        </a>
+      ) : null}
+      {isHttpsUrl(x) ? (
+        <a href={x} rel="me noreferrer" target="_blank">
+          <XIcon /> X
+        </a>
+      ) : null}
+      {mail ? (
+        <a href={`mailto:${mail}`} aria-label={owner ? `${owner}のメール` : undefined}>
+          <MailIcon /> メール
+        </a>
+      ) : null}
+    </div>
+  )
+}
 
 /*
   その人だけの連絡先。サイトと違う行き先を持つ人のぶんだけ出す（同じ行き先を
@@ -1385,7 +1426,7 @@ export const OwnSocials = ({ member, site = SITE }: { member: Member; site?: Sit
   - GitHub は外へ出る脇の道なので、小さな札で添える（↗ は外へ出る・別タブの印）
   - 単独ページは見える h1「Contact」。ページは h1 をちょうど1つ持つ（WCAG 1.3.1）。
     全体ページ（/all）では、ほかの節と同じ見出しを目に見える形で置く
-  - このページでは足元の GitHub / メールを出さない（SiteIdentity の contact。同じ
+  - このページでは足元の GitHub / メールを出さない（SiteSocials の contact。同じ
     行き先が1つのページに2つ並ぶ）
 
   whole は「全体ページ（/all）の1節として描くか」。全体ページでは見出しを目に見える
@@ -1427,36 +1468,26 @@ export const Contact = ({
 )
 
 /*
-  足元の名乗り（Layout.tsx の footer）。どのページにも出るので、ここに載せたものは
-  全ページに載る。
-
-  solo は1人のサイトのその人（src/routes/public/data.ts の soloMember）。1人の
-  サイトなら、どのページでも名前と職種を載せる——入口の大見出しはその人の
-  一文で、名前ではない。Projects・作品・Contact は検索や貼られたリンクから直接着く
-  ページで、誰のサイトかを目に見える字で言うのはここになる。
-
-  2人以上のサイトでは名前を出さない。誰か1人の名前を置くと、その人の
-  サイトに見える。
+  足元のサイトの行き先（Layout.tsx の footer）。GitHub・Instagram・X・メール。どのページにも
+  出るので、ここに載せたものは全ページに載る。足元は著作権表示とこの行き先だけで、
+  名前や一言は置かない（持ち主の「シンプルに」。誰のサイトかは入口の札と Profile が言う）。
 
   contact は「Contact のページか」。本文にメールと GitHub の手があるので、
-  足元の GitHub / メールは出さない（同じ行き先を1つのページに2つ置かない）。
-  全体ページ（/all）では出す（あそこの Contact は節の1つで、足元は全体の足元）。
+  足元の GitHub / メールは出さない（同じ行き先を1つのページに2つ置かない）。Instagram と
+  X は本文に無いので出す。全体ページ（/all）では全部出す（あそこの Contact は節の1つで、
+  足元は全体の足元）。
 */
-export const SiteIdentity = ({
-  solo,
+export const SiteSocials = ({
   contact,
   site = SITE,
 }: {
-  solo?: Member
   contact?: boolean
   site?: SiteSettings
 }) => (
-  <div class="identity">
-    <div class="identity__who">
-      {solo ? <span class="identity__name">{solo.name}</span> : null}
-      {solo?.role ? <span class="identity__role">{solo.role}</span> : null}
-      <span class="identity__tagline">{site.tagline}</span>
-    </div>
-    {contact ? null : <Socials github={site.github} email={site.email} />}
-  </div>
+  <Socials
+    github={contact ? null : site.github}
+    instagram={site.instagram}
+    x={site.x}
+    email={contact ? null : site.email}
+  />
 )

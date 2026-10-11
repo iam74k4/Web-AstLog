@@ -6,7 +6,6 @@ import {
   findPublishedMember,
   listPublishedMembers,
   loadSiteSettings,
-  loadTheme,
   publishedBlocks,
 } from '../../db/queries'
 import * as schema from '../../db/schema'
@@ -14,7 +13,7 @@ import type { AppEnv } from '../../env'
 import { isHttpsUrl } from '../../lib/format'
 import { tableOfContents } from '../../lib/sequence'
 import { SITE } from '../../site'
-import { Band, filterQuery, SiteIdentity } from '../../ui/components'
+import { Band, filterQuery, SiteSocials } from '../../ui/components'
 import { bandOf, NO_FILTER, soloMember } from './data'
 import {
   MEMBER_SECTIONS,
@@ -43,7 +42,7 @@ const isSection = (key: string): key is MemberSection =>
     1人のサイト（Team を置いているとき。data.ts の profileOf）
       Team のページは作らず、その位置にこの人のページが並ぶ（site.ts の pageList）。
       目次は「Profile」の1行で、このページでその行に印。帯は出さない（入口の
-      「一覧で見る →」と同じ行き先・同じ件数）。構造化データはサイトの並びの先頭のときだけ
+      「作品を見る →」と同じ行き先・同じ件数）。構造化データはサイトの並びの先頭のときだけ
       サイトの名乗りを載せる（firstOnly）
     2人以上のサイト
       Team の続き。目次はサイトのもので、印は Team に付く。この人の一覧への帯を
@@ -62,7 +61,7 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
   */
   if (rest !== null && rest !== 'contact' && !isSection(rest)) return c.notFound()
   const db = drizzle(c.env.DB, { schema })
-  const [member, members, theme, blocks, site] = await Promise.all([
+  const [member, members, blocks, site] = await Promise.all([
     findPublishedMember(db, slug),
     /*
       人数だけを見る。サイトが1人として名乗っているあいだ（soloMember）は、
@@ -72,7 +71,6 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
       持つことになる。
     */
     listPublishedMembers(db),
-    loadTheme(db),
     publishedBlocks(db),
     loadSiteSettings(db),
   ])
@@ -126,7 +124,7 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
   /*
     この人の一覧への帯。一覧の行をここに複製せず、絞り込んだ一覧へ送る。
     行き先と件数の決め方は data.ts の bandOf。1人のサイトのプロフィールでは
-    出さない（入口の「一覧で見る →」と同じ行き先・同じ件数になる）。
+    出さない（入口の「作品を見る →」と同じ行き先・同じ件数になる）。
 
     1人のサイトでは ?member= を付けない。readFilter が読まない（名前の絞り込みが
     無い）ので、付けても効かない URL が1本増えるだけになる。
@@ -142,6 +140,7 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
     member,
     band ? <Band href={band.href} label="このメンバーのつくったもの" counts={band.counts} /> : null,
     site,
+    solo?.id === member.id,
   )
 
   return screenPage(c, {
@@ -173,9 +172,8 @@ export async function renderMemberScreen(c: Context<AppEnv>, slug: string, rest:
               : { worksFor: { '@type': 'Organization', name: SITE.name, url: SITE.origin } }),
           }),
         },
-    theme,
     // 足元はサイトのもの。個人ページだけのものに入れ替えると、別のサイトへ飛んだように見える
-    footer: <SiteIdentity site={site} solo={solo} />,
+    footer: <SiteSocials site={site} />,
     adminPath: `/admin/members/${member.id}/edit`,
   })
 }

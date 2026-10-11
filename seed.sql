@@ -148,6 +148,11 @@ UPDATE items SET
   image_height = 900
 WHERE id = 1;
 
+-- Discord Bot（4）と AstLog（5）のアイコン。AppMixer と同じ角丸の墨の台に、Discord の印と
+-- ΛSTLOG の Λ（src/ui/logo.ts）を載せたもの。
+UPDATE items SET icon_url = '/images/items/discord-bot-icon.png' WHERE id = 4;
+UPDATE items SET icon_url = '/images/items/astlog-icon.png' WHERE id = 5;
+
 INSERT INTO item_shots (item_id, url, alt, width, height, sort_order) VALUES
   (1, '/images/items/appmixer-02-auto-ducking.jpg', 'FaceTime の通話が始まり、ほかのアプリの音量を自動で下げている画面', 1440, 900, 10),
   (1, '/images/items/appmixer-03-per-device-memory.jpg', 'AirPods Pro と MacBook Air のスピーカーで、同じアプリの音量を別々に覚えている画面', 1440, 900, 20),
@@ -164,8 +169,10 @@ INSERT INTO item_slug_redirects (old_slug, item_id) VALUES
 -- ローカル見本のサイト設定 ------------------------------------------------
 -- 公開文言・宛先の編集は管理画面で行う。本番の初期値には個人データを置かない。
 INSERT OR REPLACE INTO settings (key, value) VALUES
-  ('site.tagline', 'つくる人の、置き場所。'),
-  ('site.heroLead', '個人でつくったアプリと、仕事で取り組んだ開発効率化をまとめています。'),
-  ('site.contactLead', '開発効率化や生成AIの活用、個人開発について話せる機会を探しています。お仕事のご相談も歓迎です。'),
+  ('site.tagline', 'つくったものを、ひとつずつ記録する。'),
+  ('site.heroLead', 'つくったアプリと、仕事で取り組んだ開発効率化をまとめています。'),
+  ('site.contactLead', '生成AIを使った開発効率化や個人開発について、話しませんか。お仕事のご相談も歓迎します。'),
   ('site.email', 'iam74k4@gmail.com'),
-  ('site.github', 'https://github.com/iam74k4');
+  ('site.github', 'https://github.com/iam74k4'),
+  ('site.instagram', ''),
+  ('site.x', '');

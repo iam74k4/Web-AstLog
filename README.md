@@ -35,8 +35,8 @@ workers.dev とプレビュー URL は無効。公開はデプロイ後で、購
 開発ツールの間接依存（undici・sharp・旧 esbuild loader）は、セキュリティ修正版へ
 `package.json` の overrides で固定し、型・テスト・ビルドと Drizzle の schema export を確認する。**内容と導線は JavaScript なしで成立する**。
 公開ページは実行する script を1本も持たない（JSON-LD はデータ）。装飾の動きは置かず、
-HTML は字だけで組む——入口の HTML は約 4.5KB。天体の飾り（惑星の縁・すばる・軌道・星）は
-静止した線と点だけを CSS の背景と疑似要素が描く（`CLAUDE.md` の「天体の飾り」）。
+HTML は字だけで組む——入口の HTML は約 4.5KB。天体の飾り（夜明けの窓のすばると星・経歴の
+星座・顔の軌道）は、静止したまま CSS の背景と疑似要素が描く（`CLAUDE.md` の「天体の飾り」）。
 絞り込みとページの移動は URL とサーバー、管理画面は HTML フォームと 303 で動く。
 全部の応答に CSP（管理画面の HTML は補助1本の exact SHA-256 だけ、それ以外は `script-src 'none'`）と
 `X-Content-Type-Options: nosniff`・`Referrer-Policy: strict-origin-when-cross-origin`
@@ -45,7 +45,7 @@ HTML は字だけで組む——入口の HTML は約 4.5KB。天体の飾り（
 ファイルには `public/_headers`（決まりは `CLAUDE.md` の「応答のヘッダ」）。
 
 公開ページは節ごとに1ページ（入口・Projects・Profile・Contact と打ち込むブロック）で、
-骨格は1つ——上の帯（ロゴと目次）・本文・足元（名乗りと連絡先）。普通に縦にスクロールし、
+骨格は1つ——上の帯（ロゴと目次）・本文・足元（著作権表示と GitHub・Instagram・X・メール）。普通に縦にスクロールし、
 上の帯はページの上に貼り付いてどこまで読んでも見えている。ページを移るときは CSS の
 view transitions で短く切り替わる（一覧の行の題が作品のページの見出しへつながる）。行き来は目次とページの中のリンクだけで、画面の底の「← 前 / 次 →」は無い。
 以前は「1画面に1つぶんを収め、ページはスクロールしない」を不変条件にして、入りきらない
@@ -58,8 +58,8 @@ view transitions で短く切り替わる（一覧の行の題が作品のペー
 
 公開中のメンバーが1人のあいだは、サイトはその人として名乗る。Team のページの代わりに
 その人のプロフィール（`/members/<slug>` の1ページに名札・About・Skills・Career）がサイトの
-並びに入り、目次では「Profile」の1行になる。足元はどのページでも名前と職種を出し、入口の
-大見出しはその人の一文（名前ではない）。2人目を公開すると Team と器の名乗りに戻る（決まりは
+並びに入り、目次では「Profile」の1行になる。入口の大見出しはその人の一文（名前ではない）で、
+名前は大見出しの上の札が出す。2人目を公開すると Team と器の名乗りに戻る（決まりは
 `CLAUDE.md`）。
 
 ## 動かす
@@ -188,12 +188,12 @@ Members・Projects のフォームは基本情報を先に書き、本文・画�
 概要では公開/下書き件数と最近編集した作品を確認できる。作品一覧にはサムネイルと操作名を表示する。
 保存操作はスクロール中も下部に残り、入力エラーは先頭の一覧から該当欄へ移れる。
 同じ内容を複数のタブで編集した場合、古い版の保存は409で止めて入力を残す。「最新の編集画面と比較する」から新しいタブで最新を開き、必要な変更を反映する。
-構成の数字・リンク・年表・取り組みは項目ごとに入力する。見た目は選んだ色と書体を実際の見本へ反映し、サイト設定の紹介文・問い合わせ文は複数行で編集できる。
+構成の数字・リンク・年表・取り組みは項目ごとに入力する。サイト設定の紹介文・問い合わせ文は複数行で編集できる。見た目（色と書体）は1つに決めてあり、選ぶ画面は無い。
 `npm run check:admin` で3寸法の主要画面、キーボード、競合、保存前プレビュー、JS無効時の操作を検証する。
 
-各編集フォームの「保存前にプレビュー」で、入力中の文章・選んだ画像・見た目を同じ画面のダイアログに表示する。閉じると入力とフォーカスが戻る。JS無効時は別タブで開く。
-保存・公開はせず、元のフォームも残る。サイト設定と見た目は入口・作品・Profile / Team・連絡先・全体から確認先を選べる。
-Profile / Team は公開中が1人ならプロフィール、複数なら一覧を表示する。未保存プレビューの全体リンクは保存済み内容を別タブで開く。
+各編集フォームの「保存前にプレビュー」で、入力中の文章・選んだ画像を同じ画面のダイアログに表示する。閉じると入力とフォーカスが戻る。JS無効時は別タブで開く。
+保存・公開はせず、元のフォームも残る。サイト設定は入口・作品・Profile / Team・連絡先・全体から確認先を選べる。
+Profile / Team は公開中が1人ならプロフィール、複数なら一覧を表示する。
 全体プレビューは現在公開中のデータを使う。プレビューは認証・送り元検査・
 `no-store`・`noindex` で守り、公開ページのキャッシュの版を変えない。
 
@@ -222,10 +222,10 @@ npm run check:media-restore # 削除画像の控えから戻せるか
 
 `check:fit` と `check:admin` の2つだけは毛色が違う。`npm test` は workerd の中で動くので版面を組む
 エンジンが居らず、レイアウトを1行も測れない。そこで `wrangler dev` を自分で立て、
-3書体 × 3ビューポート（390x844 / 768x1024 / 1440x900。電話と板の2つは指＝
+3ビューポート（390x844 / 768x1024 / 1440x900。電話と板の2つは指＝
 `pointer: coarse` で）× 訪問者とログインした姿（上の帯に「管理画面」が出る）×
 `/sitemap.xml` に載った全 URL を Chromium で開いて測る。`/all` は帯を貼り付けない1本の
-文書なので、横に動かないことだけを 3書体 × 3寸法で測る。
+文書なので、横に動かないことだけを 3寸法で測る。
 初回は実体のブラウザが要る（Node は 22.18 以降。名前の上限を `src/blocks.ts` から
 そのまま読むのに、Node の型の読み飛ばしを使う）。
 
@@ -248,16 +248,16 @@ seed を先に流さなくてよい）。
 | seed | `seed.sql`。本人のサイトそのもの | 11 |
 | seed＋ブロック3本 | seed に既定の見出しのブロックを3本（いま・数字・リンク集。`fit-fixture.mjs` の `seedBlocks`）。目次の帯が溢れる、ふつうの姿 | 14 |
 | fixture（複数人） | `scripts/lib/fit-fixture.mjs` が作る、重い中身のサイト。打ち込むブロック6種（長い段落・行の多い一覧・上限の見出し）・6人の Team・長い肩書き・上限の大見出し・長い紹介文と経歴・いちばん重い一覧の行（説明 100 字・実績値・タグとリンク5つずつ・担当者名・画像・アイコン・横長と正方形と寸法の分からない画像を混ぜたほかの画像。いちばん重い作品は上限の 8 枚）・長い本文・上限の作品名（一覧の行と作品のページの題） | 29 |
-| fixture（1人） | 同じ中身で公開中のメンバーを1人にしたもの（Team の位置にプロフィール・足元が名前と長い職種で名乗る） | 23 |
+| fixture（1人） | 同じ中身で公開中のメンバーを1人にしたもの（Team の位置にプロフィール・入口の札が名前と長い職種で名乗る） | 23 |
 
 成功行は中身ごとに1行出る。
 
 ```
-✓ seed（1人のサイト）: 198 通り（11 URL × 3書体 × 3寸法 × 2姿）。横のはみ出し 0・
+✓ seed（1人のサイト）: 66 通り（11 URL × 3寸法 × 2姿）。横のはみ出し 0・
   切られた要素 0・h1 はどれも1つ・一番下まで送っても目次が見え、送った先は帯の下。
-  いちばん長いページ 3279px（sans 768x1024 指 /apps/item/appmixer）。
+  いちばん長いページ 3195px（Poppins 768x1024 指 /apps/item/appmixer）。
   見出しの錨のずれ 最大 0px。目次の印 30 ページが帯の中（うち 0 ページは送って開いた）。
-  /all は 9 通りとも横に動かない
+  /all は 3 通りとも横に動かない
 ```
 
 読むのは3つ。**URL の数**（上の表より減っていたら、測れていない。検査は seed が 11 本
@@ -499,7 +499,7 @@ deploy が残した栞（その移行を流す**前**に取ったもの）まで
 （その代替テキスト）はマイグレーションで入り、既にある作品は本文と代替テキストが
 空、画像は無しのまま——作品のページに `figure` も本文の小節（Story）も無く、
 一覧にサムネイルも出ないだけ（代わりの絵は置かない）。`seed.sql` は本文を書かない。
-検査用の AppMixer 画像は `scripts/fixtures/media/` からローカル KV にだけ入れる。
+検査用の作品画像（AppMixer の画像と、Discord Bot・AstLog のアイコン）は `scripts/fixtures/media/` からローカル KV にだけ入れる。
 本番の作品・画像・本文は管理画面から登録する。本文を書いた作品は説明の下に
 小節（`#story`）を持つ。以前の `/apps/item/<slug>/story` はそこへ 301。
 画像は KV の `items/` に置かれ、`/images/items/…` から出る。画像を公開するときは
@@ -596,7 +596,6 @@ EXPLAIN QUERY PLAN で並べ直しが無いことを見ている）。
 src/
   index.tsx          入口。応答のヘッダ（CSP など）を全部に付け、ルートを束ねて 404 / 500 を出す
   site.ts            ブランド・公開先と、サイト設定の初期値・検査
-  theme.ts           見た目のプリセット。選べる値はここが正
   domain.ts          作品の区分（ITEM_KINDS: データの値・URL の語・呼び名の対応）と、
                      UI と DB が共有する作品の型（ItemView・ItemFilter）
   blocks.ts          置けるブロックの種類。ここが正。
@@ -605,7 +604,7 @@ src/
   env.ts             バインディングの型
   db/
     schema.ts        テーブル定義。ここが正
-    queries.ts       公開ページが読む問い合わせと、構成・見た目・サイト設定の読み書き
+    queries.ts       公開ページが読む問い合わせと、構成・サイト設定の読み書き
   lib/
     auth.ts          セッション（D1 にはハッシュで置く）と、通してよいアカウントの判定
     oauth.ts         GitHub / Google との約束（認可 URL・トークンの交換・id_token の検査）
@@ -640,7 +639,6 @@ src/
       members.tsx    Members
       items.tsx      Projects の項目（個人開発・業務）
       blocks.tsx     構成
-      appearance.tsx 見た目
       site-settings.tsx 公開する文言と連絡先
       account.tsx    アカウント
   ui/
@@ -649,19 +647,19 @@ src/
     AdminDashboard.tsx 概要の設定案内と状態
     PreviewLayout.tsx プレビューの案内と公開ページの外枠
     AdminForm.tsx    管理画面のフォームの部品（欄・公開のトグル・確認）
-    AdminVisuals.tsx 見た目の見本・ブロックの見本・表示位置の案内
+    AdminVisuals.tsx ブロックの見本・表示位置の案内
     AdminBlockFields.tsx ブロックの項目別入力
-    admin-behavior.ts 保存前プレビューと見本の最小補助・CSPの固定ハッシュ
+    admin-behavior.ts 保存前プレビューとエラー導線の最小補助・CSPの固定ハッシュ
     components.tsx   画面を組む部品。main の直接の子は Screen / Hero だけが作る
                      外枠はどれも HtmlDocument で <html> を開く（DOCTYPE を出す）
     icons.tsx        インライン SVG（ロゴの Wordmark / Mark もここで描く）
     logo.ts          ロゴの形と素材に焼く色の正（字で組む ΛSTLOG。印は Λ。JSX を持たない）
-    astra.ts         天体の飾りの素材（入口の空・Contact の軌道）の形の正。JSX を持たない
+    astra.ts         天体の飾りの素材（夜明けの窓の星とすばる）の形の正。JSX を持たない
 public/
   app.css            全画面のスタイル。値は :root のトークンだけで決める
-                     色・書体のプリセットもここ（[data-accent] / [data-typeface]）
-                     末尾の「ページの外枠」が足元の位置と貼り付く上の帯を作る。
-                     「天体の飾り」の節が、静止した線と点の飾りを背景と疑似要素で描く。
+                     末尾の「ページの外枠」が足元の位置と貼り付く上の帯、900 以上の
+                     2分割（左の夜明けの窓・右の本文）を作る。
+                     「天体の飾り」の節が、夜明けの窓と静止した線と点の飾りを背景と疑似要素で描く。
                      ページを移るときの切り替え（@view-transition）もここ
   admin.css          管理画面だけの規則。管理画面は app.css のあとにこれを読み、
                      公開ページは読まない（:root は持たず、app.css の段を読む）
@@ -670,10 +668,12 @@ public/
                      Workers Static Assets が読む規則で、ファイルとしては配られない
                      3枚の CSS は 1年・immutable（中身の版つきの URL
                      /app.css?v=… などで読むので、変えてデプロイすれば URL が変わる）
-  assets/            ロゴと天体の飾りの素材だけ。favicon（favicon.svg・favicon-32.png・apple-touch-icon.png）・
-                     ページの外で使うワードマーク（astlog-wordmark.svg）・共有カード（astlog-card.png。
-                     1200×630）・入口の空（sky.svg）・Contact の軌道（orbit.svg）——どれも
+  assets/            ロゴと天体の飾りの素材と、見出しの書体だけ。favicon（favicon.svg・favicon-32.png・
+                     apple-touch-icon.png）・ページの外で使うワードマーク（astlog-wordmark.svg）・共有カード
+                     （astlog-card.png。1200×630）・夜明けの窓の空（sky.svg）——ここまでは
                      scripts/logo/export.mjs が src/ui/logo.ts と src/ui/astra.ts から書く。
+                     見出しの欧文の Poppins（poppins-400/500/600/700.woff2。欧文だけに絞った
+                     もの）とそのライセンス（poppins-OFL.txt）は手で置いたもの。
                      版を持たないので既定のキャッシュ（毎回確かめる）のまま。
                      ※ ここに robots.txt や sitemap.xml を置かないこと。
                        public/ は Worker より先に配られるので、置くと
@@ -692,7 +692,7 @@ scripts/
   logo/              export.mjs。ロゴと天体の飾りの素材（SVG と favicon・iPhone のホーム画面・共有カードの PNG）を
                      src/ui/logo.ts と src/ui/astra.ts から書く（node scripts/logo/export.mjs。PNG は Playwright の Chromium で撮る）
   lib/               check-fit と check-admin の共通部分。dev サーバの立て方と使い捨ての D1（dev-server.mjs）、
-                     src/theme.ts の読み方（theme.mjs）、設計サイズ（viewports.mjs）。写しを2本持たない
+                     設計サイズ（viewports.mjs）。写しを2本持たない
                      wrangler.toml の id の読み方（wrangler-ids.mjs）も
                      fit-fixture.mjs は check:fit の上限ちょうどの中身を src/blocks.ts の
                      上限から作る。ts-import.mjs は src/ の .ts を Node からそのまま読む口

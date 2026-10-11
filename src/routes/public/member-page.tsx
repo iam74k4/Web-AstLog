@@ -57,7 +57,17 @@ export function memberSectionHref(member: schema.Member, section: MemberSection)
 }
 
 // band は名札の下に置く一覧への帯（呼ぶ側が決める。1人のサイトのプロフィールでは null）
-export function memberPage(member: schema.Member, band: Child, site: SiteSettings = SITE) {
+/*
+  titled は「この人の大見出しを入口がもう出しているか」（1人のサイトのその人。入口の大見出しは
+  その人の headline）。そのときは大見出しを置かず、名札の名前を大きな h1 にする——入口と
+  個人ページの h1 が同じ一文になり、2つのページが同じ頭を持った
+*/
+export function memberPage(
+  member: schema.Member,
+  band: Child,
+  site: SiteSettings = SITE,
+  titled = false,
+) {
   // 開き方は src/blocks.ts の memberUnits が正（全体ページの Profile の節も同じ式を読む）
   const { bio, skills, career } = memberUnits(member)
 
@@ -78,8 +88,8 @@ export function memberPage(member: schema.Member, band: Child, site: SiteSetting
           見出し（h1）は大見出しがあればそれ、無ければ名札の名前。どちらでも
           このページの中で完結する1つの h1 になる
         */}
-        <Nameplate member={member} heading={!member.headline} />
-        {member.headline ? (
+        <Nameplate member={member} heading={titled || !member.headline} title={titled} />
+        {member.headline && !titled ? (
           <h1 class="hero__headline">
             <Phrases text={member.headline} />
           </h1>

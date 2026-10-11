@@ -23,7 +23,6 @@ const paths = [
   '/admin/items?type=work',
   '/admin/members',
   '/admin/blocks',
-  '/admin/appearance',
   '/admin/site',
   '/admin/account',
   '/admin/items/new?type=app',
@@ -131,31 +130,20 @@ try {
     )
     await go(page, '/admin/members/1/edit')
     assert.notEqual(await page.locator('[name=name]').inputValue(), 'プレビューだけの名前')
-
-    // 見た目の見本は選択直後に変化する。
-    await go(page, '/admin/appearance')
-    await page.locator('[name=accent][value=ember]').check({ force: true })
-    await page.locator('[name=typeface][value=serif]').check({ force: true })
-    assert.equal(await page.locator('form[data-accent]').getAttribute('data-accent'), 'ember')
-    assert.ok(
-      await page
-        .locator('.design-sample h2')
-        .evaluate((node) => getComputedStyle(node).fontFamily.includes('serif')),
-    )
     await context.close()
   }
   const forced = await contextFor(390)
   const forcedPage = await forced.newPage()
   await forcedPage.emulateMedia({ forcedColors: 'active', reducedMotion: 'reduce' })
-  await go(forcedPage, '/admin/appearance')
+  await go(forcedPage, '/admin/members/1/edit')
   assert.ok(
     await forcedPage
-      .locator('.preset input')
+      .locator('.toggle input')
       .evaluateAll(
         (inputs) =>
           inputs.length > 0 && inputs.every((input) => getComputedStyle(input).opacity === '1'),
       ),
-    '強制色で見た目の選択状態が消える',
+    '強制色で公開の切り替えが消える',
   )
   await forced.close()
   const context = await contextFor(390)
