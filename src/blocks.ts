@@ -29,7 +29,7 @@ export const BLOCK_TYPES = [
     個人開発（app）と業務（work）を1つの一覧に並べる。見る側にとってはどちらも
     「つくったもの」で、節を分けると目次が2倍に伸びる。区分はデータに
     残り（src/domain.ts の ITEM_KINDS）、一覧の行の札（プラットフォーム / 業界・区分）と
-    絞り込み（すべて・個人開発・業務）で見分ける。並びは新しい順
+    絞り込み（All・Personal・Work）で見分ける。並びは新しい順
     （src/db/queries.ts の itemOrder）
   */
   {

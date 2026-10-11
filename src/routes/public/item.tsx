@@ -85,7 +85,7 @@ export function itemPage(item: ItemView, links: { backHref?: string; memberHref?
     description: item.summary || describe(itemFacts(item)),
     node: (
       <Screen id="item" label={item.title}>
-        {links.backHref ? <BackLink href={links.backHref} label="一覧に戻る" /> : null}
+        {links.backHref ? <BackLink href={links.backHref} label="Projects" /> : null}
         <SectionHead
           title={item.title}
           note={note || undefined}
@@ -118,7 +118,7 @@ export function itemPage(item: ItemView, links: { backHref?: string; memberHref?
   （…/story）に分け、作品同士を画面の底の左右の手でめくっていた。1ページにまとめたので、
   前の本文の URL は #story へ 301（story が true）。
 
-  行き来は目次と「← 一覧に戻る」（見出しの上）。戻る先は一覧のこの作品の行
+  行き来は目次と「← Projects」（見出しの上）。戻る先は一覧のこの作品の行
   （/projects#item-<slug>）。
 */
 export async function renderItem(
@@ -171,7 +171,7 @@ export async function renderItem(
   const links = sitePageLinks(pages, NO_FILTER, solo)
 
   /*
-    「← 一覧に戻る」の行き先。一覧のこの作品の行（id は itemCardId）。一覧は全件を
+    「← Projects」の行き先。一覧のこの作品の行（id は itemCardId）。一覧は全件を
     1ページに並べるので、どこに載っているかを数えなくてよい。URL は自分で組まず、
     サイトの並びから Projects のページを引く——Projects を先頭に置いた構成では / に
     なり、置いていない構成ではそもそも一覧が無い（そのときは戻る道を出さない）。

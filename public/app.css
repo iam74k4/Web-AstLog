@@ -973,7 +973,7 @@ body[data-site] > .frame {
   text-wrap: pretty;
 }
 
-/* 押し手の並び（入口の「一覧で見る →」「プロフィール →」） */
+/* 押し手の並び（入口の「Projects →」「Profile →」） */
 .hero__actions {
   display: flex;
   flex-wrap: wrap;
@@ -1403,8 +1403,8 @@ body[data-site] > .frame {
 }
 
 /*
-  キャプションは番号と説明の2列で、「拡大して見る ↗」は説明の下に置く。3つを1行に
-  並べていたころは、900 以上の細い列で説明が「拡大して見る」に幅を取られ、4〜5行に
+  キャプションは番号と説明の2列で、「Full size ↗」は説明の下に置く。3つを1行に
+  並べていたころは、900 以上の細い列で説明が「Full size」に幅を取られ、4〜5行に
   割れて「画 / 面」のように1字だけの行が出た
 */
 .gallery__caption {
@@ -1472,7 +1472,7 @@ body[data-site] > .frame {
 }
 
 /*
-  作品1件のページの「← 一覧に戻る」（components.tsx の BackLink）。一覧（1つ上の
+  作品1件のページの「← Projects」（components.tsx の BackLink）。一覧（1つ上の
   階層）へ上がる手なので見出しの上に置く。行き先は一覧のその作品の行
   （/projects#item-<slug>）。面を持たない字の手で、当たり判定は --tap
   （pointer: coarse では 44px）。
@@ -1933,7 +1933,7 @@ body[data-site] > .frame {
     scale var(--dur-spring) var(--ease-spring);
 }
 
-/* 狭い画面では「プロフィール →」を下の行に落とし、名前と一言に幅を渡す */
+/* 狭い画面では「Profile →」を下の行に落とし、名前と一言に幅を渡す */
 .member--wide {
   display: flex;
   align-items: center;
@@ -2298,7 +2298,7 @@ body[data-site] > .frame {
 /*
   2人以上のサイトの個人ページの名札の下に置く、一覧への1本（components.tsx の Band）。
   左に何が入っているか（「このメンバーのつくったもの」）と件数、右端に塗りの
-  「一覧で見る →」。上下に罫線を引いた1行で、箱には入れない。
+  「Projects →」。上下に罫線を引いた1行で、箱には入れない。
 
   justify-self（Hero が grid のとき）と align-self（flex のとき）の両方で左に寄せる。
 */

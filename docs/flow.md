@@ -8,7 +8,7 @@ GitHub 上でそのまま図として表示される（Mermaid）。画面の一
 公開ページは節ごとに1ページ（入口・Projects・Profile・Contact と打ち込むブロック）で、
 普通に縦にスクロールする。骨格は上の帯（ロゴと目次）・本文・足元で、目次の1行が1ページ、
 上の帯はページの上に貼り付いていつでも押せる。ページからページへの移動は普通のフルページ遷移
-（CSS の view transitions で短く切り替わる）。見る人は目次で飛ぶか、入口の「作品を見る →」から
+（CSS の view transitions で短く切り替わる）。見る人は目次で飛ぶか、入口の「Projects →」から
 入るか、一覧の行から作品1件へ入るか、Team のカードから個人ページへ入るかの
 4つだけ。**画面の底のページャ（← 前 / 次 →）は無い**——以前は「1画面に収めてスクロール
 させない」ために節を画面ごとに割り、底の左右の手でめくっていた。持ち主が触って「面倒すぎる」と
@@ -46,16 +46,16 @@ flowchart LR
     Top -->|"上の帯の目次"| Screen
     Screen -->|"上の帯の目次（先頭の Hero へはロゴ）"| Screen
     Screen -->|"上の帯のロゴ"| Top
-    Top -->|"作品を見る →"| Screen
-    Top -->|"プロフィール →（1人のサイト）"| Profile
+    Top -->|"Projects →"| Screen
+    Top -->|"Profile →（1人のサイト）"| Profile
     OldPage -->|"301（同じページへ。query は付けたまま）"| Screen
     Moved -->|"301。同じ区分で絞る"| Filtered
 
     Screen -->|"絞り込みを押す"| Filtered
-    Filtered -->|"「すべて」で外す"| Screen
+    Filtered -->|"「All」で外す"| Screen
 
     Screen -->|"一覧の行（面ごと押せる）"| Item
-    Item -->|"← 一覧に戻る（一覧のその行 #item-slug）"| Screen
+    Item -->|"← Projects（一覧のその行 #item-slug）"| Screen
     Item -->|"目次（Projects に印）"| Screen
     Item -->|"行き先の「担当 名前 →」（2人以上、または Team が無いとき）"| Profile
     Item -->|"前の slug・前の区分の URL → 301（いまの URL へ）"| Item
@@ -63,7 +63,7 @@ flowchart LR
     Profile -->|"前の slug → 301（いまの URL へ）"| Profile
     OldMember -->|"301（#about などの小節へ。無ければページの頭へ）"| Profile
 
-    Screen -->|"Team のカード / プロフィール →（2人以上）"| Profile
+    Screen -->|"Team のカード / Profile →（2人以上）"| Profile
     Screen -->|"目次の Profile（1人のサイト）"| Profile
     OldTeam -->|"301（1人のサイト）"| Profile
     ProfileAlias -->|"301（1人のサイト。ほかは 404）"| Profile
@@ -80,7 +80,7 @@ flowchart LR
     OldMember -.->|"知らない続きの名前"| NotFound
     Screen -.->|"ページの名前の形でない（D1 に聞かずに）"| NotFound
     Item -.->|"下書き / 知らない slug"| NotFound
-    NotFound -->|"トップへ戻る"| Top
+    NotFound -->|"Home"| Top
 
     Top -.->|"上の帯の「管理画面」（ログイン中だけ）"| Admin
     Screen -.->|"上の帯の「管理画面」（ログイン中だけ）"| Admin
@@ -96,19 +96,19 @@ Projects、個人ページは Profile か Team）。先頭の Hero へはロゴ�
 
 絞り込み（区分・メンバー）は**ページを移る**。絞り込みの手はリンクで、押すと絞り込んだ一覧の
 ページへ遷移する。絞り込みは目次の Projects の行き先にも同じ query が付いて、目次から
-一覧へ戻っても外れない。もう一度同じ手を押すとその軸だけ外れる（「すべて」は両方）。
+一覧へ戻っても外れない。もう一度同じ手を押すとその軸だけ外れる（「All」は両方）。
 内容と導線は SSR で成立し、公開ページは JavaScript を1本も持たない。
 
 作品1件のページ（`/apps/item/<slug>` ・ `/works/item/<slug>`）は、一覧の行を開いたものと、
 本文を書いた作品なら説明の下の小節「Story」（`#story`）。画像（あれば）はここに大きく出る
 （2枚以上なら、小節「Screenshots」（`#screenshots`）で先頭を大きく見せ、
 続きは番号と説明を添えたギャラリーに並べる）。
-頭の「← 一覧に戻る」は一覧のその作品の行（`/projects#item-<slug>`）へ戻す——一覧は
+頭の「← Projects」は一覧のその作品の行（`/projects#item-<slug>`）へ戻す——一覧は
 全件を1ページに並べるので、開いた行の所から読み続けられる。作品同士をめくる手は無い
 （隣の作品は、戻った一覧の隣の行）。目次の印は Projects に付く。一覧の行は面ごと
 ここへのリンクで（中の Repository と担当者名はそれぞれの行き先へ）、出る条件は「その作品が
 公開中」の1つだけ——Projects の節を外しても、貼られたリンクは死なない（そのときは
-「← 一覧に戻る」を出さない）。以前の本文の画面（`…/<slug>/story`）は `#story` へ 301。
+「← Projects」を出さない）。以前の本文の画面（`…/<slug>/story`）は `#story` へ 301。
 管理画面で slug を変えた作品・メンバーの前の URL と、区分を変えた作品の前の区分の URL は、
 いまの URL へ 301 で寄せる（前の slug は `item_slug_redirects` / `member_slug_redirects`
 に残っている）。変えた日に名刺や SNS に貼ったリンクが切れる、を起こさない。
@@ -122,14 +122,14 @@ Projects、個人ページは Profile か Team）。先頭の Hero へはロゴ�
 
 「構成」で節を外しても、行き止まりを作らない。
 
-- 入口の「作品を見る →」と件数、2人以上のサイトの個人ページの帯は Projects へ送り、件数は
+- 入口の「Projects →」と件数、2人以上のサイトの個人ページの帯は Projects へ送り、件数は
   区分ごとに数える（`個人開発 5 · 業務 2`。項目の無い区分は数えない）。Projects を外した
   サイトでは出さない
 - 一覧の行の担当者名（個人ページへのリンク）は、2人以上いるとき**か、Team を
   置いていないとき**に出す。Team が無いと、トップから個人ページへ行く道が
   ほかに1本も無い。作品1件のページの「担当」も同じ条件
 - `?member=` は名前の絞り込みが並ぶとき（2人以上）だけ効く。1人のサイトでは読まず、
-  個人ページの帯も付けない。効かせると「すべて」にも名前にも印が付かないまま
+  個人ページの帯も付けない。効かせると「All」にも名前にも印が付かないまま
   一覧だけが絞られる
 
 全体ページ（`/all`）は公開ページからリンクしない（足元は著作権表示と行き先だけ）。

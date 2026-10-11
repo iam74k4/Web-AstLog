@@ -168,8 +168,8 @@ export const Layout = (props: {
       data-opening={props.opening && !props.preview ? '' : undefined}
       data-preview={props.preview ? '' : undefined}
     >
-      <a class="skip" href="#main">
-        本文へスキップ
+      <a class="skip" href="#main" lang="en">
+        Skip to content
       </a>
       {props.preview}
       {/*
@@ -193,7 +193,7 @@ export const Layout = (props: {
           片方に固定した文字列は、必ずどちらかで嘘になる。
 
           ページの移動は、この目次と、ページの中のリンク（入口の一覧への手・
-          作品の行・「← 一覧に戻る」）だけ。画面の底の左右の手（ページャ）は置かない
+          作品の行・「← Projects」）だけ。画面の底の左右の手（ページャ）は置かない
           （CLAUDE.md の「公開ページは縦に読む」）。
         */}
         <nav class="toc" aria-label={props.whole ? 'ページ内の移動' : 'ページの移動'}>
@@ -211,7 +211,7 @@ export const Layout = (props: {
         {props.admin ? <AdminLink href={props.admin} /> : null}
       </header>
       {/*
-        tabindex={-1} は「本文へスキップ」のため。Safari（と iOS の全ブラウザ）は
+        tabindex={-1} は「Skip to content」のため。Safari（と iOS の全ブラウザ）は
         フラグメントで移った先が素でフォーカスを受けない要素だと、見た目だけ動いて
         キーボードの位置は帯に残る。このサイトに迂回路はこの1本しか無いので、
         外すと目次を毎回たどる以外の手が消える。-1 なので Tab の順番には入らない。
