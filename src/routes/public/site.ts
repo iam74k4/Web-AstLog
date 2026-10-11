@@ -16,7 +16,7 @@ import {
   type TopData,
 } from './data'
 import { memberHref } from './member-page'
-import { pageTitle, siteTitle } from './meta'
+import { nameWithLatin, pageTitle, siteTitle } from './meta'
 
 /*
   サイトのページの並び——管理の「構成」で置いた順に、ブロックを1つずつページに
@@ -174,7 +174,7 @@ export const sitePageLinks = (
         nav: 'Profile',
         href,
         canonical: href,
-        title: pageTitle(page.member.name),
+        title: pageTitle(nameWithLatin(page.member)),
       }
     }
     const query = pageQuery(page.slug, filter)

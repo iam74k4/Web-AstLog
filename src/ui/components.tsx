@@ -904,6 +904,15 @@ export const Nameplate = ({
       ) : (
         <strong class="nameplate__name">{member.name}</strong>
       )}
+      {/*
+        名前のローマ字。名前の読みとして名前のすぐ下に置く（肩書きの行と混ぜない）。
+        英字だけなので lang="en"（読み上げが英語の読みで読む）
+      */}
+      {member.nameLatin ? (
+        <span class="nameplate__latin" lang="en">
+          {member.nameLatin}
+        </span>
+      ) : null}
       {member.role || member.location ? (
         <span class="nameplate__meta">
           {[member.role, member.location].filter(Boolean).join(' · ')}

@@ -236,6 +236,31 @@ describe('名乗り', () => {
     expect(await okText('/members/okazaki')).toContain('application/ld+json')
   })
 
+  /*
+    名前のローマ字（members.name_latin）。ローマ字で検索した人にも同じ人だと分かるように、
+    名札の名前の下・個人ページの題・構造化データの alternateName に出す。空なら出さない
+  */
+  it('名前のローマ字は、名札と個人ページの題と構造化データに出る', async () => {
+    await seedMember({ nameLatin: 'Okazaki Takanari' })
+    const ld = (html: string) =>
+      JSON.parse(html.match(/<script type="application\/ld\+json">(.*?)<\/script>/)?.[1] ?? 'null')
+
+    const profile = await okText('/members/okazaki')
+    expect(profile).toContain('<span class="nameplate__latin" lang="en">Okazaki Takanari</span>')
+    expect(profile).toContain('<title>岡崎 昂功（Okazaki Takanari） — AstLog</title>')
+    expect(ld(await okText('/')).alternateName).toBe('Okazaki Takanari')
+    // 全体ページの Profile の名札にも出る
+    expect(await okText('/all')).toContain('class="nameplate__latin"')
+  })
+
+  it('名前のローマ字が空なら、名札にも題にも構造化データにも出さない', async () => {
+    await seedMember()
+    const profile = await okText('/members/okazaki')
+    expect(profile).not.toContain('nameplate__latin')
+    expect(profile).toContain('<title>岡崎 昂功 — AstLog</title>')
+    expect(await okText('/')).not.toContain('alternateName')
+  })
+
   it('個人ページは、1人のあいだ worksFor を名乗らない', async () => {
     await seedMember()
     /*

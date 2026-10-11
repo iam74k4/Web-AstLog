@@ -202,6 +202,13 @@ const MemberForm = (props: {
             required
             error={props.errors?.name}
           />
+          <Field
+            label="名前（ローマ字）"
+            name="nameLatin"
+            value={value('nameLatin')}
+            placeholder="Okazaki Takanari"
+            hint="個人ページの名前の下と、検索エンジン向けの情報に出ます。空なら出しません"
+          />
           <Field label="役割 / 肩書" name="role" value={value('role')} />
           <Field
             label="ページの見出し"
@@ -379,6 +386,7 @@ export function readMemberForm(form: FormData, existing?: schema.Member) {
     typed: (sortOrder.error ? { sortOrder: sortOrder.text } : {}) as Record<string, string>,
     values: {
       name,
+      nameLatin: str(form.get('nameLatin')),
       slug,
       role: str(form.get('role')),
       location: str(form.get('location')),

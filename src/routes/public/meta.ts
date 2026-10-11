@@ -19,6 +19,13 @@ export const nameWithRole = (member: Pick<schema.Member, 'name' | 'role'>) =>
   member.role ? `${member.name}（${member.role}）` : member.name
 
 /*
+  個人ページの題の名前。ローマ字（nameLatin）があれば添える——「岡崎 昂功（Okazaki Takanari）」。
+  ローマ字で検索した人の結果にも、題の字として当たるように。無ければ名前だけ
+*/
+export const nameWithLatin = (member: Pick<schema.Member, 'name' | 'nameLatin'>) =>
+  member.nameLatin ? `${member.name}（${member.nameLatin}）` : member.name
+
+/*
   <title> の組み方。ページの名前を「 · 」でつなぎ、最後にサイトの名前を置く。
 
   ページごとに違う題にする（CLAUDE.md「1ページ = 1ドキュメント」。履歴・タブ・
@@ -115,12 +122,14 @@ export const metricDigest = (item: ItemView) =>
   （空の配列を名乗らない）。
 */
 export const personJsonLd = (
-  member: Pick<schema.Member, 'name' | 'role'>,
+  member: Pick<schema.Member, 'name' | 'nameLatin' | 'role'>,
   url: string,
   extra?: Record<string, unknown>,
 ) => ({
   '@type': 'Person' as const,
   name: member.name,
+  // 名前のローマ字は別名。ローマ字で探した人と同じ人だと結び付ける（無ければ名乗らない）
+  ...(member.nameLatin ? { alternateName: member.nameLatin } : {}),
   // 肩書きを書いていない人は jobTitle を名乗らない（空文字を名乗らない）
   ...(member.role ? { jobTitle: member.role } : {}),
   url,

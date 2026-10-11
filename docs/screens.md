@@ -63,7 +63,7 @@ Instagram → X → メール。サイト設定にあるものだけ）。足元
 | 全体 | `GET /all` | 公開中のブロックを全部、1ページに縦に積んで | その節ごと出さない。見出しだけ残さない |
 | プロフィールの別名 | `GET /profile` | 1人のサイトのプロフィール（目次の「Profile」の行き先 `/members/<slug>`）へ 301（行き先がデータで変わるので `no-cache`） | プロフィールの無いサイト（2人以上・Team を置いていない）では 404 |
 | トップ | `GET /` | 並びの先頭のページ（ふつうは Hero）。先頭が1人のサイトのプロフィールなら、そこへ 302 | 置いたものが全部空なら「まだ何も置いていません」 |
-| メンバー個別 | `GET /members/:slug` | 名札（顔・名前・肩書きと所在地）と大見出し、2人以上のサイトならこの人の一覧への帯、その下に About・Skills・Career の小節（`#about` `#skills` `#career`） | 下書き・不明な slug は 404。前の slug（管理画面で変えたもの）は、いまの slug へ 301 |
+| メンバー個別 | `GET /members/:slug` | 名札（顔・名前・名前のローマ字・肩書きと所在地）と大見出し、2人以上のサイトならこの人の一覧への帯、その下に About・Skills・Career の小節（`#about` `#skills` `#career`） | 下書き・不明な slug は 404。前の slug（管理画面で変えたもの）は、いまの slug へ 301 |
 | 前の個人ページの続き | `GET /members/:slug/:rest` | `about` `skills` `career` はこのページの小節（`/members/<slug>#about` …）へ 301。小節が無くなっていればページの頭へ。`contact` はサイトの `/contact` へ 301 | 知らない名前は 404。前の slug はいまの slug の同じ続きへ 301 |
 | 割っていたころの続き | `GET /members/:slug/:rest/:page` | 同上（`/members/okazaki/career/2` → `#career`） | 番号の形（1始まりの数）でなければ 404 |
 | 作品1件（個人開発） | `GET /apps/item/:slug` | その作品のページ（一覧の行を開いたもの）と、画像が2枚以上なら縦ギャラリーの小節「Screenshots」（`#screenshots`）、本文があればその下に小節「Story」（`#story`）。頭に「← 一覧に戻る」（一覧のその作品の行 `/projects#item-<slug>` へ） | 下書き・不明な slug は 404。前の slug（管理画面で変えたもの。`item_slug_redirects`）は、いまの URL へ 301 |
