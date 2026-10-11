@@ -1113,6 +1113,21 @@ body[data-site] > .frame {
 }
 
 /*
+  名前のローマ字（「Okazaki Takanari」）。名前の読みとして、節の見出しと同じ Poppins の
+  大文字を字間を取って組む——すぐ下の肩書きの行（同じ英字で、本文の書体）と見分けが付く。
+  字は書いたまま（大文字にするのは見た目だけ。検索エンジンと読み上げは書いた字を読む）
+*/
+.nameplate__latin {
+  color: var(--ink);
+  font-family: var(--font-latin);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  letter-spacing: var(--track-caption);
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+/*
   名前をページの題として出す名札（1人のサイトの個人ページ。大見出しは入口がもう出している）。
   名前は頭の大見出しと同じ段（--fs-display）・同じ太さ。3つのクラス（0,3,0）で、上の
   .nameplate .nameplate__name に勝つ

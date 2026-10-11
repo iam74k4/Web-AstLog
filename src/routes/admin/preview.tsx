@@ -39,7 +39,7 @@ import {
 } from '../public/data'
 import { itemPage } from '../public/item'
 import { memberHref, memberPage } from '../public/member-page'
-import { pageTitle, siteDescription } from '../public/meta'
+import { nameWithLatin, pageTitle, siteDescription } from '../public/meta'
 import { type PickedImage, pickImage } from './images'
 import {
   formContext,
@@ -284,7 +284,7 @@ function memberResponse(
   )
   return c.html(
     <PreviewLayout
-      title={pageTitle(member.name)}
+      title={pageTitle(nameWithLatin(member))}
       description={page.description}
       label={member.name}
       publicHref={!options.unsaved && member.published === 1 ? memberHref(member.slug) : undefined}

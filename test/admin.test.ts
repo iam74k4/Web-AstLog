@@ -2307,8 +2307,8 @@ describe('大見出し・ブロックの見出しの上限（公開の関門）'
     const strings = [...tuple.matchAll(/'((?:[^']|'')*)'/g)].map((found) =>
       (found[1] ?? '').replaceAll("''", "'"),
     )
-    // slug, name, role, location, headline, bio の順
-    const bio = strings[5] ?? ''
+    // slug, name, name_latin, role, location, headline, bio の順
+    const bio = strings[6] ?? ''
     expect(bio).toContain('コンピュータサイエンス')
 
     const member = await seedMember({ bio, published: 1 })

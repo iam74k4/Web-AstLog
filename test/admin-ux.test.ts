@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { form, resetDb, seedItem, seedMember, signIn } from './helpers'
+import * as schema from '../src/db/schema'
+import { db, form, resetDb, seedItem, seedMember, signIn } from './helpers'
 
 beforeEach(resetDb)
 
@@ -88,6 +89,20 @@ describe('管理フォームの入力とプレビュー導線', () => {
       expect(formHtml).toContain(`formaction="/admin/preview/${kind}/${draft.id}"`)
       expect(formHtml).toContain('保存前にプレビューで')
     }
+  })
+
+  it('メンバーの名前のローマ字を保存し、編集画面に戻す', async () => {
+    const signed = await signIn()
+    const response = await signed('/admin/members', {
+      method: 'POST',
+      body: form({ name: 'テスト', nameLatin: 'Tesuto Taro' }),
+    })
+    expect(response.status).toBe(303)
+    const [member] = await db().select().from(schema.members)
+    expect(member?.nameLatin).toBe('Tesuto Taro')
+    const edit = await (await signed(`/admin/members/${member?.id}/edit`)).text()
+    expect(edit).toContain('name="nameLatin"')
+    expect(edit).toContain('value="Tesuto Taro"')
   })
 
   it('畳んだメンバーの設定で入力が止まったら、該当するまとまりを開く', async () => {

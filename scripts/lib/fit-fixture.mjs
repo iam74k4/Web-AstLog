@@ -232,6 +232,8 @@ function memberRows() {
     id,
     slug,
     name,
+    // 名前のローマ字（名札の名前の下）。字間を取った大文字で、狭い画面で折り返すか測る
+    name_latin: 'Bartholomew Alexander Montgomery-Wellington',
     role,
     location: 'Kanagawa, Japan',
     headline: text(MAX_CHARS.memberHeadline, id),
@@ -246,6 +248,7 @@ function memberRows() {
   })
   const light = (id, slug, name, role, avatar) => ({
     ...heavy(id, slug, name, role, 'even'),
+    name_latin: '',
     headline: text(16, id),
     bio: text(80, id),
     skills_text: '',
