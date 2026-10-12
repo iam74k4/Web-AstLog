@@ -165,12 +165,14 @@ export const ColorSchemeMeta = () => <meta name="color-scheme" content="light" /
   favicon。ロゴの印（Λ を1つで）を夜明けの空の正方形に載せたもの（src/ui/logo.ts の iconSvg）を
   SVG のまま読ませ、読めない環境には同じ絵の PNG を渡す（どちらも scripts/logo/export.mjs が
   書き出す）。地を敷くのは、字が白いから——透明のままだと明るいタブの帯では字が消える。
+  PNG はタブの 32px と、検索結果の印の 96px（Google は 48px の倍数の正方形を求める）。
   公開・管理・404 の外枠がどれも置く。
 */
 export const FaviconLinks = () => (
   <>
     <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/assets/favicon-96.png" />
     <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
   </>
 )
