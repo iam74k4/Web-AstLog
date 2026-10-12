@@ -3251,6 +3251,23 @@ describe('読み込んだときの幕', () => {
     const signed = await signIn()
     expect(await (await signed('/admin/preview?screen=hero')).text()).not.toContain('data-opening')
   })
+
+  it('サイトの中から入口へ戻るときは幕を出さない。写しも外から来たときと分ける', async () => {
+    /*
+      戻るたびに幕を待たせていた（持ち主の「もっさり」）。ブラウザはサイトの中のリンクで移ると
+      Sec-Fetch-Site: same-origin を付ける。写し（page-cache）の鍵も分けないと、先に置かれた
+      ほうの HTML が、もう片方にも出てしまう
+    */
+    await seedMember()
+    const inside = { headers: { 'sec-fetch-site': 'same-origin' } }
+    // 外から → 中から → 外から（写しが入れ違わない）
+    expect(await okText('/')).toContain('data-opening=""')
+    const fromInside = await get('/', inside)
+    expect(fromInside.status).toBe(200)
+    expect(await fromInside.text()).not.toContain('data-opening')
+    expect(await okText('/')).toContain('data-opening=""')
+    expect(await (await get('/', inside)).text()).not.toContain('data-opening')
+  })
 })
 
 describe('文書の外枠', () => {
