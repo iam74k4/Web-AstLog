@@ -4,7 +4,7 @@
   形の正は src/ui/logo.ts（ページのロゴはそこから直に SVG を描く）と src/ui/astra.ts
   （夜明けの窓の空。app.css が星の形として読む）。ここは、ページの
   外で使う素材——ファイルとしての SVG（ワードマーク・favicon・空）と、SVG を読めない所に
-  渡す PNG（favicon・iPhone のホーム画面・共有カード）——を同じ形から作る。
+  渡す PNG（favicon・検索結果の印・iPhone のホーム画面・共有カード）——を同じ形から作る。
   手で描き直さない（test/public.test.ts が SVG の中身を logo.ts・astra.ts と突き合わせる）。
 
   PNG はブラウザ（Playwright の Chromium）で SVG を描いて撮る。共有カード（1200×630）の
@@ -35,6 +35,8 @@ const browser = await chromium.launch()
 try {
   for (const [file, size] of [
     ['favicon-32.png', 32],
+    // 検索結果の印。Google は 48px の倍数の正方形を求める（32 は満たさない。SVG は大きさを問わない）
+    ['favicon-96.png', 96],
     ['apple-touch-icon.png', 180],
   ]) {
     const shot = await browser.newPage({ viewport: { width: size, height: size } })

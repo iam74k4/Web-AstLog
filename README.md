@@ -670,7 +670,7 @@ public/
                      3枚の CSS は 1年・immutable（中身の版つきの URL
                      /app.css?v=… などで読むので、変えてデプロイすれば URL が変わる）
   assets/            ロゴと天体の飾りの素材と、見出しの書体だけ。favicon（favicon.svg・favicon-32.png・
-                     apple-touch-icon.png）・ページの外で使うワードマーク（astlog-wordmark.svg）・共有カード
+                     検索結果の印の favicon-96.png・apple-touch-icon.png）・ページの外で使うワードマーク（astlog-wordmark.svg）・共有カード
                      （astlog-card.png。1200×630）・夜明けの窓の空（sky.svg）——ここまでは
                      scripts/logo/export.mjs が src/ui/logo.ts と src/ui/astra.ts から書く。
                      見出しの欧文の Poppins（poppins-400/500/600/700.<版>.woff2。欧文だけに

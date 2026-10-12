@@ -2,6 +2,7 @@ import { env } from 'cloudflare:test'
 import wordmarkFile from 'virtual:asset:astlog-wordmark.svg'
 import faviconFile from 'virtual:asset:favicon.svg'
 import skyFile from 'virtual:asset:sky.svg'
+import favicon96 from 'virtual:asset-base64:favicon-96.png'
 import assetFiles from 'virtual:assets'
 import seedSql from 'virtual:repo:seed.sql'
 import { eq } from 'drizzle-orm'
@@ -10,6 +11,7 @@ import css from '../public/app.css'
 import { saveSiteSettings } from '../src/db/queries'
 import * as schema from '../src/db/schema'
 import { ITEM_KINDS } from '../src/domain'
+import { sniffImage } from '../src/lib/image'
 import { publicRoutes } from '../src/routes/public/routes'
 import { skySvg } from '../src/ui/astra'
 import { itemHref, LinkList, LinkRow, splitPhrases } from '../src/ui/components'
@@ -352,6 +354,7 @@ describe('名乗り', () => {
     for (const file of [
       'favicon.svg',
       'favicon-32.png',
+      'favicon-96.png',
       'apple-touch-icon.png',
       'astlog-card.png',
       'sky.svg',
@@ -384,6 +387,12 @@ describe('名乗り', () => {
     expect(html).toContain(
       '<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"/>',
     )
+    // 検索結果の印は 48px の倍数の正方形（Google の求め。32px は満たさない）
+    expect(html).toContain(
+      '<link rel="icon" type="image/png" sizes="96x96" href="/assets/favicon-96.png"/>',
+    )
+    const icon96 = Uint8Array.from(atob(favicon96), (char) => char.charCodeAt(0))
+    expect(sniffImage(icon96)).toMatchObject({ type: 'image/png', width: 96, height: 96 })
     expect(html).toContain('<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png"/>')
     expect(html).not.toContain('data:image')
   })

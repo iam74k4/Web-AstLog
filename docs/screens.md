@@ -542,7 +542,7 @@ Worker より先に配られる（`public/`）。
 | `/app.css` | 全画面のスタイル。公開ページ・404 はこれだけを読む（`?v=` は中身の版。配り手は見ない） |
 | `/admin.css` | 管理画面だけの規則。管理画面は `/app.css` のあとにこれを読む |
 | `/preview.css` | 管理者専用プレビューの案内だけの規則。公開ページの `/app.css` と一緒に読む |
-| `/assets/…` | favicon（`favicon.svg`・`favicon-32.png`・`apple-touch-icon.png`）、ページの外で使うワードマーク（`astlog-wordmark.svg`）、サイトの `og:image`（`astlog-card.png`。1200×630。画像がある作品はその作品の画像）。どれも `scripts/logo/export.mjs` が `src/ui/logo.ts` から書き、版を持たないので既定のキャッシュのまま。作品・プロフィールの検査素材は本番には同梱せず、ローカル KV に入れる |
+| `/assets/…` | favicon（`favicon.svg`・`favicon-32.png`・検索結果の印の `favicon-96.png`・`apple-touch-icon.png`）、ページの外で使うワードマーク（`astlog-wordmark.svg`）、サイトの `og:image`（`astlog-card.png`。1200×630。画像がある作品はその作品の画像）。どれも `scripts/logo/export.mjs` が `src/ui/logo.ts` から書き、版を持たないので既定のキャッシュのまま。作品・プロフィールの検査素材は本番には同梱せず、ローカル KV に入れる |
 
 **ここに `robots.txt` や `sitemap.xml` を置かないこと。** どちらも Worker が
 公開ページと同じ式から組み立てていて、`public/` に同じ名前のファイルを置いた瞬間に
