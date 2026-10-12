@@ -1631,7 +1631,7 @@ describe('作品1件の恒久リンク', () => {
     // 画像は文の列の横に並ぶ組み方（900 以上。app.css の .detail--shot）
     expect(main).toContain('<div class="detail detail--shot">')
     expect(main).toContain(
-      '<figure class="shot"><img src="/images/items/appmixer-ab12.png" alt="音量ミキサーの画面" decoding="async"/></figure>',
+      '<figure class="shot"><img src="/images/items/appmixer-ab12.png" alt="音量ミキサーの画面" decoding="async" fetchpriority="high"/></figure>',
     )
     /*
       説明（目録の2文）のあとに、本文の小節。以前は本文を次の画面（…/story）に分け、
@@ -1713,7 +1713,7 @@ describe('作品の画像の見せ方', () => {
     })
     const main = mainOf(await okText('/apps/item/one'))
     expect(main).toContain(
-      '<figure class="shot"><img src="/images/items/one-aaaaaaaa.png" alt="一枚の画面" decoding="async"/></figure>',
+      '<figure class="shot"><img src="/images/items/one-aaaaaaaa.png" alt="一枚の画面" decoding="async" fetchpriority="high"/></figure>',
     )
     expect(main).not.toContain('class="gallery"')
     expect(main).not.toContain('id="screenshots"')
@@ -1732,7 +1732,7 @@ describe('作品の画像の見せ方', () => {
     await touch()
     const page = await okText('/apps/item/face')
     expect(mainOf(page)).toContain(
-      '<figure class="shot"><img src="/images/items/face-aaaaaaaa.png" alt="ほかの画像の1枚目" decoding="async"/></figure>',
+      '<figure class="shot"><img src="/images/items/face-aaaaaaaa.png" alt="ほかの画像の1枚目" decoding="async" fetchpriority="high"/></figure>',
     )
     expect(page).toContain(
       `<meta property="og:image" content="${SITE.origin}/images/items/face-aaaaaaaa.png"/>`,
@@ -1774,7 +1774,7 @@ describe('作品の画像の見せ方', () => {
     // 先頭は作品の顔として大きく、残りはページを読んで近づくまで遅延読み込み
     expect(html).toContain('class="gallery__item gallery__item--lead"')
     expect(html).toContain(
-      '<img src="/images/items/many-aaaaaaaa.png" alt="メイン" width="1440" height="900" decoding="async"/>',
+      '<img src="/images/items/many-aaaaaaaa.png" alt="メイン" width="1440" height="900" fetchpriority="high" decoding="async"/>',
     )
     expect(html).toContain(
       '<img src="/images/items/many-bbbbbbbb.png" alt="二" width="1440" height="900" loading="lazy" decoding="async"/>',

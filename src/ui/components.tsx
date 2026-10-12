@@ -751,11 +751,12 @@ export const LinkRow = ({ links }: { links: { label: string; url: string }[] }) 
   文の列が押し下げられ（読み始めた字が動く）、縦長の絵が1枚でページの頭を
   何画面ぶんも食う。
 
-  遅延読み込みにしない。このページの主役で、開いた時点で画面の中にある。
+  遅延読み込みにしない。このページの主役で、開いた時点で画面の中にある。lead は作品のページの
+  主役の絵（LCP）として、ほかの読み込みより先に取りに行かせる（管理画面の見本には付けない）
 */
-export const Shot = ({ src, alt }: { src: string; alt: string }) => (
+export const Shot = ({ src, alt, lead }: { src: string; alt: string; lead?: boolean }) => (
   <figure class="shot">
-    <img src={src} alt={alt} decoding="async" />
+    <img src={src} alt={alt} decoding="async" fetchpriority={lead ? 'high' : undefined} />
   </figure>
 )
 
@@ -792,7 +793,7 @@ export const ItemDetail = ({
   const only = images.length === 1 ? images[0] : undefined
   return (
     <div class={only ? 'detail detail--shot' : 'detail'}>
-      {only ? <Shot src={only.url} alt={only.alt} /> : null}
+      {only ? <Shot src={only.url} alt={only.alt} lead /> : null}
       <div class="detail__text">
         {item.summary ? <Note paragraphs={[item.summary]} /> : null}
         <Metric item={item} />
@@ -838,6 +839,8 @@ export const ItemShots = ({ images }: { images: ItemImage[] }) =>
                   width={image.width ?? undefined}
                   height={image.height ?? undefined}
                   loading={index === 0 ? undefined : 'lazy'}
+                  // 先頭の1枚は作品のページでいちばん大きな絵（LCP）。ほかの読み込みより先に取りに行く
+                  fetchpriority={index === 0 ? 'high' : undefined}
                   decoding="async"
                 />
               </span>
