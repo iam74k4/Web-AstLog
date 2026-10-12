@@ -143,6 +143,20 @@ describe('動画を上げる', () => {
     expect(await db().select().from(schema.items)).toHaveLength(0)
   })
 
+  it('絵が保存していない動画1本だけでも、空の <img> を出さない', async () => {
+    const signed = await signIn()
+    const response = await signed('/admin/preview/items', {
+      method: 'POST',
+      body: withFiles({ type: 'app', title: 'Demo', slug: 'demo', newShotAlt: ['動く画面'] }, [
+        ['newShot', mp4File()],
+      ]),
+    })
+    expect(response.status).toBe(200)
+    const html = await response.text()
+    expect(html).toContain('<figure class="shot"><video controls="" muted=""')
+    expect(html).not.toMatch(/<img src=""/)
+  })
+
   it('まだ保存していない動画は、プレビューの応答に埋めない', async () => {
     const signed = await signIn()
     const response = await signed('/admin/preview/items', {

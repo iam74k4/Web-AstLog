@@ -766,7 +766,8 @@ export const LinkRow = ({ links }: { links: { label: string; url: string }[] }) 
 */
 export const Shot = ({ src, alt, lead }: { src: string; alt: string; lead?: boolean }) => (
   <figure class="shot">
-    {isVideoUrl(src) ? (
+    {/* src が空なのは、プレビューのまだ保存していない動画（ItemShots と同じ） */}
+    {isVideoUrl(src) || !src ? (
       <Clip src={src} label={alt} />
     ) : (
       <img src={src} alt={alt} decoding="async" fetchpriority={lead ? 'high' : undefined} />
