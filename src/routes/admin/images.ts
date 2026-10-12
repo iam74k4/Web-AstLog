@@ -44,7 +44,9 @@ type Picked = { image: PickedImage | null; error?: string }
 const IMAGE_TYPE_ERROR = `${IMAGE_LABELS} の画像を選んでください（SVG と HEIC は受け付けません。iPhone の写真は JPEG で書き出してください）`
 const SHOT_TYPE_ERROR = `${IMAGE_LABELS} の画像か、MP4（H.264）の動画を選んでください（SVG・HEIC・MOV は受け付けません）`
 const IMAGE_SIZE_ERROR = '画像は 1MB まで（GIF は 3MB まで）です。小さくしてから選び直してください'
-const VIDEO_SIZE_ERROR = '動画は 10MB までです。短くするか小さくしてから選び直してください'
+// ほかの画像の欄で、中身を読む前に止めるとき（画像か動画かはまだ分からない）
+const SHOT_SIZE_ERROR =
+  '画像は 1MB まで（GIF は 3MB まで）、動画は 10MB までです。小さくしてから選び直してください'
 const VIDEO_ERRORS = {
   quicktime: 'MOV（QuickTime）の動画は受け付けません。MP4（H.264）で書き出してください',
   hevc: 'HEVC（H.265）の動画は Chrome などで再生できません。MP4（H.264）で書き出してください',
@@ -54,7 +56,7 @@ const VIDEO_ERRORS = {
 async function pickFile(file: File | string | null, video = false): Promise<Picked> {
   if (!(file instanceof File) || file.size === 0) return { image: null }
   if (file.size > (video ? VIDEO_MAX_BYTES : GIF_MAX_BYTES)) {
-    return { image: null, error: video ? VIDEO_SIZE_ERROR : IMAGE_SIZE_ERROR }
+    return { image: null, error: video ? SHOT_SIZE_ERROR : IMAGE_SIZE_ERROR }
   }
   const bytes = await file.arrayBuffer()
   const view = new Uint8Array(bytes)
