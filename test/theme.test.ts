@@ -962,7 +962,8 @@ describe('部品の作法', () => {
     */
     expect(bodyOf(sheet, ':root {')).toContain('--shot-h:')
     expect(bodyOf(sheet, '.shot {')).toContain('height: var(--shot-h)')
-    const img = bodyOf(sheet, '.shot img {')
+    // 動画（components.tsx の Clip）も同じ枠に同じ収め方で
+    const img = bodyOf(sheet, '.shot > :is(img, video) {')
     expect(img).toContain('object-fit: contain')
     // 流れの中に置くと、絵の寸法（2000px のスクリーンショット）が枠の最小の高さになる
     expect(img).toContain('position: absolute')
@@ -987,7 +988,7 @@ describe('部品の作法', () => {
     expect(bodyOf(sheet, '.gallery__item--lead .gallery__frame {')).toContain(
       'max-height: var(--gallery-lead-h)',
     )
-    const image = bodyOf(sheet, '.gallery__image img {')
+    const image = bodyOf(sheet, '.gallery__frame > :is(img, video) {')
     expect(image).toContain('position: absolute')
     expect(image).toContain('object-fit: contain')
     // 横スクロールと、その操作だけのための部品は残さない

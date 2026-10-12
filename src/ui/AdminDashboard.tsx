@@ -1,4 +1,5 @@
 import { timeInJapan } from '../lib/format'
+import { type MediaUsage, megabytes } from '../lib/media-usage'
 import { AdminLayout } from './AdminLayout'
 import { StatusPill } from './components'
 
@@ -51,6 +52,7 @@ export const AdminDashboard = (props: {
   blockCount: number
   blockDrafts: number
   pages: number
+  storage: MediaUsage & { quota: number }
 }) => (
   <AdminLayout title="概要" active="dashboard" account={props.account}>
     <div class="admin-head">
@@ -226,6 +228,30 @@ export const AdminDashboard = (props: {
           <span class="dashboard-card__action">構成を開く →</span>
         </a>
       </div>
+    </section>
+
+    {/*
+      画像と動画の容量。上限に達すると新しい画像と動画を保存できない（src/lib/media-usage.ts）。
+      外した画像の控えは数えないので、別に言う（90日で消える）
+    */}
+    <section class="dashboard-settings dashboard-storage" aria-labelledby="dashboard-storage-title">
+      <div class="dashboard-settings__head">
+        <h2 id="dashboard-storage-title">画像と動画の容量</h2>
+        <p>上限に達すると、新しい画像と動画を保存できません。</p>
+      </div>
+      <p class="dashboard-storage__usage">
+        <strong>{megabytes(props.storage.used)}</strong> / {megabytes(props.storage.quota)}（
+        {Math.min(100, Math.round((props.storage.used / props.storage.quota) * 100))}%）
+        {props.storage.used >= props.storage.quota * 0.9 ? (
+          <span class="dashboard-state">残りわずか</span>
+        ) : null}
+      </p>
+      {props.storage.archived ? (
+        <p class="dashboard-storage__note">
+          ほかに、外した画像の控えが {megabytes(props.storage.archived)}
+          （90日で消える。容量には数えない）
+        </p>
+      ) : null}
     </section>
   </AdminLayout>
 )

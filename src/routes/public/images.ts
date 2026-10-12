@@ -1,6 +1,6 @@
 import type { Context } from 'hono'
 import type { AppEnv } from '../../env'
-import { isImageType } from '../../lib/image'
+import { isMediaType } from '../../lib/image'
 
 /*
   管理画面からアップロードした画像。KV から出す。
@@ -27,8 +27,12 @@ import { isImageType } from '../../lib/image'
   - Content-Security-Policy: default-src 'none'; sandbox——直に開かれても
     スクリプトも読み込みも走らない（<img> で埋め込む分には効かず、邪魔もしない）。
     src/index.tsx のヘッダの1本は、ルートが付けた CSP を上書きしない
-  - 5種類に無い content-type（以前の image/svg+xml や image/heic）は
+  - 画像の5種類と動画（MP4）に無い content-type（以前の image/svg+xml や image/heic）は
     application/octet-stream の添付として返す。画像としては描かせない
+
+  動画のために、範囲の要求（Range: bytes=…）に 206 で答える。iPhone の Safari は範囲で
+  取れない動画を再生しない。範囲は1つだけ読み、複数の範囲は無視して全体を返す（許される
+  答え方）。中身は KV から全体を読んで切り出す——1本 10MB までなので Worker のメモリに収まる。
 */
 const IMAGE_KEY = /^(?:avatars|items)\/[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/
 
@@ -49,14 +53,47 @@ export async function serveImage(c: Context<AppEnv>) {
   if (!object.value) return c.notFound()
 
   const type = object.metadata?.contentType
-  return new Response(object.value, {
-    headers: {
-      ...(isImageType(type)
-        ? { 'content-type': type }
-        : { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment' }),
-      'x-content-type-options': 'nosniff',
-      'content-security-policy': "default-src 'none'; sandbox",
-      'cache-control': 'public, max-age=31536000, immutable',
-    },
+  const headers = {
+    ...(isMediaType(type)
+      ? { 'content-type': type }
+      : { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment' }),
+    'x-content-type-options': 'nosniff',
+    'content-security-policy': "default-src 'none'; sandbox",
+    'cache-control': 'public, max-age=31536000, immutable',
+    'accept-ranges': 'bytes',
+  }
+  const total = object.value.byteLength
+  const range = byteRange(c.req.header('range'), total)
+  if (range === 'unsatisfiable') {
+    return new Response(null, {
+      status: 416,
+      headers: { ...headers, 'content-range': `bytes */${total}` },
+    })
+  }
+  if (!range) return new Response(object.value, { headers })
+  return new Response(object.value.slice(range.start, range.end + 1), {
+    status: 206,
+    headers: { ...headers, 'content-range': `bytes ${range.start}-${range.end}/${total}` },
   })
+}
+
+/*
+  Range の1つの範囲（bytes=始め-終わり・bytes=始め-・bytes=-末尾の長さ）を読む。範囲の
+  要求でない・読めない・複数の範囲なら null（全体を 200 で返す）。始めが中身の外なら 416
+*/
+export function byteRange(
+  header: string | undefined,
+  total: number,
+): { start: number; end: number } | 'unsatisfiable' | null {
+  const found = header?.trim().match(/^bytes=(\d*)-(\d*)$/)
+  if (!found || (!found[1] && !found[2])) return null
+  if (!found[1]) {
+    const suffix = Number(found[2])
+    if (suffix === 0) return 'unsatisfiable'
+    return { start: Math.max(0, total - suffix), end: total - 1 }
+  }
+  const start = Number(found[1])
+  const end = found[2] ? Math.min(Number(found[2]), total - 1) : total - 1
+  if (start >= total) return 'unsatisfiable'
+  return start <= end ? { start, end } : null
 }

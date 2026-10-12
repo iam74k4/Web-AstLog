@@ -302,7 +302,7 @@ function itemResponse(
   c: Context<AppEnv>,
   saved: Snapshot,
   item: ItemView,
-  options: Pick<PreviewLayoutProps, 'editHref' | 'unsaved' | 'warnings'>,
+  options: Pick<PreviewLayoutProps, 'editHref' | 'unsaved' | 'warnings' | 'note'>,
 ) {
   const page = itemPage(item, {
     backHref: !options.unsaved && saved.data.band ? '/admin/preview?screen=projects' : undefined,
@@ -347,7 +347,7 @@ previewRoutes.get('/preview/items/:id', async (c) => {
   return itemResponse(c, saved, item, { editHref: `/admin/items/${id}/edit` })
 })
 
-// 種類・容量を検査した画像の bytes だけから作る。この応答内に閉じ、KVに置かない。
+// 種類・容量を検査した画像の bytes だけから作る。この応答内に閉じ、KVに置かない（動画は埋めない）。
 function imageDataUrl(image: PickedImage) {
   const bytes = new Uint8Array(image.bytes)
   const parts: string[] = []
@@ -498,8 +498,12 @@ async function itemPreviewPost(c: Context<AppEnv>, askedId?: string) {
     memberSlug: member?.slug ?? null,
     shots: [
       ...plan.kept.map((edit) => ({ ...edit.shot, alt: edit.alt })),
+      /*
+        まだ保存していない動画は応答に埋めない（1本 10MB まで。base64 で 13MB の HTML になる）。
+        src を空にして、ギャラリーは枠と説明だけを出す（components.tsx の ItemShots）
+      */
       ...added.map((shot) => ({
-        url: imageDataUrl(shot.image),
+        url: shot.image.type.startsWith('video/') ? '' : imageDataUrl(shot.image),
         alt: shot.alt,
         width: shot.image.width ?? null,
         height: shot.image.height ?? null,
@@ -509,6 +513,9 @@ async function itemPreviewPost(c: Context<AppEnv>, askedId?: string) {
   return itemResponse(c, await snapshot(c), item, {
     editHref,
     unsaved: true,
+    note: added.some((shot) => shot.image.type.startsWith('video/'))
+      ? '選んだ動画は、保存したあとで再生できます（ここでは枠だけを出します）。'
+      : undefined,
     warnings: values.published
       ? publishErrors({
           kind: 'item',

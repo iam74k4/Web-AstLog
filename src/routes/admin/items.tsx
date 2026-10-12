@@ -25,7 +25,7 @@ import {
   str,
   yearFrom,
 } from '../../lib/format'
-import { IMAGE_ACCEPT, IMAGE_LABELS } from '../../lib/image'
+import { IMAGE_ACCEPT, isVideoUrl, SHOT_ACCEPT } from '../../lib/image'
 import {
   Area,
   Confirm,
@@ -44,12 +44,15 @@ import { ExternalIcon, PencilIcon, TrashIcon } from '../../ui/icons'
 import {
   commitWithImage,
   discardImages,
+  IMAGE_LIMIT_NOTE,
   imageNotKept,
   type PickedImage,
   pickImage,
   pickImages,
   putImage,
+  quotaErrors,
   removeImage,
+  SHOT_LIMIT_NOTE,
 } from './images'
 import {
   cameFromEdit,
@@ -130,91 +133,95 @@ itemRoutes.get('/items', async (c) => {
         </div>
       ) : (
         <ul class="rows">
-          {rows.map((item) => (
-            <li class="row row--project" key={item.id}>
-              {item.imageUrl || item.shots[0]?.url ? (
-                <img
-                  class="row__thumb"
-                  src={item.imageUrl ?? item.shots[0]?.url}
-                  alt=""
-                  width={112}
-                  height={70}
-                  loading="lazy"
-                />
-              ) : item.iconUrl ? (
-                <img
-                  class="row__thumb row__thumb--icon"
-                  src={item.iconUrl}
-                  alt=""
-                  width={112}
-                  height={70}
-                  loading="lazy"
-                />
-              ) : (
-                /*
+          {rows.map((item) => {
+            // 見本は絵だけ（動画は <img> に描けない。ほかの画像の先頭が動画なら次の絵）
+            const thumb = item.imageUrl ?? item.shots.find((shot) => !isVideoUrl(shot.url))?.url
+            return (
+              <li class="row row--project" key={item.id}>
+                {thumb ? (
+                  <img
+                    class="row__thumb"
+                    src={thumb}
+                    alt=""
+                    width={112}
+                    height={70}
+                    loading="lazy"
+                  />
+                ) : item.iconUrl ? (
+                  <img
+                    class="row__thumb row__thumb--icon"
+                    src={item.iconUrl}
+                    alt=""
+                    width={112}
+                    height={70}
+                    loading="lazy"
+                  />
+                ) : (
+                  /*
                   絵の無い作品にも同じ大きさの空の枠を置く。枠が行によって有ったり無かったりすると、
                   題の頭と行の高さがそろわなかった（管理画面の一覧だけ。公開ページには代わりの絵を置かない）
                 */
-                <span class="row__thumb row__thumb--empty" aria-hidden="true" />
-              )}
-              <span class="row__main">
-                <strong>{item.title}</strong>
-                {/*
+                  <span class="row__thumb row__thumb--empty" aria-hidden="true" />
+                )}
+                <span class="row__main">
+                  <strong>{item.title}</strong>
+                  {/*
                   恒久リンクをここに出す。貼るための URL なので、探しに行かずに
                   読めるところに置く。slug の無い行（列より前からある作品）も、
                   黙っていると気づけないので名指しで出す
                 */}
-                <span class="row__sub">
-                  {item.member?.name ?? '担当なし'} ·{' '}
-                  {itemHref(item) ?? '恒久リンクなし（保存すると付く）'}
+                  <span class="row__sub">
+                    {item.member?.name ?? '担当なし'} ·{' '}
+                    {itemHref(item) ?? '恒久リンクなし（保存すると付く）'}
+                  </span>
                 </span>
-              </span>
-              <span class="row__col">{item.platform?.label ?? item.category}</span>
-              <span class="row__col">{item.year}</span>
-              <span class="row__col row__col--num">{item.sortOrder}</span>
-              <StatusPill published={item.published} />
-              <span class="row__actions">
-                <a
-                  class="icon-btn"
-                  href={`/admin/preview/items/${item.id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label={`${item.title} の保存済み内容をプレビュー`}
-                >
-                  <ExternalIcon />
-                  <span class="icon-btn__text">プレビュー</span>
-                </a>
-                {item.published && itemHref(item) ? (
+                <span class="row__col">{item.platform?.label ?? item.category}</span>
+                <span class="row__col">{item.year}</span>
+                <span class="row__col row__col--num">{item.sortOrder}</span>
+                <StatusPill published={item.published} />
+                <span class="row__actions">
                   <a
                     class="icon-btn"
-                    href={itemHref(item) ?? ''}
+                    href={`/admin/preview/items/${item.id}`}
                     target="_blank"
                     rel="noreferrer"
-                    aria-label={`${item.title} の公開ページを見る`}
+                    aria-label={`${item.title} の保存済み内容をプレビュー`}
                   >
                     <ExternalIcon />
-                    <span class="icon-btn__text">公開ページ</span>
+                    <span class="icon-btn__text">プレビュー</span>
                   </a>
-                ) : null}
-                <a
-                  class="icon-btn"
-                  href={`/admin/items/${item.id}/edit`}
-                  aria-label={`${item.title} を編集`}
-                >
-                  <PencilIcon />
-                  <span class="icon-btn__text">編集</span>
-                </a>
-                <a
-                  class="icon-btn icon-btn--danger"
-                  href={`/admin/items/${item.id}/delete`}
-                  aria-label={`${item.title} を削除`}
-                >
-                  <TrashIcon />
-                  <span class="icon-btn__text">削除</span>
-                </a>
-              </span>
-            </li>
-          ))}
+                  {item.published && itemHref(item) ? (
+                    <a
+                      class="icon-btn"
+                      href={itemHref(item) ?? ''}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`${item.title} の公開ページを見る`}
+                    >
+                      <ExternalIcon />
+                      <span class="icon-btn__text">公開ページ</span>
+                    </a>
+                  ) : null}
+                  <a
+                    class="icon-btn"
+                    href={`/admin/items/${item.id}/edit`}
+                    aria-label={`${item.title} を編集`}
+                  >
+                    <PencilIcon />
+                    <span class="icon-btn__text">編集</span>
+                  </a>
+                  <a
+                    class="icon-btn icon-btn--danger"
+                    href={`/admin/items/${item.id}/delete`}
+                    aria-label={`${item.title} を削除`}
+                  >
+                    <TrashIcon />
+                    <span class="icon-btn__text">削除</span>
+                  </a>
+                </span>
+              </li>
+            )
+          })}
         </ul>
       )}
     </AdminLayout>,
@@ -361,7 +368,7 @@ const LINK_ROWS = 3
 
 /*
   ほかの画像（スクリーンショット）の上限と、1度の保存で足せる空いた欄の数。上限は
-  作品のページの縦ギャラリーに並べる枚数として（1枚 1MB まで）。JavaScript が無いので
+  作品のページの縦ギャラリーに並べる枚数として（大きさの上限は src/routes/admin/images.ts）。JavaScript が無いので
   欄を足す手が無く、もっと足すなら保存して開き直す（リンクの欄と同じ）
 */
 const MAX_SHOTS = 8
@@ -448,7 +455,19 @@ const ShotFields = ({
     {shots.map((shot, index) => (
       <div class="shot-row" key={shot.id}>
         {/* 見本。何が写っているかは隣の欄が言うので、ここでは名前を持たせない */}
-        <img class="shot-row__image" src={shot.url} alt="" loading="lazy" />
+        {isVideoUrl(shot.url) ? (
+          // 動画の見本は最初の絵だけ（#t=0.1。見本なので操作の手は出さない）。動画だと名乗る
+          <video
+            class="shot-row__image"
+            src={`${shot.url}#t=0.1`}
+            muted
+            playsinline
+            preload="metadata"
+            aria-label={`${index + 1} 枚目（動画）`}
+          />
+        ) : (
+          <img class="shot-row__image" src={shot.url} alt="" loading="lazy" />
+        )}
         <input
           class={errors?.shots && !shot.alt && !shot.remove ? 'input input--error' : 'input'}
           type="text"
@@ -485,7 +504,7 @@ const ShotFields = ({
           class={errors?.newShot ? 'input input--file input--error' : 'input input--file'}
           type="file"
           name="newShot"
-          accept={IMAGE_ACCEPT}
+          accept={SHOT_ACCEPT}
           aria-label={`足す画像（${index + 1}）`}
         />
         <input
@@ -515,7 +534,8 @@ const ShotFields = ({
     ) : null}
     <span class="field__hint">
       作品のページでは、Screenshots の縦ギャラリーに並びます。並び順は小さいほど先 · 1枚ずつ{' '}
-      {IMAGE_LABELS}（1MB まで） · 公開するときは1枚ずつ代替テキストが必須 ·{' '}
+      {SHOT_LIMIT_NOTE}（動画は押して再生。1回の保存で合計 24MB まで） ·
+      公開するときは1枚ずつ代替テキストが必須 ·{' '}
       {slots
         ? `${MAX_SHOTS} 枚まで。もっと足すときは、保存してから開き直すと空いた欄が出る`
         : `${MAX_SHOTS} 枚に達している。足すときは、外してから保存する`}
@@ -648,8 +668,8 @@ const ItemForm = (props: ItemFormData) => {
             ) : null}
             <span class="field__hint">
               {item?.imageUrl
-                ? `選ぶと差し替わる。空なら今のまま · ${IMAGE_LABELS}（1MB まで）`
-                : `スクリーンショット。${IMAGE_LABELS}（1MB まで） · 作品のページと、一覧の行のサムネイルに出る。横長なら共有カードも大きく出る`}
+                ? `選ぶと差し替わる。空なら今のまま · ${IMAGE_LIMIT_NOTE}`
+                : `スクリーンショット。${IMAGE_LIMIT_NOTE} · 作品のページと、一覧の行のサムネイルに出る。横長なら共有カードも大きく出る`}
             </span>
           </label>
           {/*
@@ -698,8 +718,8 @@ const ItemForm = (props: ItemFormData) => {
             ) : null}
             <span class="field__hint">
               {item?.iconUrl
-                ? `選ぶと差し替わる。空なら今のまま · ${IMAGE_LABELS}（1MB まで）`
-                : `正方形の画像（アプリのアイコンなど）。${IMAGE_LABELS}（1MB まで） · 一覧の行と作品のページで、題の左に小さく出る`}
+                ? `選ぶと差し替わる。空なら今のまま · ${IMAGE_LIMIT_NOTE}`
+                : `正方形の画像（アプリのアイコンなど）。${IMAGE_LIMIT_NOTE} · 一覧の行と作品のページで、題の左に小さく出る`}
             </span>
           </label>
           {item?.iconUrl ? (
@@ -1463,6 +1483,12 @@ itemRoutes.post('/items', async (c) => {
     await itemSlugTaken(database, values.slug, null),
   )
   if (errors) return back(errors)
+  const full = await quotaErrors(c.env.MEDIA, [
+    ...shots.added.map((shot) => ['newShot', shot.image] as const),
+    ['image', picked.image],
+    ['icon', icon.image],
+  ])
+  if (full) return back(full)
 
   // 検査が全部通ってから KV に置き、D1 が落ちたら置いた画像を消す（commitWithImage）
   const placed = await placeImages(c.env.MEDIA, [
@@ -1601,6 +1627,12 @@ async function saveItem(
     await itemSlugTaken(database, values.slug, id),
   )
   if (errors) return back(errors)
+  const full = await quotaErrors(c.env.MEDIA, [
+    ...fresh.map((shot) => ['newShot', shot.image] as const),
+    ['image', picked.image],
+    ['icon', icon.image],
+  ])
+  if (full) return back(full)
 
   // 新しい画像を置く → D1 → 通ってから前の画像を消す（commitWithImage の順序）
   const placed = await placeImages(c.env.MEDIA, [

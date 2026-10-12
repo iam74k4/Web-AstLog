@@ -8,7 +8,7 @@ import { STORY_SECTIONS } from '../src/domain'
 import { isOngoing, ONGOING_HINT, yearFrom } from '../src/lib/format'
 import { SITE_VERSION_KEY } from '../src/lib/page-cache'
 import { db, form, get, okText, resetDb, seedItem, seedMember, signIn, touch } from './helpers'
-import { avif, file, gif, heic, jpeg, png, svg, webp } from './images'
+import { avif, file, gif, heic, jpeg, padded, png, svg, webp } from './images'
 
 beforeEach(resetDb)
 
@@ -208,11 +208,12 @@ describe('Members', () => {
   it('大きすぎる画像は黙って捨てず、保存も止める', async () => {
     const signed = await signIn()
     const body = form({ name: '画像テスト', slug: 'image-test' })
-    body.append('avatar', new File([new Uint8Array(1_200_000)], 'big.png', { type: 'image/png' }))
+    // 種類は中身の頭で決まるので、本物の PNG の頭を 1MB を超えるまで伸ばす
+    body.append('avatar', file(padded(png(), 1_200_000), 'big.png', 'image/png'))
 
     const response = await signed('/admin/members', { method: 'POST', body })
     expect(response.status).toBe(400)
-    expect(await response.text()).toContain('1MB まで')
+    expect(await response.text()).toContain('画像は 1MB まで（GIF は 3MB まで）です')
     expect(await (await signed('/admin/members')).text()).not.toContain('image-test')
   })
 
@@ -519,11 +520,11 @@ describe('Items — 本文と画像', () => {
       method: 'POST',
       body: withImage(
         { type: 'app', title: '大きい画像' },
-        file(new Uint8Array(1_200_000), 'big.png', 'image/png'),
+        file(padded(png(), 1_200_000), 'big.png', 'image/png'),
       ),
     })
     expect(response.status).toBe(400)
-    expect(await response.text()).toContain('1MB まで')
+    expect(await response.text()).toContain('画像は 1MB まで（GIF は 3MB まで）です')
     expect(await itemKeys()).toEqual([])
     expect(await db().select().from(schema.items)).toHaveLength(0)
   })

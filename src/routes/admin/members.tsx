@@ -9,7 +9,7 @@ import * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
 import { newToken } from '../../lib/auth'
 import { bool, isHttpsUrl, ONGOING_HINT, str } from '../../lib/format'
-import { IMAGE_ACCEPT, IMAGE_LABELS } from '../../lib/image'
+import { IMAGE_ACCEPT } from '../../lib/image'
 import { isContactEmail } from '../../site'
 import {
   Area,
@@ -25,7 +25,15 @@ import {
 import { AdminLayout } from '../../ui/AdminLayout'
 import { Avatar, StatusPill } from '../../ui/components'
 import { ExternalIcon, PencilIcon, TrashIcon } from '../../ui/icons'
-import { commitWithImage, discardImages, imageNotKept, pickImage, putImage } from './images'
+import {
+  commitWithImage,
+  discardImages,
+  IMAGE_LIMIT_NOTE,
+  imageNotKept,
+  pickImage,
+  putImage,
+  quotaErrors,
+} from './images'
 import {
   asValues,
   cameFromEdit,
@@ -274,8 +282,8 @@ const MemberForm = (props: {
             ) : null}
             <span class="field__hint">
               {member?.avatarUrl
-                ? `選ぶと差し替わる。空なら今のまま · ${IMAGE_LABELS}（1MB まで）`
-                : `${IMAGE_LABELS}（1MB まで）。未設定なら頭文字を出す`}
+                ? `選ぶと差し替わる。空なら今のまま · ${IMAGE_LIMIT_NOTE}`
+                : `${IMAGE_LIMIT_NOTE}。未設定なら頭文字を出す`}
             </span>
           </label>
         </FormDetails>
@@ -518,6 +526,8 @@ memberRoutes.post('/members', async (c) => {
     await memberSlugTaken(database, values.slug, null),
   )
   if (errors) return back(errors)
+  const full = await quotaErrors(c.env.MEDIA, [['avatar', picked.image]])
+  if (full) return back(full)
 
   // 検査が全部通ってから KV に置き、D1 が落ちたら置いた画像を消す（commitWithImage）
   const avatarUrl = picked.image
@@ -585,6 +595,8 @@ async function saveMember(
     await memberSlugTaken(database, values.slug, id),
   )
   if (errors) return back(errors)
+  const full = await quotaErrors(c.env.MEDIA, [['avatar', picked.image]])
+  if (full) return back(full)
 
   // 新しい画像を置く → D1 → 通ってから前の画像を消す（commitWithImage の順序）
   const avatarUrl = picked.image

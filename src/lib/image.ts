@@ -8,9 +8,10 @@
   （管理画面と同じオリジンなので、owner のクッキーのまま管理画面を読み書き
   できる）。保存する content-type と拡張子も、ここで判定した結果からだけ作る。
 
-  通すのは5種類だけ。SVG はスクリプトを持てる文書なので受けない。HEIC は
-  Safari 以外で表示できない（Mac の Safari から上げると「保存しました」と
-  出て、Chrome と Firefox の訪問者にだけ壊れて見えていた）。
+  通すのは画像の5種類と、作品のほかの画像（スクリーンショット）の欄だけで受ける動画の
+  MP4（H.264）。SVG はスクリプトを持てる文書なので受けない。HEIC は Safari 以外で表示
+  できない（Mac の Safari から上げると「保存しました」と出て、Chrome と Firefox の訪問者に
+  だけ壊れて見えていた）。動画も同じ理由で、MOV（QuickTime）と HEVC（H.265）は受けない。
 
   配る側（src/routes/public/images.ts の /images/*）も同じ一覧を読み、一覧に無い
   content-type が KV に残っていたら、画像として返さずに添付として返す。
@@ -37,6 +38,30 @@ export const IMAGE_LABELS = IMAGE_FORMATS.map((format) => format.label).join('�
 
 export const isImageType = (type: string | undefined | null): type is string =>
   IMAGE_FORMATS.some((format) => format.type === type)
+
+/*
+  動画。作品のほかの画像（スクリーンショット）の欄でだけ受ける（src/routes/admin/images.ts の
+  pickImages）。iPhone の Safari と Chrome のどちらでも再生できる組は MP4（H.264）だけ
+*/
+export const VIDEO_FORMATS: readonly ImageFormat[] = [
+  { type: 'video/mp4', extension: 'mp4', label: 'MP4' },
+]
+
+// ほかの画像の欄の accept（画像の5種類と動画）
+export const SHOT_ACCEPT = [...IMAGE_FORMATS, ...VIDEO_FORMATS]
+  .map((format) => format.type)
+  .join(',')
+
+// /images/* が中身の種類として返してよいもの（画像の5種類と動画）
+export const isMediaType = (type: string | undefined | null): type is string =>
+  [...IMAGE_FORMATS, ...VIDEO_FORMATS].some((format) => format.type === type)
+
+/*
+  URL が動画か。拡張子は putImage が判定の結果から付けたもの（.mp4）なので、こちらが上げた
+  ものならそのまま信じてよい。作品のページは画像なら <img>、動画なら <video> で描き、
+  共有カードと構造化データの画像からは外す
+*/
+export const isVideoUrl = (url: string) => /\.mp4$/i.test(url)
 
 /*
   経路の拡張子から種類を引く（og:image:type）。拡張子は putImage が判定の
@@ -71,6 +96,59 @@ const startsWith = (bytes: Uint8Array, signature: number[], at = 0) =>
   signature.every((byte, index) => bytes[at + index] === byte)
 
 const formatByType = (type: string) => IMAGE_FORMATS.find((format) => format.type === type)
+
+/*
+  動画の判定。入れ物（ISO BMFF）の先頭の ftyp 箱と、moov の中の映像の符号化（stsd の
+  見本の種類）を見る。結果は3つ——通す（MP4 と寸法）、理由つきで弾く（MOV・HEVC など、
+  書き出し直せば通るもの）、動画ではない（null。呼ぶ側は種類の知らせを出す）。
+
+  寸法は映像の tkhd（表示の幅と高さ。16.16 の固定小数）。行列が 90° / 270° の回転
+  （iPhone の縦の動画）なら縦横を入れ替える。読めなければ寸法なしで返す。
+*/
+export type VideoProblem = 'quicktime' | 'hevc' | 'codec'
+
+export function sniffVideo(
+  bytes: Uint8Array,
+): { video: SniffedImage } | { problem: VideoProblem } | null {
+  if (ascii(bytes, 4, 4) !== 'ftyp') return null
+  if (ascii(bytes, 8, 4) === 'qt  ') return { problem: 'quicktime' }
+  const moov = findBox(bytes, 0, bytes.length, 'moov')
+  if (!moov) return null
+  const codecs: string[] = []
+  let size: Size | null = null
+  for (const trak of boxes(bytes, moov.body, moov.end)) {
+    if (trak.type !== 'trak') continue
+    const mdia = findBox(bytes, trak.body, trak.end, 'mdia')
+    const hdlr = mdia ? findBox(bytes, mdia.body, mdia.end, 'hdlr') : null
+    // hdlr は full box（版と印 4・pre_defined 4 のあとに handler_type）
+    if (!mdia || !hdlr || ascii(bytes, hdlr.body + 8, 4) !== 'vide') continue
+    const minf = findBox(bytes, mdia.body, mdia.end, 'minf')
+    const stbl = minf ? findBox(bytes, minf.body, minf.end, 'stbl') : null
+    const stsd = stbl ? findBox(bytes, stbl.body, stbl.end, 'stsd') : null
+    // stsd も full box（版と印 4・個数 4 のあとに見本の箱が並ぶ）
+    if (stsd) for (const entry of boxes(bytes, stsd.body + 8, stsd.end)) codecs.push(entry.type)
+    const tkhd = findBox(bytes, trak.body, trak.end, 'tkhd')
+    if (tkhd && !size) size = trackSize(bytes, tkhd)
+  }
+  if (codecs.some((codec) => codec === 'avc1' || codec === 'avc3')) {
+    const format = VIDEO_FORMATS[0] as ImageFormat
+    return { video: size ? { ...format, ...size } : { ...format } }
+  }
+  if (codecs.some((codec) => codec === 'hvc1' || codec === 'hev1')) return { problem: 'hevc' }
+  return codecs.length ? { problem: 'codec' } : null
+}
+
+// tkhd の幅と高さ。版 0 と 1 で前の欄の長さが違う（作成・更新の日時と長さが 64 ビットになる）
+function trackSize(bytes: Uint8Array, tkhd: Box): Size | null {
+  const wide = bytes[tkhd.body] === 1
+  const matrix = tkhd.body + (wide ? 52 : 40)
+  const at = matrix + 36
+  if (at + 8 > tkhd.end) return null
+  const size = sized(readU16(bytes, at), readU16(bytes, at + 4))
+  // 行列の a と d が 0 なら 90° か 270° の回転（表示では縦横が入れ替わる）
+  const turned = readU32(bytes, matrix) === 0 && readU32(bytes, matrix + 16) === 0
+  return size && turned ? { width: size.height, height: size.width } : size
+}
 
 function formatOf(bytes: Uint8Array): ImageFormat | undefined {
   if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) {
@@ -238,7 +316,7 @@ function* boxes(bytes: Uint8Array, start: number, end: number): Generator<Box> {
     const type = ascii(bytes, at + 4, 4)
     let body = at + 8
     if (size === 1) {
-      // 64 ビットの長さ。上位 32 ビットが 0 でなければ、1MB までの画像ではありえない
+      // 64 ビットの長さ。上位 32 ビットが 0 でなければ、10MB までの画像と動画ではありえない
       if (readU32(bytes, at + 8) !== 0) return
       size = readU32(bytes, at + 12)
       body = at + 16

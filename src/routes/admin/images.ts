@@ -1,9 +1,22 @@
 import { newToken } from '../../lib/auth'
 import { toSlug } from '../../lib/format'
-import { IMAGE_LABELS, type SniffedImage, sniffImage } from '../../lib/image'
+import { IMAGE_LABELS, type SniffedImage, sniffImage, sniffVideo } from '../../lib/image'
 import { archiveImage } from '../../lib/media-retention'
+import { MEDIA_QUOTA_BYTES, mediaUsage, megabytes } from '../../lib/media-usage'
 
-const IMAGE_MAX_BYTES = 1_000_000
+/*
+  1枚（1本）の上限。種類ごとに決める——静止画は 1MB、動く GIF は 3MB、動画は 10MB。
+  判定の前に、その欄で受けうるいちばん大きい上限（file.size）で先に止め、大きなファイルを
+  読み込まない。全部の欄を合わせた1回の送信の上限は src/routes/admin/request.ts の
+  readAdminForm（Worker のメモリに収める）
+*/
+export const IMAGE_MAX_BYTES = 1_000_000
+export const GIF_MAX_BYTES = 3_000_000
+export const VIDEO_MAX_BYTES = 10_000_000
+
+// 欄の案内に添える上限（フォームの field__hint）
+export const IMAGE_LIMIT_NOTE = `${IMAGE_LABELS}（1MB まで。GIF は 3MB まで）`
+export const SHOT_LIMIT_NOTE = `${IMAGE_LIMIT_NOTE}・動画は MP4（H.264）で 10MB まで`
 
 /*
   画像は KV に置く。R2 が未有効なのと、画像は読むばかりで書き換えが稀なため。
@@ -13,7 +26,8 @@ const IMAGE_MAX_BYTES = 1_000_000
   種類は中身の先頭のバイトで決める（src/lib/image.ts の sniffImage）。ブラウザが
   名乗る file.type は見ない——image/png を名乗った SVG を名乗りのまま保存して
   配ると、開いた人のブラウザがこのサイトのオリジンでスクリプトを走らせる。
-  通すのは PNG・JPEG・WebP・AVIF・GIF だけで、SVG と HEIC は理由を添えて弾く。
+  通すのは PNG・JPEG・WebP・AVIF・GIF だけで、SVG と HEIC は理由を添えて弾く。作品の
+  ほかの画像の欄（pickImages）だけは MP4（H.264）の動画も通す（src/lib/image.ts の sniffVideo）。
 
   検査（pickImage）と書き込み（putImage）を分けてあるのは、作品のフォームが
   「画像があるか」を知ってから保存してよいかを決めるため（代替テキストの
@@ -28,18 +42,38 @@ export type PickedImage = SniffedImage & { bytes: ArrayBuffer }
 type Picked = { image: PickedImage | null; error?: string }
 
 const IMAGE_TYPE_ERROR = `${IMAGE_LABELS} の画像を選んでください（SVG と HEIC は受け付けません。iPhone の写真は JPEG で書き出してください）`
+const SHOT_TYPE_ERROR = `${IMAGE_LABELS} の画像か、MP4（H.264）の動画を選んでください（SVG・HEIC・MOV は受け付けません）`
+const IMAGE_SIZE_ERROR = '画像は 1MB まで（GIF は 3MB まで）です。小さくしてから選び直してください'
+// ほかの画像の欄で、中身を読む前に止めるとき（画像か動画かはまだ分からない）
+const SHOT_SIZE_ERROR =
+  '画像は 1MB まで（GIF は 3MB まで）、動画は 10MB までです。小さくしてから選び直してください'
+const VIDEO_ERRORS = {
+  quicktime: 'MOV（QuickTime）の動画は受け付けません。MP4（H.264）で書き出してください',
+  hevc: 'HEVC（H.265）の動画は Chrome などで再生できません。MP4（H.264）で書き出してください',
+  codec: 'この動画の形式は受け付けません。MP4（H.264）で書き出してください',
+} as const
 
-async function pickFile(file: File | string | null): Promise<Picked> {
+async function pickFile(file: File | string | null, video = false): Promise<Picked> {
   if (!(file instanceof File) || file.size === 0) return { image: null }
-  if (file.size > IMAGE_MAX_BYTES) {
-    return { image: null, error: '画像は 1MB までです。小さくしてから選び直してください' }
+  if (file.size > (video ? VIDEO_MAX_BYTES : GIF_MAX_BYTES)) {
+    return { image: null, error: video ? SHOT_SIZE_ERROR : IMAGE_SIZE_ERROR }
   }
   const bytes = await file.arrayBuffer()
-  const sniffed = sniffImage(new Uint8Array(bytes))
-  if (!sniffed) return { image: null, error: IMAGE_TYPE_ERROR }
-  return { image: { ...sniffed, bytes } }
+  const view = new Uint8Array(bytes)
+  const sniffed = sniffImage(view)
+  if (sniffed) {
+    const limit = sniffed.type === 'image/gif' ? GIF_MAX_BYTES : IMAGE_MAX_BYTES
+    if (bytes.byteLength > limit) return { image: null, error: IMAGE_SIZE_ERROR }
+    return { image: { ...sniffed, bytes } }
+  }
+  if (!video) return { image: null, error: IMAGE_TYPE_ERROR }
+  const clip = sniffVideo(view)
+  if (!clip) return { image: null, error: SHOT_TYPE_ERROR }
+  if ('problem' in clip) return { image: null, error: VIDEO_ERRORS[clip.problem] }
+  return { image: { ...clip.video, bytes } }
 }
 
+// アバター・作品のメインの画像とアイコン。画像だけ（動画は作品のほかの画像の欄だけ）
 export const pickImage = (form: FormData, field: string): Promise<Picked> =>
   pickFile(form.get(field))
 
@@ -49,7 +83,7 @@ export const pickImage = (form: FormData, field: string): Promise<Picked> =>
   何番目かで組にするため
 */
 export const pickImages = (form: FormData, field: string): Promise<Picked[]> =>
-  Promise.all(form.getAll(field).map(pickFile))
+  Promise.all(form.getAll(field).map((file) => pickFile(file, true)))
 
 /*
   キーは /images/ 側の検査（src/routes/public/images.ts の IMAGE_KEY——置き場の
@@ -65,8 +99,32 @@ export async function putImage(
 ) {
   const fallback = folder === 'avatars' ? 'member' : 'item'
   const key = `${folder}/${toSlug(name) || fallback}-${newToken(4)}.${image.extension}`
-  await kv.put(key, image.bytes, { metadata: { contentType: image.type } })
+  // 大きさも添える（容量を数えるとき、中身を読まずに一覧の metadata だけで足せる。src/lib/media-usage.ts）
+  await kv.put(key, image.bytes, {
+    metadata: { contentType: image.type, size: image.bytes.byteLength },
+  })
   return `/images/${key}`
+}
+
+/*
+  置く前に容量を確かめる（上限は src/lib/media-usage.ts の MEDIA_QUOTA_BYTES）。上げるものが
+  無ければ KV の一覧を引かない。超えるなら、選んだ欄のうち最初の欄に理由を付けて止める
+  （どの欄も KV にはまだ書いていない）。差し替えで外れる前の画像は保存のあと控え（数えない）へ
+  移るが、ここでは差し引かない——上限の近くで差し替えるときは、先に外して保存する
+*/
+export async function quotaErrors(
+  kv: KVNamespace,
+  picks: readonly (readonly [field: string, image: PickedImage | null])[],
+): Promise<Record<string, string> | null> {
+  const chosen = picks.filter((pick): pick is readonly [string, PickedImage] => pick[1] !== null)
+  const incoming = chosen.reduce((sum, [, image]) => sum + image.bytes.byteLength, 0)
+  const field = chosen[0]?.[0]
+  if (!field) return null
+  const { used } = await mediaUsage(kv)
+  if (used + incoming <= MEDIA_QUOTA_BYTES) return null
+  return {
+    [field]: `画像と動画の容量の上限（${megabytes(MEDIA_QUOTA_BYTES)}）を超えます（使っているのは ${megabytes(used)}、足すのは ${megabytes(incoming)}）。使わない画像を外して保存してから、選び直してください`,
+  }
 }
 
 /*

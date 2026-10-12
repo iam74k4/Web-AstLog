@@ -26,6 +26,7 @@ import {
   type SkillGroup,
   skillRows,
 } from '../lib/format'
+import { isVideoUrl } from '../lib/image'
 import { isContactEmail, SITE, type SiteSettings } from '../site'
 import { GithubIcon, InstagramIcon, MailIcon, PencilIcon, Wordmark, XIcon } from './icons'
 
@@ -765,8 +766,44 @@ export const LinkRow = ({ links }: { links: { label: string; url: string }[] }) 
 */
 export const Shot = ({ src, alt, lead }: { src: string; alt: string; lead?: boolean }) => (
   <figure class="shot">
-    <img src={src} alt={alt} decoding="async" fetchpriority={lead ? 'high' : undefined} />
+    {/* src が空なのは、プレビューのまだ保存していない動画（ItemShots と同じ） */}
+    {isVideoUrl(src) || !src ? (
+      <Clip src={src} label={alt} />
+    ) : (
+      <img src={src} alt={alt} decoding="async" fetchpriority={lead ? 'high' : undefined} />
+    )}
   </figure>
+)
+
+/*
+  作品の動画（ほかの画像の欄に上げた MP4。src/lib/image.ts の sniffVideo）。押して再生する
+  ——自動では動かさない（終わらない動きを足さない。動きを減らす設定の人にも勝手に動かない）。
+  音は消して始め、操作の手（controls）で出せる。playsinline は iPhone で全画面に飛ばさない。
+  preload="metadata" は長さと最初の絵のぶんだけ範囲で取る（/images/* が 206 で答える）。
+  #t=0.1 は iPhone の Safari に最初の絵を出させるため（無いと再生するまで黒い枠のまま）。
+  枠と収め方は画像と同じ（CSS が先に決め、切らずに収める）。名前は代替テキスト
+*/
+const Clip = ({
+  src,
+  label,
+  width,
+  height,
+}: {
+  src: string
+  label: string
+  width?: number | null
+  height?: number | null
+}) => (
+  <video
+    src={src ? `${src}#t=0.1` : undefined}
+    controls
+    muted
+    playsinline
+    preload="metadata"
+    width={width ?? undefined}
+    height={height ?? undefined}
+    aria-label={label}
+  />
 )
 
 /*
@@ -823,6 +860,10 @@ export const ItemDetail = ({
   別タブに開ける。操作は HTML のリンクだけなので、JavaScript 無効でも拡大できる。
   各画像の説明は代替テキストをそのまま見せる。リンクの名前が説明と操作を含むため、
   キャプションは読み上げから外し、同じ文を2度読ませない。先頭だけすぐ読み、続きは遅延。
+
+  動画（Clip）はリンクで包まない——面いっぱいのリンクの覆いが再生の手を塞ぐ。原寸の手
+  「Full size ↗」も無い（動画は自分の操作で全画面にできる）。名前は「動画N「説明」」。
+  プレビューでまだ保存していない動画は src が空で、枠だけを出す（応答に中身を埋めない）
 */
 export const ItemShots = ({ images }: { images: ItemImage[] }) =>
   images.length > 1 ? (
@@ -832,34 +873,47 @@ export const ItemShots = ({ images }: { images: ItemImage[] }) =>
         {images.map((image, index) => (
           <figure
             class={index === 0 ? 'gallery__item gallery__item--lead' : 'gallery__item'}
-            key={image.url}
+            key={image.url || `pending-${index}`}
           >
-            <a
-              class="gallery__image"
-              href={image.url}
-              target="_blank"
-              rel="noreferrer"
-              aria-label={`Full size: 画像${index + 1}「${image.alt}」（別タブ）`}
-            >
+            {isVideoUrl(image.url) || !image.url ? (
               <span class="gallery__frame">
-                <img
+                <Clip
                   src={image.url}
-                  alt={image.alt}
-                  width={image.width ?? undefined}
-                  height={image.height ?? undefined}
-                  loading={index === 0 ? undefined : 'lazy'}
-                  // 先頭の1枚は作品のページでいちばん大きな絵（LCP）。ほかの読み込みより先に取りに行く
-                  fetchpriority={index === 0 ? 'high' : undefined}
-                  decoding="async"
+                  label={`動画${index + 1}「${image.alt}」`}
+                  width={image.width}
+                  height={image.height}
                 />
               </span>
-            </a>
+            ) : (
+              <a
+                class="gallery__image"
+                href={image.url}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Full size: 画像${index + 1}「${image.alt}」（別タブ）`}
+              >
+                <span class="gallery__frame">
+                  <img
+                    src={image.url}
+                    alt={image.alt}
+                    width={image.width ?? undefined}
+                    height={image.height ?? undefined}
+                    loading={index === 0 ? undefined : 'lazy'}
+                    // 先頭の1枚は作品のページでいちばん大きな絵（LCP）。ほかの読み込みより先に取りに行く
+                    fetchpriority={index === 0 ? 'high' : undefined}
+                    decoding="async"
+                  />
+                </span>
+              </a>
+            )}
             <figcaption class="gallery__caption" aria-hidden="true">
               <span class="gallery__number">{twoDigits(index + 1)}</span>
               <span class="gallery__description">{image.alt}</span>
-              <span class="gallery__open" lang="en">
-                Full size ↗
-              </span>
+              {isVideoUrl(image.url) || !image.url ? null : (
+                <span class="gallery__open" lang="en">
+                  Full size ↗
+                </span>
+              )}
             </figcaption>
           </figure>
         ))}
