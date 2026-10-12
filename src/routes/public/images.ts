@@ -36,7 +36,16 @@ export async function serveImage(c: Context<AppEnv>) {
   const key = c.req.path.replace(/^\/images\//, '')
   if (!IMAGE_KEY.test(key)) return c.notFound()
 
-  const object = await c.env.MEDIA.getWithMetadata<{ contentType?: string }>(key, 'arrayBuffer')
+  /*
+    キーは置くたびに乱数が付き、同じキーの中身は変わらない（putImage）。だから KV の端の写しを
+    1日持たせる（cacheTtl。既定の 60 秒だと、しばらく見られていない画像は毎回中央まで読みに行き、
+    初めの1枚に 0.3〜0.5 秒かかっていた）。消した画像がその端に最長1日残るが、ブラウザには
+    immutable で1年持たせているので、出回り方は変わらない
+  */
+  const object = await c.env.MEDIA.getWithMetadata<{ contentType?: string }>(key, {
+    type: 'arrayBuffer',
+    cacheTtl: 86_400,
+  })
   if (!object.value) return c.notFound()
 
   const type = object.metadata?.contentType

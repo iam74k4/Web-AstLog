@@ -334,6 +334,12 @@
   */
   --rise: var(--sp-5);
   --dur-reveal: 520ms;
+  /*
+    --dur-page はページを移るときの切り替え（view transition）、--dur-chip は目次の印が満ちる長さ。
+    どちらもページを移るたびに待たされるので、現れる動き（--dur-reveal）より短く
+  */
+  --dur-page: 200ms;
+  --dur-chip: 360ms;
   --stagger: 70ms;
   --twinkle: 5s;
   --orbit: 160s;
@@ -758,7 +764,7 @@ body[data-site] > .frame {
   color: var(--accent-ink);
   background:
     linear-gradient(var(--accent), var(--accent)) left center / 100% var(--toc-chip-h) no-repeat;
-  animation: chip-fill var(--dur-reveal) var(--ease) both;
+  animation: chip-fill var(--dur-chip) var(--ease) both;
 }
 
 /*
@@ -2992,7 +2998,7 @@ body[data-site] > .frame {
 ::view-transition-group(*),
 ::view-transition-old(*),
 ::view-transition-new(*) {
-  animation-duration: var(--dur);
+  animation-duration: var(--dur-page);
   animation-timing-function: var(--ease);
 }
 

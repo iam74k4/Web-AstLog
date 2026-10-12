@@ -410,7 +410,7 @@ describe('Items — 本文と画像', () => {
 
     const html = await okText('/apps/item/appmixer')
     expect(html).toContain(
-      `<figure class="shot"><img src="${url}" alt="音量ミキサーの画面" decoding="async"/></figure>`,
+      `<figure class="shot"><img src="${url}" alt="音量ミキサーの画面" decoding="async" fetchpriority="high"/></figure>`,
     )
     // 説明の段落のあとに、本文の小節が同じ段落の部品（Note）で出る
     expect(html).toContain('<div class="bio"><p>音量を分ける常駐アプリ。</p></div>')

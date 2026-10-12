@@ -1637,6 +1637,17 @@ describe('動き', () => {
     )
   })
 
+  it('ページを移るたびの動きは、現れる動きより短い段で持つ', () => {
+    // 移るたびに待たされる（持ち主の「もっさり」）。切り替え 0.2 秒・目次の印 0.36 秒
+    const root = bodyOf(sheet, ':root {')
+    expect(root).toContain('--dur-page: 200ms')
+    expect(root).toContain('--dur-chip: 360ms')
+    expect(bodyOf(sheet, '::view-transition-group(*),')).toContain(
+      'animation-duration: var(--dur-page)',
+    )
+    expect(sheet).toContain('animation: chip-fill var(--dur-chip) var(--ease) both')
+  })
+
   it('入口の幕開けは1回だけ。札・大見出し・リード文・押し手が順に現れる', () => {
     expect(bodyOf(sheet, '.hero--cover > .eyebrow,')).toContain(
       'animation: rise var(--dur-reveal) var(--ease) both',
