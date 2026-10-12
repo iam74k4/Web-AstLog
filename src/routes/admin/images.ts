@@ -16,7 +16,7 @@ export const VIDEO_MAX_BYTES = 10_000_000
 
 // 欄の案内に添える上限（フォームの field__hint）
 export const IMAGE_LIMIT_NOTE = `${IMAGE_LABELS}（1MB まで。GIF は 3MB まで）`
-export const SHOT_LIMIT_NOTE = `${IMAGE_LIMIT_NOTE}・動画は MP4（H.264）で 10MB まで`
+export const SHOT_LIMIT_NOTE = `${IMAGE_LIMIT_NOTE}・動画は H.264 の MP4 か MOV で 10MB まで`
 
 /*
   画像は KV に置く。R2 が未有効なのと、画像は読むばかりで書き換えが稀なため。
@@ -27,7 +27,7 @@ export const SHOT_LIMIT_NOTE = `${IMAGE_LIMIT_NOTE}・動画は MP4（H.264）�
   名乗る file.type は見ない——image/png を名乗った SVG を名乗りのまま保存して
   配ると、開いた人のブラウザがこのサイトのオリジンでスクリプトを走らせる。
   通すのは PNG・JPEG・WebP・AVIF・GIF だけで、SVG と HEIC は理由を添えて弾く。作品の
-  ほかの画像の欄（pickImages）だけは MP4（H.264）の動画も通す（src/lib/image.ts の sniffVideo）。
+  ほかの画像の欄（pickImages）だけは H.264 の動画（MP4・MOV）も通す（src/lib/image.ts の sniffVideo）。
 
   検査（pickImage）と書き込み（putImage）を分けてあるのは、作品のフォームが
   「画像があるか」を知ってから保存してよいかを決めるため（代替テキストの
@@ -42,15 +42,14 @@ export type PickedImage = SniffedImage & { bytes: ArrayBuffer }
 type Picked = { image: PickedImage | null; error?: string }
 
 const IMAGE_TYPE_ERROR = `${IMAGE_LABELS} の画像を選んでください（SVG と HEIC は受け付けません。iPhone の写真は JPEG で書き出してください）`
-const SHOT_TYPE_ERROR = `${IMAGE_LABELS} の画像か、MP4（H.264）の動画を選んでください（SVG・HEIC・MOV は受け付けません）`
+const SHOT_TYPE_ERROR = `${IMAGE_LABELS} の画像か、H.264 の動画（MP4・MOV）を選んでください（SVG と HEIC は受け付けません）`
 const IMAGE_SIZE_ERROR = '画像は 1MB まで（GIF は 3MB まで）です。小さくしてから選び直してください'
 // ほかの画像の欄で、中身を読む前に止めるとき（画像か動画かはまだ分からない）
 const SHOT_SIZE_ERROR =
   '画像は 1MB まで（GIF は 3MB まで）、動画は 10MB までです。小さくしてから選び直してください'
 const VIDEO_ERRORS = {
-  quicktime: 'MOV（QuickTime）の動画は受け付けません。MP4（H.264）で書き出してください',
-  hevc: 'HEVC（H.265）の動画は Chrome などで再生できません。MP4（H.264）で書き出してください',
-  codec: 'この動画の形式は受け付けません。MP4（H.264）で書き出してください',
+  hevc: 'HEVC（H.265）の動画は Chrome などで再生できません。H.264 で書き出してください（iPhone はカメラのフォーマットを「互換性優先」に、Mac の QuickTime Player は書き出しで HEVC を外す）',
+  codec: 'この動画の形式は受け付けません。H.264 の MP4 か MOV で書き出してください',
 } as const
 
 async function pickFile(file: File | string | null, video = false): Promise<Picked> {
