@@ -144,6 +144,68 @@ export const avif = (width = 1600, height = 900) =>
 export const heic = (width = 4032, height = 3024) =>
   isobmff('heic', ['mif1', 'heic'], width, height)
 
+/*
+  動画（MP4）。ftyp → mdat → moov の順（moov が後ろの、ネット向けに並べ替えていない形）。
+  moov > trak > tkhd（版 0。幅と高さは 16.16）・mdia > hdlr（vide）・minf > stbl > stsd > 見本。
+  codec が見本の種類（avc1 = H.264・hvc1 = HEVC）、turned で 90° の回転の行列、handler を
+  soun にすると音だけ。中身は頭だけで再生はできない
+*/
+export const mp4 = ({
+  brand = 'isom',
+  codec = 'avc1',
+  width = 1280,
+  height = 720,
+  turned = false,
+  handler = 'vide',
+}: {
+  brand?: string
+  codec?: string
+  width?: number
+  height?: number
+  turned?: boolean
+  handler?: string
+} = {}) => {
+  const one = 0x00010000
+  const matrix = turned
+    ? [0, one, 0, 0xffff0000, 0, 0, 0, 0, 0x40000000]
+    : [one, 0, 0, 0, one, 0, 0, 0, 0x40000000]
+  const tkhd = box(
+    'tkhd',
+    [0, 0, 0, 3],
+    zeros(20),
+    zeros(8),
+    zeros(8),
+    ...matrix.map((value) => u32(value)),
+    u32(width * 0x10000),
+    u32(height * 0x10000),
+  )
+  const sample = box(codec, zeros(6), u16(1), zeros(16), u16(width), u16(height), zeros(50))
+  return bytes(
+    box('ftyp', brand, zeros(4), 'isom', 'iso2', 'mp41'),
+    box('mdat', zeros(64)),
+    box(
+      'moov',
+      box('mvhd', zeros(100)),
+      box(
+        'trak',
+        tkhd,
+        box(
+          'mdia',
+          box('hdlr', zeros(8), handler, zeros(12), [0]),
+          box('minf', box('stbl', box('stsd', zeros(4), u32(1), sample))),
+        ),
+      ),
+    ),
+  )
+}
+
+// 頭のあとを 0 で埋めて、決まった大きさにする（上限を確かめる。種類は頭で決まる）
+export const padded = (head: Uint8Array, size: number) => {
+  const out = new Uint8Array(size)
+  out.set(head)
+  return out
+}
+
 export const svg = () =>
   bytes('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(document.domain)</script></svg>')
 

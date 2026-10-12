@@ -423,6 +423,26 @@
   gap: var(--sp-4);
 }
 
+/* 画像と動画の容量（概要。AdminDashboard の dashboard-storage）。数字は桁をそろえる */
+.dashboard-storage__usage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-storage__usage strong {
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.dashboard-storage__note {
+  color: var(--ink-weak);
+  font-size: var(--fs-meta);
+}
+
 .dashboard-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

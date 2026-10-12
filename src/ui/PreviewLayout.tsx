@@ -12,6 +12,8 @@ export type PreviewLayoutProps = Omit<
   unsaved?: boolean
   draft?: boolean
   warnings?: Record<string, string> | null
+  // ほかに言っておくこと（まだ保存していない動画は枠だけを出す、など）
+  note?: string
 }
 
 // 公開と同じ外枠で表示し、管理プレビューであることだけを明示する。
@@ -40,6 +42,7 @@ export const PreviewLayout = (props: PreviewLayoutProps) => (
                 ? 'ほかの画面へ移動すると保存済みの内容を表示します。公開サイトや外部サービスへのリンクもあります。'
                 : '本文内には、公開サイトや外部サービスへ移動するリンクがあります。'}
             </span>
+            {props.note ? <span>{props.note}</span> : null}
             {props.warnings ? (
               <span>公開する前に確認してください: {Object.values(props.warnings).join('。')}</span>
             ) : null}

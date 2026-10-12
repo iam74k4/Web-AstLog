@@ -4,6 +4,7 @@ import { blockShown } from '../../blocks'
 import { defaultBlocks, listBlocks, loadSiteSettings } from '../../db/queries'
 import * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
+import { MEDIA_QUOTA_BYTES, mediaUsage } from '../../lib/media-usage'
 import { hasContact, SITE_SETTING_KEYS, SITE_SETTING_LATER_KEYS } from '../../site'
 import { AdminDashboard, type DashboardAction, type DashboardCounts } from '../../ui/AdminDashboard'
 import { db } from './request'
@@ -143,6 +144,8 @@ dashboardRoutes.get('/', async (c) => {
     }
   }
 
+  // 画像と動画の容量（上限で保存を止める。src/lib/media-usage.ts）
+  const storage = { ...(await mediaUsage(c.env.MEDIA)), quota: MEDIA_QUOTA_BYTES }
   const recent = await database.query.items.findMany({
     columns: { id: true, title: true, imageUrl: true, published: true, updatedAt: true },
     orderBy: [desc(schema.items.updatedAt), desc(schema.items.id)],
@@ -164,6 +167,7 @@ dashboardRoutes.get('/', async (c) => {
       blockCount={blocks.length}
       blockDrafts={blockDrafts}
       pages={pages}
+      storage={storage}
     />,
   )
 })

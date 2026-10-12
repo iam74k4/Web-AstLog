@@ -1401,7 +1401,8 @@ body[data-site] > .frame {
   max-height: var(--gallery-lead-h);
 }
 
-.gallery__image img {
+/* 絵と動画（components.tsx の Clip）は同じ枠に同じ収め方で */
+.gallery__frame > :is(img, video) {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -1612,7 +1613,7 @@ body[data-site] > .frame {
   overflow: clip;
 }
 
-.shot img {
+.shot > :is(img, video) {
   position: absolute;
   inset: 0;
   width: 100%;

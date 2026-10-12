@@ -11,7 +11,7 @@ import {
 import * as schema from '../../db/schema'
 import { type ItemKind, type ItemView, itemImages, KIND_LABEL } from '../../domain'
 import type { AppEnv } from '../../env'
-import { IMAGE_FORMATS, imageTypeOfPath } from '../../lib/image'
+import { IMAGE_FORMATS, imageTypeOfPath, isVideoUrl } from '../../lib/image'
 import { tableOfContents } from '../../lib/sequence'
 import { SITE } from '../../site'
 import {
@@ -34,7 +34,8 @@ import { sitePageLinks, sitePages } from './site'
 
 /*
   作品のページの共有カードの画像（src/ui/Layout.tsx の OgImage）。その作品の顔の1枚
-  （メインの画像。無ければほかの画像の1枚目。src/domain.ts の itemImages）。
+  （メインの画像。無ければほかの画像の1枚目。src/domain.ts の itemImages）。動画は飛ばす
+  （貼り先は動画の最初の絵を出さない）——ほかの画像の先頭が動画なら、次の画像が顔。
 
   使うのは、こちらが上げた画像（/images/items/…）と同梱の素材（/assets/…。seed.sql が
   指す AppMixer の画像）で、種類が貼り先に読まれるもの（AVIF 以外の4種類）だけ。種類は
@@ -47,7 +48,7 @@ const SHARE_TYPES = new Set(
 )
 
 function itemOgImage(item: ItemView): OgImage | undefined {
-  const cover = itemImages(item)[0]
+  const cover = itemImages(item).find((image) => !isVideoUrl(image.url))
   if (!cover || !/^\/(images\/items|assets)\//.test(cover.url)) return undefined
   const type = imageTypeOfPath(cover.url)
   if (!type || !SHARE_TYPES.has(type)) return undefined
@@ -165,7 +166,8 @@ export async function renderItem(
   if (item.type !== kind) return movedTo(c, href)
 
   const solo = soloMember(members)
-  const images = itemImages(item)
+  // 構造化データの画像（image）は絵だけ。動画は画像として名乗らない
+  const images = itemImages(item).filter((image) => !isVideoUrl(image.url))
   // 目次はサイトのページのまま。このページに絞り込みは無いので、素の並びを聞く
   const { pages } = await sitePages(db, blocks, members, NO_FILTER, undefined, site)
   const links = sitePageLinks(pages, NO_FILTER, solo)

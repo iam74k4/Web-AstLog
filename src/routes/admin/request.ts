@@ -17,13 +17,26 @@ export const db = (c: { env: { DB: D1Database } }) => drizzle(c.env.DB, { schema
   認証のあとでフォームを先に読む。壊れた multipart の境界などは入力の 400 で返し、
   サーバー障害の 500 にしない。Hono が formData を要求ごとにキャッシュするので、
   各保存ルートは同じ内容を再利用できる。フォーム以外（本文の無い操作を含む）は触らない。
+
+  1回の送信は合計 24MB まで（読む前に Content-Length で止める）。Worker のメモリは 128MB で、
+  フォームを読むと中身が何重かに写される——動画（1本 10MB まで）を8本まとめて送ると収まらない。
+  24MB なら動画2本と画像を何枚か足せる。止めたときはフォームを描き直せない（読んでいない）ので、
+  戻って減らすように言う（ブラウザの「戻る」は書いた欄を残す）
 */
+export const MAX_FORM_BYTES = 24_000_000
+
 export const readAdminForm = createMiddleware<AppEnv>(async (c, next) => {
   const type = c.req.header('content-type')?.split(';', 1)[0]?.trim().toLowerCase()
   if (
     c.req.method === 'POST' &&
     (type === 'multipart/form-data' || type === 'application/x-www-form-urlencoded')
   ) {
+    if (Number(c.req.header('content-length') ?? 0) > MAX_FORM_BYTES) {
+      return c.text(
+        '1回の保存で送れるのは合計 24MB までです。前の画面に戻り、動画や画像を分けて保存してください。',
+        413,
+      )
+    }
     try {
       await c.req.formData()
     } catch {
