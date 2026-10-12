@@ -149,9 +149,10 @@ JSON API も SPA も無い（動きは CSS だけ。「動き」）。
 保存させない**（`publishErrors`。ほかの画像も1枚ずつ）。
 
 **画像と動画の種類は中身の先頭のバイトで決める。** 通すのは画像5種類と、ほかの画像の欄だけ
-MP4（H.264）（`src/lib/image.ts` の `IMAGE_FORMATS`・`VIDEO_FORMATS` が正。`accept` も配る側の
-許可リストもここから）。`file.type` と拡張子は見ない（名乗りのまま配っていたころ、SVG の
-`<script>` がサイトのオリジンで走った）。SVG・HEIC・MOV・HEVC は理由を添えて 400。
+H.264 の動画（MP4・MOV。MOV も MP4 として置く）（`src/lib/image.ts` の `IMAGE_FORMATS`・
+`VIDEO_FORMATS` が正。`accept` も配る側の許可リストもここから）。`file.type` と拡張子は見ない
+（名乗りのまま配ると、SVG の `<script>` がサイトのオリジンで走る）。SVG・HEIC・HEVC は
+理由を添えて 400。
 **画像の URL はフォームから受け取らない。**
 - 上限は1枚が静止画 1MB・GIF 3MB・動画 10MB、1回の送信 24MB（Worker のメモリ）、全体 300MB
   （`src/lib/media-usage.ts`。控えは数えず、概要に出す）

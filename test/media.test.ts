@@ -130,14 +130,31 @@ describe('動画を上げる', () => {
     expect(await mediaKeys()).toEqual([])
   })
 
-  it('MOV と HEVC は理由を言って弾き、何も置かない', async () => {
-    for (const [bytes, reason] of [
-      [mp4({ brand: 'qt  ' }), 'MOV（QuickTime）の動画は受け付けません'],
-      [mp4({ codec: 'hvc1' }), 'HEVC（H.265）の動画は Chrome などで再生できません'],
-    ] as const) {
+  it('Mac の画面収録の MOV（H.264）は MP4 として置き、作品のページで動画として描く', async () => {
+    const mov = mp4({ brand: 'qt  ' })
+    const response = await postShots(
+      [['newShot', file(mov, '画面収録 2026-10-13.mov', 'video/quicktime')]],
+      ['設定を切り替える動き'],
+    )
+    expect(response.status).toBe(303)
+    const [row] = await db().select().from(schema.items)
+    const [shot] = await shotsOf(row?.id ?? 0)
+    // 拡張子と content-type は判定の結果から（名乗りの video/quicktime は使わない）
+    expect(shot?.url).toMatch(/^\/images\/items\/demo-[0-9a-f]{8}\.mp4$/)
+    const key = (shot?.url ?? '').replace('/images/', '')
+    const stored = await env.MEDIA.getWithMetadata<{ contentType: string }>(key, 'arrayBuffer')
+    expect(stored.metadata?.contentType).toBe('video/mp4')
+    expect(new Uint8Array(stored.value ?? new ArrayBuffer(0))).toEqual(mov)
+    const served = await get(`/images/${key}`)
+    expect(served.headers.get('content-type')).toBe('video/mp4')
+    expect(await okText('/apps/item/demo')).toContain(`<video src="${shot?.url}#t=0.1"`)
+  })
+
+  it('HEVC は理由を言って弾き、何も置かない（MOV でも MP4 でも）', async () => {
+    for (const bytes of [mp4({ codec: 'hvc1' }), mp4({ brand: 'qt  ', codec: 'hvc1' })]) {
       const response = await postShots([['newShot', mp4File(bytes)]], ['動く画面'])
       expect(response.status).toBe(400)
-      expect(await response.text()).toContain(reason)
+      expect(await response.text()).toContain('HEVC（H.265）の動画は Chrome などで再生できません')
     }
     expect(await mediaKeys()).toEqual([])
     expect(await db().select().from(schema.items)).toHaveLength(0)
@@ -322,8 +339,8 @@ describe('動画を配る', () => {
     const html = await (await signed(`/admin/items/${item.id}/edit`)).text()
     expect(html).toContain(`<video class="shot-row__image" src="/images/${key}#t=0.1"`)
     expect(html).not.toContain(`<img class="shot-row__image" src="/images/${key}"`)
-    // 足す欄は動画も選べる
-    expect(html).toMatch(/name="newShot" accept="[^"]*video\/mp4"/)
+    // 足す欄は動画も選べる（MP4 と、Mac の画面収録の MOV）
+    expect(html).toMatch(/name="newShot" accept="[^"]*video\/mp4,video\/quicktime"/)
     // 一覧の見本に動画を <img> で出さない
     const list = await (await signed('/admin/items')).text()
     expect(list).not.toContain(`src="/images/${key}"`)

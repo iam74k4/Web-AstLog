@@ -8,10 +8,10 @@
   （管理画面と同じオリジンなので、owner のクッキーのまま管理画面を読み書き
   できる）。保存する content-type と拡張子も、ここで判定した結果からだけ作る。
 
-  通すのは画像の5種類と、作品のほかの画像（スクリーンショット）の欄だけで受ける動画の
-  MP4（H.264）。SVG はスクリプトを持てる文書なので受けない。HEIC は Safari 以外で表示
-  できない（Mac の Safari から上げると「保存しました」と出て、Chrome と Firefox の訪問者に
-  だけ壊れて見えていた）。動画も同じ理由で、MOV（QuickTime）と HEVC（H.265）は受けない。
+  通すのは画像の5種類と、作品のほかの画像（スクリーンショット）の欄だけで受ける H.264 の
+  動画（MP4 と、Mac の画面収録の MOV）。SVG はスクリプトを持てる文書なので受けない。HEIC は
+  Safari 以外で表示できない（Mac の Safari から上げると「保存しました」と出て、Chrome と
+  Firefox の訪問者にだけ壊れて見えていた）。動画も同じ理由で、HEVC（H.265）は受けない。
 
   配る側（src/routes/public/images.ts の /images/*）も同じ一覧を読み、一覧に無い
   content-type が KV に残っていたら、画像として返さずに添付として返す。
@@ -41,15 +41,20 @@ export const isImageType = (type: string | undefined | null): type is string =>
 
 /*
   動画。作品のほかの画像（スクリーンショット）の欄でだけ受ける（src/routes/admin/images.ts の
-  pickImages）。iPhone の Safari と Chrome のどちらでも再生できる組は MP4（H.264）だけ
+  pickImages）。iPhone の Safari と Chrome のどちらでも再生できるのは H.264 の映像。入れ物は
+  MP4 と MOV（QuickTime。Mac の画面収録）を受け、どちらも MP4 として置いて配る——MOV は MP4 と
+  同じ箱の並びで、MP4 を名乗っても Chrome と Safari はそのまま再生する。配る種類は MP4 の1つに
+  しておく（Chrome の canPlayType は video/quicktime を再生できると答えず、配る側の許可リストも
+  増やさずに済む）
 */
 export const VIDEO_FORMATS: readonly ImageFormat[] = [
   { type: 'video/mp4', extension: 'mp4', label: 'MP4' },
 ]
 
-// ほかの画像の欄の accept（画像の5種類と動画）
+// ほかの画像の欄の accept（画像の5種類と動画。MOV も選べるように video/quicktime も並べる）
 export const SHOT_ACCEPT = [...IMAGE_FORMATS, ...VIDEO_FORMATS]
   .map((format) => format.type)
+  .concat('video/quicktime')
   .join(',')
 
 // /images/* が中身の種類として返してよいもの（画像の5種類と動画）
@@ -98,20 +103,20 @@ const startsWith = (bytes: Uint8Array, signature: number[], at = 0) =>
 const formatByType = (type: string) => IMAGE_FORMATS.find((format) => format.type === type)
 
 /*
-  動画の判定。入れ物（ISO BMFF）の先頭の ftyp 箱と、moov の中の映像の符号化（stsd の
-  見本の種類）を見る。結果は3つ——通す（MP4 と寸法）、理由つきで弾く（MOV・HEVC など、
-  書き出し直せば通るもの）、動画ではない（null。呼ぶ側は種類の知らせを出す）。
+  動画の判定。入れ物（ISO BMFF。MOV も同じ箱の並び）の先頭の ftyp 箱と、moov の中の映像の
+  符号化（stsd の見本の種類）を見る。結果は3つ——通す（H.264。MP4 として置く形と寸法）、
+  理由つきで弾く（HEVC など、書き出し直せば通るもの）、動画ではない（null。呼ぶ側は種類の
+  知らせを出す）。MOV の hdlr も同じ位置に映像の印（vide）を持つ。
 
   寸法は映像の tkhd（表示の幅と高さ。16.16 の固定小数）。行列が 90° / 270° の回転
   （iPhone の縦の動画）なら縦横を入れ替える。読めなければ寸法なしで返す。
 */
-export type VideoProblem = 'quicktime' | 'hevc' | 'codec'
+export type VideoProblem = 'hevc' | 'codec'
 
 export function sniffVideo(
   bytes: Uint8Array,
 ): { video: SniffedImage } | { problem: VideoProblem } | null {
   if (ascii(bytes, 4, 4) !== 'ftyp') return null
-  if (ascii(bytes, 8, 4) === 'qt  ') return { problem: 'quicktime' }
   const moov = findBox(bytes, 0, bytes.length, 'moov')
   if (!moov) return null
   const codecs: string[] = []

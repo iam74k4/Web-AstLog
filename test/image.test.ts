@@ -74,8 +74,8 @@ describe('画像の種類は中身で決める', () => {
 })
 
 /*
-  動画は作品のほかの画像の欄でだけ受ける MP4（H.264）。iPhone の Safari と Chrome の
-  どちらでも再生できる組だけを通し、書き出し直せば通るもの（MOV・HEVC）は理由で分ける
+  動画は作品のほかの画像の欄でだけ受ける H.264（MP4 と、Mac の画面収録の MOV）。iPhone の
+  Safari と Chrome のどちらでも再生できる組だけを通し、書き出し直せば通るもの（HEVC）は理由で分ける
 */
 describe('動画の種類も中身で決める', () => {
   it('MP4（H.264）を通し、寸法を表示の向きで読む', () => {
@@ -89,8 +89,15 @@ describe('動画の種類も中身で決める', () => {
     expect(sniffVideo(mp4({ codec: 'avc3' }))).toMatchObject({ video: { type: 'video/mp4' } })
   })
 
-  it('MOV・HEVC・ほかの符号化は理由を分けて弾く', () => {
-    expect(sniffVideo(mp4({ brand: 'qt  ' }))).toEqual({ problem: 'quicktime' })
+  it('H.264 の MOV（QuickTime の入れ物）も通し、MP4 として置く形を返す', () => {
+    expect(sniffVideo(mp4({ brand: 'qt  ' }))).toEqual({
+      video: { type: 'video/mp4', extension: 'mp4', label: 'MP4', width: 1280, height: 720 },
+    })
+    // 入れ物が MOV でも、映像が HEVC なら弾く（iPhone のカメラの既定）
+    expect(sniffVideo(mp4({ brand: 'qt  ', codec: 'hvc1' }))).toEqual({ problem: 'hevc' })
+  })
+
+  it('HEVC・ほかの符号化は理由を分けて弾く', () => {
     expect(sniffVideo(mp4({ codec: 'hvc1' }))).toEqual({ problem: 'hevc' })
     expect(sniffVideo(mp4({ codec: 'hev1' }))).toEqual({ problem: 'hevc' })
     expect(sniffVideo(mp4({ codec: 'av01' }))).toEqual({ problem: 'codec' })
@@ -107,9 +114,12 @@ describe('動画の種類も中身で決める', () => {
     expect(sniffVideo(new Uint8Array(0))).toBeNull()
   })
 
-  it('ほかの画像の欄の accept と配る側の許可リストは、画像の5種類と MP4', () => {
-    expect(SHOT_ACCEPT).toBe(`${IMAGE_ACCEPT},video/mp4`)
-    for (const type of SHOT_ACCEPT.split(',')) expect(isMediaType(type), type).toBe(true)
+  it('ほかの画像の欄は MOV も選べ、配る側の許可リストは画像の5種類と MP4 だけ', () => {
+    expect(SHOT_ACCEPT).toBe(`${IMAGE_ACCEPT},video/mp4,video/quicktime`)
+    // MOV は MP4 として置いて配るので、video/quicktime は配る側の許可リストに入れない
+    for (const type of SHOT_ACCEPT.split(',').filter((one) => one !== 'video/quicktime')) {
+      expect(isMediaType(type), type).toBe(true)
+    }
     expect(isImageType('video/mp4')).toBe(false)
     for (const type of ['video/quicktime', 'image/svg+xml', 'text/html', undefined]) {
       expect(isMediaType(type), String(type)).toBe(false)
