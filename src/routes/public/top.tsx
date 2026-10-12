@@ -10,6 +10,7 @@ import {
 import * as schema from '../../db/schema'
 import { ITEM_KIND_KEYS, type KindCounts } from '../../domain'
 import type { AppEnv } from '../../env'
+import { fromInside } from '../../lib/page-cache'
 import { tableOfContents } from '../../lib/sequence'
 import { SITE } from '../../site'
 import { Empty, SiteSocials } from '../../ui/components'
@@ -239,6 +240,7 @@ export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
     // Contact では足元に行き先を出さない（本文の連絡先の表に同じ行き先がある。SiteSocials）
     footer: <SiteSocials site={site} contact={current.block.type === 'contact'} />,
     adminPath: blockAdminPath(current.block, solo),
-    opening: current.block.type === 'hero',
+    // 幕は外から入口へ来たときだけ（サイトの中から戻るたびには待たせない。page-cache.ts の fromInside）
+    opening: current.block.type === 'hero' && !fromInside((name) => c.req.header(name)),
   })
 }

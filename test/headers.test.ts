@@ -226,6 +226,12 @@ describe('応答のヘッダ', () => {
       expect(links, path).toHaveLength(1)
       expect(links[0], path).toMatch(version)
       expect(links[0], path).toMatch(/^\/app\.css/)
+      // 上の帯と見出しの Poppins（500・700）は CSS を読み終える前から取りに行く
+      for (const weight of [500, 700]) {
+        expect(html, `${path} ${weight}`).toContain(
+          `<link rel="preload" href="/assets/poppins-${weight}.woff2" as="font" type="font/woff2" crossorigin="anonymous"/>`,
+        )
+      }
     }
     // 管理画面（壁の中と外）は app.css のあとに admin.css
     const signed = await signIn()

@@ -120,6 +120,25 @@ export const Stylesheets = ({
 }) => (
   <>
     <link rel="stylesheet" href={STYLESHEETS.app} />
+    {/*
+      どのページの上の帯と見出しも使う Poppins の 500 と 700 を、CSS を読み終える前から取りに
+      行く（CSS の @font-face で見つけてからだと、その往復のぶん字の差し替えが遅れる）。
+      400 と 600 は使う所が少ないので、見つけてからでよい
+    */}
+    <link
+      rel="preload"
+      href="/assets/poppins-500.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="preload"
+      href="/assets/poppins-700.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin="anonymous"
+    />
     {admin ? <link rel="stylesheet" href={STYLESHEETS.admin} /> : null}
     {preview ? <link rel="stylesheet" href={STYLESHEETS.preview} /> : null}
   </>

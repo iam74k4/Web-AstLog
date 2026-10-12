@@ -134,6 +134,14 @@ const isFresh = (copy: Response, version: string) =>
   copy.headers.get(VERSION_HEADER) === version &&
   Date.now() - Number(copy.headers.get(STORED_HEADER)) < FRESH_MS
 
+/*
+  サイトの中から来たページ移動か（ブラウザが付ける Sec-Fetch-Site: same-origin）。入口の読み込みの
+  幕（Layout の opening）は外から来たときだけ出し、サイトの中を行き来して入口へ戻るたびには
+  出さない——戻るたびに 1 秒近く幕を待たせていた。HTML が変わるので、写しの鍵も分ける
+*/
+export const fromInside = (header: (name: string) => string | undefined) =>
+  header('sec-fetch-site') === 'same-origin'
+
 export const pageCache = createMiddleware<AppEnv>(async (c, next) => {
   if (
     c.req.method !== 'GET' ||
@@ -145,9 +153,15 @@ export const pageCache = createMiddleware<AppEnv>(async (c, next) => {
 
   const url = new URL(c.req.url)
   const deploy = c.env.CF_VERSION_METADATA?.id ?? 'local'
-  // 鍵は URL（query 込み）と Worker の版。内容の版は写しの中に持つ（古い版の写しを
-  // stale-if-error で探せるように、鍵には入れない）
-  const key = new Request(`${url.origin}/__page-cache/${deploy}${url.pathname}${url.search}`)
+  /*
+    鍵は URL（query 込み）と Worker の版と、サイトの中から来たか（fromInside。入口の幕の有無で
+    HTML が変わる）。内容の版は写しの中に持つ（古い版の写しを stale-if-error で探せるように、
+    鍵には入れない）。版の id は「:」を含まないので、印と取り違えない
+  */
+  const inside = fromInside((name) => c.req.header(name)) ? ':inside' : ''
+  const key = new Request(
+    `${url.origin}/__page-cache/${deploy}${inside}${url.pathname}${url.search}`,
+  )
   const cache = caches.default
 
   // 版は描く前に読む。描いたあとに読むと、描いている間の保存の版を古い中身に付けてしまう

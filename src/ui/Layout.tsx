@@ -116,8 +116,9 @@ export const Layout = (props: {
   // 共有カードの画像。渡さなければサイトの1枚（SITE_IMAGE）
   image?: OgImage
   /*
-    読み込んだときの幕（app.css の「動き」の .opening）。入口（Hero のページ）だけに立てる——
-    どのページにも出すと、ページを移るたびに幕を待たされる
+    読み込んだときの幕（app.css の「動き」の .opening）。外から入口（Hero のページ）へ来たときだけに
+    立てる（呼ぶ側が src/lib/page-cache.ts の fromInside で決める）——どのページにも、サイトの中から
+    入口へ戻るたびにも出すと、移るたびに幕を待たされる
   */
   opening?: boolean
   // 認証済みプレビューの案内。検索・共有用のメタ情報は出さない。

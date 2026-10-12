@@ -333,18 +333,19 @@
     星空が巡る周期、--dawn-reach は読み終えたときに空が明ける量
   */
   --rise: var(--sp-5);
-  --dur-reveal: 720ms;
-  --stagger: 120ms;
+  --dur-reveal: 520ms;
+  --stagger: 70ms;
   --twinkle: 5s;
   --orbit: 160s;
   --dawn-reach: 26%;
   /*
-    読み込んだときの幕（入口だけ。「動き」の節の body[data-opening]）。--opening-hold は地平の
+    読み込んだときの幕（外から入口へ来たときだけ。src/lib/page-cache.ts の fromInside。「動き」の節の
+    body[data-opening]）。--opening-hold は地平の
     光が伸びるあいだ（幕は閉じたまま）、--opening-open は幕が上下に開く長さ。入口の字は幕が
     開き始めると同時に現れ始める（--reveal-from。幕の無いページでは 0）
   */
-  --opening-hold: 760ms;
-  --opening-open: 560ms;
+  --opening-hold: 360ms;
+  --opening-open: 440ms;
   --opening-line: 62vw;
   --opening-glow: 0 0 18px 2px rgba(255, 255, 255, 0.55);
   --opening-sky-at: 62% 85%;
@@ -949,6 +950,8 @@ body[data-site] > .frame {
   font-weight: 500;
   line-height: 1.4;
   white-space: nowrap;
+  /* 打つたびに字の幅が変わる。組み直しをこの行の中で止める（ページ全体を組み直させない） */
+  contain: layout style;
 }
 
 .typed__word {
