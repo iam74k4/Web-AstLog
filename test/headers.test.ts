@@ -1,6 +1,9 @@
 import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test'
+import assetSums from 'virtual:asset-sha256'
+import assetFiles from 'virtual:assets'
 import assetHeaders from 'virtual:repo:public/_headers'
 import { beforeEach, describe, expect, it } from 'vitest'
+import appCss from '../public/app.css'
 import app from '../src/index'
 import { ADMIN_BEHAVIOR, ADMIN_CSP } from '../src/ui/admin-behavior'
 import { get, okText, resetDb, seedItem, seedMember, signIn, uncachedEnv } from './helpers'
@@ -198,6 +201,28 @@ describe('応答のヘッダ', () => {
     長く持たせてよいのは版つきの URL で読まれるものだけ——版の無い素材（ロゴの素材・共有カード）を
     immutable にすると、差し替えた絵が1年届かない
   */
+  /*
+    見出しの書体（Poppins）も1年・immutable。版の無い既定（毎回確かめる）のままだと、ページを
+    移るたびに書体の条件付き GET が1往復し、戻りが新しいページの最初の描画に間に合わないと、
+    上の帯の字が一瞬だけ代わりの書体で描かれてから差し替わった。版は中身の SHA-256 の頭8桁を
+    名前に持つ——中身だけを差し替えて名前を変え忘れると、古い書体が1年残るので、ここで落とす
+  */
+  it('書体は中身の版を名前に持ち、1年・immutable で配る', () => {
+    const rules = headerRules()
+    const fonts = assetFiles.filter((file) => file.endsWith('.woff2'))
+    expect(fonts).toHaveLength(4)
+    for (const file of fonts) {
+      const version = file.match(/^poppins-[1-9]00\.([0-9a-f]{8})\.woff2$/)?.[1]
+      expect(version, file).toBeDefined()
+      expect(assetSums[file]?.slice(0, 8), file).toBe(version)
+      expect(rules.get(`/assets/${file}`)?.['cache-control'], file).toBe(
+        'public, max-age=31536000, immutable',
+      )
+      // CSS の @font-face が同じ名前で読む（古い名前を指したまま残らない）
+      expect(appCss, file).toContain(`url('/assets/${file}')`)
+    }
+  })
+
   it('スタイルシートは版つきの URL で読み、1年・immutable で配る', async () => {
     const rules = headerRules()
     // 1年持たせるのは版つきの URL で読むものだけ（版の無い素材に付けると、古い写しが1年残る）
@@ -205,8 +230,12 @@ describe('応答のヘッダ', () => {
     for (const path of cached) {
       expect(rules.get(path)?.['cache-control'], path).toBe('public, max-age=31536000, immutable')
     }
+    // ほかに1年持たせるのは、名前に版を持つ書体だけ（下の「書体」）
+    const fonts = assetFiles
+      .filter((file) => file.endsWith('.woff2'))
+      .map((file) => `/assets/${file}`)
     const long = [...rules].filter(([, values]) => values['cache-control']?.includes('immutable'))
-    expect(long.map(([path]) => path).sort()).toEqual([...cached].sort())
+    expect(long.map(([path]) => path).sort()).toEqual([...cached, ...fonts].sort())
 
     const version = /^\/(app|admin|preview)\.css\?v=[0-9a-z]+$/
     const sheets = (html: string) =>
@@ -226,10 +255,13 @@ describe('応答のヘッダ', () => {
       expect(links, path).toHaveLength(1)
       expect(links[0], path).toMatch(version)
       expect(links[0], path).toMatch(/^\/app\.css/)
-      // 上の帯と見出しの Poppins（500・700）は CSS を読み終える前から取りに行く
-      for (const weight of [500, 700]) {
+      // 上の帯・見出し・作品名の Poppins（500・600・700）は CSS を読み終える前から取りに行く。
+      // 取りに行く URL は CSS の @font-face と同じ（違うと、同じ書体を2度取る）
+      for (const weight of [500, 600, 700]) {
+        const font = appCss.match(new RegExp(`url\\('(/assets/poppins-${weight}\\.[^']+)'\\)`))?.[1]
+        expect(font, `${weight}`).toBeDefined()
         expect(html, `${path} ${weight}`).toContain(
-          `<link rel="preload" href="/assets/poppins-${weight}.woff2" as="font" type="font/woff2" crossorigin="anonymous"/>`,
+          `<link rel="preload" href="${font}" as="font" type="font/woff2" crossorigin="anonymous"/>`,
         )
       }
     }

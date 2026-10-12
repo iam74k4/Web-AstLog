@@ -60,6 +60,15 @@ declare module 'virtual:assets' {
 }
 
 /*
+  public/assets/ のファイルごとの SHA-256（16進。vitest.config.ts の assetPlugin）。
+  名前に版を持つ書体（poppins-500.<版>.woff2）の版が中身と合うかを見る
+*/
+declare module 'virtual:asset-sha256' {
+  const sums: Record<string, string>
+  export default sums
+}
+
+/*
   リポジトリの設定ファイルを中身として読む（vitest.config.ts の repoPlugin。
   読めるのはそこの REPO_FILES に並べたものだけ）。本番へ出す道の決まり
   （test/deploy.test.ts）を確かめるため。

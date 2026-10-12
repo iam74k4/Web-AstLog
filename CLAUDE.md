@@ -21,7 +21,7 @@
 付いた押し手や明朝の名札がこの見た目の芯を崩したので、選ぶ口ごと外した（前に保存した `theme.*` の
 行は読まない。`test/theme.test.ts` の「見た目は1つ」）。暗いのは左の夜明けの窓の空だけで、それも下へ行くほど
 明けて地の白に溶ける（`--dawn` 系の段）——窓を平らな夜の黒で塗ったら、白いページの中で1枚の
-板が浮いた（持ち主の「黒で配色が浮いている」）。
+板が浮いた。
 持ち主の指定なので OS の暗い配色には合わせない（`prefers-color-scheme` は書かない）。
 `color-scheme: light` と `ColorSchemeMeta` を使う。前は黒基調だった——作り替えのときに
 持ち主が明るい配色を選んだ。紙も画面と同じ白地で、色の段は差し替えず、夜明けの窓だけ刷らない
@@ -89,9 +89,10 @@ app.css + preview.css（案内だけ）。値は app.css の段を読む。公�
 並びは素 → 600 → 900 → 手触り → 入力手段。読込は `Stylesheets` 1本（`test/headers.test.ts` の
 「スタイルシート」、`test/theme.test.ts` の「スタイルシートの分け方」）。
 
-**CSS は版つきの URL で、1年・immutable で配る。** `public/_headers` が配信を決める。
+**CSS と書体は版つきの URL で、1年・immutable で配る。** `public/_headers` が配信を決める。
 CSS の版は `Stylesheets` が Worker に同梱した文字列から作る（`wrangler.toml` の `[[rules]]`、
 テストでは `vitest.config.ts` の `cssTextPlugin`）。**`<link rel="stylesheet">` を直に書かない**。
+書体は名前に中身の版を持つ（毎回確かめると、移った先の帯の字が一瞬代わりの書体になった）。
 版の無い素材（ロゴの素材・共有カード・アバター）に長い `Cache-Control` を付けない（古い写しが1年残る）。
 
 ### JavaScript とリンク
