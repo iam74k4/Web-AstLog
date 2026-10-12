@@ -22,14 +22,17 @@
   Poppins（欧文の見出しの書体。SIL Open Font License 1.1。ライセンスは
   public/assets/poppins-OFL.txt）。Google Fonts の欧文の字だけを切り出した版を同梱して
   サイトから配る——外のサイトから書体を読まない（CSP は default-src 'self'）。
-  font-display: swap で、読み込むまではヒラギノ・Helvetica の字で先に出す
+  font-display: swap で、読み込むまではヒラギノ・Helvetica の字で先に出す。
+  ファイルの名前に中身の版（SHA-256 の頭8桁）を持ち、public/_headers が1年・immutable で
+  配る——ページを移るたびに書体を確かめに行くと、その戻りを待たずに描いた上の帯の字が
+  一瞬だけ代わりの書体になった。差し替えるときは名前も変える（test/headers.test.ts の「書体」）
 */
 @font-face {
   font-family: 'Poppins';
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('/assets/poppins-400.woff2') format('woff2');
+  src: url('/assets/poppins-400.3dc5d0c5.woff2') format('woff2');
 }
 
 @font-face {
@@ -37,7 +40,7 @@
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url('/assets/poppins-500.woff2') format('woff2');
+  src: url('/assets/poppins-500.289e0afc.woff2') format('woff2');
 }
 
 @font-face {
@@ -45,7 +48,7 @@
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url('/assets/poppins-600.woff2') format('woff2');
+  src: url('/assets/poppins-600.872e8629.woff2') format('woff2');
 }
 
 @font-face {
@@ -53,7 +56,7 @@
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url('/assets/poppins-700.woff2') format('woff2');
+  src: url('/assets/poppins-700.197a3cbd.woff2') format('woff2');
 }
 
 :root {

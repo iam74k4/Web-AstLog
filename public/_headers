@@ -28,3 +28,20 @@
 
 /preview.css
   Cache-Control: public, max-age=31536000, immutable
+
+# 見出しの書体も1年・immutable。版（中身の SHA-256 の頭8桁）をファイルの名前に持つので、
+# 差し替えれば名前が変わる（test/headers.test.ts が中身と名前を突き合わせる）。
+# 毎回確かめる既定のままだと、ページを移るたびに書体の条件付き GET が1往復し、
+# 戻りが新しいページの最初の描画に間に合わないと、上の帯の字が一瞬だけ代わりの
+# 書体で描かれてから Poppins に差し替わった（ページを読み直したように見えた）。
+/assets/poppins-400.3dc5d0c5.woff2
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/poppins-500.289e0afc.woff2
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/poppins-600.872e8629.woff2
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/poppins-700.197a3cbd.woff2
+  Cache-Control: public, max-age=31536000, immutable

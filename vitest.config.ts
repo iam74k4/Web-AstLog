@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync } from 'node:fs'
 import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-pool-workers'
 import type { Plugin } from 'vite'
@@ -53,15 +54,31 @@ const ASSET = 'virtual:asset:'
 const ASSET_BYTES = 'virtual:asset-base64:'
 // public/assets/ にあるファイルの名前の一覧
 const ASSET_LIST = 'virtual:assets'
+// public/assets/ のファイルごとの SHA-256（16進）。名前に版を持つ書体が中身と合うかを見る
+const ASSET_SHA256 = 'virtual:asset-sha256'
 
 const assetPlugin = (): Plugin => ({
   name: 'astlog:asset',
   resolveId: (id) =>
-    id.startsWith(ASSET) || id.startsWith(ASSET_BYTES) || id === ASSET_LIST ? `\0${id}` : null,
+    id.startsWith(ASSET) || id.startsWith(ASSET_BYTES) || id === ASSET_LIST || id === ASSET_SHA256
+      ? `\0${id}`
+      : null,
   load(id) {
     if (id === `\0${ASSET_LIST}`) {
       this.addWatchFile('./public/assets')
       return `export default ${JSON.stringify(readdirSync('./public/assets'))}`
+    }
+    if (id === `\0${ASSET_SHA256}`) {
+      this.addWatchFile('./public/assets')
+      const sums = Object.fromEntries(
+        readdirSync('./public/assets').map((name) => [
+          name,
+          createHash('sha256')
+            .update(readFileSync(`./public/assets/${name}`))
+            .digest('hex'),
+        ]),
+      )
+      return `export default ${JSON.stringify(sums)}`
     }
     if (id.startsWith(`\0${ASSET_BYTES}`)) {
       const file = `./public/assets/${id.slice(`\0${ASSET_BYTES}`.length)}`

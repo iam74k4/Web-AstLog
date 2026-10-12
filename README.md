@@ -673,9 +673,10 @@ public/
                      apple-touch-icon.png）・ページの外で使うワードマーク（astlog-wordmark.svg）・共有カード
                      （astlog-card.png。1200×630）・夜明けの窓の空（sky.svg）——ここまでは
                      scripts/logo/export.mjs が src/ui/logo.ts と src/ui/astra.ts から書く。
-                     見出しの欧文の Poppins（poppins-400/500/600/700.woff2。欧文だけに絞った
-                     もの）とそのライセンス（poppins-OFL.txt）は手で置いたもの。
-                     版を持たないので既定のキャッシュ（毎回確かめる）のまま。
+                     見出しの欧文の Poppins（poppins-400/500/600/700.<版>.woff2。欧文だけに
+                     絞ったもの）とそのライセンス（poppins-OFL.txt）は手で置いたもの。
+                     書体は名前に中身の版（SHA-256 の頭8桁）を持ち、1年・immutable。
+                     ほかは版を持たないので既定のキャッシュ（毎回確かめる）のまま。
                      ※ ここに robots.txt や sitemap.xml を置かないこと。
                        public/ は Worker より先に配られるので、置くと
                        Worker が組み立てているほうが静かに届かなくなる

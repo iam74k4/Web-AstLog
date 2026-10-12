@@ -121,20 +121,29 @@ export const Stylesheets = ({
   <>
     <link rel="stylesheet" href={STYLESHEETS.app} />
     {/*
-      どのページの上の帯と見出しも使う Poppins の 500 と 700 を、CSS を読み終える前から取りに
-      行く（CSS の @font-face で見つけてからだと、その往復のぶん字の差し替えが遅れる）。
-      400 と 600 は使う所が少ないので、見つけてからでよい
+      上の帯・見出し・作品名と名前に使う Poppins の 500・600・700 を、CSS を読み終える前から
+      取りに行く（CSS の @font-face で見つけてからだと、その往復のぶん字の差し替えが遅れる。
+      600 は入口では使わず、先に取らないと初めて開いた Projects の作品名が一瞬だけ代わりの
+      書体で出た）。400 は窓の札だけなので、見つけてからでよい。URL は app.css の
+      @font-face と同じ版つきの名前（違うと同じ書体を2度取る）
     */}
     <link
       rel="preload"
-      href="/assets/poppins-500.woff2"
+      href="/assets/poppins-500.289e0afc.woff2"
       as="font"
       type="font/woff2"
       crossorigin="anonymous"
     />
     <link
       rel="preload"
-      href="/assets/poppins-700.woff2"
+      href="/assets/poppins-600.872e8629.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="preload"
+      href="/assets/poppins-700.197a3cbd.woff2"
       as="font"
       type="font/woff2"
       crossorigin="anonymous"

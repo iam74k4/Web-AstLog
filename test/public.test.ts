@@ -355,12 +355,15 @@ describe('名乗り', () => {
       'apple-touch-icon.png',
       'astlog-card.png',
       'sky.svg',
-      'poppins-400.woff2',
-      'poppins-500.woff2',
-      'poppins-600.woff2',
-      'poppins-700.woff2',
     ]) {
       expect(read, file).toContain(file)
+    }
+    // 見出しの書体は名前に版を持つ（poppins-500.<版>.woff2。test/headers.test.ts の「書体」）
+    for (const weight of [400, 500, 600, 700]) {
+      expect(
+        [...read].some((file) => file?.startsWith(`poppins-${weight}.`)),
+        `poppins-${weight}`,
+      ).toBe(true)
     }
     for (const file of read) expect(assetFiles, file).toContain(file)
     const OUTSIDE = new Set([
