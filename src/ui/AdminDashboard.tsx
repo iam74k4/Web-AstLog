@@ -37,6 +37,7 @@ export const AdminDashboard = (props: {
     id: number
     title: string
     imageUrl: string | null
+    iconUrl: string | null
     published: number
     updatedAt: string
   }[]
@@ -129,8 +130,25 @@ export const AdminDashboard = (props: {
         <div class="dashboard-recent__grid">
           {props.recent.map((item) => (
             <a class="dashboard-recent__item" href={`/admin/items/${item.id}/edit`} key={item.id}>
-              {item.imageUrl ? (
-                <img src={item.imageUrl} alt="" width={112} height={70} loading="lazy" />
+              {/* 見本は作品の一覧（/admin/items）と同じ決め方: アイコンを先に、無ければメインの画像 */}
+              {item.iconUrl ? (
+                <img
+                  class="row__thumb row__thumb--icon"
+                  src={item.iconUrl}
+                  alt=""
+                  width={112}
+                  height={70}
+                  loading="lazy"
+                />
+              ) : item.imageUrl ? (
+                <img
+                  class="row__thumb"
+                  src={item.imageUrl}
+                  alt=""
+                  width={112}
+                  height={70}
+                  loading="lazy"
+                />
               ) : null}
               <span>
                 <strong>{item.title}</strong>

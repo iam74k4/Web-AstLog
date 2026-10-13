@@ -134,23 +134,29 @@ itemRoutes.get('/items', async (c) => {
       ) : (
         <ul class="rows">
           {rows.map((item) => {
-            // 見本は絵だけ（動画は <img> に描けない。ほかの画像の先頭が動画なら次の絵）
-            const thumb = item.imageUrl ?? item.shots.find((shot) => !isVideoUrl(shot.url))?.url
+            /*
+              見本はアイコンを先に（作品の印。画像を持つ作品と持たない作品で、行ごとに見本の種類が
+              変わらない）。アイコンが無ければ絵——動画は <img> に描けないので、ほかの画像の先頭が
+              動画なら次の絵
+            */
+            const thumb = item.iconUrl
+              ? null
+              : (item.imageUrl ?? item.shots.find((shot) => !isVideoUrl(shot.url))?.url)
             return (
               <li class="row row--project" key={item.id}>
-                {thumb ? (
+                {item.iconUrl ? (
                   <img
-                    class="row__thumb"
-                    src={thumb}
+                    class="row__thumb row__thumb--icon"
+                    src={item.iconUrl}
                     alt=""
                     width={112}
                     height={70}
                     loading="lazy"
                   />
-                ) : item.iconUrl ? (
+                ) : thumb ? (
                   <img
-                    class="row__thumb row__thumb--icon"
-                    src={item.iconUrl}
+                    class="row__thumb"
+                    src={thumb}
                     alt=""
                     width={112}
                     height={70}
