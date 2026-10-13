@@ -147,7 +147,14 @@ dashboardRoutes.get('/', async (c) => {
   // 画像と動画の容量（上限で保存を止める。src/lib/media-usage.ts）
   const storage = { ...(await mediaUsage(c.env.MEDIA)), quota: MEDIA_QUOTA_BYTES }
   const recent = await database.query.items.findMany({
-    columns: { id: true, title: true, imageUrl: true, published: true, updatedAt: true },
+    columns: {
+      id: true,
+      title: true,
+      imageUrl: true,
+      iconUrl: true,
+      published: true,
+      updatedAt: true,
+    },
     orderBy: [desc(schema.items.updatedAt), desc(schema.items.id)],
     limit: 4,
   })

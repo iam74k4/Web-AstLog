@@ -831,6 +831,43 @@ describe('Items — アイコンとほかの画像', () => {
     return [...gallery.matchAll(/<img src="([^"]+)" alt="([^"]*)"/g)].map((m) => [m[1], m[2]])
   }
 
+  it('一覧と概要の見本はアイコンを先に出し、無ければ絵（作品ごとに見本の種類を変えない）', async () => {
+    // 絵もアイコンも持つ作品（AppMixer の形）と、アイコンだけの作品と、絵だけの作品
+    await seedItem({
+      slug: 'both',
+      title: '両方',
+      imageUrl: '/images/items/both-aaaa1111.png',
+      imageAlt: '画面',
+      iconUrl: '/images/items/both-icon-bbbb2222.png',
+    })
+    await seedItem({
+      slug: 'icon-only',
+      title: 'アイコンだけ',
+      iconUrl: '/images/items/icon-cccc3333.png',
+    })
+    await seedItem({
+      slug: 'image-only',
+      title: '絵だけ',
+      imageUrl: '/images/items/image-dddd4444.png',
+      imageAlt: '画面',
+    })
+    await touch()
+    const signed = await signIn()
+    for (const html of [
+      await (await signed('/admin/items')).text(),
+      await (await signed('/admin')).text(),
+    ]) {
+      expect(html).toContain(
+        'class="row__thumb row__thumb--icon" src="/images/items/both-icon-bbbb2222.png"',
+      )
+      expect(html).not.toContain('src="/images/items/both-aaaa1111.png"')
+      expect(html).toContain(
+        'class="row__thumb row__thumb--icon" src="/images/items/icon-cccc3333.png"',
+      )
+      expect(html).toContain('class="row__thumb" src="/images/items/image-dddd4444.png"')
+    }
+  })
+
   it('アイコンとほかの画像を上げると KV の items/ に置き、作品のページでギャラリーに並ぶ', async () => {
     const signed = await signIn()
     const response = await signed('/admin/items', {
