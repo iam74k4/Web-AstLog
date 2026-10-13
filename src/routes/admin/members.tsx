@@ -158,6 +158,8 @@ const MemberForm = (props: {
   flash?: string | null
   // 1人のサイトの編集画面。一覧を通らないので、2人目を足す手をここに置く
   solo?: boolean
+  // この人の見出しが入口の大見出しになる（1人のサイト。保存すれば1人になる新しい人も）
+  onTop?: boolean
   // 追加のフォームの一度きりの札（newFormKey）。編集では持たない
   formKey?: string | null
   version?: string
@@ -183,6 +185,7 @@ const MemberForm = (props: {
       flash={props.flash}
       errors={props.errors}
       latestHref={member ? `/admin/members/${member.id}/edit` : undefined}
+      live
     >
       <div class="admin-head">
         <div class="admin-head__title">
@@ -243,12 +246,21 @@ const MemberForm = (props: {
             hint="個人ページの名前の下と、検索エンジン向けの情報に出ます。空なら出しません"
           />
           <Field label="役割 / 肩書" name="role" value={value('role')} />
+          {/*
+            1人のサイトでは、この見出しが入口（トップページ）の大見出しになり、個人ページには
+            出さない（CLAUDE.md「個人ページは1ページで、サイトの並びの一部」）。どこに出るかを
+            欄で言わないと、直しても横の完成形（個人ページ）に何も出ず、直せていないように見える
+          */}
           <Field
-            label="ページの見出し"
+            label={props.onTop ? '入口の大見出し' : 'ページの見出し'}
             name="headline"
             value={value('headline')}
             error={props.errors?.headline}
-            hint={`個人ページの一番上。言い切りで · ${MAX_CHARS.memberHeadline} 字まで`}
+            hint={
+              props.onTop
+                ? `トップページの一番大きな一文（1人のサイトでは個人ページには出しません）。言い切りで · ${MAX_CHARS.memberHeadline} 字まで`
+                : `個人ページの一番上。言い切りで · ${MAX_CHARS.memberHeadline} 字まで`
+            }
           />
         </FormSection>
         <FormDetails
@@ -391,9 +403,13 @@ const MemberForm = (props: {
   )
 }
 
-memberRoutes.get('/members/new', (c) =>
-  c.html(<MemberForm account={c.get('account')} formKey={newFormKey()} />),
-)
+memberRoutes.get('/members/new', async (c) => {
+  // まだ誰もいなければ、この人が1人目（見出しが入口の大見出しになる）
+  const [{ total } = { total: 0 }] = await db(c).select({ total: count() }).from(schema.members)
+  return c.html(
+    <MemberForm account={c.get('account')} formKey={newFormKey()} onTop={total === 0} />,
+  )
+})
 
 memberRoutes.get('/members/:id/edit', async (c) => {
   const id = parseId(c.req.param('id'))
@@ -409,6 +425,7 @@ memberRoutes.get('/members/:id/edit', async (c) => {
       member={member}
       flash={flashFor(c)}
       solo={total === 1}
+      onTop={total === 1}
     />,
   )
 })

@@ -61,6 +61,9 @@
 
 :root {
   --admin-shell-width: 1240px;
+  /* 書きながら横に完成形を置く編集画面の外枠（AdminLayout の live）。編集と完成形の2列ぶん */
+  --admin-live-width: 1760px;
+  --admin-live-height: calc(100svh - 2 * var(--gutter));
   --admin-preview-width: 1280px;
   --admin-preview-height: 88svh;
   --admin-art-size: 96px;

@@ -25,44 +25,71 @@ export const PreviewLayout = (props: PreviewLayoutProps) => (
     nav={props.nav}
     footer={props.footer}
     whole={props.whole}
+    still={props.still}
     preview={
-      <aside class="preview-notice" aria-label="管理プレビュー">
-        <div class="preview-notice__inner">
-          <div class="preview-notice__copy">
-            <strong>プレビュー · {props.label}</strong>
-            <span>
-              {props.unsaved
-                ? '編集中の内容です。このプレビューでは保存されません。編集を続けるにはプレビューを閉じてください。'
-                : props.draft
-                  ? '保存済みの下書きです。サイトには公開されません。'
-                  : '公開中の保存済みデータを表示しています。'}
-            </span>
-            <span>
-              {props.unsaved
-                ? 'ほかの画面へ移動すると保存済みの内容を表示します。公開サイトや外部サービスへのリンクもあります。'
-                : '本文内には、公開サイトや外部サービスへ移動するリンクがあります。'}
-            </span>
-            {props.note ? <span>{props.note}</span> : null}
-            {props.warnings ? (
-              <span>公開する前に確認してください: {Object.values(props.warnings).join('。')}</span>
-            ) : null}
-          </div>
-          {!props.unsaved || props.publicHref ? (
-            <div class="preview-notice__actions">
-              {!props.unsaved ? (
-                <a href={props.editHref} target="_blank" rel="noreferrer">
-                  編集画面を開く ↗
-                </a>
-              ) : null}
-              {props.publicHref ? (
-                <a href={props.publicHref} target="_blank" rel="noreferrer">
-                  公開中の画面を見る ↗
-                </a>
+      props.still ? (
+        /*
+          書きながら横に出す完成形（still）では、長い案内を出さない——枠の頭が「入力中の内容・
+          まだ保存されていません」と言っている。公開の前に直すことと添え書きだけを残す
+        */
+        props.warnings || props.note ? (
+          <aside class="preview-notice" aria-label="管理プレビュー">
+            <div class="preview-notice__inner">
+              <div class="preview-notice__copy">
+                {props.note ? <span>{props.note}</span> : null}
+                {props.warnings ? (
+                  <span>
+                    公開する前に確認してください: {Object.values(props.warnings).join('。')}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </aside>
+        ) : (
+          // 案内が何も無くても、プレビューの印（preview.css を読む・検索に出さない）は要る
+          <span hidden />
+        )
+      ) : (
+        <aside class="preview-notice" aria-label="管理プレビュー">
+          <div class="preview-notice__inner">
+            <div class="preview-notice__copy">
+              <strong>プレビュー · {props.label}</strong>
+              <span>
+                {props.unsaved
+                  ? '編集中の内容です。このプレビューでは保存されません。編集を続けるにはプレビューを閉じてください。'
+                  : props.draft
+                    ? '保存済みの下書きです。サイトには公開されません。'
+                    : '公開中の保存済みデータを表示しています。'}
+              </span>
+              <span>
+                {props.unsaved
+                  ? 'ほかの画面へ移動すると保存済みの内容を表示します。公開サイトや外部サービスへのリンクもあります。'
+                  : '本文内には、公開サイトや外部サービスへ移動するリンクがあります。'}
+              </span>
+              {props.note ? <span>{props.note}</span> : null}
+              {props.warnings ? (
+                <span>
+                  公開する前に確認してください: {Object.values(props.warnings).join('。')}
+                </span>
               ) : null}
             </div>
-          ) : null}
-        </div>
-      </aside>
+            {!props.unsaved || props.publicHref ? (
+              <div class="preview-notice__actions">
+                {!props.unsaved ? (
+                  <a href={props.editHref} target="_blank" rel="noreferrer">
+                    編集画面を開く ↗
+                  </a>
+                ) : null}
+                {props.publicHref ? (
+                  <a href={props.publicHref} target="_blank" rel="noreferrer">
+                    公開中の画面を見る ↗
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </aside>
+      )
     }
   >
     {props.children}

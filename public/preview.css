@@ -40,6 +40,28 @@
   color: var(--ink);
 }
 
+/*
+  管理画面で書きながら横に出す完成形（AdminLayout の live。Layout の still が body に
+  data-still を立てる）。書くたびに読み込み直すので、動きを全部止める——入口の幕開けや
+  行の入りが毎回動くと、直した字が読めない。止まった姿は動きの終わりの姿と同じ（app.css の
+  決まり）なので、出来上がりの見た目のまま。ページの切り替え（view transition）も、名前を
+  外して何もつながないようにする
+*/
+body[data-still] *,
+body[data-still] *::before,
+body[data-still] *::after {
+  /* biome-ignore lint/complexity/noImportantStyles: app.css のどの動きの規則（詳しいセレクタも）より強く止めるため */
+  animation: none !important;
+  /* biome-ignore lint/complexity/noImportantStyles: 同じ理由（触ったときの色の移り変わりも止める） */
+  transition: none !important;
+  /* biome-ignore lint/complexity/noImportantStyles: 一覧の題は style 属性で名前を持つので、それより強く外す */
+  view-transition-name: none !important;
+}
+
+:root:has(> body[data-still]) {
+  view-transition-name: none;
+}
+
 @media print {
   .preview-notice__actions {
     display: none;

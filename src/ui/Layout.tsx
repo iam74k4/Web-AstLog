@@ -123,6 +123,11 @@ export const Layout = (props: {
   opening?: boolean
   // 認証済みプレビューの案内。検索・共有用のメタ情報は出さない。
   preview?: Child
+  /*
+    動きを止めて描く（管理画面で書きながら横に出す完成形。preview.css の data-still）。
+    書くたびに読み込み直すので、入口の幕開けや行の入りが毎回動くと、直した字が読めない
+  */
+  still?: boolean
   children?: Child
 }) => (
   <HtmlDocument>
@@ -168,6 +173,7 @@ export const Layout = (props: {
       data-whole={props.whole ? '' : undefined}
       data-opening={props.opening && !props.preview ? '' : undefined}
       data-preview={props.preview ? '' : undefined}
+      data-still={props.still && props.preview ? '' : undefined}
     >
       <a class="skip" href="#main" lang="en">
         Skip to content

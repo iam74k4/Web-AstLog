@@ -154,11 +154,17 @@ function blockNode(saved: Snapshot, block: schema.Block): { node: Child; descrip
   return rendered ?? { node: emptyBlock(block), description: '表示できる内容がありません' }
 }
 
+/*
+  管理画面で書きながら横に出す完成形（AdminLayout の live）からの送信か。admin-behavior.ts が
+  プレビューの送り先に ?live=1 を付ける。動きを止めて描く（Layout の still）
+*/
+export const livePreview = (c: Context<AppEnv>) => c.req.query('live') === '1'
+
 function renderSnapshot(
   c: Context<AppEnv>,
   saved: Snapshot,
   screen: (typeof READ_SCREENS)[number],
-  options: Pick<PreviewLayoutProps, 'editHref' | 'unsaved'>,
+  options: Pick<PreviewLayoutProps, 'editHref' | 'unsaved' | 'still'>,
 ) {
   if (screen === 'all') {
     const data = { ...saved.data, band: null }
@@ -241,7 +247,7 @@ function memberResponse(
   c: Context<AppEnv>,
   saved: Snapshot,
   member: schema.Member,
-  options: Pick<PreviewLayoutProps, 'editHref' | 'unsaved' | 'warnings'>,
+  options: Pick<PreviewLayoutProps, 'editHref' | 'unsaved' | 'warnings' | 'still'>,
 ) {
   // この人物ページの名乗りだけ、保存した場合の公開人数・氏名・肩書きで確認する。
   // 他のGETや全体プレビューへ仮のメンバーを渡さない。
@@ -302,7 +308,7 @@ function itemResponse(
   c: Context<AppEnv>,
   saved: Snapshot,
   item: ItemView,
-  options: Pick<PreviewLayoutProps, 'editHref' | 'unsaved' | 'warnings' | 'note'>,
+  options: Pick<PreviewLayoutProps, 'editHref' | 'unsaved' | 'warnings' | 'note' | 'still'>,
 ) {
   const page = itemPage(item, {
     backHref: !options.unsaved && saved.data.band ? '/admin/preview?screen=projects' : undefined,
@@ -370,6 +376,7 @@ export async function validationFailure(
       label="入力の確認"
       editHref={editHref}
       unsaved
+      still={livePreview(c)}
       nav={[]}
       footer={footer(saved)}
     >
@@ -420,6 +427,7 @@ async function memberPreviewPost(c: Context<AppEnv>, askedId?: string) {
   return memberResponse(c, await snapshot(c), member, {
     editHref,
     unsaved: true,
+    still: livePreview(c),
     warnings: values.published
       ? publishErrors({ kind: 'member', headline: values.headline })
       : null,
@@ -513,6 +521,7 @@ async function itemPreviewPost(c: Context<AppEnv>, askedId?: string) {
   return itemResponse(c, await snapshot(c), item, {
     editHref,
     unsaved: true,
+    still: livePreview(c),
     note: added.some((shot) => shot.image.type.startsWith('video/'))
       ? '選んだ動画は、保存したあとで再生できます（ここでは枠だけを出します）。'
       : undefined,
@@ -542,6 +551,7 @@ export async function renderBlockPreview(
     unsaved?: boolean
     draft?: boolean
     warnings?: Record<string, string> | null
+    still?: boolean
   },
 ) {
   const saved = await snapshot(c)
@@ -555,6 +565,7 @@ export async function renderBlockPreview(
       editHref={options.editHref}
       unsaved={options.unsaved}
       warnings={options.warnings}
+      still={options.still}
       draft={options.draft ?? block.published !== 1}
       nav={options.unsaved ? [] : previewNav(saved)}
       footer={footer(saved)}
@@ -600,5 +611,6 @@ previewRoutes.post('/preview/site', async (c) => {
   return renderSnapshot(c, { ...saved, site, data: { ...saved.data, site } }, screen, {
     editHref: '/admin/site',
     unsaved: true,
+    still: livePreview(c),
   })
 })

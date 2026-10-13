@@ -577,6 +577,7 @@ const ItemForm = (props: ItemFormData) => {
       account={props.account}
       errors={props.errors}
       latestHref={item ? `/admin/items/${item.id}/edit` : undefined}
+      live
     >
       <div class="admin-head">
         <div class="admin-head__title">

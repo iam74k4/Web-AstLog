@@ -40,6 +40,12 @@ export const AdminLayout = (props: {
   flash?: string | null
   errors?: Record<string, string> | null
   latestHref?: string
+  /*
+    書くそばから横で完成形が変わる編集画面（保存前にプレビューできるフォームの画面）。
+    編集の枠が広いときだけ右に完成形を置き、入力が止まるたびに描き直す（admin-behavior.ts。
+    送り先はフォームの「保存前にプレビュー」と同じ）。狭いときは今までどおりダイアログで見る
+  */
+  live?: boolean
   children?: Child
 }) => (
   <HtmlDocument>
@@ -101,10 +107,36 @@ export const AdminLayout = (props: {
             </div>
           </details>
         </aside>
-        <main class="admin-main" id="admin-main" tabindex={-1}>
-          <FormErrors errors={props.errors} latestHref={props.latestHref} />
-          {props.flash ? <p class="flash">{props.flash}</p> : null}
-          {props.children}
+        <main
+          class={props.live ? 'admin-main admin-main--live' : 'admin-main'}
+          id="admin-main"
+          tabindex={-1}
+        >
+          {props.live ? (
+            <div class="live">
+              <div class="live__edit">
+                <FormErrors errors={props.errors} latestHref={props.latestHref} />
+                {props.flash ? <p class="flash">{props.flash}</p> : null}
+                {props.children}
+              </div>
+              <aside class="live__preview" aria-label="入力中の内容の完成形">
+                <p class="live__status" role="status">
+                  入力中の内容・まだ保存されていません
+                </p>
+                <iframe
+                  name="live-preview"
+                  title="入力中の内容の完成形（保存前）"
+                  sandbox="allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+                />
+              </aside>
+            </div>
+          ) : (
+            <>
+              <FormErrors errors={props.errors} latestHref={props.latestHref} />
+              {props.flash ? <p class="flash">{props.flash}</p> : null}
+              {props.children}
+            </>
+          )}
         </main>
       </div>
       <dialog id="editor-preview" class="editor-preview" aria-labelledby="editor-preview-title">
