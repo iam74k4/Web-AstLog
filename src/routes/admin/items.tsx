@@ -26,6 +26,7 @@ import {
   yearFrom,
 } from '../../lib/format'
 import { IMAGE_ACCEPT, isVideoUrl, SHOT_ACCEPT } from '../../lib/image'
+import { MARKDOWN_HINT } from '../../lib/markdown'
 import {
   Area,
   Confirm,
@@ -408,9 +409,7 @@ const StoryFields = ({
   <fieldset class="field field--wide fieldset fieldset--story">
     <legend class="field__label">Story — 個人開発と業務で同じ見出し</legend>
     <span class="field__hint">
-      {
-        'どの欄も「です・ます」で、空行で段落を分ける · 作品のページの「Story」に出る（欄の順に見出しを付けて。空の欄は出ない。一覧には出ない）'
-      }
+      {`どの欄も「です・ます」で、空行で段落を分ける · ${MARKDOWN_HINT} · 作品のページの「Story」に出る（欄の順に見出しを付けて。空の欄は出ない。一覧には出ない）`}
     </span>
     {body ? (
       <Area

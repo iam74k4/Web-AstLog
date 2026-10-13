@@ -66,7 +66,7 @@ Instagram → X → メール。サイト設定にあるものだけ）。足元
 | メンバー個別 | `GET /members/:slug` | 名札（顔・名前・名前のローマ字・肩書きと所在地）と大見出し、2人以上のサイトならこの人の一覧への帯、その下に About・Skills・Career の小節（`#about` `#skills` `#career`） | 下書き・不明な slug は 404。前の slug（管理画面で変えたもの）は、いまの slug へ 301 |
 | 前の個人ページの続き | `GET /members/:slug/:rest` | `about` `skills` `career` はこのページの小節（`/members/<slug>#about` …）へ 301。小節が無くなっていればページの頭へ。`contact` はサイトの `/contact` へ 301 | 知らない名前は 404。前の slug はいまの slug の同じ続きへ 301 |
 | 割っていたころの続き | `GET /members/:slug/:rest/:page` | 同上（`/members/okazaki/career/2` → `#career`） | 番号の形（1始まりの数）でなければ 404 |
-| 作品1件（個人開発） | `GET /apps/item/:slug` | その作品のページ（一覧の行を開いたもの）と、画像が2枚以上なら縦ギャラリーの小節「Screenshots」（`#screenshots`。動画は押して再生し、共有カードと構造化データの画像には使わない）、本文があればその下に小節「Story」（`#story`）。頭に「← Projects」（一覧のその作品の行 `/projects#item-<slug>` へ） | 下書き・不明な slug は 404。前の slug（管理画面で変えたもの。`item_slug_redirects`）は、いまの URL へ 301 |
+| 作品1件（個人開発） | `GET /apps/item/:slug` | その作品のページ（一覧の行を開いたもの）と、本文（Story）は段落の中の小さな Markdown（行頭の「- 」の箇条書き・**太字**・[リンク](URL)。紹介文とメモも同じ。`src/lib/markdown.ts`）を要素にする。画像が2枚以上なら縦ギャラリーの小節「Screenshots」（`#screenshots`。動画は押して再生し、共有カードと構造化データの画像には使わない）、本文があればその下に小節「Story」（`#story`）。頭に「← Projects」（一覧のその作品の行 `/projects#item-<slug>` へ） | 下書き・不明な slug は 404。前の slug（管理画面で変えたもの。`item_slug_redirects`）は、いまの URL へ 301 |
 | 前の本文の画面（個人開発） | `GET /apps/item/:slug/story` | 作品のページの `#story` へ 301（本文が無くなっていればページの頭へ） | 下書き・不明な slug は 404。前の slug はいまの URL の `…/story` へ（そこで `#story` へ） |
 | 作品1件（業務） | `GET /works/item/:slug` | 同上 | 1語目と種類が食い違う URL（区分を変えた作品の前の URL）は、いまの区分の URL へ 301 |
 | 前の本文の画面（業務） | `GET /works/item/:slug/story` | 同上 | 同上 |

@@ -1,6 +1,7 @@
 import type { Child } from 'hono/jsx'
 import { memberUnits } from '../../blocks'
 import type * as schema from '../../db/schema'
+import { plainText } from '../../lib/markdown'
 import { SITE, type SiteSettings } from '../../site'
 import {
   CareerGroups,
@@ -77,7 +78,7 @@ export function memberPage(
     しか出ず、検索結果から誰の何のページかが分からなかった。長さは describe が切る
   */
   const description = describe(
-    sentences(member.headline, bio[0] ?? '') || `${nameWithRole(member)}のプロフィール`,
+    sentences(member.headline, plainText(bio[0] ?? '')) || `${nameWithRole(member)}のプロフィール`,
   )
 
   const node = (
@@ -108,7 +109,9 @@ export function memberPage(
       {/* 添えは置かない。訳語（紹介）は見出しを2度言うだけ */}
       <Screen id="about" label="About">
         <SectionHead title="About" chapter />
-        <Note paragraphs={bio}>{bio.length ? null : <Empty>準備中です</Empty>}</Note>
+        <Note paragraphs={bio} rich>
+          {bio.length ? null : <Empty>準備中です</Empty>}
+        </Note>
       </Screen>
       {skills.length ? (
         <Screen id="skills" label="Skills">

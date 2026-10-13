@@ -8,6 +8,7 @@ import {
   parseLines,
   parseSkills,
 } from './lib/format'
+import { MARKDOWN_HINT } from './lib/markdown'
 
 /*
   トップページを組むブロックの一覧。
@@ -101,7 +102,7 @@ export const BLOCK_TYPES = [
     note: '段落の文章',
     kind: 'free',
     title: '',
-    hint: '空行で段落を分ける',
+    hint: `空行で段落を分ける · ${MARKDOWN_HINT}`,
   },
 ] as const
 

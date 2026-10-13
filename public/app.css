@@ -208,7 +208,7 @@
   --brand-h: 15px;
 
   /*
-    段落（.bio p。紹介文・メモ・作品の説明と本文）の1行の長さ。約40字で止める。
+    段落（.bio の p と箇条書き。紹介文・メモ・作品の説明と本文）の1行の長さ。約40字で止める。
 
     和文の本文は1行 35〜40字あたりを超えると、行末から次の行頭へ目を戻すときに
     行を取り違えやすくなる。止めていなかったころは、1440 の About が1行約65字
@@ -1080,7 +1080,7 @@ body[data-site] > .frame {
   .head :is(h1, h2, h3),
   .entry__main :is(h3, p),
   .statement__text,
-  .bio p,
+  .bio :is(p, li),
   .gallery__description,
   .career :is(.title, .org, .career__item)
 ) {
@@ -2051,11 +2051,55 @@ body[data-site] > .frame {
   画面の幅いっぱいに流していたころは、1440 の About が1行約65字あり、小さい字の
   長い行を読み進めることになっていた。
 */
-.bio p {
+.bio :is(p, ul) {
   max-width: var(--measure);
   color: var(--ink-mid);
   font-size: var(--fs-md);
   line-height: 1.9;
+}
+
+/*
+  段落の中の小さな Markdown（components.tsx の Note の rich。src/lib/markdown.ts）。紹介文・
+  作品の本文・メモだけが持つ。
+
+  - 箇条書きは段落と同じ字と行の長さで、頭に「・」。行と行のあいだは段落より狭く、
+    1つの塊に見せる。空行を挟まずに続けた文と箇条書きは、1つの段落として詰める（.bio__part）
+  - 太字は字の墨（--ink）で、地の字（--ink-mid）より1段濃く
+  - リンクは字の色のまま下線を引く。外へ出る（別タブで開く）ものにだけ ↗ を添える——
+    文の中のサイトの続きに → を付けると、文が矢印で切れる。行き先の決め方は作品の
+    行き先（.links。components.tsx の LinkRow）と同じ
+*/
+.bio__part {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.bio ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  list-style: '・' outside;
+  padding-inline-start: 1em;
+}
+
+.bio strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.bio a {
+  color: var(--ink);
+  text-decoration-line: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: var(--sp-1);
+  transition: text-decoration-color var(--dur) var(--ease);
+}
+
+.bio a[target='_blank']::after {
+  content: '↗';
+  font-size: var(--fs-meta);
+  margin-inline-start: var(--sp-1);
 }
 
 /*
@@ -2934,6 +2978,11 @@ body[data-site] > .frame {
     透明の線）に色を入れる。色だけに頼らない合図なので、タッチ端末で落ちても失うものが無い。
   */
   .links a:hover {
+    text-decoration-color: currentColor;
+  }
+
+  /* 文の中のリンク（.bio a）も同じ合図。灰色の下線に字の色を入れる */
+  .bio a:hover {
     text-decoration-color: currentColor;
   }
 
