@@ -113,19 +113,93 @@ describe('認証', () => {
   })
 
   it('一覧の「追加」の手も日本語。メンバーの削除の手はメンバーと言う', async () => {
-    // 「＋ Add item」「＋ Add member」が、空の一覧の「＋ 最初の項目を追加」と別の言葉で並んでいた
+    // 「＋ Add item」「＋ Add member」が、空の一覧の「＋ 最初の作品を追加」と別の言葉で並んでいた
     const member = await seedMember()
+    // 1人のあいだは一覧を飛ばして編集画面が開くので、一覧を見るには2人にする
+    await seedMember({ slug: 'second', name: '星野' })
     await seedItem()
     const signed = await signIn()
     const items = await (await signed('/admin/items?type=app')).text()
-    expect(items).toContain('＋ 項目を追加')
+    // タブの名前（作品）と、概要の「＋ 作品を追加」と同じ言葉
+    expect(items).toContain('＋ 作品を追加')
     const members = await (await signed('/admin/members')).text()
     expect(members).toContain('＋ メンバーを追加')
     expect(items + members).not.toMatch(/Add (item|member)/)
-    // 共通の既定の「この項目を削除…」は作品の言い方。メンバーに「項目」は合わない
+    // 共通の既定の「この作品を削除…」は作品の言い方。メンバーに「作品」は合わない
     const edit = await (await signed(`/admin/members/${member.id}/edit`)).text()
     expect(edit).toContain('このメンバーを削除…')
-    expect(edit).not.toContain('この項目を削除')
+    expect(edit).not.toContain('この作品を削除')
+  })
+})
+
+/*
+  管理画面の並び（タブ）は日本語の1行で、画面の見出しも同じ名前。英語の名前と日本語の添えの
+  2行にしていたころは、どれが名前か分からなかった。一覧の行の名前は編集画面へのリンク
+*/
+describe('管理画面の並びと一覧', () => {
+  it('タブは日本語の1行。画面の見出しもタブと同じ名前', async () => {
+    await seedMember()
+    await seedMember({ slug: 'second', name: '星野' })
+    const signed = await signIn()
+    const html = await (await signed('/admin')).text()
+    const nav = html.slice(html.indexOf('<nav class="admin-nav__links">'), html.indexOf('</nav>'))
+    expect([...nav.matchAll(/<a [^>]*>([^<]*)<\/a>/g)].map((found) => found[1]?.trim())).toEqual([
+      '概要',
+      'プロフィール',
+      '作品',
+      'ページ構成',
+      'サイト設定',
+    ])
+    expect(html).not.toContain('admin-nav__note')
+    for (const [path, heading] of [
+      ['/admin/members', 'プロフィール'],
+      ['/admin/items', '作品'],
+      ['/admin/blocks', 'ページ構成'],
+      ['/admin/site', 'サイト設定'],
+    ] as const) {
+      expect(await (await signed(path)).text(), path).toContain(`<h1>${heading}</h1>`)
+    }
+  })
+
+  it('一覧の行の名前を押すと、その行の編集画面へ', async () => {
+    const member = await seedMember()
+    await seedMember({ slug: 'second', name: '星野' })
+    const item = await seedItem({ title: 'AppMixer' })
+    const signed = await signIn()
+    expect(await (await signed('/admin/items')).text()).toContain(
+      `<a class="row__title" href="/admin/items/${item.id}/edit">AppMixer</a>`,
+    )
+    expect(await (await signed('/admin/members')).text()).toContain(
+      `<a class="row__title" href="/admin/members/${member.id}/edit">${member.name}</a>`,
+    )
+    const [block] = await db()
+      .insert(schema.blocks)
+      .values({ type: 'note', title: 'メモの題', body: '本文', published: 1 })
+      .returning()
+    expect(await (await signed('/admin/blocks')).text()).toContain(
+      `<a class="row__title" href="/admin/blocks/${block?.id}/edit">`,
+    )
+  })
+
+  it('メンバーが1人のあいだは、プロフィールのタブがその人の編集画面を開く', async () => {
+    const member = await seedMember()
+    const signed = await signIn()
+    const list = await signed('/admin/members')
+    expect(list.status).toBe(303)
+    expect(list.headers.get('location')).toBe(`/admin/members/${member.id}/edit`)
+    // 保存のあとの知らせは持ったまま移り、編集画面で出す
+    const saved = await signed('/admin/members?saved=1')
+    expect(saved.headers.get('location')).toBe(`/admin/members/${member.id}/edit?saved=1`)
+    const edit = await (await signed(`/admin/members/${member.id}/edit?saved=1`)).text()
+    expect(edit).toContain('<p class="flash">保存しました</p>')
+    // 一覧を通らないので、2人目を足す手を編集画面に置く
+    expect(edit).toContain('<a class="btn btn--ghost" href="/admin/members/new">')
+    // 2人になったら一覧に戻り、編集画面には足す手を置かない
+    await seedMember({ slug: 'second', name: '星野' })
+    expect((await signed('/admin/members')).status).toBe(200)
+    expect(await (await signed(`/admin/members/${member.id}/edit`)).text()).not.toContain(
+      '<a class="btn btn--ghost" href="/admin/members/new">',
+    )
   })
 })
 

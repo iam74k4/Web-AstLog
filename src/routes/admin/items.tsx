@@ -92,10 +92,10 @@ itemRoutes.get('/items', async (c) => {
   })
 
   return c.html(
-    <AdminLayout title="Projects" active="items" account={c.get('account')} flash={flashFor(c)}>
+    <AdminLayout title="作品" active="items" account={c.get('account')} flash={flashFor(c)}>
       <div class="admin-head">
         <div class="admin-head__title">
-          <h1>Projects</h1>
+          <h1>作品</h1>
           <div class="tabs">
             {ITEM_KINDS.map((kind) => (
               <a
@@ -108,9 +108,9 @@ itemRoutes.get('/items', async (c) => {
             ))}
           </div>
         </div>
-        {/* 押す手の言葉は日本語（CLAUDE.md「文言」。空の一覧の「＋ 最初の項目を追加」と同じ言い方） */}
+        {/* 押す手の言葉は日本語（CLAUDE.md「文言」。空の一覧の「＋ 最初の作品を追加」と同じ言い方） */}
         <a class="btn btn--primary" href={`/admin/items/new?type=${type}`}>
-          ＋ 項目を追加
+          ＋ 作品を追加
         </a>
       </div>
 
@@ -128,7 +128,7 @@ itemRoutes.get('/items', async (c) => {
         <div class="empty-state">
           <p>{KIND_LABEL[type]} はまだありません</p>
           <a class="btn btn--primary" href={`/admin/items/new?type=${type}`}>
-            ＋ 最初の項目を追加
+            ＋ 最初の作品を追加
           </a>
         </div>
       ) : (
@@ -170,7 +170,10 @@ itemRoutes.get('/items', async (c) => {
                   <span class="row__thumb row__thumb--empty" aria-hidden="true" />
                 )}
                 <span class="row__main">
-                  <strong>{item.title}</strong>
+                  {/* 名前を押すと編集へ（右端の「編集」と同じ行き先。押す的を広くする） */}
+                  <a class="row__title" href={`/admin/items/${item.id}/edit`}>
+                    {item.title}
+                  </a>
                   {/*
                   恒久リンクをここに出す。貼るための URL なので、探しに行かずに
                   読めるところに置く。slug の無い行（列より前からある作品）も、
@@ -569,7 +572,7 @@ const ItemForm = (props: ItemFormData) => {
 
   return (
     <AdminLayout
-      title={item ? item.title : '新しい項目'}
+      title={item ? item.title : '新しい作品'}
       active="items"
       account={props.account}
       errors={props.errors}
@@ -578,9 +581,9 @@ const ItemForm = (props: ItemFormData) => {
       <div class="admin-head">
         <div class="admin-head__title">
           <span class="crumbs">
-            Projects / {KIND_LABEL[props.type]} / {item ? '編集' : '追加'}
+            作品 / {KIND_LABEL[props.type]} / {item ? '編集' : '追加'}
           </span>
-          <h1>{item ? item.title : '新しい項目'}</h1>
+          <h1>{item ? item.title : '新しい作品'}</h1>
         </div>
         {item ? (
           <div class="admin-head__actions">

@@ -234,7 +234,7 @@ export const PublishToggle = ({ published }: { published: number }) => (
 export const FormActions = ({
   cancelHref,
   deleteHref,
-  deleteLabel = 'この項目を削除…',
+  deleteLabel = 'この作品を削除…',
   previewAction,
 }: {
   cancelHref: string

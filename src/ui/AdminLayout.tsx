@@ -7,7 +7,8 @@ import { Wordmark } from './icons'
 
 /*
   管理画面の外枠。900px 以上で左ナビ、それ未満では上のナビになる（CSS 側）。
-  節の名前に短い説明を添え、狭い画面では3列に分けて全項目を表示する。
+  節の名前は日本語の1行（画面の見出しも同じ名前）。英語の名前と日本語の添えの2行にして
+  いたころは、どれが名前か分からなかった。狭い画面では3列に分けて全項目を表示する。
 
   色と書体は公開ページと同じ1つ（app.css の段）。選ばせる口は持たない。
 */
@@ -55,24 +56,19 @@ export const AdminLayout = (props: {
           </span>
           <nav class="admin-nav__links">
             <a href="/admin" aria-current={props.active === 'dashboard' ? 'page' : undefined}>
-              <span>概要</span>
-              <span class="admin-nav__note">準備と状況</span>
+              概要
             </a>
             <a href="/admin/members" aria-current={props.active === 'members' ? 'page' : undefined}>
-              <span>Members</span>
-              <span class="admin-nav__note">プロフィール</span>
+              プロフィール
             </a>
             <a href="/admin/items" aria-current={props.active === 'items' ? 'page' : undefined}>
-              <span>Projects</span>
-              <span class="admin-nav__note">作品・業務</span>
+              作品
             </a>
             <a href="/admin/blocks" aria-current={props.active === 'blocks' ? 'page' : undefined}>
-              <span>構成</span>
-              <span class="admin-nav__note">ページと順番</span>
+              ページ構成
             </a>
             <a href="/admin/site" aria-current={props.active === 'site' ? 'page' : undefined}>
-              <span>サイト設定</span>
-              <span class="admin-nav__note">紹介・連絡先</span>
+              サイト設定
             </a>
           </nav>
           <details class="admin-nav__tools">

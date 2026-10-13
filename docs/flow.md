@@ -120,7 +120,7 @@ Projects、個人ページは Profile か Team）。先頭の Hero へはロゴ�
 （`/apps` `/works` とその続き）は、同じ区分で絞った `/projects` へ 301 で寄せる。割って
 いたころの続き（`/projects/2`）も `/projects` へ 301（絞り込みは付けたまま）。
 
-「構成」で節を外しても、行き止まりを作らない。
+「ページ構成」で節を外しても、行き止まりを作らない。
 
 - 入口の「Projects →」と件数、2人以上のサイトの個人ページの帯は Projects へ送り、件数は
   区分ごとに数える（`個人開発 5 · 業務 2`。項目の無い区分は数えない）。Projects を外した
@@ -133,7 +133,7 @@ Projects、個人ページは Profile か Team）。先頭の Hero へはロゴ�
   一覧だけが絞られる
 
 全体ページ（`/all`）は公開ページからリンクしない（足元は著作権表示と行き先だけ）。
-管理画面の「構成」から開く（`sitemap.xml` にも載る）。印刷・Ctrl-F・翻訳・全体の点検のための
+管理画面の「ページ構成」から開く（`sitemap.xml` にも載る）。印刷・Ctrl-F・翻訳・全体の点検のための
 1本で、サイトの全部が1つの文書に並ぶ。詳しくは [screens.md](./screens.md#全体ページ)。
 
 管理画面へは、**ログインしている人にだけ**上の帯に出る「管理画面」から行く（訪問者の
@@ -144,11 +144,11 @@ Projects、個人ページは Profile か Team）。先頭の Hero へはロゴ�
 | 見ているページ | 行き先 |
 |---|---|
 | 入口（Hero） | 1人のサイトならその人の編集、それ以外はサイト設定 |
-| Projects | 項目の一覧（`/admin/items`。個人開発 / 業務のタブ） |
-| Team（2人以上のサイト） | Members 一覧 |
+| Projects | 作品の一覧（`/admin/items`。個人開発 / 業務のタブ） |
+| Team（2人以上のサイト） | プロフィールの一覧 |
 | Contact | サイト設定（`/admin/site`。文言と公開する宛先を編集） |
 | 打ち込むブロック（ひとこと・メモ …） | そのブロックの編集 |
-| 全体ページ（`/all`）・0件のトップ | 構成 |
+| 全体ページ（`/all`）・0件のトップ | ページ構成 |
 | 作品1件 | その項目の編集 |
 | 個人ページ（1人のサイトのプロフィールも） | その人の編集 |
 
@@ -160,8 +160,11 @@ Projects、個人ページは Profile か Team）。先頭の Hero へはロゴ�
 
 ## 管理側
 
-ログイン後は概要から次の設定に進む。追加・編集・削除は「一覧 → フォーム → 一覧」で閉じ、
-削除は確認を挟む。保存済みの内容は下書きもプレビューできる。メンバー・作品・ブロック・
+ログイン後は概要から次の設定に進む。左の並びは日本語の1行（概要・プロフィール・作品・
+ページ構成・サイト設定）で、画面の見出しも同じ名前。追加・編集・削除は「一覧 → フォーム → 一覧」で
+閉じ、削除は確認を挟む。一覧の行の名前を押すと、その行の編集画面が開く。メンバーが1人のあいだは
+「プロフィール」が一覧を飛ばしてその人の編集画面を開く（保存のあとの知らせもそこで出し、2人目を
+足す手もそこに置く）。保存済みの内容は下書きもプレビューできる。メンバー・作品・ブロック・
 サイト設定の入力中の内容も、選んだ画像とともにダイアログで確認してから保存できる。
 
 ```mermaid
@@ -169,14 +172,14 @@ flowchart TD
     Login["ログイン<br>GET /admin/login"]
     Dashboard["概要・次の設定<br>GET /admin"]
     Preview["管理者専用プレビュー<br>/admin/preview/*<br>保存・公開はしない"]
-    Members["Members 一覧<br>GET /admin/members"]
+    Members["プロフィールの一覧<br>GET /admin/members<br>1人なら 303 でその人の編集へ"]
     Account["アカウント<br>GET /admin/account"]
-    Items["Projects（個人開発 / 業務）<br>GET /admin/items?type="]
+    Items["作品（個人開発 / 業務）<br>GET /admin/items?type="]
     MForm["Member フォーム<br>/members/new ・ /:id/edit"]
     IForm["Item フォーム<br>/items/new ・ /:id/edit"]
     MDel["削除の確認<br>GET /members/:id/delete"]
     IDel["削除の確認<br>GET /items/:id/delete"]
-    Blocks["構成<br>GET /admin/blocks"]
+    Blocks["ページ構成<br>GET /admin/blocks"]
     BForm["ブロックフォーム<br>/blocks/new?type= ・ /:id/edit"]
     BDel["外す確認<br>GET /blocks/:id/delete"]
     SiteSettings["サイト設定<br>GET /admin/site"]
@@ -215,12 +218,12 @@ flowchart TD
     BDel -->|"POST → 303 ?deleted=1"| Blocks
     BDel -->|"キャンセル（編集から来たら編集へ）"| BForm
 
-    Members -->|"＋ Add / 編集"| MForm
+    Members -->|"名前・編集 / ＋ メンバーを追加"| MForm
     MForm -->|"POST → 303 ?saved=1 / ?saved=draft"| Members
     MForm -->|"キャンセル"| Members
     MForm -->|"入力エラー → 400<br>打った内容は残したまま描き直す"| MForm
 
-    Items -->|"＋ Add / 編集"| IForm
+    Items -->|"名前・編集 / ＋ 作品を追加"| IForm
     IForm -->|"POST → 303 ?saved=1 / ?saved=draft"| Items
     IForm -->|"キャンセル"| Items
     IForm -->|"入力エラー → 400"| IForm

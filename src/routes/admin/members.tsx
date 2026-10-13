@@ -57,11 +57,23 @@ memberRoutes.get('/members', async (c) => {
   const members = await db(c).query.members.findMany({
     orderBy: [asc(schema.members.sortOrder), asc(schema.members.id)],
   })
+  /*
+    1人のあいだは一覧を飛ばして、その人の編集画面を開く（一覧は1行だけで、押す手が1つ
+    増えるだけだった）。保存や削除のあとの知らせ（?saved= など）は持ったまま移る。2人目を
+    足す手と削除の手は編集画面にある
+  */
+  const only = members.length === 1 ? members[0] : undefined
+  if (only) return c.redirect(`/admin/members/${only.id}/edit${new URL(c.req.url).search}`, 303)
 
   return c.html(
-    <AdminLayout title="Members" active="members" account={c.get('account')} flash={flashFor(c)}>
+    <AdminLayout
+      title="プロフィール"
+      active="members"
+      account={c.get('account')}
+      flash={flashFor(c)}
+    >
       <div class="admin-head">
-        <h1>Members</h1>
+        <h1>プロフィール</h1>
         {/* 押す手の言葉は日本語（CLAUDE.md「文言」。空の一覧の「＋ 最初のメンバーを追加」と同じ言い方） */}
         <a class="btn btn--primary" href="/admin/members/new">
           ＋ メンバーを追加
@@ -81,7 +93,10 @@ memberRoutes.get('/members', async (c) => {
             <li class="row" key={member.id}>
               <Avatar src={member.avatarUrl} name={member.name} size={36} />
               <span class="row__main">
-                <strong>{member.name}</strong>
+                {/* 名前を押すと編集へ（右端の「編集」と同じ行き先） */}
+                <a class="row__title" href={`/admin/members/${member.id}/edit`}>
+                  {member.name}
+                </a>
                 <span class="row__sub">/members/{member.slug}</span>
               </span>
               <span class="row__col">{member.role}</span>
@@ -139,6 +154,10 @@ memberRoutes.get('/members', async (c) => {
 const MemberForm = (props: {
   account: string
   member?: schema.Member
+  // 保存のあとの知らせ（1人のサイトは一覧を飛ばしてここへ戻る。flashFor）
+  flash?: string | null
+  // 1人のサイトの編集画面。一覧を通らないので、2人目を足す手をここに置く
+  solo?: boolean
   // 追加のフォームの一度きりの札（newFormKey）。編集では持たない
   formKey?: string | null
   version?: string
@@ -161,16 +180,22 @@ const MemberForm = (props: {
       title={member ? member.name : '新しいメンバー'}
       active="members"
       account={props.account}
+      flash={props.flash}
       errors={props.errors}
       latestHref={member ? `/admin/members/${member.id}/edit` : undefined}
     >
       <div class="admin-head">
         <div class="admin-head__title">
-          <span class="crumbs">Members / {member ? '編集' : '追加'}</span>
+          <span class="crumbs">プロフィール / {member ? '編集' : '追加'}</span>
           <h1>{member ? member.name : '新しいメンバー'}</h1>
         </div>
         {member ? (
           <div class="admin-head__actions">
+            {props.solo ? (
+              <a class="btn btn--ghost" href="/admin/members/new">
+                ＋ メンバーを追加
+              </a>
+            ) : null}
             <a
               class="btn btn--ghost"
               href={`/admin/preview/members/${member.id}`}
@@ -377,7 +402,15 @@ memberRoutes.get('/members/:id/edit', async (c) => {
     where: eq(schema.members.id, id),
   })
   if (!member) return c.notFound()
-  return c.html(<MemberForm account={c.get('account')} member={member} />)
+  const [{ total } = { total: 0 }] = await db(c).select({ total: count() }).from(schema.members)
+  return c.html(
+    <MemberForm
+      account={c.get('account')}
+      member={member}
+      flash={flashFor(c)}
+      solo={total === 1}
+    />,
+  )
 })
 
 export function readMemberForm(form: FormData, existing?: schema.Member) {

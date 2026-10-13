@@ -182,7 +182,9 @@ npx wrangler d1 execute astlog --remote --command "DELETE FROM sessions"
 ## 公開する文言と連絡先を設定する
 
 管理画面の概要（`/admin`）から、次にする設定と公開/下書きの件数を確認できる。
-Members・Projects のフォームは基本情報を先に書き、本文・画像・URL・並び順などは必要なときに開く。
+左の並びは概要・プロフィール・作品・ページ構成・サイト設定。一覧の名前を押すと編集画面が開き、メンバーが
+1人のあいだは「プロフィール」がそのまま編集画面を開く。プロフィール・作品のフォームは基本情報を先に書き、
+本文・画像・URL・並び順などは必要なときに開く。
 保存済みのメンバー・作品・ブロックは、下書きのまま管理者専用プレビューで表示を確認できる。
 ![管理画面の概要](docs/admin-overview.png)
 
@@ -635,11 +637,11 @@ src/
       auth.tsx       ログインの往復（/admin/login・/admin/auth/*・ログアウト）
       dashboard.tsx  概要・設定の状態と次の一手（閲覧だけ）
       preview.tsx    管理者専用の保存済み/保存前プレビュー（保存しない）
-      block-preview.tsx 構成の入力中の内容を検査して表示（保存しない）
+      block-preview.tsx ページ構成の入力中の内容を検査して表示（保存しない）
       images.ts      画像の取り込み（pickImage / putImage）と KV・D1 の順序
-      members.tsx    Members
-      items.tsx      Projects の項目（個人開発・業務）
-      blocks.tsx     構成
+      members.tsx    プロフィール（メンバー）
+      items.tsx      作品（個人開発・業務）
+      blocks.tsx     ページ構成
       site-settings.tsx 公開する文言と連絡先
       account.tsx    アカウント
   ui/

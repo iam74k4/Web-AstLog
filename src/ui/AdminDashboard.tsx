@@ -188,7 +188,7 @@ export const AdminDashboard = (props: {
           {props.members.published > 0 && !props.profilesShown ? (
             <span class="dashboard-card__status">プロフィール・チームは目次から外れています</span>
           ) : null}
-          <span class="dashboard-card__action">Members を開く →</span>
+          <span class="dashboard-card__action">プロフィールを開く →</span>
         </a>
 
         <a
@@ -221,7 +221,7 @@ export const AdminDashboard = (props: {
               Projects は目次から外れています（作品のページは公開中）
             </span>
           ) : null}
-          <span class="dashboard-card__action">Projects を開く →</span>
+          <span class="dashboard-card__action">作品を開く →</span>
         </a>
 
         <a class="dashboard-card" href="/admin/blocks">
@@ -243,7 +243,7 @@ export const AdminDashboard = (props: {
               公開 {props.blockCount - props.blockDrafts} 件 · 下書き {props.blockDrafts} 件
             </span>
           ) : null}
-          <span class="dashboard-card__action">構成を開く →</span>
+          <span class="dashboard-card__action">ページ構成を開く →</span>
         </a>
       </div>
     </section>

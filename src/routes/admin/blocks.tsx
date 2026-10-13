@@ -130,11 +130,11 @@ const BlocksPage = (props: {
   const total = shown.filter(Boolean).length
 
   return (
-    <AdminLayout title="構成" active="blocks" account={props.account} flash={props.flash}>
+    <AdminLayout title="ページ構成" active="blocks" account={props.account} flash={props.flash}>
       <div class="admin-head">
         <div class="admin-head__title">
           <span class="crumbs">トップページ</span>
-          <h1>構成</h1>
+          <h1>ページ構成</h1>
         </div>
         {/*
           「見る」は2つある。入口（/）は読む人が着くところで、節ごとのページを
@@ -212,7 +212,10 @@ const BlocksPage = (props: {
                     </form>
                   </span>
                   <span class="row__main">
-                    <strong>{blockLabel(block)}</strong>
+                    {/* 名前を押すと編集へ（右端の「編集」と同じ行き先） */}
+                    <a class="row__title" href={`/admin/blocks/${block.id}/edit`}>
+                      {blockLabel(block)}
+                    </a>
                     <span class="row__sub">
                       {type?.label ?? block.type}
                       {type?.kind === 'fixed' ? ' · 中身は自動' : ''}
@@ -387,7 +390,7 @@ const BlockForm = (props: {
     >
       <div class="admin-head">
         <div class="admin-head__title">
-          <span class="crumbs">構成 / {block ? '編集' : '追加'}</span>
+          <span class="crumbs">ページ構成 / {block ? '編集' : '追加'}</span>
           <h1>{type.label}</h1>
         </div>
         {block ? (
