@@ -1399,7 +1399,8 @@ describe('文字の段', () => {
     */
     expect(bodyOf(sheet, '.entry__main p {')).toContain('font-size: var(--fs-base)')
     expect(bodyOf(sheet, '.entry__main p {')).toContain('max-width: var(--measure)')
-    const bio = bodyOf(sheet, '.bio p {')
+    // 箇条書き（長い文章の欄の Markdown）も段落と同じ字と行の長さ
+    const bio = bodyOf(sheet, '.bio :is(p, ul) {')
     expect(bio).toContain('font-size: var(--fs-md)')
     expect(bio).toContain('max-width: var(--measure)')
     expect(bodyOf(sheet, ':root {')).toMatch(/--measure:\s*\d+em/)
@@ -1448,7 +1449,7 @@ describe('文字の段', () => {
       '.head :is(h1, h2, h3)',
       '.entry__main :is(h3, p)',
       '.statement__text',
-      '.bio p',
+      '.bio :is(p, li)',
       // 画像の説明。細い列で「画 / 面」と1字だけの行が出た
       '.gallery__description',
       // 経歴の会社・学校と役割・学科。電話の幅で「人工知 / 能専攻」と語の途中で折れた

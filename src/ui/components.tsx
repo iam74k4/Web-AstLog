@@ -27,6 +27,7 @@ import {
   skillRows,
 } from '../lib/format'
 import { isVideoUrl } from '../lib/image'
+import { type Inline, prose } from '../lib/markdown'
 import { isContactEmail, SITE, type SiteSettings } from '../site'
 import { GithubIcon, InstagramIcon, MailIcon, PencilIcon, Wordmark, XIcon } from './icons'
 
@@ -946,10 +947,10 @@ const StoryParts = ({ parts, level }: { parts: StoryPart[]; level: 3 | 4 }) => (
               {part.heading}
             </h4>
           )}
-          <Note paragraphs={part.paragraphs} />
+          <Note paragraphs={part.paragraphs} rich />
         </div>
       ) : (
-        <Note key="lead" paragraphs={part.paragraphs} />
+        <Note key="lead" paragraphs={part.paragraphs} rich />
       ),
     )}
   </div>
@@ -1476,14 +1477,81 @@ export const CareerGroups = ({ groups, level }: { groups: CareerGroup[]; level: 
 }
 
 /*
-  文章の列。段落のあとに、同じ列へ続けたいもの（個人ページのスキル）を
-  children で受ける。受けないと、呼ぶ側が同じ列をもう1枚作ることになる
+  段落の中の字（src/lib/markdown.ts の Inline）。太字は strong、リンクは a。リンクの target /
+  rel は作品の行き先（LinkRow）と同じ条件——/ で始まるサイトの中は同じタブ、外は別タブ。
+  矢印は CSS が URL の頭で決める（app.css の .bio a）
 */
-export const Note = ({ paragraphs, children }: { paragraphs: string[]; children?: Child }) => (
+const Inlines = ({ items }: { items: Inline[] }) => (
+  <>
+    {items.map((one, index) =>
+      one.kind === 'text' ? (
+        one.text
+      ) : one.kind === 'strong' ? (
+        <strong key={index}>
+          <Inlines items={one.children} />
+        </strong>
+      ) : (
+        <a
+          key={index}
+          href={one.href}
+          rel={one.href.startsWith('/') ? undefined : 'noreferrer'}
+          target={one.href.startsWith('/') ? undefined : '_blank'}
+        >
+          <Inlines items={one.children} />
+        </a>
+      ),
+    )}
+  </>
+)
+
+/*
+  文章の列。段落のあとに、同じ列へ続けたいもの（個人ページのスキル）を
+  children で受ける。受けないと、呼ぶ側が同じ列をもう1枚作ることになる。
+
+  rich は長い文章の欄（紹介文・作品の本文・メモ）の印。段落の中の小さな Markdown
+  （箇条書き・太字・リンク。src/lib/markdown.ts の prose）を要素にする。作品の説明
+  （目録の2文）には付けない——一覧の行と同じ字のまま出す
+*/
+export const Note = ({
+  paragraphs,
+  rich = false,
+  children,
+}: {
+  paragraphs: string[]
+  rich?: boolean
+  children?: Child
+}) => (
   <div class="bio">
-    {paragraphs.map((text) => (
-      <p key={text}>{text}</p>
-    ))}
+    {paragraphs.map((text) => {
+      if (!rich) return <p key={text}>{text}</p>
+      const blocks = prose(text).map((block, index) =>
+        block.kind === 'paragraph' ? (
+          <p key={index}>
+            <Inlines items={block.inlines} />
+          </p>
+        ) : (
+          <ul key={index}>
+            {block.items.map((item, at) => (
+              <li key={at}>
+                <Inlines items={item} />
+              </li>
+            ))}
+          </ul>
+        ),
+      )
+      /*
+        空行を挟まずに書いた文と箇条書き（「取り組んだこと:」と続く「- 」の行）は1つの段落。
+        段落どうしの間（.bio の gap）より詰めて、ひとまとまりに見せる（.bio__part）。1つだけの
+        ときは包まない——記号の無い段落は、前と同じ <p> 1つのまま
+      */
+      return blocks.length === 1 ? (
+        blocks[0]
+      ) : (
+        <div class="bio__part" key={text}>
+          {blocks}
+        </div>
+      )
+    })}
     {children}
   </div>
 )
@@ -1532,7 +1600,7 @@ export const ProfileWhole = ({
     {bio.length ? (
       <div>
         <SectionHead title="About" sub={3} />
-        <Note paragraphs={bio} />
+        <Note paragraphs={bio} rich />
       </div>
     ) : null}
     {skills.length ? (

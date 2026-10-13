@@ -10,6 +10,7 @@ import type { AppEnv } from '../../env'
 import { newToken } from '../../lib/auth'
 import { bool, isHttpsUrl, ONGOING_HINT, str } from '../../lib/format'
 import { IMAGE_ACCEPT } from '../../lib/image'
+import { MARKDOWN_HINT } from '../../lib/markdown'
 import { isContactEmail } from '../../site'
 import {
   Area,
@@ -276,7 +277,7 @@ const MemberForm = (props: {
             name="bio"
             value={value('bio')}
             rows={5}
-            hint="「です・ます」で。空行で段落を分ける"
+            hint={`「です・ます」で。空行で段落を分ける · ${MARKDOWN_HINT}`}
             error={props.errors?.bio}
           />
           <Area

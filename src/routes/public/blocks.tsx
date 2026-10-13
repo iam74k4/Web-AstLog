@@ -2,6 +2,7 @@ import type { Child } from 'hono/jsx'
 import { blockLines, blockShown, blockTexts, blockType, itemStory, memberUnits } from '../../blocks'
 import type * as schema from '../../db/schema'
 import { KIND_LABEL, KIND_NAME } from '../../domain'
+import { plainText } from '../../lib/markdown'
 import { heroRoleWords, SITE } from '../../site'
 import {
   Contact,
@@ -442,15 +443,17 @@ export function renderBlock(
     */
     case 'note': {
       const texts = blockTexts(block.body)
+      // 題と説明文は記号（**・[](）・「- 」）を外した字で（src/lib/markdown.ts の plainText）
+      const plain = texts.map(plainText)
       const headed = block.title !== ''
       return {
         id,
         slug: id,
         nav: title,
         toc: headed,
-        title: headed ? title : excerpt(texts[0] ?? title),
+        title: headed ? title : excerpt(plain[0] ?? title),
         // 段落そのもの。見出しを持たないメモは本文だけで説明になる
-        description: describe(joinParts(block.title, texts.join(' '))),
+        description: describe(joinParts(block.title, plain.join(' '))),
         node: (
           <Screen id={id} label={title}>
             {headed ? (
@@ -458,7 +461,7 @@ export function renderBlock(
             ) : (
               <HiddenHeading text={title} h1={!whole} />
             )}
-            <Note paragraphs={texts} />
+            <Note paragraphs={texts} rich />
           </Screen>
         ),
       }
