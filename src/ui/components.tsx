@@ -28,8 +28,16 @@ import {
 } from '../lib/format'
 import { isVideoUrl } from '../lib/image'
 import { type Inline, prose } from '../lib/markdown'
-import { isContactEmail, SITE, type SiteSettings } from '../site'
-import { GithubIcon, InstagramIcon, MailIcon, PencilIcon, Wordmark, XIcon } from './icons'
+import { isContactEmail, isDiscordName, SITE, type SiteSettings } from '../site'
+import {
+  DiscordIcon,
+  GithubIcon,
+  InstagramIcon,
+  MailIcon,
+  PencilIcon,
+  Wordmark,
+  XIcon,
+} from './icons'
 
 /*
   画面はこの部品だけで組む。新しい見た目が要るときは、まずここに足してから使う。
@@ -1621,7 +1629,7 @@ export const ProfileWhole = ({
 /* ------------------------------------------------------------ 連絡先と足元 */
 
 /*
-  GitHub・Instagram・X・Mail の行き先（並びはこの順）。URL は https:// の絶対 URL
+  GitHub・Instagram・X・Discord・Mail の行き先（並びはこの順）。URL は https:// の絶対 URL
   だけを描く（isHttpsUrl。保存でも同じ検査で弾いている——src/site.ts の siteSettingsErrors、
   src/routes/admin/members.tsx の memberErrors）。部品の側でも見るのは、その検査より前に
   保存された行を、呼ぶ側に頼らずに落とすため。
@@ -1629,7 +1637,8 @@ export const ProfileWhole = ({
   見た目はアイコンだけ（持ち主の「アイコンだけでよい」。X は印も字も「X」で、二重に読めた）。
   名前は読み上げにだけ渡す（.sr-only。英字なので lang="en"）。マウスで重ねたときは title で
   名前を出す。押す的はアイコンより広い --tap の四角（app.css の .socials）。並びと名前は
-  GitHub・Instagram・X・Mail（メールの名前も英語でそろえる）。
+  GitHub・Instagram・X・Discord・Mail（メールの名前も英語でそろえる）。Discord だけは外へ
+  出ず、Contact の Discord の行へ送る（ユーザー名から開ける URL が無い）。
 
   owner は「誰の行き先か」。サイトの行き先（足元）は渡さず、その人だけの行き先
   （OwnSocials）が名前を渡す。読み上げの名前が「青木 春香の GitHub」になる。
@@ -1645,18 +1654,21 @@ export const Socials = ({
   github,
   instagram,
   x,
+  discord,
   email,
   owner,
 }: {
   github?: string | null
   instagram?: string | null
   x?: string | null
+  discord?: string | null
   email?: string | null
   owner?: string
 }) => {
   const mail = email && isContactEmail(email) ? email : null
+  const chat = discord && isDiscordName(discord) ? discord : null
   // 1つも無ければ枠も置かない（Contact のページの足元は、Instagram も X も無いと空になる）
-  if (!isHttpsUrl(github) && !isHttpsUrl(instagram) && !isHttpsUrl(x) && !mail) return null
+  if (!isHttpsUrl(github) && !isHttpsUrl(instagram) && !isHttpsUrl(x) && !chat && !mail) return null
   return (
     <div class="socials">
       {isHttpsUrl(github) ? (
@@ -1675,6 +1687,16 @@ export const Socials = ({
         <a href={x} rel="me noreferrer" target="_blank" title="X">
           <XIcon />
           <SocialName owner={owner} name="X" />
+        </a>
+      ) : null}
+      {/*
+        Discord はユーザー名から開ける URL が無い。Contact の Discord の行（名前を字で出す）へ
+        送る。サイトの中の行き先なので同じタブで開く
+      */}
+      {chat ? (
+        <a href="/contact#discord" title={`Discord: ${chat}`}>
+          <DiscordIcon />
+          <SocialName owner={owner} name="Discord" />
         </a>
       ) : null}
       {mail ? (
@@ -1707,7 +1729,7 @@ export const OwnSocials = ({ member, site = SITE }: { member: Member; site?: Sit
 /*
   連絡先のページ。サイトの並びの最後で、入口と対になる締め。
 
-  見える h1「Contact」の下に、連絡先の表（Email / GitHub / X / Instagram）だけを置く
+  見える h1「Contact」の下に、連絡先の表（Email / GitHub / X / Instagram / Discord）だけを置く
   （持ち主の「シンプルに」。大見出しと誘いの1文を置いた形から削った）。誘いの1文
   （サイト設定の contactLead）はページには出さず、検索結果の説明文にだけ使う。
   HTML に絵は置かない。
@@ -1739,12 +1761,14 @@ export const Contact = ({
   github,
   x,
   instagram,
+  discord,
   whole,
 }: {
   email: string
   github?: string | null
   x?: string | null
   instagram?: string | null
+  discord?: string | null
   whole?: boolean
 }) => {
   const away = [
@@ -1779,6 +1803,16 @@ export const Contact = ({
               </div>
             ) : null,
           )}
+          {/*
+            Discord はユーザー名から開ける URL が無いので、名前を字で出す（リンクにしない。
+            行は押せる面を持たない）。足元の Discord の印はこの行（#discord）へ送る
+          */}
+          {discord && isDiscordName(discord) ? (
+            <div class="contact-list__row" id="discord">
+              <dt lang="en">Discord</dt>
+              <dd>{discord}</dd>
+            </div>
+          ) : null}
         </dl>
       </div>
     </Screen>
@@ -1786,7 +1820,7 @@ export const Contact = ({
 }
 
 /*
-  足元のサイトの行き先（Layout.tsx の footer）。GitHub・Instagram・X・Mail。どのページにも
+  足元のサイトの行き先（Layout.tsx の footer）。GitHub・Instagram・X・Discord・Mail。どのページにも
   出るので、ここに載せたものは全ページに載る。足元は著作権表示とこの行き先だけで、
   名前や一言は置かない（持ち主の「シンプルに」。誰のサイトかは入口の札と Profile が言う）。
 
@@ -1802,5 +1836,11 @@ export const SiteSocials = ({
   site?: SiteSettings
 }) =>
   contact ? null : (
-    <Socials github={site.github} instagram={site.instagram} x={site.x} email={site.email} />
+    <Socials
+      github={site.github}
+      instagram={site.instagram}
+      x={site.x}
+      discord={site.discord}
+      email={site.email}
+    />
   )

@@ -317,12 +317,12 @@ Projects・Profile・Contact・打ち込むブロックがそれぞれ1ページ
 
 ### 足元と個人ページ
 
-**足元は著作権表示とサイトの行き先だけ**（「© 年 AstLog」と、GitHub → Instagram → X → Mail の
+**足元は著作権表示とサイトの行き先だけ**（「© 年 AstLog」と、GitHub → Instagram → X → Discord → Mail の
 順の行き先。アイコンだけで、名前は読み上げに渡す。`src/ui/components.tsx` の `SiteSocials`）。名前・職種・一言と
 `/all` への1本は置かない——`/all` は sitemap と管理画面の「ページ構成」から開く。
-Instagram と X はサイト設定の欄で、空なら出さない。誰のサイトかは入口の札（1人のサイトなら「名前・職種・所在地」）と Profile が
+Instagram・X・Discord は空なら出さない（Discord は Contact の行へ送る）。誰のサイトかは入口の札（1人のサイトなら「名前・職種・所在地」）と Profile が
 言う。入口の大見出しはその人の一文（`members.headline`。無ければ名前）で、名前を真ん中に据えない
-（持ち主が「ださい。Profile で出る」と外した）。顔は個人ページの名札（`.nameplate`）にだけ。
+（名前は Profile が出す）。顔は個人ページの名札（`.nameplate`）にだけ。
 上の帯には名乗りを置かない（ロゴ・目次・管理画面の入口だけ）。
 **行き先の違う同じ名前の札を並べない**——2人以上のサイトの個人ページでは、その人の札
 （`OwnSocials`）が読み上げの名前でその人を名乗る（`aria-label="青木 春香の GitHub"`。見た目の字を
@@ -377,12 +377,12 @@ HTML に絵・件数の帯は置かない。
 「Profile →」（1人のサイトでその人のページが並びにあるとき。`profileOf`）は枠線だけの2本目
 （`Cta` の `quiet`。同じ強さを2本並べない）。`/all` の頭は名前を目に見える `h1` で置く。
 
-**Contact は連絡先があるときだけ出す。** メールか GitHub のどちらかがサイト設定にあれば
+**Contact は連絡先があるときだけ出す。** メール・GitHub・Discord のどれかがサイト設定にあれば
 （`src/site.ts` の `hasContact`）、`blockShown` が数える。無ければページも目次の行も作らない
-（誘いの1文だけで、送る手の無いページになる）。
+。
 
 **Contact は見える h1 と連絡先の表だけ**。表は Email / GitHub / X /
-Instagram の `dt` / `dd` で、行き先は字（紙に刷っても残る）。誘いの1文（`contactLead`）はページに
+Instagram / Discord の `dt` / `dd` で、行き先は字（紙に刷っても残る）。誘いの1文（`contactLead`）はページに
 出さず description にだけ使う。HTML に絵は置かない。`/all` も同じ。
 
 **ロゴは字で組む ΛSTLOG**（横棒の無い A と、線の太さをそろえた幾何の大文字。O は同じ太さの輪を
@@ -540,8 +540,7 @@ URL を動かすなら前の URL は転送で残す（貼られたリンクを�
   新しいコード」（流し忘れ）も起きる。先のリリースで読む側を広げ（`src/blocks.ts` の
   `LEGACY_BLOCK_KEYS`）、`test/deploy.test.ts` の「前の DB ＋ 今のコード」のように、書き換えの
   前後で同じ HTML になることを確かめる。前の形を外してよいのは、どの環境にも当たったあと
-- `0006_oauth_identities`・`0007_hash_sessions` は例外として同時に旧認証列を落とした。
-  それより前の Worker へ戻すなら D1 も移行前へ戻す（README）。
+- `0006`・`0007` の移行は旧認証列も同時に落とした。それより前の Worker へ戻すなら D1 も戻す（README）。
 - **`seed.sql` はローカルの開発・検査専用で、中身を全部消す。** `db:seed:local` だけが
   流す。本番への seed 経路は作らず、内容は管理画面から登録する。作品の検査画像は
   `scripts/fixtures/media/` に置き、ローカルの KV にだけ投入する（public/ に含めない）。

@@ -16,12 +16,14 @@ export const SITE = {
   github: '',
   instagram: '',
   x: '',
+  // Discord のユーザー名（@ は付けない）。名前から開ける URL が無いので、Contact に字で出す
+  discord: '',
 } as const
 
 /*
-  足元の行き先は GitHub → Instagram → X → Mail の順（components.tsx の Socials）。
-  Contact のページを出すかを決めるのはメールと GitHub だけ（hasContact）——Instagram と X は
-  足元に添える行き先で、Contact の本文には置かない
+  足元の行き先は GitHub → Instagram → X → Discord → Mail の順（components.tsx の Socials）。
+  Contact のページを出すかを決めるのはメール・GitHub・Discord（hasContact）——Instagram と X は
+  ほかの手に添える行き先で、それだけではページを作らない
 */
 export const SITE_SETTING_KEYS = [
   'tagline',
@@ -32,15 +34,21 @@ export const SITE_SETTING_KEYS = [
   'github',
   'instagram',
   'x',
+  'discord',
 ] as const
 export type SiteSettingKey = (typeof SITE_SETTING_KEYS)[number]
 
 /*
-  あとから足した欄（入口の打ち替える言葉・Instagram・X）。既定は空（出さない）なので、行がまだ無くても管理画面の
+  あとから足した欄（入口の打ち替える言葉・Instagram・X・Discord）。既定は空（出さない）なので、行がまだ無くても管理画面の
   概要では「保存済み」に数える——欄を足した日に、保存済みのサイトが「一部保存済み」に戻らない
   ように（src/routes/admin/dashboard.tsx）
 */
-export const SITE_SETTING_LATER_KEYS: readonly SiteSettingKey[] = ['heroRoles', 'instagram', 'x']
+export const SITE_SETTING_LATER_KEYS: readonly SiteSettingKey[] = [
+  'heroRoles',
+  'instagram',
+  'x',
+  'discord',
+]
 export type SiteSettings = Record<SiteSettingKey, string>
 
 // 大きな見出しと表紙の文は、管理画面から変えても既存のレイアウトに収まる長さにする。
@@ -54,6 +62,7 @@ export const SITE_SETTING_LIMITS = {
   github: 2048,
   instagram: 2048,
   x: 2048,
+  discord: 32,
 } as const
 
 // biome-ignore lint/suspicious/noControlCharactersInRegex: 制御文字を弾くのがこの検査の目的
@@ -84,11 +93,17 @@ export const isContactEmail = (email: string) =>
   !/%(?:0[0-9a-f]|1[0-9a-f]|7f)/i.test(email)
 
 /*
+  Discord のユーザー名（2〜32 字の英数字・_・.）。@ と旧来の #0000 は付けない。名前から開ける
+  URL が無いので、Contact に字で出し、足元の印はその行（/contact#discord）へ送る
+*/
+export const isDiscordName = (name: string) => /^[a-z0-9_.]{2,32}$/i.test(name)
+
+/*
   サイトに連絡の手があるか。Contact のページを出すかを決める（src/blocks.ts の blockShown）。
   形の通らない値は無いものとして数える——描く部品（components.tsx の Contact）も同じ検査で落とす
 */
-export const hasContact = (site: Pick<SiteSettings, 'email' | 'github'>) =>
-  isContactEmail(site.email) || isHttpsUrl(site.github)
+export const hasContact = (site: Pick<SiteSettings, 'email' | 'github' | 'discord'>) =>
+  isContactEmail(site.email) || isHttpsUrl(site.github) || isDiscordName(site.discord)
 
 export function siteSettingsErrors(site: SiteSettings): Record<string, string> | null {
   const errors: Record<string, string> = {}
@@ -111,6 +126,10 @@ export function siteSettingsErrors(site: SiteSettings): Record<string, string> |
   if (site.email && !isContactEmail(site.email)) errors.email = 'メールアドレスを1つ入れてください'
   for (const key of ['github', 'instagram', 'x'] as const) {
     if (site[key] && !isHttpsUrl(site[key])) errors[key] = 'https:// で始まる URL を入れてください'
+  }
+  if (site.discord && !isDiscordName(site.discord)) {
+    errors.discord =
+      'Discord のユーザー名を入れてください（英数字・_・. の 2〜32 字。@ は付けない）'
   }
   return Object.keys(errors).length ? errors : null
 }

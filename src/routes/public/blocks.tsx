@@ -374,6 +374,7 @@ export function renderBlock(
             github={site.github}
             x={site.x}
             instagram={site.instagram}
+            discord={site.discord}
             whole={whole}
           />
         ),
