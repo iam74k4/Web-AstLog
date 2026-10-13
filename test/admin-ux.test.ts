@@ -19,7 +19,10 @@ describe('管理フォームの入力とプレビュー導線', () => {
       expect(html).toContain('href="#admin-main"')
       expect(html).toContain('管理内容へスキップ')
       expect(html.indexOf('href="#admin-main"')).toBeLessThan(html.indexOf('class="admin-shell"'))
-      expect(html).toContain('<main class="admin-main" id="admin-main" tabindex="-1">')
+      // 書きながら横に完成形を置く画面（フォームの画面）は live の印を足す
+      expect(html).toMatch(
+        /<main class="admin-main( admin-main--live)?" id="admin-main" tabindex="-1">/,
+      )
     }
   })
 
@@ -177,5 +180,83 @@ describe('管理フォームの入力とプレビュー導線', () => {
     expect(html).not.toContain('OWNER_GOOGLE_EMAIL')
     expect(html).not.toContain('owner_claims')
     expect(html).not.toContain('D1')
+  })
+})
+
+/*
+  書くそばから横で完成形が変わる編集画面（AdminLayout の live）。編集の枠が広いときだけ右に
+  完成形の枠を出し、admin-behavior.ts が入力の止まるたびに「保存前にプレビュー」と同じ送り先へ
+  ?live=1 を付けて送り直す。?live=1 の完成形は動きを止めて描く（書くたびに幕開けが動かない）
+*/
+describe('書きながら横に完成形を置く', () => {
+  it('保存前にプレビューできるフォームの画面にだけ、完成形の枠を置く', async () => {
+    const member = await seedMember()
+    await seedMember({ slug: 'second', name: '星野' })
+    const item = await seedItem()
+    const [block] = await db()
+      .insert(schema.blocks)
+      .values({ type: 'note', title: 'メモ', body: '本文', published: 1 })
+      .returning()
+    const signed = await signIn()
+    for (const path of [
+      `/admin/members/${member.id}/edit`,
+      '/admin/members/new',
+      `/admin/items/${item.id}/edit`,
+      `/admin/blocks/${block?.id}/edit`,
+      '/admin/site',
+    ]) {
+      const html = await (await signed(path)).text()
+      expect(html, path).toContain('<main class="admin-main admin-main--live"')
+      expect(html, path).toContain('<iframe name="live-preview"')
+      // 送り先はフォームの「保存前にプレビュー」（その画面のプレビューの口）
+      expect(html, path).toMatch(/formaction="\/admin\/preview\//)
+    }
+    for (const path of ['/admin', '/admin/members', '/admin/items', '/admin/blocks']) {
+      expect(await (await signed(path)).text(), path).not.toContain('<iframe name="live-preview"')
+    }
+  })
+
+  it('?live=1 の完成形は動きを止めて描き、ふつうのプレビューは止めない', async () => {
+    const member = await seedMember()
+    const signed = await signIn()
+    const body = () => form({ name: member.name, slug: member.slug, headline: '書きかけの見出し' })
+    const live = await (
+      await signed(`/admin/preview/members/${member.id}?live=1`, { method: 'POST', body: body() })
+    ).text()
+    expect(live).toContain('data-still=""')
+    expect(live).toContain('書きかけの見出し')
+    const plain = await (
+      await signed(`/admin/preview/members/${member.id}`, { method: 'POST', body: body() })
+    ).text()
+    expect(plain).not.toContain('data-still')
+    // 横の完成形では長い案内を出さない（枠の頭が「まだ保存されていません」と言う）
+    expect(live).not.toContain('編集中の内容です')
+    expect(plain).toContain('編集中の内容です')
+    // サイト設定の完成形も同じ
+    const site = await (
+      await signed('/admin/preview/site?live=1', {
+        method: 'POST',
+        body: form({ heroLead: '入口の紹介文です。', previewScreen: 'hero' }),
+      })
+    ).text()
+    expect(site).toContain('data-still=""')
+  })
+})
+
+describe('見出しの欄は、どこに出るかで名前を変える', () => {
+  it('1人のサイトでは「入口の大見出し」、2人以上では「ページの見出し」', async () => {
+    const member = await seedMember()
+    const signed = await signIn()
+    const solo = await (await signed(`/admin/members/${member.id}/edit`)).text()
+    expect(solo).toContain('入口の大見出し')
+    expect(solo).toContain('1人のサイトでは個人ページには出しません')
+    // まだ誰もいないときの追加は、その人が1人目になる
+    await db().delete(schema.members)
+    expect(await (await signed('/admin/members/new')).text()).toContain('入口の大見出し')
+    const again = await seedMember()
+    await seedMember({ slug: 'second', name: '星野' })
+    const team = await (await signed(`/admin/members/${again.id}/edit`)).text()
+    expect(team).toContain('ページの見出し')
+    expect(team).not.toContain('入口の大見出し')
   })
 })

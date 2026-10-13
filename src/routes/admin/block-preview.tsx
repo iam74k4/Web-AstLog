@@ -5,7 +5,7 @@ import type * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
 import { str } from '../../lib/format'
 import { findAdminBlock, readBlockForm } from './blocks'
-import { renderBlockPreview, validationFailure } from './preview'
+import { livePreview, renderBlockPreview, validationFailure } from './preview'
 import { db, parseId } from './request'
 
 export const blockPreviewRoutes = new Hono<AppEnv>()
@@ -46,6 +46,7 @@ async function previewBlockPost(c: Context<AppEnv>, askedId?: string) {
   return renderBlockPreview(c, block, {
     editHref,
     unsaved: true,
+    still: livePreview(c),
     warnings: publishErrors({ kind: 'block', type, title: values.title, body: values.body }),
   })
 }

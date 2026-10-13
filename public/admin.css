@@ -110,6 +110,65 @@
   min-width: 0;
 }
 
+/*
+  書くそばから横で完成形が変わる編集画面（AdminLayout の live）。編集の列と完成形の列を
+  並べるのは、編集の枠（.admin-main）が広いときだけ——幅は画面ではなく枠で決める
+  （@container）。狭いときは完成形の枠を出さず、今までどおり「保存前にプレビュー」の
+  ダイアログで見る（admin-behavior.ts は枠が見えないあいだ描き直さない）。外枠は2列ぶん広げる
+*/
+.admin-shell:has(.live) {
+  max-width: var(--admin-live-width);
+}
+
+.admin-main--live {
+  container: editor / inline-size;
+}
+
+.live,
+.live__edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  min-width: 0;
+}
+
+.live__preview {
+  display: none;
+}
+
+@container editor (min-width: 1080px) {
+  .live {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+    gap: var(--sp-6);
+  }
+
+  .live__preview {
+    position: sticky;
+    top: var(--gutter);
+    display: flex;
+    flex-direction: column;
+    height: var(--admin-live-height);
+    border: 1px solid var(--line);
+    background: var(--bg);
+  }
+
+  .live__status {
+    border-bottom: 1px solid var(--line);
+    padding: var(--sp-3) var(--sp-4);
+    color: var(--ink-weak);
+    font-size: var(--fs-meta);
+  }
+
+  .live__preview iframe {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    border: 0;
+  }
+}
+
 .admin-head {
   display: flex;
   flex-direction: column;
@@ -1313,7 +1372,7 @@ html:has(.admin-shell) {
   padding: var(--sp-2) var(--sp-3);
   font-size: var(--fs-meta);
 }
-.admin-main > .form-note {
+:is(.admin-main, .live__edit) > .form-note {
   font-size: var(--fs-meta);
 }
 .form-errors {

@@ -387,6 +387,7 @@ const BlockForm = (props: {
       account={props.account}
       errors={props.errors}
       latestHref={block ? `/admin/blocks/${block.id}/edit` : undefined}
+      live
     >
       <div class="admin-head">
         <div class="admin-head__title">

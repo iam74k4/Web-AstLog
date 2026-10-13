@@ -30,6 +30,7 @@ const SiteSettingsPage = (props: {
     flash={props.flash}
     errors={props.errors}
     latestHref="/admin/site"
+    live
   >
     <div class="admin-head">
       <div class="admin-head__title">
