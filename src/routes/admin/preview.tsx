@@ -599,6 +599,7 @@ previewRoutes.post('/preview/site', async (c) => {
     email: '公開するメールアドレス',
     github: '公開する GitHub URL',
     instagram: '公開する Instagram URL',
+    discord: '公開する Discord のユーザー名',
     x: '公開する X URL',
   }
   const previewErrors: Record<string, string> = {}

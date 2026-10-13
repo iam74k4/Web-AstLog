@@ -26,6 +26,7 @@ const configured: SiteSettings = {
   github: 'https://github.com/astlog-example',
   instagram: 'https://www.instagram.com/astlog.example',
   x: 'https://x.com/astlog_example',
+  discord: 'astlog_example',
 }
 
 const plain = (html: string) => html.replace(/<[^>]*>/g, '')
@@ -43,6 +44,7 @@ describe('サイト設定', () => {
       github: '',
       instagram: '',
       x: '',
+      discord: '',
     })
     for (const path of ['/', '/all']) {
       const html = await okText(path)
@@ -126,7 +128,7 @@ describe('サイト設定', () => {
       (
         await signed('/admin/site', {
           method: 'POST',
-          body: form({ ...configured, email: '', github: '', instagram: '', x: '' }),
+          body: form({ ...configured, email: '', github: '', instagram: '', x: '', discord: '' }),
         })
       ).status,
     ).toBe(303)
@@ -260,5 +262,47 @@ describe('入口で打ち替える言葉', () => {
       }),
     })
     expect(ok.status).toBe(303)
+  })
+})
+
+/*
+  Discord はユーザー名から開ける URL が無い。Contact の表に名前を字で出し（リンクにしない）、
+  足元の印はその行（/contact#discord）へ送る。Discord だけでも Contact のページを作る
+*/
+describe('Discord', () => {
+  it('Contact に名前を字で出し、足元の印はその行へ送る', async () => {
+    await saveSiteSettings(db(), { ...TEST_SITE, discord: 'iam74k4' })
+    await touch()
+    const contact = await okText('/contact')
+    expect(contact).toContain(
+      '<div class="contact-list__row" id="discord"><dt lang="en">Discord</dt><dd>iam74k4</dd></div>',
+    )
+    // Contact のページの足元には行き先を出さない（表と同じ行き先を2つ置かない）
+    expect(contact).not.toContain('href="/contact#discord"')
+    const top = await okText('/')
+    expect(top).toContain('<a href="/contact#discord" title="Discord: iam74k4">')
+    // 足元の並びは GitHub → Instagram → X → Discord → Mail
+    const foot = top.slice(top.indexOf('<footer'))
+    expect(foot.indexOf('github.com')).toBeLessThan(foot.indexOf('/contact#discord'))
+    expect(foot.indexOf('/contact#discord')).toBeLessThan(foot.indexOf('mailto:'))
+  })
+
+  it('Discord だけでも Contact のページを作る', async () => {
+    await saveSiteSettings(db(), { ...SITE, discord: 'iam74k4' })
+    await touch()
+    expect(await okText('/')).toContain('href="/contact"')
+    expect(await okText('/contact')).toContain('<dd>iam74k4</dd>')
+  })
+
+  it('ユーザー名の形でないものは保存せず、理由を返す', async () => {
+    const signed = await signIn()
+    for (const discord of ['@iam74k4', 'iam74k4#1234', 'https://discord.com/users/1', 'a']) {
+      const response = await signed('/admin/site', {
+        method: 'POST',
+        body: form({ ...configured, discord }),
+      })
+      expect(response.status, discord).toBe(400)
+      expect(await response.text(), discord).toContain('Discord のユーザー名を入れてください')
+    }
   })
 })
