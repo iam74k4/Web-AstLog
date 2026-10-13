@@ -87,7 +87,7 @@ dashboardRoutes.get('/', async (c) => {
       title: '公開ページの構成を確認する',
       note: '現在、目次に表示するページはありません。出すページと下書きを構成から確認できます。',
       href: '/admin/blocks',
-      label: '構成を開く',
+      label: 'ページ構成を開く',
     }
   } else if (!siteSaved) {
     next = {

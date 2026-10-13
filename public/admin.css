@@ -63,21 +63,12 @@
 
 .admin-nav__links a {
   display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 2px;
+  align-items: center;
   min-height: var(--tap);
   padding: var(--sp-2) var(--sp-3);
   color: var(--ink-weak);
   font-size: var(--fs-sm);
   overflow-wrap: anywhere;
-}
-
-.admin-nav__note {
-  color: var(--ink-weak);
-  font-size: var(--fs-meta);
-  line-height: 1.4;
 }
 
 .admin-nav__links a[aria-current='page'] {
@@ -249,9 +240,27 @@
   min-width: 0;
 }
 
-.row__main strong {
+.row__main strong,
+.row__title {
   font-size: var(--fs-sm);
   font-weight: 600;
+}
+
+/*
+  一覧の行の名前は編集画面へのリンク（右端の「編集」と同じ行き先）。字の色は名前のまま、
+  触ったときに下線で押せることを見せる。的の高さは行が持つ（行の高さは --tap より高い）
+*/
+.row__title {
+  align-self: flex-start;
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.2em;
+  transition: text-decoration-color var(--dur-fast) var(--ease);
+}
+
+.row__title:focus-visible {
+  text-decoration-color: currentColor;
 }
 
 /* 担当者と恒久リンク、ブロックの種類。和文が入るので本文の書体 */
@@ -1243,9 +1252,6 @@
 .admin-nav__links a {
   padding: var(--sp-3);
 }
-.admin-nav__note {
-  display: none;
-}
 .admin-nav {
   gap: var(--sp-3);
 }
@@ -1633,10 +1639,6 @@ html:has(.admin-shell) {
     padding-bottom: 0;
   }
 
-  .admin-nav__note {
-    display: block;
-  }
-
   .admin-nav__links {
     grid-template-columns: minmax(0, 1fr);
     flex: 0 0 auto;
@@ -1676,6 +1678,10 @@ html:has(.admin-shell) {
 /* ============================================ 入力手段で分ける（幅ではなく） */
 
 @media (hover: hover) {
+  .row__title:hover {
+    text-decoration-color: currentColor;
+  }
+
   .icon-btn:not(.icon-btn--danger):hover,
   .move-btn:not(:disabled):hover,
   .btn--ghost:hover,
