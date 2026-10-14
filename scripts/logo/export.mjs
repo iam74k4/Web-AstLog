@@ -33,15 +33,16 @@ const sized = (svg, width, height) =>
 
 const browser = await chromium.launch()
 try {
-  for (const [file, size] of [
-    ['favicon-32.png', 32],
+  for (const [file, size, shape] of [
+    ['favicon-32.png', 32, 'rounded'],
     // 検索結果の印。Google は 48px の倍数の正方形を求める（32 は満たさない。SVG は大きさを問わない）
-    ['favicon-96.png', 96],
-    ['apple-touch-icon.png', 180],
+    ['favicon-96.png', 96, 'rounded'],
+    // iPhone のホーム画面は角を丸めない（iOS が自分で丸める。src/ui/logo.ts の iconSvg）
+    ['apple-touch-icon.png', 180, 'square'],
   ]) {
     const shot = await browser.newPage({ viewport: { width: size, height: size } })
     await shot.setContent(
-      `<!doctype html><style>html,body{margin:0;background:transparent}svg{display:block}</style>${sized(logo.iconSvg(), size, size)}`,
+      `<!doctype html><style>html,body{margin:0;background:transparent}svg{display:block}</style>${sized(logo.iconSvg(shape), size, size)}`,
     )
     files.set(file, await shot.screenshot({ omitBackground: true }))
     await shot.close()

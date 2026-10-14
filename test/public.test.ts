@@ -2,6 +2,7 @@ import { env } from 'cloudflare:test'
 import wordmarkFile from 'virtual:asset:astlog-wordmark.svg'
 import faviconFile from 'virtual:asset:favicon.svg'
 import skyFile from 'virtual:asset:sky.svg'
+import appleTouchIcon from 'virtual:asset-base64:apple-touch-icon.png'
 import favicon96 from 'virtual:asset-base64:favicon-96.png'
 import assetFiles from 'virtual:assets'
 import seedSql from 'virtual:repo:seed.sql'
@@ -15,7 +16,7 @@ import { sniffImage } from '../src/lib/image'
 import { publicRoutes } from '../src/routes/public/routes'
 import { skySvg } from '../src/ui/astra'
 import { itemHref, LinkList, LinkRow, splitPhrases } from '../src/ui/components'
-import { cardSvg, iconSvg, WORDMARK, wordmarkSvg } from '../src/ui/logo'
+import { cardSvg, ICON, iconSvg, WORDMARK, wordmarkSvg } from '../src/ui/logo'
 import {
   db,
   form,
@@ -53,6 +54,37 @@ const footOf = (html: string) =>
 const heroOf = (html: string) => {
   const main = mainOf(html)
   return main.slice(main.indexOf('<header class="hero'), main.indexOf('</header>'))
+}
+
+/*
+  PNG（base64）の左上の画素の不透明度。IDAT をつないで zlib をほどき、1行目の頭を読む——
+  1行目の最初の画素は、行の前処理（filter）がどれでも生の値のまま（左にも上にも画素が無い）。
+  素材は Playwright が撮る 8bit の RGBA（色の型 6）か、透明の無い絵の RGB（色の型 2。
+  Chromium は透明が1画素も無いと不透明度を落とす）だけを読む
+*/
+const cornerAlpha = async (base64: string) => {
+  const png = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))
+  const view = new DataView(png.buffer)
+  const parts: Uint8Array[] = []
+  let colorType = 0
+  for (let at = 8; at < png.length; ) {
+    const length = view.getUint32(at)
+    const type = String.fromCharCode(...png.subarray(at + 4, at + 8))
+    if (type === 'IHDR') {
+      expect(png[at + 16]).toBe(8)
+      colorType = png[at + 17] ?? 0
+    }
+    if (type === 'IDAT') parts.push(png.subarray(at + 8, at + 8 + length))
+    at += 12 + length
+  }
+  expect([2, 6]).toContain(colorType)
+  if (colorType === 2) return 255
+  const inflated = new Response(
+    new Blob(parts).stream().pipeThrough(new DecompressionStream('deflate')),
+  )
+  const row = new Uint8Array(await inflated.arrayBuffer())
+  // 頭の1バイトは行の前処理の種類。続く4バイトが左上の画素の R・G・B・A
+  return row[4]
 }
 
 describe('全体ページ', () => {
@@ -286,7 +318,7 @@ describe('名乗り', () => {
     expect(await okText('/members/okazaki')).toContain('worksFor')
   })
 
-  it('ロゴの形は1か所が正。素材のファイルがずれたら落とす', () => {
+  it('ロゴの形は1か所が正。素材のファイルがずれたら落とす', async () => {
     /*
       ロゴの形の正は src/ui/logo.ts で、ページはそこから直に描く。素材のファイル
       （ワードマークと favicon の SVG）は scripts/logo/export.mjs が同じ形から書くが、
@@ -299,7 +331,7 @@ describe('名乗り', () => {
       （実際にそう書いて通ってしまった）。ファイルの中身は
       vitest.config.ts の assetPlugin が渡す。
 
-      どちらも輪郭の path と塗り（favicon の空のグラデーション）だけで、絵も外のものも抱えない（public/_headers の CSP は
+      どちらも輪郭の path と塗り（favicon の地のグラデーション）だけで、絵も外のものも抱えない（public/_headers の CSP は
       何も読み込ませない）
     */
     expect(wordmarkFile).toBe(wordmarkSvg())
@@ -307,6 +339,13 @@ describe('名乗り', () => {
     for (const file of [wordmarkFile, faviconFile]) {
       expect(file).not.toMatch(/<image|data:|href=/)
     }
+    // favicon は Projects の AstLog のアイコンと同じく角を丸め、iPhone のホーム画面は丸めない
+    // （iOS が同じ角丸で切り抜き、透明の角は黒く塗る。src/ui/logo.ts の iconSvg）
+    expect(faviconFile).toContain(` rx="${ICON.radius}"`)
+    expect(iconSvg('square')).not.toContain(' rx=')
+    // 書き出した PNG も同じ。左上の角の画素が、favicon は透明・ホーム画面は塗り
+    expect(await cornerAlpha(favicon96)).toBe(0)
+    expect(await cornerAlpha(appleTouchIcon)).toBe(255)
   })
 
   it('夜明けの窓の素材（空）は astra.ts が正。点だけで色相を持たない', () => {
