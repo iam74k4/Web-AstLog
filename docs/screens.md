@@ -133,8 +133,8 @@ Projects の行き先にも同じものが付いて（目次から一覧へ戻�
 サイトの個人ページは、その人の `Person` を載せる（そのページが何の URL かを言う）。
 
 **足元は著作権表示と行き先だけ。** 名前・職種・一言は置かない（誰のサイトかは入口の札と
-Profile が言う）。Contact のページでは足元の GitHub / メールを出さない（本文の手と同じ
-行き先が2組並ぶ）。Instagram と X は本文に無いので出す。
+Profile が言う）。Contact のページでは足元に行き先を出さない（本文の連絡先の表と同じ
+行き先が2組並ぶ）。
 
 `<meta name="description">` と `og:description` は、**そのページに実際に出ている文字**
 から作る（`src/routes/public/meta.ts` の `DESCRIPTION_MAX` は 110 字。超えたら末尾を `…`
