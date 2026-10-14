@@ -5,7 +5,7 @@ import { expect } from 'vitest'
 import { settingsVersion } from '../src/db/edit'
 import { saveSiteSettings } from '../src/db/queries'
 import * as schema from '../src/db/schema'
-import { createSession, SESSION_COOKIE } from '../src/lib/auth'
+import { createSession, HOST_SESSION_COOKIE } from '../src/lib/auth'
 import { touchSite } from '../src/lib/page-cache'
 import { SITE } from '../src/site'
 
@@ -112,7 +112,7 @@ export async function ensureOwner() {
   return owner
 }
 
-// セッションのクッキー（astlog_session=…）を持った fetch
+// セッションのクッキー（https では __Host-astlog_session=…）を持った fetch
 export const withCookie =
   (cookie: string) =>
   (path: string, init: RequestInit = {}) =>
@@ -133,7 +133,7 @@ export const withCookie =
 export async function signIn(options: { rawForms?: boolean } = {}) {
   const owner = await ensureOwner()
   const { token } = await createSession(db(), owner.id)
-  const request = withCookie(`${SESSION_COOKIE}=${token}`)
+  const request = withCookie(`${HOST_SESSION_COOKIE}=${token}`)
   return async (path: string, init: RequestInit = {}) => {
     // 通常のフォーム検査は、その時点の編集版を送る。競合・版の欠落は rawForms で検査する。
     if (

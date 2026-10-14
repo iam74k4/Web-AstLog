@@ -290,8 +290,7 @@ Projects・Profile・Contact・打ち込むブロックがそれぞれ1ページ
   だけ。見出しより前に子を足すなら全ページに足すか、錨の測り方と一緒に決め直す（`check:fit` が
   1px 以内を測る）
 - **レイアウトは `check:fit` が測る。** 設計サイズは3つ（正は `scripts/lib/viewports.mjs`）で、
-  **390 と 768 は指で測る**。測るのは横のはみ出し・切られた要素・`h1` の数・帯の貼り付け（一番下
-  まで送っても見える）・送った先・指の的・見出しの錨
+  **390 と 768 は指で測る**。測るものは README の「確かめる」
 
 ### 見出しと文書
 
@@ -385,9 +384,8 @@ HTML に絵・件数の帯は置かない。
 Instagram / Discord の `dt` / `dd` で、行き先は字（紙に刷っても残る）。誘いの1文（`contactLead`）はページに
 出さず description にだけ使う。HTML に絵は置かない。`/all` も同じ。
 
-**ロゴは字で組む ΛSTLOG**（横棒の無い A と、線の太さをそろえた幾何の大文字。O は同じ太さの輪を
-軌道に見立て、右上 45° に衛星を1つ。Λ の頂は平らに切る）。上の帯・ログイン・共有カード・素材は
-同じ1つの形で、大きさで形を変えない（15px で衛星が Ó に読める恐れも、持ち主が見て選んだ）。
+**ロゴは字で組む ΛSTLOG**（横棒の無い A。O は軌道の輪で、右上 45° に衛星を1つ）。上の帯・ログイン・共有カード・素材は
+同じ1つの形で、大きさで形を変えない。
 印だけのとき（favicon・apple-touch-icon）は Λ を1つ。絵も動きも持たない。形は
 `src/ui/logo.ts` が正で、ページは `src/ui/icons.tsx` の `Wordmark` が直に描き、素材
 （ワードマークと favicon の SVG、favicon・apple-touch-icon・共有カードの PNG）は
@@ -578,15 +576,16 @@ URL を動かすなら前の URL は転送で残す（貼られたリンクを�
 - CSP（中身は `src/index.tsx`）は公開ページで script を1本も許さず、管理画面は固定 helper の
   exact hash だけを許す。プレビューは同一オリジン内の埋め込みを許すが script は許さない。style の
   `'unsafe-inline'` は `style` 属性で渡す値（ページの切り替えの名前・アバターの寸法）のため。外のサイトの画像・書体・スクリプトを読むなら、
-  ここを一緒に直す（直さないと黙って読み込まれない）。CSP を変えたら、全公開
-  URL と管理画面の主な画面を Chromium で開いて違反が出ないことを確かめる（`npm test` はブラウザの
-  CSP を持たない）
+  ここを一緒に直す。CSP を変えたら、全公開 URL と管理画面の主な画面を Chromium で開いて違反が
+  出ないことを確かめる（`npm test` はブラウザの CSP を持たない）
 - `Referrer-Policy` を **`no-referrer` にしない**（同じオリジンの POST に `Origin: null` が付き、
   `sameOrigin` が管理画面の保存を全部止める）。`X-Content-Type-Options: nosniff` はどの応答にも
 - `/admin/*` は `Cache-Control: no-store`。公開ページはログイン中だけ `private, no-store`
   （`adminHref`）で、ミドルウェアは上書きしない。**ルートが自分の CSP を持っていたら上書きしない**
   （`/images/*`）
-- `public/` の静的なファイルはミドルウェアを通らないので `public/_headers`（上限 100 本）
+- `public/` の静的なファイルはミドルウェアを通らないので `public/_headers`（上限 100 本）。HSTS と
+  Permissions-Policy は `src/lib/headers.ts` の値を両方に付ける
+- `public/.well-known/security.txt` の Expires は毎年更新（切れる30日前から CI が落ちる）
 
 **公開ページの「管理画面」の入口はログイン中だけ出る**（`src/routes/public/page.tsx` の
 `adminHref`。クッキーが無ければ D1 に聞かない。行き先は `blockAdminPath`）。出したページは
@@ -642,5 +641,5 @@ POST を足すなら**ここを見直す。
 - 入口はフォームではなく GET のリンク（POST から外へのリダイレクトは CSP の `form-action` に止まる）
 - **`wrangler dev` の中では `c.req.url` が本番の顔をしている。** コールバックは `.dev.vars` の
   `OAUTH_REDIRECT_ORIGIN` で渡す（`src/lib/oauth.ts` の `callbackUrl`）。ヘッダーから組まない
-- **セッションの id は D1 にはハッシュで置く**（`src/lib/auth.ts` の `sessionKey`）。ログインのたびに
+- **セッションの id は D1 にはハッシュで置く**（`src/lib/auth.ts` の `sessionKey`。https のクッキー名は `__Host-`）。ログインのたびに
   発行し直す。全部を切るのは管理画面の「すべての端末からログアウト」

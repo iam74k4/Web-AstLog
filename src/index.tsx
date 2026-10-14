@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import type { AppEnv } from './env'
 import { yearInJapan } from './lib/format'
+import { HSTS, PERMISSIONS_POLICY } from './lib/headers'
 import { pageCache } from './lib/page-cache'
 import { adminRoutes } from './routes/admin/index'
 import { publicRoutes } from './routes/public/routes'
@@ -86,6 +87,8 @@ app.use(async (c, next) => {
   }
   headers.set('x-content-type-options', 'nosniff')
   headers.set('referrer-policy', 'strict-origin-when-cross-origin')
+  headers.set('permissions-policy', PERMISSIONS_POLICY)
+  if (new URL(c.req.url).protocol === 'https:') headers.set('strict-transport-security', HSTS)
   if (admin) {
     headers.set('cache-control', preview ? 'private, no-store' : 'no-store')
     if (preview) headers.set('x-robots-tag', 'noindex, nofollow')

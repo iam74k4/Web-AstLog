@@ -1,7 +1,7 @@
 import { getCookie } from 'hono/cookie'
 import { createMiddleware } from 'hono/factory'
 import type { AppEnv } from '../env'
-import { SESSION_COOKIE } from './auth'
+import { sessionCookie } from './auth'
 
 /*
   公開ページの写し（Cache API）。
@@ -146,7 +146,7 @@ export const pageCache = createMiddleware<AppEnv>(async (c, next) => {
   if (
     c.req.method !== 'GET' ||
     passesBy(c.req.path) ||
-    getCookie(c, SESSION_COOKIE) !== undefined
+    getCookie(c, sessionCookie(c.req.url)) !== undefined
   ) {
     return next()
   }

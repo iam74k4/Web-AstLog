@@ -104,6 +104,7 @@ const REPO_FILES = new Set([
   '.github/workflows/deploy.yml',
   'package.json',
   'public/_headers',
+  'public/.well-known/security.txt',
   'scripts/touch-site.mjs',
   'scripts/seed-local.mjs',
   'seed.sql',

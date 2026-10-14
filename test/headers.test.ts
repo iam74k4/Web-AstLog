@@ -1,10 +1,12 @@
 import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test'
 import assetSums from 'virtual:asset-sha256'
 import assetFiles from 'virtual:assets'
+import securityTxt from 'virtual:repo:public/.well-known/security.txt'
 import assetHeaders from 'virtual:repo:public/_headers'
 import { beforeEach, describe, expect, it } from 'vitest'
 import appCss from '../public/app.css'
 import app from '../src/index'
+import { HSTS, PERMISSIONS_POLICY } from '../src/lib/headers'
 import { ADMIN_BEHAVIOR, ADMIN_CSP } from '../src/ui/admin-behavior'
 import { get, okText, resetDb, seedItem, seedMember, signIn, uncachedEnv } from './helpers'
 
@@ -179,6 +181,50 @@ describe('応答のヘッダ', () => {
     return rules
   }
 
+  /*
+    https を1年覚えさせ（HSTS）、使わない端末の機能を止める（Permissions-Policy）。公開・
+    管理画面・リダイレクト・404・画像のどれにも、同じ1本のミドルウェアが付ける
+  */
+  it('どの応答にも HSTS と Permissions-Policy を付ける', async () => {
+    await seedItem()
+    for (const [path, status] of [
+      ['/', 200],
+      ['/admin', 303],
+      ['/no-such-page', 404],
+      ['/robots.txt', 200],
+    ] as const) {
+      const response = await get(path)
+      expect(response.status, path).toBe(status)
+      expect(response.headers.get('strict-transport-security'), path).toBe(HSTS)
+      expect(response.headers.get('permissions-policy'), path).toBe(PERMISSIONS_POLICY)
+    }
+    // 全画面（動画の操作の手）は止めない
+    expect(PERMISSIONS_POLICY).not.toContain('fullscreen')
+  })
+
+  /*
+    脆弱性を見つけた人の連絡先（RFC 9116。public/.well-known/security.txt）。Expires は必須で、
+    切れた security.txt は古いものとして読まれる。切れる30日前からここが落ちる——1年先の日付に
+    書き換えて出し直す
+  */
+  it('security.txt は連絡先と、30日より先の期限を持つ', () => {
+    const fields = Object.fromEntries(
+      securityTxt
+        .split('\n')
+        .filter((line) => line.includes(': '))
+        .map((line) => [line.slice(0, line.indexOf(': ')), line.slice(line.indexOf(': ') + 2)]),
+    )
+    expect(fields.Contact).toMatch(/^mailto:\S+@\S+$/)
+    expect(fields.Canonical).toBe('https://astlog.dev/.well-known/security.txt')
+    const expires = Date.parse(fields.Expires ?? '')
+    const day = 86_400_000
+    expect(expires - Date.now(), 'security.txt の Expires を1年先へ更新する').toBeGreaterThan(
+      30 * day,
+    )
+    // RFC 9116 は1年より先にしないことを勧める
+    expect(expires - Date.now()).toBeLessThan(366 * day)
+  })
+
   it('静的なファイルのヘッダは public/_headers が持つ', () => {
     const rules = headerRules()
     expect([...rules.keys()][0]).toBe('/*')
@@ -190,6 +236,9 @@ describe('応答のヘッダ', () => {
       ブラウザによっては <img> や favicon で使うときもこの CSP が効く
     */
     expect(values['content-security-policy']).toBe("default-src 'none'; sandbox")
+    // HSTS と Permissions-Policy は Worker の応答と同じ値（静的なファイルだけ素で出さない）
+    expect(values['strict-transport-security']).toBe(HSTS)
+    expect(values['permissions-policy']).toBe(PERMISSIONS_POLICY)
     // 規則の数には上限がある（Workers Static Assets は 100 まで）
     expect(rules.size).toBeLessThanOrEqual(100)
   })

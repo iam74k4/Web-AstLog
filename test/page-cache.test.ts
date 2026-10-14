@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as schema from '../src/db/schema'
 import app from '../src/index'
-import { SESSION_COOKIE } from '../src/lib/auth'
+import { HOST_SESSION_COOKIE } from '../src/lib/auth'
 import { CACHE_STATE_HEADER, SITE_VERSION_KEY } from '../src/lib/page-cache'
 import { db, form, get, resetDb, seedItem, signIn, touch, uncachedEnv, withCookie } from './helpers'
 
@@ -233,7 +233,10 @@ describe('公開ページの写し', () => {
     expect(state(await get('/projects'))).toBe('hit')
     await retitle('改名した題')
 
-    for (const cookie of [`${SESSION_COOKIE}=expired-or-forged`, `other=1; ${SESSION_COOKIE}=x`]) {
+    for (const cookie of [
+      `${HOST_SESSION_COOKIE}=expired-or-forged`,
+      `other=1; ${HOST_SESSION_COOKIE}=x`,
+    ]) {
       const response = await withCookie(cookie)('/projects')
       expect(state(response), cookie).toBeNull()
       expect(await response.text(), cookie).toContain('改名した題')

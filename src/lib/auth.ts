@@ -216,4 +216,15 @@ export async function accountLabel(db: Db, userId: number): Promise<string | nul
   return row?.label || null
 }
 
+/*
+  セッションのクッキーの名前。https（本番）では頭に __Host- を付ける——この名前のクッキーは
+  Secure・Path=/・Domain 無しでなければブラウザが受け取らないので、ほかのサブドメインや
+  http の応答から同じ名前で上書き・差し込みされない。http の開発（wrangler dev の localhost）
+  では Secure を付けない（Safari が捨てる。src/routes/admin/session.ts の isHttps）ので
+  __Host- は使えず、素の名前のまま。名前を変えた日は、前の名前のクッキーが読まれなくなり
+  1度ログインし直しになる
+*/
 export const SESSION_COOKIE = 'astlog_session'
+export const HOST_SESSION_COOKIE = `__Host-${SESSION_COOKIE}`
+export const sessionCookie = (url: string) =>
+  new URL(url).protocol === 'https:' ? HOST_SESSION_COOKIE : SESSION_COOKIE

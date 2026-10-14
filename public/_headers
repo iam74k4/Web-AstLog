@@ -3,6 +3,9 @@
 # src/index.tsx のミドルウェアは届かない。Workers Static Assets がこのファイルを
 # 読んで付け、このファイル自身は配らない。
 #
+# HSTS と Permissions-Policy は Worker の応答と同じ値（src/index.tsx の HSTS と
+# PERMISSIONS_POLICY。test/headers.test.ts が突き合わせる）。
+#
 # CSP は /images/* と同じ狭い約束。ここにあるのは文書ではなく素材なので、
 # SVG を直に開かれてもスクリプトを走らせず、外のものを読み込ませない。
 # ロゴの SVG（ワードマークと favicon）は輪郭の path と塗り（favicon の空のグラデーション）だけで、絵も外のものも読まない
@@ -12,6 +15,8 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Content-Security-Policy: default-src 'none'; sandbox
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Permissions-Policy: accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()
 
 # スタイルシートは1年・immutable。HTML が中身から作った版つきの URL（/app.css?v=…）で
 # 読むので、CSS を変えてデプロイすれば URL が変わり、古い写しは二度と引かれない
