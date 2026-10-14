@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import adminCss from '../public/admin.css'
 import css from '../public/app.css'
 import * as schema from '../src/db/schema'
+import { ADMIN_BEHAVIOR } from '../src/ui/admin-behavior'
 import { ICON, LOGO_COLORS } from '../src/ui/logo'
 import { db, get, okText, resetDb, seedItem, seedMember, signIn, touch } from './helpers'
 
@@ -130,6 +131,18 @@ describe('スタイルシートの分け方', () => {
     expect(adminSheet).not.toContain(':root')
     expect(adminSheet).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
     expect(adminSheet).not.toMatch(/\b(rgba?|hsla?)\(/)
+  })
+
+  it('保存のあと位置を戻したら、知らせを上に貼り、下の保存の帯より上に重ねる', () => {
+    /*
+      admin-behavior.ts が編集していた位置へ戻すと、頭の「保存しました」は画面の外に出る。
+      付けるクラスの名前は script と admin.css の2か所にあるので、ここで突き合わせる
+    */
+    expect(ADMIN_BEHAVIOR).toContain("classList.add('flash--pinned')")
+    const pinned = bodyOf(adminSheet, '.flash--pinned {')
+    expect(pinned).toContain('position: sticky')
+    const layer = (body: string) => Number(body.match(/z-index: (\d+)/)?.[1])
+    expect(layer(pinned)).toBeGreaterThan(layer(bodyOf(adminSheet, '.form-foot,')))
   })
 
   it('作品のリンクの組は、1列に積んでも組の中より組の間を広く空ける', () => {

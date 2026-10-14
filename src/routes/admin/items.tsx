@@ -254,6 +254,8 @@ type ItemFormData = {
   submitted?: Record<string, string>
   version?: string
   errors?: Record<string, string>
+  // 保存のあとの知らせ（保存は編集画面へ戻る。itemSavedTo・flashFor）
+  flash?: string | null
 }
 
 // 本文のテンプレートの欄の値を、列ごとに読む（DB の行・送られた欄・弾いたあとの描き直し）
@@ -575,6 +577,7 @@ const ItemForm = (props: ItemFormData) => {
       active="items"
       account={props.account}
       errors={props.errors}
+      flash={props.flash}
       latestHref={item ? `/admin/items/${item.id}/edit` : undefined}
       live
     >
@@ -1014,6 +1017,7 @@ itemRoutes.get('/items/:id/edit', async (c) => {
       members={members}
       platforms={platforms}
       item={item}
+      flash={flashFor(c)}
     />,
   )
 })
@@ -1449,8 +1453,16 @@ itemRoutes.post('/items', async (c) => {
   if (twin) return saveItem(c, twin, form, context, true)
 
   const { values, tags, errors: unreadable } = readItemForm(form, context)
-  const saved = () =>
-    c.redirect(`/admin/items?type=${values.type}&saved=${savedParam(values.published)}`, 303)
+  // 作った行の編集画面へ（itemSavedTo の注記）。挿入は id を返さないので slug で引く（一意）
+  const saved = async () => {
+    const created = await database.query.items.findFirst({
+      where: eq(schema.items.slug, values.slug),
+      columns: { id: true },
+    })
+    return created
+      ? c.redirect(itemSavedTo(created.id, values.published), 303)
+      : c.redirect(`/admin/items?type=${values.type}&saved=${savedParam(values.published)}`, 303)
+  }
   const back = (errors: Record<string, string>) =>
     c.html(
       <ItemForm
@@ -1699,11 +1711,16 @@ async function saveItem(
   */
   const moved =
     existing.slug !== null && (existing.slug !== values.slug || existing.type !== values.type)
-  return c.redirect(
-    `/admin/items?type=${values.type}&saved=${savedParam(values.published)}${moved ? '&moved=1' : ''}${again ? '&again=1' : ''}`,
-    303,
-  )
+  return c.redirect(itemSavedTo(existing.id, values.published, { moved, again }), 303)
 }
+
+/*
+  保存のあとは、その作品の編集画面へ戻す（知らせは flashFor）。一覧へ戻すと、続けて直すたびに
+  行を押し直し、畳んだ欄を開き直して下までたどり直すことになった。編集していた位置と開いていた
+  欄は admin-behavior.ts が戻す
+*/
+const itemSavedTo = (id: number, published: number, { moved = false, again = false } = {}) =>
+  `/admin/items/${id}/edit?saved=${savedParam(published)}${moved ? '&moved=1' : ''}${again ? '&again=1' : ''}`
 
 itemRoutes.get('/items/:id/delete', async (c) => {
   const id = parseId(c.req.param('id'))

@@ -201,6 +201,44 @@ describe('管理画面の並びと一覧', () => {
       '<a class="btn btn--ghost" href="/admin/members/new">',
     )
   })
+
+  it('作品とメンバーは、保存したらその編集画面へ戻る（一覧の頭へ戻さない）', async () => {
+    /*
+      一覧へ戻すと、続けて直すたびに行を押し直し、畳んだ欄を開き直して下までたどり直した。
+      編集していた位置へ戻すのは admin-behavior.ts（ブラウザの中）で、ここは行き先と知らせ
+    */
+    const member = await seedMember()
+    await seedMember({ slug: 'second', name: '星野' })
+    const item = await seedItem({ title: 'AppMixer', summary: '説明。' })
+    const signed = await signIn()
+
+    const updated = await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: form({ type: 'app', title: 'AppMixer', summary: '直した説明。', published: '1' }),
+    })
+    expect(updated.headers.get('location')).toBe(`/admin/items/${item.id}/edit?saved=1`)
+    expect(await (await signed(updated.headers.get('location') ?? '')).text()).toContain(
+      '<p class="flash">保存しました</p>',
+    )
+
+    // 足したときも、足した作品の編集画面へ
+    const created = await signed('/admin/items', {
+      method: 'POST',
+      body: form({ type: 'work', title: '新しい業務' }),
+    })
+    const [added] = await db()
+      .select()
+      .from(schema.items)
+      .where(eq(schema.items.title, '新しい業務'))
+    expect(created.headers.get('location')).toBe(`/admin/items/${added?.id}/edit?saved=draft`)
+
+    // 2人以上のサイトでも、メンバーの保存は一覧ではなくその人の編集画面へ
+    const saved = await signed(`/admin/members/${member.id}`, {
+      method: 'POST',
+      body: form({ name: member.name, slug: member.slug, published: '1' }),
+    })
+    expect(saved.headers.get('location')).toBe(`/admin/members/${member.id}/edit?saved=1`)
+  })
 })
 
 describe('フォームの読み取り', () => {

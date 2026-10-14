@@ -60,8 +60,8 @@ memberRoutes.get('/members', async (c) => {
   })
   /*
     1人のあいだは一覧を飛ばして、その人の編集画面を開く（一覧は1行だけで、押す手が1つ
-    増えるだけだった）。保存や削除のあとの知らせ（?saved= など）は持ったまま移る。2人目を
-    足す手と削除の手は編集画面にある
+    増えるだけだった）。削除のあとの知らせ（?deleted=）などの query は持ったまま移る（保存は
+    一覧を通らず、その人の編集画面へ直に戻る。memberSavedTo）。2人目を足す手と削除の手は編集画面にある
   */
   const only = members.length === 1 ? members[0] : undefined
   if (only) return c.redirect(`/admin/members/${only.id}/edit${new URL(c.req.url).search}`, 303)
@@ -556,7 +556,19 @@ memberRoutes.post('/members', async (c) => {
 
   const { values, errors: unreadable, typed } = readMemberForm(form)
   const account = c.get('account')
-  const saved = () => c.redirect(`/admin/members?saved=${savedParam(values.published)}`, 303)
+  // 足した人の編集画面へ（memberSavedTo の注記）。挿入は id を返さないので slug で引く（一意）
+  const saved = async () => {
+    const created = await database.query.members.findFirst({
+      where: eq(schema.members.slug, values.slug),
+      columns: { id: true },
+    })
+    return c.redirect(
+      created
+        ? memberSavedTo(created.id, values.published)
+        : `/admin/members?saved=${savedParam(values.published)}`,
+      303,
+    )
+  }
   const back = (errors: Record<string, string>) =>
     c.html(
       <MemberForm
@@ -674,12 +686,19 @@ async function saveMember(
     throw error
   }
   if (avatarUrl) await discardImages(c.env.MEDIA, [member.avatarUrl])
-  const moved = member.slug !== values.slug ? '&moved=1' : ''
   return c.redirect(
-    `/admin/members?saved=${savedParam(values.published)}${moved}${again ? '&again=1' : ''}`,
+    memberSavedTo(id, values.published, { moved: member.slug !== values.slug, again }),
     303,
   )
 }
+
+/*
+  保存のあとは、その人の編集画面へ戻す（知らせは flashFor。作品の itemSavedTo と同じ）。
+  一覧へ戻すと、2人以上のサイトでは続けて直すたびに行を押し直すことになった。編集していた
+  位置と開いていた欄は admin-behavior.ts が戻す
+*/
+const memberSavedTo = (id: number, published: number, { moved = false, again = false } = {}) =>
+  `/admin/members/${id}/edit?saved=${savedParam(published)}${moved ? '&moved=1' : ''}${again ? '&again=1' : ''}`
 
 memberRoutes.get('/members/:id/delete', async (c) => {
   const id = parseId(c.req.param('id'))

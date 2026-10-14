@@ -264,8 +264,10 @@ describe('下書きの扱い', () => {
       method: 'POST',
       body: form({ type: 'app', title: '寝かせておくアプリ' }),
     })
-    expect(response.headers.get('location')).toBe('/admin/items?type=app&saved=draft')
-    expect(await (await signed('/admin/items?type=app&saved=draft')).text()).toContain(
+    // 保存のあとは作った作品の編集画面へ戻る（一覧の頭へ戻すと、続けて直すたびにたどり直す）
+    const [item] = await db().select().from(schema.items)
+    expect(response.headers.get('location')).toBe(`/admin/items/${item?.id}/edit?saved=draft`)
+    expect(await (await signed(response.headers.get('location') ?? '')).text()).toContain(
       'サイトにはまだ出ていません',
     )
   })
