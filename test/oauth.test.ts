@@ -2,7 +2,7 @@ import { env } from 'cloudflare:test'
 import { drizzle } from 'drizzle-orm/d1'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as schema from '../src/db/schema'
-import { createSession, SESSION_COOKIE, sessionKey, userForIdentity } from '../src/lib/auth'
+import { createSession, HOST_SESSION_COOKIE, sessionKey, userForIdentity } from '../src/lib/auth'
 import { base64url } from '../src/lib/oauth'
 import { db, ensureOwner, form, get, okText, resetDb, withCookie } from './helpers'
 
@@ -131,7 +131,10 @@ const callback = (provider: Provider, query: Record<string, string>, cookie?: st
 const sessionCookie = (response: Response) =>
   response.headers
     .getSetCookie()
-    .find((one) => one.startsWith(`${SESSION_COOKIE}=`) && !one.startsWith(`${SESSION_COOKIE}=;`))
+    .find(
+      (one) =>
+        one.startsWith(`${HOST_SESSION_COOKIE}=`) && !one.startsWith(`${HOST_SESSION_COOKIE}=;`),
+    )
 
 const identities = () => db().select().from(schema.userIdentities)
 const users = () => db().select().from(schema.users)
@@ -184,6 +187,8 @@ describe('GitHub でログイン', () => {
     for (const attribute of ['HttpOnly', 'Secure', 'SameSite=Lax', 'Path=/']) {
       expect(cookie).toContain(attribute)
     }
+    // __Host- の名前は Domain を持てない（持つとブラウザが捨てる）
+    expect(cookie).not.toMatch(/Domain=/i)
     // state のクッキーは使い切ったので消す
     expect(response.headers.getSetCookie().join('\n')).toMatch(/astlog_oauth_state=;.*Max-Age=0/)
 
@@ -498,12 +503,26 @@ describe('戻り先（next）', () => {
 })
 
 describe('セッション', () => {
+  /*
+    https ではクッキーの名前の頭に __Host- を付ける。Secure・Path=/・Domain 無しでなければ
+    ブラウザが受け取らない名前で、ほかのサブドメインや http の応答から上書きされない
+    （src/lib/auth.ts の sessionCookie）。前の素の名前は、https では読まない
+  */
+  it('https のセッションは __Host- の名前で、前の素の名前では入れない', async () => {
+    const owner = await ensureOwner()
+    const { token } = await createSession(db(), owner.id)
+    expect((await withCookie(`astlog_session=${token}`)('/admin/members')).status).toBe(303)
+    expect((await withCookie(`${HOST_SESSION_COOKIE}=${token}`)('/admin/members')).status).not.toBe(
+      303,
+    )
+  })
+
   it('期限を読めないセッションでは入れず、そのセッションを消す', async () => {
     const owner = await ensureOwner()
     const { token } = await createSession(db(), owner.id)
     await db().update(schema.sessions).set({ expiresAt: 'not-a-date' })
 
-    const response = await withCookie(`${SESSION_COOKIE}=${token}`)('/admin/members')
+    const response = await withCookie(`${HOST_SESSION_COOKIE}=${token}`)('/admin/members')
     expect(response.status).toBe(303)
     expect(await db().select().from(schema.sessions)).toHaveLength(0)
   })
@@ -520,7 +539,7 @@ describe('セッション', () => {
   it('ログインのたびにセッションを作り直す。前のクッキーはもう使えない', async () => {
     const owner = await ensureOwner()
     const old = (await createSession(db(), owner.id)).token
-    const oldCookie = `${SESSION_COOKIE}=${old}`
+    const oldCookie = `${HOST_SESSION_COOKIE}=${old}`
 
     providers(github().handlers)
     const flow = await start('github')
@@ -540,7 +559,7 @@ describe('セッション', () => {
     const owner = await ensureOwner()
     const [other] = await db().insert(schema.users).values({ role: 'member' }).returning()
     const cookie = async (userId: number) =>
-      `${SESSION_COOKIE}=${(await createSession(db(), userId)).token}`
+      `${HOST_SESSION_COOKIE}=${(await createSession(db(), userId)).token}`
     const phone = withCookie(await cookie(owner.id))
     const laptop = withCookie(await cookie(owner.id))
     const someoneElse = withCookie(await cookie(other?.id ?? 0))
@@ -567,7 +586,9 @@ describe('セッション', () => {
       // D1 の datetime('now') は UTC。画面には日本時間で出す
       lastLoginAt: '2099-09-26 12:00:00',
     })
-    const signed = withCookie(`${SESSION_COOKIE}=${(await createSession(db(), owner.id)).token}`)
+    const signed = withCookie(
+      `${HOST_SESSION_COOKIE}=${(await createSession(db(), owner.id)).token}`,
+    )
 
     const html = await (await signed('/admin/account')).text()
     for (const text of ['GitHub', '@owner', 'Google', 'owner@example.test', '2099-09-26 21:00']) {
@@ -588,7 +609,9 @@ describe('パスワードのログインは無い', () => {
     expect((await get('/admin/setup')).status).toBe(404)
     expect((await get('/admin/setup', { method: 'POST', body })).status).toBe(404)
     const owner = await ensureOwner()
-    const signed = withCookie(`${SESSION_COOKIE}=${(await createSession(db(), owner.id)).token}`)
+    const signed = withCookie(
+      `${HOST_SESSION_COOKIE}=${(await createSession(db(), owner.id)).token}`,
+    )
     expect((await signed('/admin/setup')).status).toBe(404)
     expect(await users()).toHaveLength(1)
   })

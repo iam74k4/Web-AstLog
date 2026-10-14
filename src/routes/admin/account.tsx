@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import { deleteCookie } from 'hono/cookie'
 import * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
-import { destroyUserSessions, SESSION_COOKIE } from '../../lib/auth'
+import { destroyUserSessions, sessionCookie } from '../../lib/auth'
 import { timeInJapan } from '../../lib/format'
 import { clientFor, PROVIDER_KEYS, PROVIDER_LABEL } from '../../lib/oauth'
 import { AdminLayout } from '../../ui/AdminLayout'
@@ -76,6 +76,6 @@ accountRoutes.get('/account', async (c) => {
 
 accountRoutes.post('/account/logout-all', async (c) => {
   await destroyUserSessions(db(c), c.get('user').id)
-  deleteCookie(c, SESSION_COOKIE, { path: '/', secure: isHttps(c) })
+  deleteCookie(c, sessionCookie(c.req.url), { path: '/', secure: isHttps(c) })
   return c.redirect('/admin/login?out=all', 303)
 })

@@ -2,7 +2,7 @@ import type { Context } from 'hono'
 import { getCookie } from 'hono/cookie'
 import { createMiddleware } from 'hono/factory'
 import type { AppEnv } from '../../env'
-import { accountLabel, getSessionUser, SESSION_COOKIE } from '../../lib/auth'
+import { accountLabel, getSessionUser, sessionCookie } from '../../lib/auth'
 import { db } from './request'
 
 /*
@@ -88,7 +88,7 @@ export function safeNext(value: string | null | undefined): string | null {
 export const isHttps = (c: Context<AppEnv>) => new URL(c.req.url).protocol === 'https:'
 
 export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
-  const token = getCookie(c, SESSION_COOKIE)
+  const token = getCookie(c, sessionCookie(c.req.url))
   const user = token ? await getSessionUser(db(c), token) : null
   if (!user) {
     // GET なら行き先を持ち回す（POST の宛先は開き直せないので持たない）

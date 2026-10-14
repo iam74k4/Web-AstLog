@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { listBlocks } from '../src/db/queries'
 import * as schema from '../src/db/schema'
 import app from '../src/index'
-import { createSession, SESSION_COOKIE } from '../src/lib/auth'
+import { createSession, HOST_SESSION_COOKIE } from '../src/lib/auth'
 import { findAdminBlock } from '../src/routes/admin/blocks'
 import { form, uncachedEnv } from './helpers'
 
@@ -44,7 +44,7 @@ beforeEach(async () => {
     ),
   ])
   const { token } = await createSession(database(), 1)
-  cookie = `${SESSION_COOKIE}=${token}`
+  cookie = `${HOST_SESSION_COOKIE}=${token}`
 })
 
 async function open(path: string, init: RequestInit = {}, signed = true) {

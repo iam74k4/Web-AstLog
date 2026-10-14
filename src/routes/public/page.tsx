@@ -4,7 +4,7 @@ import { getCookie } from 'hono/cookie'
 import type { Child } from 'hono/jsx'
 import * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
-import { getSessionUser, SESSION_COOKIE } from '../../lib/auth'
+import { getSessionUser, sessionCookie } from '../../lib/auth'
 import type { NavLink, Page } from '../../lib/sequence'
 import { SITE } from '../../site'
 import { Layout, type OgImage } from '../../ui/Layout'
@@ -20,7 +20,7 @@ import { Layout, type OgImage } from '../../ui/Layout'
   応答を通さない——この約束をそちらでも守っている。
 */
 export async function adminHref(c: Context<AppEnv>, to: string): Promise<string | undefined> {
-  const sessionId = getCookie(c, SESSION_COOKIE)
+  const sessionId = getCookie(c, sessionCookie(c.req.url))
   if (!sessionId) return undefined
   const user = await getSessionUser(drizzle(c.env.DB, { schema }), sessionId)
   if (!user) return undefined

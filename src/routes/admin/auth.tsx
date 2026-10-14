@@ -9,7 +9,7 @@ import {
   createSession,
   destroySession,
   newToken,
-  SESSION_COOKIE,
+  sessionCookie,
   timingSafeEqual,
   userForIdentity,
 } from '../../lib/auth'
@@ -349,7 +349,7 @@ authRoutes.get('/auth/:provider/callback', async (c) => {
   }
 
   // 前のセッションが残っていれば捨ててから発行し直す（ログインの前後で同じ ID を使わない）
-  const previous = getCookie(c, SESSION_COOKIE)
+  const previous = getCookie(c, sessionCookie(c.req.url))
   if (previous) await destroySession(db(c), previous)
   await startSession(c, user.id)
   // 開こうとしていた画面へ戻す。セッションが切れて弾かれた人を、一覧の頭に放り出さない
@@ -358,7 +358,7 @@ authRoutes.get('/auth/:provider/callback', async (c) => {
 
 async function startSession(c: Context<AppEnv>, userId: number) {
   const session = await createSession(db(c), userId)
-  setCookie(c, SESSION_COOKIE, session.token, {
+  setCookie(c, sessionCookie(c.req.url), session.token, {
     httpOnly: true,
     sameSite: 'Lax',
     secure: isHttps(c),
@@ -368,9 +368,9 @@ async function startSession(c: Context<AppEnv>, userId: number) {
 }
 
 authRoutes.post('/logout', async (c) => {
-  const token = getCookie(c, SESSION_COOKIE)
+  const token = getCookie(c, sessionCookie(c.req.url))
   if (token) await destroySession(db(c), token)
-  deleteCookie(c, SESSION_COOKIE, { path: '/', secure: isHttps(c) })
+  deleteCookie(c, sessionCookie(c.req.url), { path: '/', secure: isHttps(c) })
   return c.redirect('/admin/login', 303)
 })
 
