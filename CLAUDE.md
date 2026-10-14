@@ -386,11 +386,11 @@ Instagram / Discord の `dt` / `dd` で、行き先は字（紙に刷っても�
 
 **ロゴは字で組む ΛSTLOG**（横棒の無い A。O は軌道の輪で、右上 45° に衛星を1つ）。上の帯・ログイン・共有カード・素材は
 同じ1つの形で、大きさで形を変えない。
-印だけのとき（favicon・apple-touch-icon）は Λ を1つ。絵も動きも持たない。形は
+印だけのとき（favicon・apple-touch-icon）は Λ を1つで、Projects の AstLog のアイコンと
+同じ（`ICON`）。絵も動きも持たない。形は
 `src/ui/logo.ts` が正で、ページは `src/ui/icons.tsx` の `Wordmark` が直に描き、素材
 （ワードマークと favicon の SVG、favicon・apple-touch-icon・共有カードの PNG）は
-`scripts/logo/export.mjs` が書く。favicon・apple-touch-icon は夜明けの窓の空
-（`ICON_SKY`）、共有カードは墨の地（`LOGO_COLORS`）に白い字。
+`scripts/logo/export.mjs` が書く。共有カードは墨の地（`LOGO_COLORS`）に白い字。
 
 **メンバーの天体（`members.celestial_body` / `celestial_accent`）は使わない列。** 読む口も書く口も
 外し、列だけを残している（前のコードが読む。expand → contract の contract を次のリリースで出す）。

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import adminCss from '../public/admin.css'
 import css from '../public/app.css'
 import * as schema from '../src/db/schema'
-import { ICON_SKY, LOGO_COLORS } from '../src/ui/logo'
+import { ICON, LOGO_COLORS } from '../src/ui/logo'
 import { db, get, okText, resetDb, seedItem, seedMember, signIn, touch } from './helpers'
 
 beforeEach(resetDb)
@@ -1569,12 +1569,20 @@ describe('配色（白い地と夜明けの窓）', () => {
     // 共有カードとワードマークは塗りの押し手と同じ組——墨の面に白い字
     expect(value('--accent-ink')).toBe(LOGO_COLORS.ink)
     expect(value('--mono')).toBe(LOGO_COLORS.ground)
-    // アイコン（favicon・iPhone のホーム画面）の地は夜明けの窓の空。明けきった白までは入れない
-    expect(ICON_SKY.map((stop) => stop.color)).toEqual([
-      value('--dawn-night'),
-      value('--dawn-dusk'),
-      value('--dawn-haze'),
-    ])
+    /*
+      アイコン（favicon・iPhone のホーム画面）の地は、Projects の AstLog のアイコンと同じ墨の
+      グラデーション（ICON）。窓の外は色相を持たない（「天体の飾り」）ので灰の並びで、青だけ
+      --mono と同じくわずか（4 まで）に寄せてよい。上が明るく下が暗い
+    */
+    const rgb = (hex: string) => [1, 3, 5].map((at) => Number.parseInt(hex.slice(at, at + 2), 16))
+    for (const { color } of ICON.ground) {
+      const [r = 0, g = 0, b = 0] = rgb(color)
+      expect(g, color).toBe(r)
+      expect(b - r, color).toBeGreaterThanOrEqual(0)
+      expect(b - r, color).toBeLessThanOrEqual(4)
+    }
+    const [top, bottom] = ICON.ground.map(({ color }) => rgb(color)[0] ?? 0)
+    expect(top).toBeGreaterThan(bottom ?? 0)
   })
 })
 
