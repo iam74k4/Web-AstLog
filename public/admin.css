@@ -239,6 +239,22 @@
   animation: toast-in var(--dur-spring) var(--ease-spring) both;
 }
 
+/*
+  保存のあと、編集していた位置へ戻したとき（admin-behavior.ts）。知らせが画面の上の外に
+  残ると、保存できたかが見えない。上に貼り付けて見える所に置く（消さないのは上と同じ）。
+  下の保存の帯（.form-foot の z-index: 5）より上に重ねる。面（--surface-hover）は透けるので、
+  地（--bg）の上に重ねて塗る——透けたままだと下を流れる欄の字が知らせに重なって読めない
+*/
+.flash--pinned {
+  position: sticky;
+  top: var(--sp-4);
+  z-index: 6;
+  background: linear-gradient(var(--surface-hover) 0 0) var(--bg);
+  box-shadow:
+    var(--highlight),
+    0 1px 0 var(--line);
+}
+
 .flash::before {
   content: '';
   width: var(--dot);

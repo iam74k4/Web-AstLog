@@ -229,7 +229,7 @@ describe('書きながら横に完成形を置く', () => {
       await signed(`/admin/preview/members/${member.id}`, { method: 'POST', body: body() })
     ).text()
     expect(plain).not.toContain('data-still')
-    // 横の完成形では長い案内を出さない（枠の頭が「まだ保存されていません」と言う）
+    // 横の完成形では長い案内を出さない（枠の頭が、保存前か保存済みかを言う）
     expect(live).not.toContain('編集中の内容です')
     expect(plain).toContain('編集中の内容です')
     // サイト設定の完成形も同じ

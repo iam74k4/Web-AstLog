@@ -29,8 +29,8 @@ export const PreviewLayout = (props: PreviewLayoutProps) => (
     preview={
       props.still ? (
         /*
-          書きながら横に出す完成形（still）では、長い案内を出さない——枠の頭が「入力中の内容・
-          まだ保存されていません」と言っている。公開の前に直すことと添え書きだけを残す
+          書きながら横に出す完成形（still）では、長い案内を出さない——枠の頭が、保存前の入力か
+          保存済みの内容かを言っている（admin-behavior.ts）。公開の前に直すことと添え書きだけを残す
         */
         props.warnings || props.note ? (
           <aside class="preview-notice" aria-label="管理プレビュー">
