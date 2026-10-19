@@ -115,6 +115,36 @@ export const STORY_SECTIONS = [
 export type StoryColumn = (typeof STORY_SECTIONS)[number]['column']
 
 /*
+  作品の文書のページ。販売するアプリが App Store とアプリの中から指す、プライバシーポリシーと
+  サポートの2つ。列（items の privacy / support）・URL の最後の語（/<区分>/item/<slug>/privacy）・
+  ページの見出し・管理画面の欄の対応は、この表が正。
+
+  - key は URL の最後の語で、列の名前でもある。**アプリのバイナリと App Store Connect に
+    登録する URL なので、変えない**
+  - title はページの h1 と作品のページの行き先の名前（節の名前は英語。CLAUDE.md「文言」）
+  - label は管理画面の欄、about は検索結果の説明文の名前
+
+  空の欄の作品にはそのページが無い（404。src/blocks.ts の itemDocument が開く）。文書を
+  1つ足すときは、ここに1行と src/db/schema.ts に列（npm run db:generate）。
+*/
+export const ITEM_DOCUMENTS = [
+  {
+    key: 'privacy',
+    title: 'Privacy Policy',
+    label: 'プライバシーポリシー',
+    about: 'プライバシーポリシー',
+  },
+  { key: 'support', title: 'Support', label: 'サポート', about: 'サポートと問い合わせ先' },
+] as const satisfies readonly { key: keyof Item; title: string; label: string; about: string }[]
+
+export type ItemDocumentKey = (typeof ITEM_DOCUMENTS)[number]['key']
+
+// 文書の語から、その文書の行（見出し・欄の名前）
+export const ITEM_DOCUMENT = Object.fromEntries(ITEM_DOCUMENTS.map((doc) => [doc.key, doc])) as {
+  [K in ItemDocumentKey]: Extract<(typeof ITEM_DOCUMENTS)[number], { key: K }>
+}
+
+/*
   Story の塊（src/blocks.ts の itemStory が開く）。heading はテンプレートの欄の小見出しで、
   null はテンプレートより前に書いた本文（見出しの無い段落）
 */

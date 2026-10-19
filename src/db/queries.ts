@@ -186,11 +186,12 @@ export async function findAdminItemView(db: Db, id: number): Promise<ItemView | 
 }
 
 /*
-  公開中の作品の並びだけ（id・区分・slug）。sitemap.xml が恒久リンクを数え上げるのに
-  使う。並びは一覧と同じ itemOrder。
+  公開中の作品の並びだけ（id・区分・slug と文書の欄）。sitemap.xml が恒久リンクと文書の
+  ページ（…/privacy・…/support）を数え上げるのに使う。並びは一覧と同じ itemOrder。
 
   一覧の行の中身（タグ・リンク・担当）は引かない。要るのは URL だけで、7件なら
-  7件ぶんの子を毎回引くことになる。
+  7件ぶんの子を毎回引くことになる。文書の欄は字のまま引き、書いてあるかは公開ページと
+  同じ式（src/blocks.ts の itemDocument）で決める——SQL に「空」の写しを置かない。
 */
 export function listPublishedItemKeys(db: Db) {
   return db
@@ -198,6 +199,8 @@ export function listPublishedItemKeys(db: Db) {
       id: schema.items.id,
       type: schema.items.type,
       slug: schema.items.slug,
+      privacy: schema.items.privacy,
+      support: schema.items.support,
     })
     .from(schema.items)
     .where(itemsWhere({}))

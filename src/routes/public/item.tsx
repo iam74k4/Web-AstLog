@@ -1,6 +1,6 @@
 import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
-import { itemStory } from '../../blocks'
+import { itemDocument, itemStory } from '../../blocks'
 import {
   findMovedItem,
   findPublishedItem,
@@ -9,19 +9,33 @@ import {
   publishedBlocks,
 } from '../../db/queries'
 import * as schema from '../../db/schema'
-import { type ItemKind, type ItemView, itemImages, KIND_LABEL } from '../../domain'
+import {
+  ITEM_DOCUMENT,
+  ITEM_DOCUMENTS,
+  type ItemDocumentKey,
+  type ItemKind,
+  type ItemView,
+  itemImages,
+  KIND_LABEL,
+} from '../../domain'
 import type { AppEnv } from '../../env'
 import { IMAGE_FORMATS, imageTypeOfPath, isVideoUrl } from '../../lib/image'
+import { type DocumentBlock, documentLanguages } from '../../lib/markdown'
 import { tableOfContents } from '../../lib/sequence'
-import { SITE } from '../../site'
+import { SITE, type SiteSettings } from '../../site'
 import {
   BackLink,
+  ContactList,
+  DocumentBody,
+  hasContactRows,
   ItemDetail,
   ItemShots,
   ItemStory,
   itemCardId,
+  itemDocumentHref,
   itemHref,
   itemTransition,
+  LanguageLinks,
   Screen,
   SectionHead,
   SiteSocials,
@@ -73,11 +87,29 @@ const itemFacts = (item: ItemView) =>
     item.tags.join('、'),
   )
 
-// 公開ページと認証済みプレビューが、作品の本文を同じ部品で描く。
-export function itemPage(item: ItemView, links: { backHref?: string; memberHref?: string } = {}) {
+/*
+  公開ページと認証済みプレビューが、作品の本文を同じ部品で描く。
+
+  documentHref は文書のページ（プライバシーポリシー・サポート）の URL。書いてある文書にだけ、
+  作品のリンクのあとに行き先を置く（名前は文書の見出しと同じ英語。サイトの中なので →）。
+  渡さなければ置かない（まだ保存していないプレビュー。行き先のページが無い）。
+*/
+export function itemPage(
+  item: ItemView,
+  links: {
+    backHref?: string
+    memberHref?: string
+    documentHref?: (key: ItemDocumentKey) => string | null
+  } = {},
+) {
   const note = [item.platformLabel ?? item.category, item.year].filter(Boolean).join(' · ')
+  const documents = ITEM_DOCUMENTS.flatMap((doc) => {
+    const url = itemDocument(item, doc.key).length ? links.documentHref?.(doc.key) : null
+    return url ? [{ label: doc.title, url }] : []
+  })
   const destinations = [
     ...item.links,
+    ...documents,
     ...(links.memberHref && item.memberName
       ? [{ label: `担当 ${item.memberName}`, url: links.memberHref }]
       : []),
@@ -104,6 +136,74 @@ export function itemPage(item: ItemView, links: { backHref?: string; memberHref?
 }
 
 /*
+  作品の文書のページ（/apps/item/<slug>/privacy・…/support。src/domain.ts の ITEM_DOCUMENTS）。
+  公開ページと認証済みプレビューが同じ部品で描く。
+
+  作品のページの続きの1ページ。頭に作品へ戻る手（「← 作品名」）、見出しは文書の名前の h1
+  （Contact と同じ節の見出しの形）に作品名を添え、その下に書いた本文（DocumentBody。## が h2、
+  ### が h3）。
+
+  サポートは、本文の下に連絡先の表（Contact のページと同じ ContactList）を必ず置く。
+  App Store の審査はサポートの URL に連絡手段があることを求め、本文にメールを書き忘れても
+  ここで出る。表を置いたページは、足元に同じ行き先を出さない（contact を返す。Contact の
+  ページと同じ決まり）。表に出る行が1つも無いサイト（連絡先が空）では、表も見出しも置かない
+  （管理画面の欄が知らせる）。
+
+  「## 日本語」「## English」で分けた文書（src/lib/markdown.ts の documentLanguages）は、
+  選んだ言語の節だけを出し、見出しの下に切り替え（LanguageLinks）を置く。言語は query の
+  lang（en）で、無い・知らない値なら最初の節（日本語）。最初の言語の見出しより前（最終更新日）は
+  どの言語でも出す。サポートの連絡先の表はどの言語でも本文の下。href はこのページの URL
+  （切り替えの行き先の素。公開ページとプレビューで違う）。
+*/
+export function itemDocumentPage(
+  item: ItemView,
+  key: ItemDocumentKey,
+  blocks: DocumentBlock[],
+  options: { backHref?: string; site: SiteSettings; href: string; lang?: string },
+) {
+  const doc = ITEM_DOCUMENT[key]
+  const { site } = options
+  const contact = key === 'support' && hasContactRows(site)
+  const split = documentLanguages(blocks)
+  const current = split
+    ? (split.sections.find((section) => section.code === options.lang) ?? split.sections[0])
+    : undefined
+  return {
+    title: pageTitle(item.title, doc.title),
+    // 検索結果の説明文。作品名で、作品ごとに違う文になる
+    description: `${item.title} の${doc.about}です。`,
+    contact,
+    node: (
+      <Screen id={key} label={doc.title}>
+        {options.backHref ? <BackLink href={options.backHref} label={item.title} /> : null}
+        <SectionHead title={doc.title} note={item.title} h1 />
+        {split && current ? (
+          <LanguageLinks sections={split.sections} current={current.code} href={options.href} />
+        ) : null}
+        <DocumentBody
+          blocks={split && current ? [...split.preamble, ...current.blocks] : blocks}
+          // ページは日本語（<html lang="ja">）。ほかの言語の節を出すときだけ本文に言語を付ける
+          lang={current && current.code !== 'ja' ? current.code : undefined}
+          quiet={current?.heading}
+        />
+        {contact ? (
+          <div class="doc-contact">
+            <SectionHead title="Contact" sub={2} />
+            <ContactList
+              email={site.email}
+              github={site.github}
+              x={site.x}
+              instagram={site.instagram}
+              discord={site.discord}
+            />
+          </div>
+        ) : null}
+      </Screen>
+    ),
+  }
+}
+
+/*
   作品1件のページ（/apps/item/<slug>）。
 
   一覧の中の位置ではなく slug で1件を名指しするので、何を足しても外しても、並べ
@@ -117,7 +217,8 @@ export function itemPage(item: ItemView, links: { backHref?: string; memberHref?
   2枚以上の作品の小節「Screenshots」（#screenshots。縦ギャラリー。ItemShots）と、本文の
   小節「Story」（#story。本文を書いた作品にだけ。ItemStory）。以前は本文を次の画面
   （…/story）に分け、作品同士を画面の底の左右の手でめくっていた。1ページにまとめたので、
-  前の本文の URL は #story へ 301（story が true）。
+  前の本文の URL は #story へ 301（rest が story）。文書のページ（…/privacy・…/support。
+  rest が文書の語）も、作品を引く・寄せる道はここと同じ（itemDocumentPage が描く）。
 
   行き来は目次と「← Projects」（見出しの上）。戻る先は一覧のこの作品の行
   （/projects#item-<slug>）。
@@ -126,8 +227,11 @@ export async function renderItem(
   c: Context<AppEnv>,
   kind: ItemKind,
   slug: string,
-  // 前の本文の画面（…/story）の URL で来たか
-  story: boolean,
+  /*
+    作品の URL の4語目。null は作品のページ、story は前の本文の画面（…/story）、
+    privacy / support は文書のページ（ITEM_DOCUMENTS）
+  */
+  rest: 'story' | ItemDocumentKey | null,
 ) {
   const db = drizzle(c.env.DB, { schema })
   const [item, members, blocks, site] = await Promise.all([
@@ -152,18 +256,27 @@ export async function renderItem(
     ブラウザには覚えさせない（movedTo）。前の slug・前の区分の本文の画面は、
     いったんいまの URL の …/story へ送り、そこで小節へ送る（本文の有無を知って
     いるのは作品の行だけ）。知らない slug と、下書きの作品（転送先も含めて）は 404。
+
+    文書のページ（…/privacy・…/support）も同じ道で寄せる——前の slug はいまの URL の
+    同じ文書へ（そこで文書が空なら 404）、前の区分は1回でいまの文書の URL へ。文書が
+    空の作品は、どの URL でも 404（書いていないページを作らない）。言語の切り替え
+    （?lang=en）は付けたまま送る（英語で読んでいた人を日本語へ戻さない）。
   */
+  const keep = rest && rest !== 'story' ? new URL(c.req.url).search : ''
   if (!item) {
     const moved = await findMovedItem(db, slug)
     const at = moved ? itemHref(moved) : null
-    return at ? movedTo(c, story ? `${at}/story` : at) : c.notFound()
+    return at ? movedTo(c, rest ? `${at}/${rest}${keep}` : at) : c.notFound()
   }
   const href = itemHref(item)
   if (!href) return c.notFound()
   // 本文の塊（テンプレートの欄と前の本文）。1つも無ければ小節は無い（開く式は src/blocks.ts の itemStory）
   const parts = itemStory(item)
-  if (story) return movedTo(c, parts.length ? `${href}#story` : href)
-  if (item.type !== kind) return movedTo(c, href)
+  if (rest === 'story') return movedTo(c, parts.length ? `${href}#story` : href)
+  // 文書の見出しと段落。空ならそのページは無い（開く式は src/blocks.ts の itemDocument）
+  const document = rest ? itemDocument(item, rest) : []
+  if (rest && !document.length) return c.notFound()
+  if (item.type !== kind) return movedTo(c, rest ? `${href}/${rest}${keep}` : href)
 
   const solo = soloMember(members)
   // 構造化データの画像（image）は絵だけ。動画は画像として名乗らない
@@ -180,6 +293,31 @@ export async function renderItem(
   */
   const list = links.find((link) => link.key === 'projects')
 
+  if (rest) {
+    /*
+      文書のページ。目次はサイトのまま印は Projects（作品のページと同じ）。戻る手は作品の
+      ページへ（一覧ではなく、この文書の持ち主の作品）。canonical は文書の URL 自身。
+      構造化データは載せない（この URL は作品そのものではない。作品の CreativeWork は
+      作品のページが1つだけ持つ）
+    */
+    const page = itemDocumentPage(item, rest, document, {
+      backHref: href,
+      site,
+      href: `${href}/${rest}`,
+      lang: c.req.query('lang'),
+    })
+    return screenPage(c, {
+      title: page.title,
+      canonical: `${href}/${rest}`,
+      nav: tableOfContents(links, 'projects'),
+      node: page.node,
+      description: page.description,
+      footer: <SiteSocials site={site} contact={page.contact} />,
+      adminPath: `/admin/items/${item.id}/edit`,
+      image: itemOgImage(item),
+    })
+  }
+
   /*
     見出しと添え（SectionHead。アイコンがあれば見出しの左）の下は ItemDetail——一覧の行を
     開いたもの（なぜ行の部品かは ItemDetail に書いてある）。その下に画像のギャラリー（ItemShots）と
@@ -189,6 +327,7 @@ export async function renderItem(
     backHref: list ? `${list.href}#${itemCardId(item)}` : undefined,
     memberHref:
       showMemberOf(blocks, members) && item.memberSlug ? `/members/${item.memberSlug}` : undefined,
+    documentHref: (key) => itemDocumentHref(item, key),
   })
 
   return screenPage(c, {

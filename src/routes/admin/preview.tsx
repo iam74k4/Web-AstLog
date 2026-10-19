@@ -1,7 +1,7 @@
 import { asc, eq } from 'drizzle-orm'
 import { type Context, Hono } from 'hono'
 import type { Child } from 'hono/jsx'
-import { blockType, publishErrors } from '../../blocks'
+import { blockType, itemDocument, publishErrors } from '../../blocks'
 import {
   findAdminItemView,
   listBlocks,
@@ -11,7 +11,7 @@ import {
   publishedBlocks,
 } from '../../db/queries'
 import * as schema from '../../db/schema'
-import { ITEM_KIND_KEYS, type ItemView, type KindCounts } from '../../domain'
+import { ITEM_DOCUMENTS, ITEM_KIND_KEYS, type ItemView, type KindCounts } from '../../domain'
 import type { AppEnv } from '../../env'
 import { bool, str, yearFrom } from '../../lib/format'
 import { SITE_SETTING_KEYS, type SiteSettings, siteSettingsErrors } from '../../site'
@@ -19,6 +19,7 @@ import {
   Band,
   Empty,
   filterQuery,
+  itemDocumentHref,
   itemHref,
   Screen,
   SectionHead,
@@ -37,7 +38,7 @@ import {
   soloMember,
   type TopData,
 } from '../public/data'
-import { itemPage } from '../public/item'
+import { itemDocumentPage, itemPage } from '../public/item'
 import { memberHref, memberPage } from '../public/member-page'
 import { nameWithLatin, pageTitle, siteDescription } from '../public/meta'
 import { type PickedImage, pickImage } from './images'
@@ -316,6 +317,12 @@ function itemResponse(
       saved.data.showMember && item.memberId
         ? `/admin/preview/members/${item.memberId}`
         : undefined,
+    /*
+      文書の行き先は、保存した作品のプレビューの文書（下の /preview/items/:id/<文書>）へ。
+      まだ保存していない入力のプレビューには置かない（行き先が保存済みの文書を出し、
+      いま打っている文書と違って見える）
+    */
+    documentHref: options.unsaved ? undefined : (key) => `/admin/preview/items/${item.id}/${key}`,
   })
   return c.html(
     <PreviewLayout
@@ -352,6 +359,45 @@ previewRoutes.get('/preview/items/:id', async (c) => {
   if (!item) return c.notFound()
   return itemResponse(c, saved, item, { editHref: `/admin/items/${id}/edit` })
 })
+
+/*
+  保存した作品の文書のページ（公開の /apps/item/<slug>/privacy と同じ部品。itemDocumentPage）。
+  下書きの作品でも見える——公開のページは公開してからしか開けないので、販売の前にここで
+  確かめる。空の文書は公開と同じく 404。戻る手は作品のプレビューへ。
+*/
+for (const doc of ITEM_DOCUMENTS) {
+  previewRoutes.get(`/preview/items/:id/${doc.key}`, async (c) => {
+    const id = parseId(c.req.param('id'))
+    if (!id) return c.notFound()
+    const saved = await snapshot(c)
+    const item = await findAdminItemView(saved.database, id)
+    if (!item) return c.notFound()
+    const blocks = itemDocument(item, doc.key)
+    if (!blocks.length) return c.notFound()
+    const page = itemDocumentPage(item, doc.key, blocks, {
+      backHref: `/admin/preview/items/${id}`,
+      site: saved.site,
+      href: `/admin/preview/items/${id}/${doc.key}`,
+      lang: c.req.query('lang'),
+    })
+    return c.html(
+      <PreviewLayout
+        title={page.title}
+        description={page.description}
+        label={`${item.title} ${doc.title}`}
+        publicHref={
+          item.published === 1 ? (itemDocumentHref(item, doc.key) ?? undefined) : undefined
+        }
+        draft={item.published !== 1}
+        nav={previewNav(saved)}
+        footer={<SiteSocials site={saved.site} contact={page.contact} />}
+        editHref={`/admin/items/${id}/edit`}
+      >
+        {page.node}
+      </PreviewLayout>,
+    )
+  })
+}
 
 // 種類・容量を検査した画像の bytes だけから作る。この応答内に閉じ、KVに置かない（動画は埋めない）。
 function imageDataUrl(image: PickedImage) {

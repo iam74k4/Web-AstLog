@@ -1,5 +1,5 @@
 import type { Block, Item, Member } from './db/schema'
-import { STORY_SECTIONS, type StoryColumn, type StoryPart } from './domain'
+import { type ItemDocumentKey, STORY_SECTIONS, type StoryColumn, type StoryPart } from './domain'
 import {
   isSafeUrl,
   ONGOING_HINT,
@@ -8,7 +8,7 @@ import {
   parseLines,
   parseSkills,
 } from './lib/format'
-import { MARKDOWN_HINT } from './lib/markdown'
+import { type DocumentBlock, documentBlocks, MARKDOWN_HINT } from './lib/markdown'
 
 /*
   トップページを組むブロックの一覧。
@@ -433,6 +433,23 @@ export function itemStory(item: Pick<Item, 'body' | StoryColumn>): StoryPart[] {
       return texts.length ? [{ heading: section.heading, paragraphs: texts }] : []
     }),
   ]
+}
+
+/*
+  作品の文書（プライバシーポリシー・サポート。src/domain.ts の ITEM_DOCUMENTS）を、見出しと
+  段落の並びに開く（src/lib/markdown.ts の documentBlocks）。空なら、その文書のページは無い。
+
+  開く式はこの1本——公開ページ（src/routes/public/item.tsx）がページを 404 にするか、作品の
+  ページに行き先を置くか、sitemap に載せるかも、管理画面がいくつ書いたかを数えるのも、
+  ここを読む。空白と空行だけの欄と、見出しだけで段落の無い欄は、書いていないのと同じ
+  （見出しだけのページを作らない）。
+*/
+export function itemDocument(
+  item: Pick<Item, ItemDocumentKey>,
+  key: ItemDocumentKey,
+): DocumentBlock[] {
+  const blocks = documentBlocks(item[key])
+  return blocks.some((block) => block.kind === 'part') ? blocks : []
 }
 
 /*

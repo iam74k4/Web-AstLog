@@ -136,6 +136,138 @@ INSERT INTO item_links (item_id, label, url, sort_order) VALUES
   (7, 'Repository', 'https://github.com/iam74k4/Tool-EventPlayback', 0),
   (8, 'Repository', 'https://github.com/iam74k4/Device-AgentDeck', 0);
 
+-- AppMixer（1）の文書のページ（/apps/item/appmixer/privacy・…/support）。アプリのバイナリと
+-- App Store Connect に登録している URL。本番は管理画面の「プライバシーポリシーとサポートを書く」で
+-- 同じ文面を書いている（ここはローカルの見本）。
+UPDATE items SET
+  privacy = '最終更新日 / Last updated: 2026-10-20
+
+## 日本語
+
+### 収集する情報
+
+**AppMixer は、いかなる個人情報も収集、保存、送信しません。**
+
+本アプリには、解析ツール、広告ネットワーク、クラッシュレポート送信機能、その他のサードパーティ製 SDK が一切含まれていません。外部サーバーとの通信機能を持ちません。
+
+### 音声の取り扱い
+
+AppMixer は、アプリごとの音量を調整するという目的のためだけに、macOS の Core Audio が提供する Process Tap 機能を用いて、お使いの Mac 上で再生されている音声を経由させます。
+
+この音声は、**録音・保存・送信のいずれも行いません。** 音量の調整と、画面に表示するレベルメーターの描画のために、お使いの Mac のメモリ上でのみ処理され、直ちに破棄されます。
+
+### 保存される設定
+
+アプリごとの音量、ミュートの状態、出力先の割り当てといった設定は、macOS の標準的な仕組み（UserDefaults）を用いて、お使いの Mac の内部にのみ保存されます。これらが外部に送信されることはありません。
+
+App Sandbox が有効なため、保存先は本アプリ専用のコンテナ領域に限定されます。
+
+### アプリの削除
+
+AppMixer を削除すると、上記の設定も併せて削除されます。
+
+### お問い合わせ
+
+本ポリシーに関するご質問は、AppMixer のサポートページからお寄せください。
+
+[https://astlog.dev/apps/item/appmixer/support](/apps/item/appmixer/support)
+
+## English
+
+### Information We Collect
+
+**AppMixer does not collect, store, or transmit any personal information.**
+
+This application contains no analytics tools, no advertising networks, no crash reporting, and no third-party SDKs of any kind. It has no capability to communicate with external servers.
+
+### How Audio Is Handled
+
+For the sole purpose of adjusting per-application volume, AppMixer routes audio playing on your Mac using the Process Tap facility provided by macOS Core Audio.
+
+This audio is **never recorded, never stored, and never transmitted.** It is processed only in memory on your own Mac — to apply volume adjustments and to draw the on-screen level meters — and is discarded immediately thereafter.
+
+### Settings We Store
+
+Your settings — per-application volume levels, mute states, and output device assignments — are stored only on your own Mac using the standard macOS mechanism (UserDefaults). They are never transmitted anywhere.
+
+Because App Sandbox is enabled, this storage is confined to a container reserved for this application.
+
+### Deleting the App
+
+Removing AppMixer also removes the settings described above.
+
+### Contact
+
+Questions about this policy may be sent via the AppMixer support page.
+
+[https://astlog.dev/apps/item/appmixer/support?lang=en](/apps/item/appmixer/support?lang=en)',
+  support = '## 日本語
+
+AppMixer についてのご質問や不具合のご報告は、このページの下にある連絡先までお寄せください。
+
+不具合をご報告いただくときは、次のことを添えていただけると原因を早く確かめられます。
+
+- macOS のバージョン
+- AppMixer のバージョン（メニューの「問題を報告する（バージョン …）」に出ています）
+- 起きたことと、そのときの操作
+- 音量が変わらないアプリや出力デバイスの名前
+
+### 動作環境
+
+macOS 14.4 以降で動作します。
+
+### 「システム音声録音の許可が必要です」と出たとき
+
+アプリごとの音量を変えるために、macOS の「システム音声録音」の許可が必要です（マイクの許可ではありません）。「許可」を押してください。一度許可しなかった場合は、「設定」を押して開くシステム設定（プライバシーとセキュリティ → システム音声録音）で AppMixer をオンにしてください。
+
+音声を録音・保存・送信することはありません（[プライバシーポリシー](/apps/item/appmixer/privacy)）。
+
+### 音量が変わらない出力デバイスがあるとき
+
+一部の出力デバイス（HDMI・AV アンプなど）では、音量の調整を行いません。また、100% を超えて音量を上げることはできません。
+
+### AppMixer を終了したとき
+
+音量を変えたアプリは、元の音量に戻ります。
+
+### 購入と返金
+
+Mac App Store での購入と返金の手続きは Apple が扱います。返金のご依頼は [Apple の「問題を報告する」](https://reportaproblem.apple.com) からお願いします。
+
+## English
+
+For questions or bug reports about AppMixer, please contact us using the details at the bottom of this page.
+
+When reporting a problem, it helps to include:
+
+- your macOS version
+- your AppMixer version (shown in the menu item “Report a problem (version …)”)
+- what happened and what you were doing at the time
+- the name of any app or output device whose volume does not change
+
+### Requirements
+
+macOS 14.4 or later.
+
+### “System audio recording access is required”
+
+AppMixer needs the macOS System Audio Recording permission (not the microphone permission) to adjust the volume of each app. Click Allow. If you declined it earlier, click Settings and turn AppMixer on in System Settings (Privacy & Security, System Audio Recording).
+
+Audio is never recorded, stored, or transmitted ([Privacy Policy](/apps/item/appmixer/privacy?lang=en)).
+
+### Some output devices do not change volume
+
+AppMixer does not adjust the volume of some output devices, such as HDMI outputs and AV receivers. Volume cannot be raised above 100%.
+
+### When you quit AppMixer
+
+Apps whose volume you changed return to their original volume.
+
+### Purchases and refunds
+
+Purchases and refunds on the Mac App Store are handled by Apple. To request a refund, use [Apple’s Report a Problem page](https://reportaproblem.apple.com).'
+WHERE id = 1;
+
 -- 画像 ------------------------------------------------------------------
 
 -- AppMixer（1）のアイコンとスクリーンショットは、Mac App Store の掲載（id6804171608）と同じもの。

@@ -1,7 +1,7 @@
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { FIXED_BLOCK_KEYS } from '../../blocks'
-import { ITEM_KINDS } from '../../domain'
+import { ITEM_DOCUMENTS, ITEM_KINDS } from '../../domain'
 import type { AppEnv } from '../../env'
 import { filterQuery } from '../../ui/components'
 import { robotsTxt, sitemapXml } from './crawl'
@@ -69,6 +69,10 @@ publicRoutes.get('/members/:slug/:rest/:page', (c) =>
   ページの小節（#story）へ 301。URL の組み方は src/ui/components.tsx の itemHref で、
   ここと同じ表から作る。
 
+  4語目の privacy / support は作品の文書のページ（src/domain.ts の ITEM_DOCUMENTS。
+  書いた作品にだけ在る）。アプリのバイナリと App Store Connect に登録する URL なので、
+  形を変えない。URL は components.tsx の itemDocumentHref が同じ表から組む。
+
   3語にしてあるのは catch-all（1語・2語）と取り合わないため。2語（`/apps/<slug>`）に
   すると、割っていたころの番号と作品の名前が同じ位置で取り合い、slug が数字の作品を
   作れなかった。
@@ -78,11 +82,16 @@ publicRoutes.get('/members/:slug/:rest/:page', (c) =>
 */
 for (const kind of ITEM_KINDS) {
   publicRoutes.get(`/${kind.path}/item/:slug`, (c) =>
-    renderItem(c, kind.key, c.req.param('slug'), false),
+    renderItem(c, kind.key, c.req.param('slug'), null),
   )
   publicRoutes.get(`/${kind.path}/item/:slug/story`, (c) =>
-    renderItem(c, kind.key, c.req.param('slug'), true),
+    renderItem(c, kind.key, c.req.param('slug'), 'story'),
   )
+  for (const doc of ITEM_DOCUMENTS) {
+    publicRoutes.get(`/${kind.path}/item/:slug/${doc.key}`, (c) =>
+      renderItem(c, kind.key, c.req.param('slug'), doc.key),
+    )
+  }
 }
 
 /*
