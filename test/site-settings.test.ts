@@ -274,8 +274,8 @@ describe('Discord', () => {
     await saveSiteSettings(db(), { ...TEST_SITE, discord: 'iam74k4' })
     await touch()
     const contact = await okText('/contact')
-    expect(contact).toContain(
-      '<div class="contact-list__row" id="discord"><dt lang="en">Discord</dt><dd>iam74k4</dd></div>',
+    expect(contact).toMatch(
+      /<div class="contact-list__row" id="discord"><dt lang="en"><svg[^>]*aria-hidden="true"[^>]*>.*?<\/svg>Discord<\/dt><dd>iam74k4<\/dd><\/div>/,
     )
     // Contact のページの足元には行き先を出さない（表と同じ行き先を2つ置かない）
     expect(contact).not.toContain('href="/contact#discord"')

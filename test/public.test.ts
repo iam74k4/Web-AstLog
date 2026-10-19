@@ -1081,12 +1081,12 @@ describe('連絡先の行き先', () => {
     await touch()
 
     const contact = mainOf(await okText('/contact'))
-    // 札と行き先は dt / dd の組。メールはアドレス、外のサイトは名前（X は @ を付ける）
+    // 札と行き先は dt / dd の組。メールはアドレス、外のサイトは名前（X は @ を付ける）。札の頭に印
     expect(contact).toContain(
-      `<div class="contact-list__row"><dt lang="en">Email</dt><dd><a class="contact-list__link" href="mailto:${SITE.email}">${SITE.email}</a></dd></div>`,
+      `Email</dt><dd><a class="contact-list__link" href="mailto:${SITE.email}">${SITE.email}</a></dd></div>`,
     )
     expect(contact).toContain(
-      `<dt lang="en">GitHub</dt><dd><a class="contact-list__link" href="${SITE.github}" rel="me noreferrer" target="_blank">example</a></dd>`,
+      `GitHub</dt><dd><a class="contact-list__link" href="${SITE.github}" rel="me noreferrer" target="_blank">example</a></dd>`,
     )
     expect(contact).toContain('target="_blank">@example_x</a>')
     expect(contact).toContain('target="_blank">example.ig</a>')
@@ -1099,15 +1099,32 @@ describe('連絡先の行き先', () => {
 })
 
 describe('締めのページ（Contact）', () => {
-  it('HTML に絵も図も置かない。見出しと誘いの1文と手だけの節（軌道は CSS の背景が描く）', async () => {
+  it('HTML に絵も図も置かない。置く絵は表の札の印（足元と同じアイコン）だけ', async () => {
     await seedMember()
     await seedItem({ type: 'app' })
     await seedItem({ type: 'work' })
+    await saveSiteSettings(db(), {
+      ...SITE,
+      x: 'https://x.com/example_x',
+      instagram: 'https://www.instagram.com/example.ig',
+      discord: 'iam74k4',
+    })
+    await touch()
 
     const main = mainOf(await okText('/contact'))
     // ほかのページと同じ節（見出しの錨を持つ）。表紙の印は持たない
     expect(main).toContain('<section id="contact" role="region" aria-label="Contact">')
-    expect(main).not.toMatch(/<img|<svg|<style|<script/)
+    expect(main).not.toMatch(/<img|<style|<script/)
+    // 印は行ごとに1つ、札（dt）の頭で、読み上げに出さない。並びは表の行と同じ
+    const rows = [...main.matchAll(/<dt lang="en">(<svg[^>]*>.*?<\/svg>)([^<]+)<\/dt>/g)]
+    expect(rows.map((row) => row[2])).toEqual(['Email', 'GitHub', 'X', 'Instagram', 'Discord'])
+    for (const row of rows) expect(row[1]).toContain('aria-hidden="true"')
+    expect(main.match(/<svg/g)).toHaveLength(rows.length)
+    // 印は足元と同じ形（同じ部品）。Contact のページは足元に行き先を出さないので、入口の足元と比べる
+    const footer = (await okText('/')).split('</main>')[1] ?? ''
+    const mail = footer.match(/href="mailto:[^"]*"[^>]*>(<svg[^>]*>.*?<\/svg>)/)?.[1]
+    expect(mail).toBeTruthy()
+    expect(rows[0]?.[1]).toBe(mail)
   })
 
   it('Contact は見出しと連絡先の表だけ。誘いの1文は説明文に、足元には行き先を出さない', async () => {
@@ -1254,13 +1271,17 @@ describe('ページの URL', () => {
       入口・締め・個人ページに天体の絵・星空・軌道図を置いていたころは、最初の画面の6割を
       装飾が占め、HTML の半分以上が見えない層の動き（keyframes）だった。いまは字が主役で、
       天体の飾り（惑星の縁・空・軌道・星）は線と点だけを CSS の背景と疑似要素が描く
-      （app.css の「天体の飾り」）。HTML には1つも置かない
+      （app.css の「天体の飾り」）。HTML には1つも置かない。例外は連絡先の表の札の頭の印
+      （足元と同じアイコン。読み上げに出さない）だけ
     */
     const member = await seedMember()
     await seedItem({ type: 'app' })
     await seedItem({ type: 'work' })
     for (const path of ['/', '/contact', `/members/${member.slug}`, '/all']) {
-      const main = mainOf(await okText(path))
+      const main = mainOf(await okText(path)).replace(
+        /<dt lang="en"><svg[^>]*aria-hidden="true"[^>]*>.*?<\/svg>/g,
+        '<dt lang="en">',
+      )
       expect(main, path).not.toMatch(/class="(?:system|orbits|cosmos|hole|celestial|astra-art)/)
       expect(main, path).not.toMatch(/<style|<svg/)
     }
