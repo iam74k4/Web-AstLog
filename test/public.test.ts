@@ -11,11 +11,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import css from '../public/app.css'
 import { saveSiteSettings } from '../src/db/queries'
 import * as schema from '../src/db/schema'
-import { ITEM_KINDS } from '../src/domain'
+import { ITEM_DOCUMENTS, ITEM_KINDS } from '../src/domain'
 import { sniffImage } from '../src/lib/image'
 import { publicRoutes } from '../src/routes/public/routes'
 import { skySvg } from '../src/ui/astra'
-import { itemHref, LinkList, LinkRow, splitPhrases } from '../src/ui/components'
+import { itemDocumentHref, itemHref, LinkList, LinkRow, splitPhrases } from '../src/ui/components'
 import { cardSvg, ICON, iconSvg, WORDMARK, wordmarkSvg } from '../src/ui/logo'
 import {
   db,
@@ -3256,18 +3256,31 @@ describe('URL の登録順', () => {
     恒久リンク（itemHref が組む URL）と前の一覧の 301 が、その区分のぶんだけ
     黙って欠けないこと（URL の組み方とルートが同じ表を読んでいること）。
   */
-  it('区分ごとに、恒久リンク・前の本文の画面・前の一覧のルートがある', () => {
+  it('区分ごとに、恒久リンク・前の本文の画面・文書のページ・前の一覧のルートがある', () => {
     for (const kind of ITEM_KINDS) {
       expect(paths()).toEqual(
         expect.arrayContaining([
           `/${kind.path}/item/:slug`,
           `/${kind.path}/item/:slug/story`,
+          ...ITEM_DOCUMENTS.map((doc) => `/${kind.path}/item/:slug/${doc.key}`),
           `/${kind.path}`,
           `/${kind.path}/:page`,
         ]),
       )
       expect(itemHref({ type: kind.key, slug: 'x' })).toBe(`/${kind.path}/item/x`)
+      for (const doc of ITEM_DOCUMENTS) {
+        expect(itemDocumentHref({ type: kind.key, slug: 'x' }, doc.key)).toBe(
+          `/${kind.path}/item/x/${doc.key}`,
+        )
+      }
     }
+    // アプリのバイナリと App Store Connect に登録した URL の形（変えない）
+    expect(itemDocumentHref({ type: 'app', slug: 'appmixer' }, 'privacy')).toBe(
+      '/apps/item/appmixer/privacy',
+    )
+    expect(itemDocumentHref({ type: 'app', slug: 'appmixer' }, 'support')).toBe(
+      '/apps/item/appmixer/support',
+    )
   })
 
   it('1語目が可変のルートは、この2本のほかに作らない', () => {
@@ -3413,8 +3426,10 @@ async function seedEverything() {
       slug: `item-${i}`,
       year: `20${20 + i}`,
       sortOrder: i,
-      // 1件目だけ本文を持つ（作品のページに小節 #story が付く）
+      // 1件目だけ本文と文書を持つ（作品のページに小節 #story が付き、…/privacy と …/support ができる）
       body: i === 0 ? '背景の段落です。\n\n結果の段落です。' : '',
+      privacy: i === 0 ? '## 日本語\n\n個人情報を集めません。' : '',
+      support: i === 0 ? 'ご質問はメールでどうぞ。' : '',
     })
   }
   await db()
@@ -3528,6 +3543,8 @@ describe('サイトの全ページ', () => {
     expect(titles.get('/contact')).toBe(`Contact — ${SITE.name}`)
     expect(titles.get('/members/okazaki')).toBe(`岡崎 昂功 — ${SITE.name}`)
     expect(titles.get('/apps/item/item-0')).toBe(`作品0 — ${SITE.name}`)
+    expect(titles.get('/apps/item/item-0/privacy')).toBe(`作品0 · Privacy Policy — ${SITE.name}`)
+    expect(titles.get('/apps/item/item-0/support')).toBe(`作品0 · Support — ${SITE.name}`)
     // 割っていたころの続き・前の本文の画面は、転送するだけなので sitemap に無い
     expect([...titles.keys()].filter((path) => /\/\d+$|\/story$|\/about$/.test(path))).toEqual([])
     // 名前の無いページは、そのページの文の頭（入口と同じ題にしない）

@@ -6,6 +6,7 @@ import previewCss from '../../public/preview.css'
 import type { Item, Member } from '../db/schema'
 import {
   ITEM_KIND_KEYS,
+  type ItemDocumentKey,
   type ItemFilter,
   type ItemImage,
   type ItemKind,
@@ -27,7 +28,15 @@ import {
   skillRows,
 } from '../lib/format'
 import { isVideoUrl } from '../lib/image'
-import { type Inline, prose } from '../lib/markdown'
+import {
+  type DocumentBlock,
+  type DocumentLanguage,
+  type DocumentSection,
+  type Inline,
+  type Prose,
+  prose,
+  proseText,
+} from '../lib/markdown'
 import { isContactEmail, isDiscordName, SITE, type SiteSettings } from '../site'
 import {
   DiscordIcon,
@@ -297,6 +306,7 @@ export const SectionHead = ({
   transition,
   icon,
   item,
+  lang,
 }: {
   title: string
   note?: string
@@ -309,10 +319,20 @@ export const SectionHead = ({
   icon?: string | null
   // 作品のページの作品名か（.head--item。大きな字のまま）
   item?: boolean
+  // 見出しの字の言語。打ち込んだ見出し（作品の文書の ## English）にだけ渡す（langOf）
+  lang?: string
 }) => {
   const text = (
     <>
-      {h1 ? <h1 style={transition}>{title}</h1> : sub === 3 ? <h3>{title}</h3> : <h2>{title}</h2>}
+      {h1 ? (
+        <h1 style={transition} lang={lang}>
+          {title}
+        </h1>
+      ) : sub === 3 ? (
+        <h3 lang={lang}>{title}</h3>
+      ) : (
+        <h2 lang={lang}>{title}</h2>
+      )}
       {count === undefined ? null : (
         <span class="head__count">
           {twoDigits(count)}
@@ -583,6 +603,19 @@ export const Tags = ({ tags }: { tags: string[] }) =>
 */
 export const itemHref = (item: { type: ItemKind; slug: string | null }) =>
   item.slug ? `/${KIND_PATH[item.type]}/item/${item.slug}` : null
+
+/*
+  作品の文書のページ（/apps/item/<slug>/privacy・…/support。src/domain.ts の ITEM_DOCUMENTS）。
+  作品のページの URL に文書の語を1つ足したもの。アプリのバイナリと App Store Connect に
+  登録する URL なので、形を変えない。slug の無い作品は null（itemHref と同じ）。
+*/
+export const itemDocumentHref = (
+  item: { type: ItemKind; slug: string | null },
+  key: ItemDocumentKey,
+) => {
+  const href = itemHref(item)
+  return href ? `${href}/${key}` : null
+}
 
 /*
   一覧の行の id（/projects#item-<slug>）。作品のページの「← Projects」が、
@@ -1514,12 +1547,41 @@ const Inlines = ({ items }: { items: Inline[] }) => (
 )
 
 /*
+  1つの段落を開いた塊（src/lib/markdown.ts の Prose。文と箇条書き）を要素にする。Note の
+  長い文章の欄と、作品の文書（DocumentBody）が同じ形で描く。
+
+  空行を挟まずに書いた文と箇条書き（「取り組んだこと:」と続く「- 」の行）は1つの段落。
+  段落どうしの間（.bio の gap）より詰めて、ひとまとまりに見せる（.bio__part）。1つだけの
+  ときは包まない——記号の無い段落は、前と同じ <p> 1つのまま。lang は段落の言語（作品の
+  文書の英語の段落にだけ。langOf）
+*/
+const ProseBlocks = ({ blocks, lang }: { blocks: Prose[]; lang?: string }) => {
+  const nodes = blocks.map((block, index) =>
+    block.kind === 'paragraph' ? (
+      <p key={index} lang={lang}>
+        <Inlines items={block.inlines} />
+      </p>
+    ) : (
+      <ul key={index} lang={lang}>
+        {block.items.map((item, at) => (
+          <li key={at}>
+            <Inlines items={item} />
+          </li>
+        ))}
+      </ul>
+    ),
+  )
+  const [only] = nodes
+  return nodes.length === 1 && only ? only : <div class="bio__part">{nodes}</div>
+}
+
+/*
   文章の列。段落のあとに、同じ列へ続けたいもの（個人ページのスキル）を
   children で受ける。受けないと、呼ぶ側が同じ列をもう1枚作ることになる。
 
   rich は長い文章の欄（紹介文・作品の本文・メモ）の印。段落の中の小さな Markdown
-  （箇条書き・太字・リンク。src/lib/markdown.ts の prose）を要素にする。作品の説明
-  （目録の2文）には付けない——一覧の行と同じ字のまま出す
+  （箇条書き・太字・リンク。src/lib/markdown.ts の prose）を要素にする（ProseBlocks）。
+  作品の説明（目録の2文）には付けない——一覧の行と同じ字のまま出す
 */
 export const Note = ({
   paragraphs,
@@ -1531,37 +1593,91 @@ export const Note = ({
   children?: Child
 }) => (
   <div class="bio">
-    {paragraphs.map((text) => {
-      if (!rich) return <p key={text}>{text}</p>
-      const blocks = prose(text).map((block, index) =>
-        block.kind === 'paragraph' ? (
-          <p key={index}>
-            <Inlines items={block.inlines} />
-          </p>
-        ) : (
-          <ul key={index}>
-            {block.items.map((item, at) => (
-              <li key={at}>
-                <Inlines items={item} />
-              </li>
-            ))}
-          </ul>
-        ),
-      )
-      /*
-        空行を挟まずに書いた文と箇条書き（「取り組んだこと:」と続く「- 」の行）は1つの段落。
-        段落どうしの間（.bio の gap）より詰めて、ひとまとまりに見せる（.bio__part）。1つだけの
-        ときは包まない——記号の無い段落は、前と同じ <p> 1つのまま
-      */
-      return blocks.length === 1 ? (
-        blocks[0]
-      ) : (
-        <div class="bio__part" key={text}>
-          {blocks}
-        </div>
-      )
-    })}
+    {paragraphs.map((text) =>
+      rich ? <ProseBlocks key={text} blocks={prose(text)} /> : <p key={text}>{text}</p>,
+    )}
     {children}
+  </div>
+)
+
+/*
+  作品の文書の言語の切り替え（src/lib/markdown.ts の documentLanguages。「## 日本語」
+  「## English」で分けた文書だけ）。見出しのすぐ下に、言語の名前を並べる。
+
+  Projects の絞り込み（FilterLinks）と同じ字の手で、押した先は同じページの別の URL
+  （?lang=en）——公開ページは script を持たないので、どの言語の節を出すかはサーバーが
+  決める。最初の言語（日本語）は素の URL（アプリと App Store Connect に登録した URL）で、
+  ほかの言語だけ query を付ける。いまの言語に aria-current（下線。色だけで分けない）。
+  名前はその言語の字なので、lang と hreflang を付ける（日本語の音声で English と読ませない）。
+*/
+export const LanguageLinks = ({
+  sections,
+  current,
+  href,
+}: {
+  sections: DocumentSection[]
+  current: DocumentLanguage
+  href: string
+}) => (
+  <nav class="filters doc-languages" aria-label="Language">
+    {sections.map((section, index) => (
+      <a
+        key={section.code}
+        href={index === 0 ? href : `${href}?lang=${section.code}`}
+        hreflang={section.code}
+        lang={section.code}
+        aria-current={section.code === current ? 'true' : undefined}
+      >
+        {section.heading}
+      </a>
+    ))}
+  </nav>
+)
+
+/*
+  作品の文書（プライバシーポリシー・サポート）の本文。src/blocks.ts の itemDocument が開いた
+  見出しと段落の並び（src/lib/markdown.ts の documentBlocks）を、文書のページ（h1 が文書の
+  名前）の下に描く。
+
+  - ## は h2。作品のページの小節（Story）と同じ形（SectionHead の sub）
+  - ### は h3（.doc__head）。h2 より1段小さい太字で、本文と同じ書体
+  - 段落・箇条書き・太字・リンクは長い文章の欄と同じ（ProseBlocks。.bio の規則がそのまま効く）
+
+  規約はよく日本語と英語を並べて書くので、英字だけの見出しと段落には lang="en"（langOf）を
+  付ける——日本語の音声で英文を読ませない。
+
+  言語の切り替え（LanguageLinks）を置いたページでは、言語の節の ## の見出し（「English」）は
+  すぐ上の切り替えと同じ字なので、目には出さず読み上げにだけ残す（quiet。HiddenHeading）
+  ——消すと、その下の ### が h1 のすぐ下の h3 になり、見出しの段が飛ぶ。
+*/
+export const DocumentBody = ({
+  blocks,
+  lang,
+  quiet,
+}: {
+  blocks: DocumentBlock[]
+  lang?: string
+  // 読み上げにだけ残す ## の見出しの字（言語の節の見出し）
+  quiet?: string
+}) => (
+  <div class="bio doc" lang={lang}>
+    {blocks.map((block, index) =>
+      block.kind === 'heading' && block.level === 2 && block.text === quiet ? (
+        <HiddenHeading key={index} text={block.text} />
+      ) : block.kind === 'part' ? (
+        <ProseBlocks
+          key={index}
+          blocks={block.blocks}
+          lang={langOf(proseText(block.blocks).replace(/\s+/g, ' '))}
+        />
+      ) : block.level === 2 ? (
+        <SectionHead key={index} title={block.text} sub={2} lang={langOf(block.text)} />
+      ) : (
+        <h3 key={index} class="doc__head" lang={langOf(block.text)}>
+          {block.text}
+        </h3>
+      ),
+    )}
   </div>
 )
 
@@ -1757,68 +1873,81 @@ const handleOf = (url: string) => {
   }
 }
 
-export const Contact = ({
-  email,
-  github,
-  x,
-  instagram,
-  discord,
-  whole,
-}: {
+// 連絡先の表に並べる行き先（サイト設定の5つ）。Contact とサポートのページ（ContactList）が読む
+type ContactLinks = {
   email: string
   github?: string | null
   x?: string | null
   instagram?: string | null
   discord?: string | null
-  whole?: boolean
-}) => {
-  const away = [
-    ['GitHub', github, (url: string) => handleOf(url)],
-    ['X', x, (url: string) => `@${handleOf(url)}`],
-    ['Instagram', instagram, (url: string) => handleOf(url)],
-  ] as const
-  return (
-    <Screen id="contact" label="Contact">
-      <SectionHead title="Contact" h1={!whole} />
-      <div class="contact">
-        <dl class="contact-list">
-          {email && isContactEmail(email) ? (
-            <div class="contact-list__row">
-              <dt lang="en">Email</dt>
-              <dd>
-                <a class="contact-list__link" href={`mailto:${email}`}>
-                  {email}
-                </a>
-              </dd>
-            </div>
-          ) : null}
-          {away.map(([label, url, shown]) =>
-            isHttpsUrl(url) ? (
-              <div class="contact-list__row" key={label}>
-                <dt lang="en">{label}</dt>
-                <dd>
-                  <a class="contact-list__link" href={url} rel="me noreferrer" target="_blank">
-                    {shown(url)}
-                  </a>
-                </dd>
-              </div>
-            ) : null,
-          )}
-          {/*
-            Discord はユーザー名から開ける URL が無いので、名前を字で出す（リンクにしない。
-            行は押せる面を持たない）。足元の Discord の印はこの行（#discord）へ送る
-          */}
-          {discord && isDiscordName(discord) ? (
-            <div class="contact-list__row" id="discord">
-              <dt lang="en">Discord</dt>
-              <dd>{discord}</dd>
-            </div>
-          ) : null}
-        </dl>
-      </div>
-    </Screen>
-  )
 }
+
+// 外のサイトの行き先。札・URL・見せる名前
+const awayRows = ({ github, x, instagram }: ContactLinks) =>
+  (
+    [
+      ['GitHub', github, (url: string) => handleOf(url)],
+      ['X', x, (url: string) => `@${handleOf(url)}`],
+      ['Instagram', instagram, (url: string) => handleOf(url)],
+    ] as const
+  ).flatMap(([label, url, shown]) => (isHttpsUrl(url) ? [{ label, url, shown: shown(url) }] : []))
+
+/*
+  表に1行でも出るか。サポートのページは、出る行が無ければ表と見出しを置かない（見出しだけ
+  残さない）。受け取れない値（検査より前に入った行）は表と同じく数えない
+*/
+export const hasContactRows = (links: ContactLinks) =>
+  isContactEmail(links.email) || isDiscordName(links.discord ?? '') || awayRows(links).length > 0
+
+/*
+  連絡先の表（Email / GitHub / X / Instagram / Discord）。Contact のページと、作品の
+  サポートのページ（src/routes/public/item.tsx の itemDocumentPage）が同じ表を置く——
+  サポートの URL は App Store の審査で「連絡手段があること」を求められる。形の決まり（dt / dd・
+  字で見せる行き先・面ごと押せる行・矢印）は上の「連絡先のページ」の注記。
+*/
+export const ContactList = (links: ContactLinks) => (
+  <dl class="contact-list">
+    {isContactEmail(links.email) ? (
+      <div class="contact-list__row">
+        <dt lang="en">Email</dt>
+        <dd>
+          <a class="contact-list__link" href={`mailto:${links.email}`}>
+            {links.email}
+          </a>
+        </dd>
+      </div>
+    ) : null}
+    {awayRows(links).map((row) => (
+      <div class="contact-list__row" key={row.label}>
+        <dt lang="en">{row.label}</dt>
+        <dd>
+          <a class="contact-list__link" href={row.url} rel="me noreferrer" target="_blank">
+            {row.shown}
+          </a>
+        </dd>
+      </div>
+    ))}
+    {/*
+      Discord はユーザー名から開ける URL が無いので、名前を字で出す（リンクにしない。
+      行は押せる面を持たない）。足元の Discord の印はこの行（#discord）へ送る
+    */}
+    {links.discord && isDiscordName(links.discord) ? (
+      <div class="contact-list__row" id="discord">
+        <dt lang="en">Discord</dt>
+        <dd>{links.discord}</dd>
+      </div>
+    ) : null}
+  </dl>
+)
+
+export const Contact = ({ whole, ...links }: ContactLinks & { whole?: boolean }) => (
+  <Screen id="contact" label="Contact">
+    <SectionHead title="Contact" h1={!whole} />
+    <div class="contact">
+      <ContactList {...links} />
+    </div>
+  </Screen>
+)
 
 /*
   足元のサイトの行き先（Layout.tsx の footer）。GitHub・Instagram・X・Discord・Mail。どのページにも

@@ -137,8 +137,8 @@ function session() {
 
   **少なすぎたら止める。** ここが無いと、この検査は黙って空振りする——D1 が空なら
   ページがほとんど生えず、それでも1本ずつは 200 で返るので「✓」で終わる。
-  seed は 11 本（1人のサイトでは /team がプロフィールへの 301 で sitemap から
-  外れる）、seed＋ブロック3本は 14 本、fixture は作った中身から必ず生える URL
+  seed は 13 本（1人のサイトでは /team がプロフィールへの 301 で sitemap から
+  外れる。AppMixer のプライバシーポリシーとサポートの2本を含む）、seed＋ブロック3本は 16 本、fixture は作った中身から必ず生える URL
   （fit-fixture.mjs の expect）を1本ずつ突き合わせる。本当にページを減らしたなら、
   この数も一緒に下げること——その変更が diff に出ることに意味がある。
 */
@@ -660,13 +660,13 @@ async function main() {
           key: 'seed',
           label: 'seed（1人のサイト）',
           sql: [await readFile(`${ROOT}seed.sql`, 'utf8')],
-          least: 11,
+          least: 13,
         },
         {
           key: 'blocks',
           label: 'seed＋ブロック3本（1人のサイト・目次が帯から溢れる）',
           sql: [await readFile(`${ROOT}seed.sql`, 'utf8'), blocks.sql],
-          least: 14,
+          least: 16,
           expect: blocks.expect,
         },
         {

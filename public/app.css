@@ -1081,6 +1081,7 @@ body[data-site] > .frame {
   .entry__main :is(h3, p),
   .statement__text,
   .bio :is(p, li),
+  .doc__head,
   .gallery__description,
   .career :is(.title, .org, .career__item)
 ) {
@@ -1363,6 +1364,50 @@ body[data-site] > .frame {
   display: flex;
   flex-direction: column;
   gap: var(--sp-6);
+}
+
+/*
+  作品の文書のページの本文（components.tsx の DocumentBody。プライバシーポリシーとサポート）。
+  段落・箇条書き・太字・リンクは .bio の規則のまま。足すのは見出しの間合いと、### の
+  見出し（.doc__head）だけ。
+
+  - ## の見出し（.head--sub。Story と同じ形）は、前の段落とのあいだを1段広く取り、節の
+    切れ目に見せる。下は .bio の間（gap）に任せる（.head--sub の下の余白を足すと、見出しが
+    次の段落から離れて浮く）
+  - ### の見出しは h2（--fs-lg）より1段小さい --fs-md の太字で、本文と同じ書体（和文の節の
+    名前が入る）。上を少し空け、すぐ下の段落と組に見せる
+*/
+.doc > .head--sub {
+  margin-bottom: 0;
+}
+
+.doc > .head--sub:not(:first-child) {
+  margin-top: var(--sp-6);
+}
+
+.doc__head {
+  margin-top: var(--sp-3);
+  color: var(--ink);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+/*
+  文書の言語の切り替え（components.tsx の LanguageLinks）。見た目は Projects の絞り込み
+  （.filters）のまま。見出しの下、本文の上に置き、本文とのあいだを段落の間（.bio の gap）と
+  同じだけ空ける
+*/
+.doc-languages {
+  margin-bottom: var(--sp-5);
+}
+
+/*
+  サポートのページの連絡先の表（本文の下。components.tsx の ContactList）。本文から1段
+  離す（.story と同じ段）
+*/
+.doc-contact {
+  margin-top: var(--sp-7);
 }
 
 /*

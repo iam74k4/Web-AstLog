@@ -1,5 +1,6 @@
 import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
+import { itemDocument } from '../../blocks'
 import {
   listPublishedItemKeys,
   listPublishedMembers,
@@ -7,9 +8,10 @@ import {
   publishedBlocks,
 } from '../../db/queries'
 import * as schema from '../../db/schema'
+import { ITEM_DOCUMENTS } from '../../domain'
 import type { AppEnv } from '../../env'
 import { SITE } from '../../site'
-import { itemHref } from '../../ui/components'
+import { itemDocumentHref, itemHref } from '../../ui/components'
 import { NO_FILTER } from './data'
 import { memberHref } from './member-page'
 import { sitePageLinks, sitePages } from './site'
@@ -93,6 +95,16 @@ export async function sitemapXml(c: Context<AppEnv>) {
     ...members.map((member) => memberHref(member.slug)),
     // 作品1件の恒久リンク。slug の無い行（列より前からある作品）は URL を持たない
     ...items.map(itemHref).filter((path) => path !== null),
+    /*
+      作品の文書のページ（…/privacy・…/support）。書いた文書だけ——空の文書は 404 なので
+      載せない。正は自分自身（canonical が文書の URL）なので、作品のページと並べてよい
+    */
+    ...items.flatMap((item) =>
+      ITEM_DOCUMENTS.flatMap((doc) => {
+        const path = itemDocument(item, doc.key).length ? itemDocumentHref(item, doc.key) : null
+        return path ? [path] : []
+      }),
+    ),
   ]
 
   const body = [

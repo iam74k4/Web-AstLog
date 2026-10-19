@@ -1,12 +1,14 @@
 import { and, asc, eq, ne, type SQL, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { type Context, Hono } from 'hono'
-import { MAX_CHARS, publishErrors } from '../../blocks'
+import { itemDocument, MAX_CHARS, publishErrors } from '../../blocks'
 import { EDIT_CONFLICT, editMatches, guardEdit, isEditConflict, nextUpdatedAt } from '../../db/edit'
-import { type Db, itemOrder } from '../../db/queries'
+import { type Db, itemOrder, loadSiteSettings } from '../../db/queries'
 import * as schema from '../../db/schema'
 import {
+  ITEM_DOCUMENTS,
   ITEM_KINDS,
+  type ItemDocumentKey,
   type ItemKind,
   KIND_LABEL,
   readKind,
@@ -26,7 +28,8 @@ import {
   yearFrom,
 } from '../../lib/format'
 import { IMAGE_ACCEPT, isVideoUrl, SHOT_ACCEPT } from '../../lib/image'
-import { MARKDOWN_HINT } from '../../lib/markdown'
+import { DOCUMENT_HINT, MARKDOWN_HINT } from '../../lib/markdown'
+import { isContactEmail, SITE } from '../../site'
 import {
   Area,
   Confirm,
@@ -40,7 +43,7 @@ import {
   Select,
 } from '../../ui/AdminForm'
 import { AdminLayout } from '../../ui/AdminLayout'
-import { itemHref, Shot, StatusPill } from '../../ui/components'
+import { itemDocumentHref, itemHref, Shot, StatusPill } from '../../ui/components'
 import { ExternalIcon, PencilIcon, TrashIcon } from '../../ui/icons'
 import {
   commitWithImage,
@@ -243,6 +246,8 @@ type ItemFormData = {
   type: ItemKind
   members: schema.Member[]
   platforms: schema.Platform[]
+  // サポートのページに出るサイト設定のメールアドレス（formContext。無ければ null）
+  contactEmail: string | null
   item?: schema.Item & {
     tags: { tag: string }[]
     links: { label: string; url: string }[]
@@ -262,6 +267,13 @@ type ItemFormData = {
 const storyOf = (read: (column: StoryColumn) => string) =>
   Object.fromEntries(STORY_SECTIONS.map(({ column }) => [column, read(column)])) as Record<
     StoryColumn,
+    string
+  >
+
+// 作品の文書の欄の値を、文書ごとに読む（storyOf と同じ3つの出どころ）
+const documentsOf = (read: (key: ItemDocumentKey) => string) =>
+  Object.fromEntries(ITEM_DOCUMENTS.map(({ key }) => [key, read(key)])) as Record<
+    ItemDocumentKey,
     string
   >
 
@@ -290,6 +302,7 @@ function itemDraft(item?: ItemFormData['item'], submitted?: Record<string, strin
       summary: submitted.summary ?? '',
       body: submitted.body ?? '',
       story: storyOf((column) => submitted[column] ?? ''),
+      documents: documentsOf((key) => submitted[key] ?? ''),
       imageAlt: submitted.imageAlt ?? '',
       removeImage: submitted.removeImage === '1',
       removeIcon: submitted.removeIcon === '1',
@@ -314,6 +327,7 @@ function itemDraft(item?: ItemFormData['item'], submitted?: Record<string, strin
     summary: item?.summary ?? '',
     body: item?.body ?? '',
     story: storyOf((column) => item?.[column] ?? ''),
+    documents: documentsOf((key) => item?.[key] ?? ''),
     imageAlt: item?.imageAlt ?? '',
     removeImage: false,
     removeIcon: false,
@@ -341,6 +355,8 @@ type ItemDraft = {
   body: string
   // 本文のテンプレートの欄（STORY_SECTIONS の列ごと）
   story: Record<StoryColumn, string>
+  // 作品の文書の欄（ITEM_DOCUMENTS の文書ごと）
+  documents: Record<ItemDocumentKey, string>
   imageAlt: string
   removeImage: boolean
   removeIcon: boolean
@@ -434,6 +450,58 @@ const StoryFields = ({
       />
     ))}
   </fieldset>
+)
+
+/*
+  作品の文書（src/domain.ts の ITEM_DOCUMENTS。プライバシーポリシーとサポート）の欄。書いた
+  文書ごとに、作品の URL の下に1ページ（/apps/item/<slug>/privacy）ができ、作品のページの
+  行き先にも並ぶ。空ならページは無い（404）。どの作品にも書ける（販売するアプリごとに）。
+
+  ヒントには公開の URL を絶対 URL で出す——アプリのバイナリと App Store Connect に貼る値で、
+  ここから写す。slug を変えても前の URL は転送で届く（item_slug_redirects）が、貼る値は
+  いまの URL にする。
+
+  サポートのページは、本文の下にサイト設定の連絡先の表（メール…）を必ず置く。App Store の
+  審査は、サポートの URL に連絡手段があることを求める。サイト設定にメールが無いまま
+  サポートを書いたら、保存は止めずにその場で知らせる（保存の関門はサイト設定を見ない）。
+*/
+const DocumentFields = ({
+  documents,
+  type,
+  slug,
+  contactEmail,
+}: {
+  documents: ItemDraft['documents']
+  type: ItemKind
+  slug: string | null
+  contactEmail: string | null
+}) => (
+  <>
+    {ITEM_DOCUMENTS.map((doc) => {
+      const url = `${SITE.origin}${itemDocumentHref({ type, slug: slug || '<slug>' }, doc.key)}`
+      const contact =
+        doc.key === 'support'
+          ? contactEmail
+            ? ` · 本文の下に、サイト設定の連絡先（${contactEmail} など）が必ず出る`
+            : ' · 本文の下に、サイト設定の連絡先が出る'
+          : ''
+      return (
+        <Area
+          key={doc.key}
+          label={doc.label}
+          name={doc.key}
+          value={documents[doc.key]}
+          rows={doc.key === 'privacy' ? 14 : 8}
+          warning={
+            doc.key === 'support' && !contactEmail && documents.support
+              ? 'サイト設定にメールアドレスがありません。サポートのページに連絡先のメールが出ません（App Store の審査は、サポートの URL に連絡手段を求めます）'
+              : undefined
+          }
+          hint={`${url} に出る（ページの見出しは ${doc.title}。空ならページは無い）${contact} · ${DOCUMENT_HINT}`}
+        />
+      )
+    })}
+  </>
 )
 
 /*
@@ -925,6 +993,20 @@ const ItemForm = (props: ItemFormData) => {
           />
         </FormDetails>
         <FormDetails
+          title="プライバシーポリシーとサポートを書く"
+          status={`${ITEM_DOCUMENTS.filter((doc) => itemDocument(d.documents, doc.key).length).length} ページ`}
+          note="販売するアプリの規約と問い合わせのページ（任意）"
+          errors={props.errors}
+          fields={ITEM_DOCUMENTS.map(({ key }) => key)}
+        >
+          <DocumentFields
+            documents={d.documents}
+            type={props.type}
+            slug={item?.slug ?? null}
+            contactEmail={props.contactEmail}
+          />
+        </FormDetails>
+        <FormDetails
           title="詳細設定"
           note="ページの URL・同じ年の中での並び順"
           errors={props.errors}
@@ -976,22 +1058,25 @@ const ItemForm = (props: ItemFormData) => {
 
 export async function formContext(c: { env: { DB: D1Database } }) {
   const database = db(c)
-  const [members, platforms] = await Promise.all([
+  const [members, platforms, site] = await Promise.all([
     database.query.members.findMany({ orderBy: [asc(schema.members.sortOrder)] }),
     database.query.platforms.findMany({ orderBy: [asc(schema.platforms.sortOrder)] }),
+    loadSiteSettings(database),
   ])
-  return { members, platforms }
+  // サポートのページに出る連絡先のメール（DocumentFields の知らせ）
+  return { members, platforms, contactEmail: isContactEmail(site.email) ? site.email : null }
 }
 
 itemRoutes.get('/items/new', async (c) => {
   const type = readKind(c.req.query('type'))
-  const { members, platforms } = await formContext(c)
+  const { members, platforms, contactEmail } = await formContext(c)
   return c.html(
     <ItemForm
       account={c.get('account')}
       type={type}
       members={members}
       platforms={platforms}
+      contactEmail={contactEmail}
       formKey={newFormKey()}
     />,
   )
@@ -1009,13 +1094,14 @@ itemRoutes.get('/items/:id/edit', async (c) => {
     },
   })
   if (!item) return c.notFound()
-  const { members, platforms } = await formContext(c)
+  const { members, platforms, contactEmail } = await formContext(c)
   return c.html(
     <ItemForm
       account={c.get('account')}
       type={item.type}
       members={members}
       platforms={platforms}
+      contactEmail={contactEmail}
       item={item}
       flash={flashFor(c)}
     />,
@@ -1081,6 +1167,8 @@ export function readItemForm(
       */
       body: str(form.get('body')),
       ...storyOf((column) => str(form.get(column))),
+      // 作品の文書。空ならそのページは無い（src/blocks.ts の itemDocument）
+      ...documentsOf((key) => str(form.get(key))),
       imageAlt: str(form.get('imageAlt')),
       metricValue: str(form.get('metricValue')) || null,
       metricUnit: str(form.get('metricUnit')) || null,
@@ -1145,6 +1233,7 @@ function submittedItem(form: FormData): Record<string, string> {
     summary: str(form.get('summary')),
     body: str(form.get('body')),
     ...storyOf((column) => str(form.get(column))),
+    ...documentsOf((key) => str(form.get(key))),
     imageAlt: str(form.get('imageAlt')),
     removeImage: bool(form.get('removeImage')) ? '1' : '',
     removeIcon: bool(form.get('removeIcon')) ? '1' : '',
@@ -1470,6 +1559,7 @@ itemRoutes.post('/items', async (c) => {
         type={values.type}
         members={context.members}
         platforms={context.platforms}
+        contactEmail={context.contactEmail}
         formKey={sent}
         submitted={submittedItem(form)}
         errors={imageNotKept(form, IMAGE_FIELDS, errors)}
@@ -1577,7 +1667,7 @@ async function saveItem(
   c: Context<AppEnv>,
   existing: schema.Item,
   form: FormData,
-  context: { members: schema.Member[]; platforms: schema.Platform[] },
+  context: Awaited<ReturnType<typeof formContext>>,
   again: boolean,
 ) {
   const id = existing.id
@@ -1594,6 +1684,7 @@ async function saveItem(
         type={values.type}
         members={context.members}
         platforms={context.platforms}
+        contactEmail={context.contactEmail}
         item={{ ...existing, tags: [], links: [], shots: existingShots }}
         version={String(form.get('_version') ?? '')}
         submitted={submittedItem(form)}

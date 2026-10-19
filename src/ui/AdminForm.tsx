@@ -156,6 +156,8 @@ export const Area = (props: {
   hint?: string
   rows?: number
   error?: string
+  // 保存は止めないが知らせたいこと（Field の warning と同じ）
+  warning?: string
   /*
     上限がある欄には付ける。ブラウザ側で止まるので、長い文を打ったあとに
     保存で弾かれて直す、という往復が減る。数える単位はサーバー側（コード

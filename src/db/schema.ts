@@ -175,6 +175,17 @@ export const items = sqliteTable(
     storyHighlights: text('story_highlights').notNull().default(''),
     storyResults: text('story_results').notNull().default(''),
     /*
+      作品の文書のページ（src/domain.ts の ITEM_DOCUMENTS）。プライバシーポリシーは
+      /<区分>/item/<slug>/privacy、サポートは …/support に1ページずつ出る。販売するアプリの
+      バイナリと App Store Connect に登録する URL なので、作品ごとに管理画面で書く
+      （コードに直書きしない）。空なら、そのページは無い（404）。
+
+      書き方は小さな Markdown に見出し（行頭の ## と ###）を足したもの
+      （src/lib/markdown.ts の documentBlocks）。既にある行は ''（ALTER で入る）。
+    */
+    privacy: text('privacy').notNull().default(''),
+    support: text('support').notNull().default(''),
+    /*
       メインの画像（スクリーンショット）。/images/items/<…>（管理画面から KV に上げたもの）か、
       /assets/…（同梱）。作品の顔の1枚で、作品のページ・一覧のサムネイル・共有カードに出る。
       null ならメインの画像なし——ほかの画像（item_shots）があれば、その1枚目が顔になり

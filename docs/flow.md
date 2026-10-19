@@ -33,6 +33,7 @@ flowchart LR
     Moved["以前の一覧<br>/apps ・ /works（続きも）"]
     Item["作品1件（恒久リンク）<br>/apps/item/:slug ・ /works/item/:slug<br>本文は小節 #story"]
     OldStory["前の本文の画面<br>…/item/:slug/story"]
+    Docs["作品の文書のページ<br>…/item/:slug/privacy ・ …/support"]
     Whole["全体 GET /all"]
     Profile["メンバー個別<br>/members/:slug<br>小節 #about ・ #skills ・ #career"]
     OldTeam["1人のサイトの Team<br>/team"]
@@ -60,6 +61,10 @@ flowchart LR
     Item -->|"行き先の「担当 名前 →」（2人以上、または Team が無いとき）"| Profile
     Item -->|"前の slug・前の区分の URL → 301（いまの URL へ）"| Item
     OldStory -->|"301（#story へ。本文が無ければページの頭へ）"| Item
+    Item -->|"行き先の「Privacy Policy →」「Support →」（書いた文書だけ）"| Docs
+    Docs -->|"← 作品名"| Item
+    Docs -->|"前の slug・前の区分の URL → 301（いまの文書へ）"| Docs
+    Docs -->|"サポートの連絡先の表（メール）"| Mail
     Profile -->|"前の slug → 301（いまの URL へ）"| Profile
     OldMember -->|"301（#about などの小節へ。無ければページの頭へ）"| Profile
 
@@ -80,6 +85,7 @@ flowchart LR
     OldMember -.->|"知らない続きの名前"| NotFound
     Screen -.->|"ページの名前の形でない（D1 に聞かずに）"| NotFound
     Item -.->|"下書き / 知らない slug"| NotFound
+    Docs -.->|"文書が空 / 下書き / 知らない slug"| NotFound
     NotFound -->|"Home"| Top
 
     Top -.->|"上の帯の「管理画面」（ログイン中だけ）"| Admin
@@ -109,6 +115,12 @@ Projects、個人ページは Profile か Team）。先頭の Hero へはロゴ�
 ここへのリンクで（中の Repository と担当者名はそれぞれの行き先へ）、出る条件は「その作品が
 公開中」の1つだけ——Projects の節を外しても、貼られたリンクは死なない（そのときは
 「← Projects」を出さない）。以前の本文の画面（`…/<slug>/story`）は `#story` へ 301。
+作品の文書（プライバシーポリシーとサポート。管理画面で作品ごとに書く）は、作品の URL の下の
+1ページずつ（`…/<slug>/privacy`・`…/<slug>/support`）。作品のページの行き先に、書いた文書だけ
+「Privacy Policy →」「Support →」で並び、文書のページの頭の「← 作品名」で作品へ戻る。
+サポートのページは本文の下にサイト設定の連絡先の表を置く。書いていない文書は 404。
+「## 日本語」「## English」で分けた文書は、見出しの下の「日本語 / English」で言語を切り替える
+（素の URL が日本語、`?lang=en` が英語。どちらもサーバーが描き、script は持たない）。
 管理画面で slug を変えた作品・メンバーの前の URL と、区分を変えた作品の前の区分の URL は、
 いまの URL へ 301 で寄せる（前の slug は `item_slug_redirects` / `member_slug_redirects`
 に残っている）。変えた日に名刺や SNS に貼ったリンクが切れる、を起こさない。
