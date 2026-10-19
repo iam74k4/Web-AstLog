@@ -318,10 +318,14 @@
   --skill-note: 4em;
   /* 経歴の塊（Experience / Education）を横に並べるときの1列の幅の下限（.career-groups） */
   --career-col: 280px;
-  /* 足元の行き先のアイコンの大きさ（.socials。字を添えずアイコンだけで並べる） */
+  /* 足元の行き先のアイコンの大きさ（.socials。字を添えずアイコンだけで並べる。連絡先の表の札の印も同じ） */
   --social-icon: 18px;
-  /* Contact の連絡先の表（.contact-list）の札の列（「INSTAGRAM」が字間を取っても1行に入る幅） */
-  --contact-label: 112px;
+  /*
+    Contact の連絡先の表（.contact-list）の札の列。印と「INSTAGRAM」（字間込みで約 123px）が1行に
+    入り、電話の幅（375）でもメールのアドレス（約 194px）を折らずに残せる幅。広げるとアドレスが
+    「gmail.co / m」と折れた
+  */
+  --contact-label: 126px;
 
   --ease: cubic-bezier(0.23, 1, 0.32, 1);
   --dur-fast: 180ms;
@@ -2538,7 +2542,9 @@ body[data-site] > .frame {
   行と行のあいだは罫線（一覧の行と同じ --line）。札は節の見出しと同じ Poppins の英大文字。
   行き先は字で見せ（アドレスと @名前。紙に刷っても残る）、行の面ごと押せる——リンクの
   ::before を行いっぱいに被せる（一覧の行の題の覆いと同じ）。矢印は行の右端で、メールは →、
-  外のサイト（別タブ）は ↗。札の列の幅は :root の --contact-label
+  外のサイト（別タブ）は ↗。札の列の幅は :root の --contact-label。札の頭に足元と同じ印
+  （大きさも足元と同じ --social-icon）。札は1行なので、行の縦の真ん中に置く（印は字の
+  ベースラインを持たず、ベースラインでそろえると札が下へずれる）
 */
 .contact-list {
   width: min(100%, 40em);
@@ -2557,12 +2563,22 @@ body[data-site] > .frame {
 }
 
 .contact-list dt {
+  display: flex;
+  align-items: center;
+  align-self: center;
+  gap: var(--sp-3);
   color: var(--ink-mid);
   font-family: var(--font-latin);
   font-size: var(--fs-meta);
   font-weight: 600;
   letter-spacing: var(--track-caption);
   text-transform: uppercase;
+}
+
+.contact-list dt svg {
+  flex: none;
+  width: var(--social-icon);
+  height: var(--social-icon);
 }
 
 .contact-list dd {

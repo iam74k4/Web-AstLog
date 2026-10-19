@@ -1882,15 +1882,17 @@ type ContactLinks = {
   discord?: string | null
 }
 
-// 外のサイトの行き先。札・URL・見せる名前
+// 外のサイトの行き先。札・印・URL・見せる名前
 const awayRows = ({ github, x, instagram }: ContactLinks) =>
   (
     [
-      ['GitHub', github, (url: string) => handleOf(url)],
-      ['X', x, (url: string) => `@${handleOf(url)}`],
-      ['Instagram', instagram, (url: string) => handleOf(url)],
+      ['GitHub', GithubIcon, github, (url: string) => handleOf(url)],
+      ['X', XIcon, x, (url: string) => `@${handleOf(url)}`],
+      ['Instagram', InstagramIcon, instagram, (url: string) => handleOf(url)],
     ] as const
-  ).flatMap(([label, url, shown]) => (isHttpsUrl(url) ? [{ label, url, shown: shown(url) }] : []))
+  ).flatMap(([label, Icon, url, shown]) =>
+    isHttpsUrl(url) ? [{ label, Icon, url, shown: shown(url) }] : [],
+  )
 
 /*
   表に1行でも出るか。サポートのページは、出る行が無ければ表と見出しを置かない（見出しだけ
@@ -1904,12 +1906,19 @@ export const hasContactRows = (links: ContactLinks) =>
   サポートのページ（src/routes/public/item.tsx の itemDocumentPage）が同じ表を置く——
   サポートの URL は App Store の審査で「連絡手段があること」を求められる。形の決まり（dt / dd・
   字で見せる行き先・面ごと押せる行・矢印）は上の「連絡先のページ」の注記。
+
+  札（dt）の頭に、足元の行き先と同じ印（icons.tsx）を置く——足元のアイコンで覚えた行き先を、
+  表の中でも同じ形で見つけられるように。印は読み上げに出さない（aria-hidden。名前はすぐ隣の
+  札の字が言う）。印は札の飾りで、行き先は字のまま（紙に刷っても残る）。
 */
 export const ContactList = (links: ContactLinks) => (
   <dl class="contact-list">
     {isContactEmail(links.email) ? (
       <div class="contact-list__row">
-        <dt lang="en">Email</dt>
+        <dt lang="en">
+          <MailIcon />
+          Email
+        </dt>
         <dd>
           <a class="contact-list__link" href={`mailto:${links.email}`}>
             {links.email}
@@ -1919,7 +1928,10 @@ export const ContactList = (links: ContactLinks) => (
     ) : null}
     {awayRows(links).map((row) => (
       <div class="contact-list__row" key={row.label}>
-        <dt lang="en">{row.label}</dt>
+        <dt lang="en">
+          <row.Icon />
+          {row.label}
+        </dt>
         <dd>
           <a class="contact-list__link" href={row.url} rel="me noreferrer" target="_blank">
             {row.shown}
@@ -1933,7 +1945,10 @@ export const ContactList = (links: ContactLinks) => (
     */}
     {links.discord && isDiscordName(links.discord) ? (
       <div class="contact-list__row" id="discord">
-        <dt lang="en">Discord</dt>
+        <dt lang="en">
+          <DiscordIcon />
+          Discord
+        </dt>
         <dd>{links.discord}</dd>
       </div>
     ) : null}
