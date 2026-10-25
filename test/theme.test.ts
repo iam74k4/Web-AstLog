@@ -702,8 +702,27 @@ describe('部品の作法', () => {
     expect(bodyOf(sheet, '.contact-list__link::before {')).toContain('inset: 0')
     expect(bodyOf(sheet, '.contact-list__link::after {')).toContain("content: '↗'")
     expect(bodyOf(sheet, ".contact-list__link[href^='mailto:']::after {")).toContain("content: '→'")
-    // 札の列の幅は :root の段
-    expect(bodyOf(sheet, '.contact-list__row {')).toContain('var(--contact-label)')
+    // 札の列の幅は :root の段。2列に並べるのは 600 以上（未満は札の下に行き先を積む）
+    expect(bodyOf(sheet, '.contact-list__row {')).toContain('grid-template-columns: minmax(0, 1fr)')
+    expect(bodyOf(blockAt(css, '@media (min-width: 600px) {'), '.contact-list__row {')).toContain(
+      'grid-template-columns: var(--contact-label) minmax(0, 1fr)',
+    )
+  })
+
+  it('Contact の1文は入口のリード文と同じ段、行き先は一覧の行の題と同じ段と下線', () => {
+    // 1文を大見出しにしない。入口のリード文と同じ1本の規則で組む
+    expect(bodyOf(sheet, '.hero__lead,\n.contact__lead {')).toContain('font-size: var(--fs-md)')
+    const to = bodyOf(sheet, '.contact-list dd {')
+    expect(to).toContain('font-family: var(--font-display)')
+    expect(to).toContain('font-size: var(--fs-display-xs)')
+    // 下線は字の幅だけに、左から伸ばす（.entry__link と同じ線）
+    expect(bodyOf(sheet, '.contact-list__to {')).toContain(
+      'background: linear-gradient(currentColor, currentColor) 0 100% / 0% 1px no-repeat',
+    )
+    const hover = blockAt(css, '@media (hover: hover) {')
+    expect(
+      bodyOf(hover, '.contact-list__row:has(.contact-list__link):hover .contact-list__to {'),
+    ).toContain('background-size: 100% 1px')
   })
 
   it('画像の説明は番号の右の列いっぱいに使い、「Full size」は説明の下に置く', () => {
@@ -1679,6 +1698,17 @@ describe('動き', () => {
       ruleWith(sheet, 'animation-delay: calc(var(--reveal-from) + var(--stagger) * 6)').selector,
     ).toContain('.hero__actions')
     expect(motion).not.toMatch(/\.hero[^{]*\{[^}]*infinite/)
+  })
+
+  it('締めの幕開け（Contact）は入口と同じ rise と間で、1文 → 表の行の順に1回だけ', () => {
+    expect(bodyOf(sheet, '.contact > .contact__lead,')).toContain(
+      'animation: rise var(--dur-reveal) var(--ease) both',
+    )
+    expect(bodyOf(sheet, '.contact .contact-list__row:nth-child(1) {')).toContain(
+      'animation-delay: var(--stagger)',
+    )
+    // サポートのページの表（本文の続き）は動かさない。Contact の中の表だけ
+    expect(motion).not.toMatch(/(?:^|[,}])\s*\.contact-list__row\b/)
   })
 
   it('読み込んだときの幕は入口だけ。合成だけで動き、押す手を通し、止める設定では出さない', () => {
