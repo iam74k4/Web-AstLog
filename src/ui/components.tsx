@@ -47,6 +47,7 @@ import {
   Wordmark,
   XIcon,
 } from './icons'
+import { iconSvg } from './logo'
 
 /*
   画面はこの部品だけで組む。新しい見た目が要るときは、まずここに足してから使う。
@@ -114,7 +115,7 @@ export const HtmlDocument = ({ children }: { children: Child }) => (
   古い写しを掴まない）ため。静的なファイルの配り手は query を見ずにパスで
   返すので、?v= は URL を分けるためだけのもの。
 */
-const cssVersion = (text: string) => {
+const versionOf = (text: string) => {
   // FNV-1a（32bit）。改ざんを見る値ではなく、変わったかどうかの印
   let hash = 0x811c9dc5
   for (let i = 0; i < text.length; i += 1) {
@@ -125,9 +126,9 @@ const cssVersion = (text: string) => {
 }
 
 const STYLESHEETS = {
-  app: `/app.css?v=${cssVersion(appCss)}`,
-  admin: `/admin.css?v=${cssVersion(adminCss)}`,
-  preview: `/preview.css?v=${cssVersion(previewCss)}`,
+  app: `/app.css?v=${versionOf(appCss)}`,
+  admin: `/admin.css?v=${versionOf(adminCss)}`,
+  preview: `/preview.css?v=${versionOf(previewCss)}`,
 } as const
 
 export const Stylesheets = ({
@@ -186,13 +187,31 @@ export const ColorSchemeMeta = () => <meta name="color-scheme" content="light" /
   明るいタブの帯では字が消える。
   PNG はタブの 32px と、検索結果の印の 96px（Google は 48px の倍数の正方形を求める）。
   公開・管理・404 の外枠がどれも置く。
+
+  URL には印の形から作った版（?v=…。CSS と同じ作り方）を付ける。Google は favicon を URL
+  ごとに覚えていて、同じ URL の中身を Λ に替えてから10日以上たっても、検索結果には前の
+  ブラックホールの絵が出続けた。形（iconSvg）を変えた日に URL も変わるので、次にトップを
+  読んだときに新しい印として取り直す。PNG も同じ iconSvg から書き出すので、版は SVG の
+  2つの形（角丸・四角）で足りる。配り方は版の無い素材のまま（public/_headers の既定）
 */
+const ICON_VERSION = versionOf(iconSvg('rounded') + iconSvg('square'))
+
 export const FaviconLinks = () => (
   <>
-    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
-    <link rel="icon" type="image/png" sizes="96x96" href="/assets/favicon-96.png" />
-    <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+    <link rel="icon" type="image/svg+xml" href={`/assets/favicon.svg?v=${ICON_VERSION}`} />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href={`/assets/favicon-32.png?v=${ICON_VERSION}`}
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="96x96"
+      href={`/assets/favicon-96.png?v=${ICON_VERSION}`}
+    />
+    <link rel="apple-touch-icon" href={`/assets/apple-touch-icon.png?v=${ICON_VERSION}`} />
   </>
 )
 
