@@ -421,18 +421,25 @@ describe('名乗り', () => {
     for (const file of assetFiles) {
       expect(read.has(file) || OUTSIDE.has(file), `${file} を読む所が無い`).toBe(true)
     }
-    // favicon は画像ファイル（data URI の SVG はやめた。CSP の img-src は 'self' だけ）
-    expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg"/>')
+    // favicon は画像ファイル（data URI の SVG はやめた。CSP の img-src は 'self' だけ）。
+    // URL には印の形の版が付く（Google は favicon を URL ごとに覚え、前の絵を出し続けた）
+    const version = html.match(/href="\/assets\/favicon\.svg\?v=([0-9a-z]+)"/)?.[1]
+    expect(version).toBeTruthy()
     expect(html).toContain(
-      '<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png"/>',
+      `<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=${version}"/>`,
+    )
+    expect(html).toContain(
+      `<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=${version}"/>`,
     )
     // 検索結果の印は 48px の倍数の正方形（Google の求め。32px は満たさない）
     expect(html).toContain(
-      '<link rel="icon" type="image/png" sizes="96x96" href="/assets/favicon-96.png"/>',
+      `<link rel="icon" type="image/png" sizes="96x96" href="/assets/favicon-96.png?v=${version}"/>`,
     )
     const icon96 = Uint8Array.from(atob(favicon96), (char) => char.charCodeAt(0))
     expect(sniffImage(icon96)).toMatchObject({ type: 'image/png', width: 96, height: 96 })
-    expect(html).toContain('<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png"/>')
+    expect(html).toContain(
+      `<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=${version}"/>`,
+    )
     expect(html).not.toContain('data:image')
   })
 
