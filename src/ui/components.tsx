@@ -1846,11 +1846,12 @@ export const OwnSocials = ({ member, site = SITE }: { member: Member; site?: Sit
 /*
   連絡先のページ。サイトの並びの最後で、入口と対になる締め。
 
-  見える h1「Contact」の下に、連絡先の表（Email / GitHub / X / Instagram / Discord）だけを置く
-  （持ち主の「シンプルに」。大見出しと誘いの1文を置いた形から削った）。誘いの1文
-  （サイト設定の contactLead）はページには出さず、検索結果の説明文にだけ使う。
-  HTML に絵は置かない。
+  見える h1「Contact」の下に、誘いの1文（サイト設定の contactLead）と連絡先の表
+  （Email / GitHub / X / Instagram / Discord）を置く。HTML に絵は置かない。
 
+  - 誘いの1文は入口のリード文と同じ段（大見出しにしない）。表だけだと、何の相談なら送って
+    よいかを言うものが無く、住所録に見えた。受付状況のような2文目は足さない（同じことを
+    2度言う）。受けているかどうかも、この1文が言う。検索結果の説明文にも同じ1文を使う
   - 表は dt / dd の組（読み上げで「Email、iam74k4@gmail.com」と組で読む）。行き先は字で
     見せる——アドレスと @名前が字で残るので、紙に刷っても宛先が分かる。行は面ごと押せる
     （題の覆いと同じ。app.css の .contact-list）。矢印は行き先で決める: メールは →、
@@ -1910,6 +1911,10 @@ export const hasContactRows = (links: ContactLinks) =>
   札（dt）の頭に、足元の行き先と同じ印（icons.tsx）を置く——足元のアイコンで覚えた行き先を、
   表の中でも同じ形で見つけられるように。印は読み上げに出さない（aria-hidden。名前はすぐ隣の
   札の字が言う）。印は札の飾りで、行き先は字のまま（紙に刷っても残る）。
+
+  行き先の字を span（.contact-list__to）で包むのは、触ったときの下線を字の幅にだけ引くため
+  （一覧の行の題と同じ、左から伸びる線）。リンクは矢印まで含めた行の幅を持つので、リンクに
+  引くと線が矢印の下まで伸びる。
 */
 export const ContactList = (links: ContactLinks) => (
   <dl class="contact-list">
@@ -1921,7 +1926,7 @@ export const ContactList = (links: ContactLinks) => (
         </dt>
         <dd>
           <a class="contact-list__link" href={`mailto:${links.email}`}>
-            {links.email}
+            <span class="contact-list__to">{links.email}</span>
           </a>
         </dd>
       </div>
@@ -1934,7 +1939,7 @@ export const ContactList = (links: ContactLinks) => (
         </dt>
         <dd>
           <a class="contact-list__link" href={row.url} rel="me noreferrer" target="_blank">
-            {row.shown}
+            <span class="contact-list__to">{row.shown}</span>
           </a>
         </dd>
       </div>
@@ -1955,10 +1960,19 @@ export const ContactList = (links: ContactLinks) => (
   </dl>
 )
 
-export const Contact = ({ whole, ...links }: ContactLinks & { whole?: boolean }) => (
+export const Contact = ({
+  whole,
+  lead,
+  ...links
+}: ContactLinks & { lead: string; whole?: boolean }) => (
   <Screen id="contact" label="Contact">
     <SectionHead title="Contact" h1={!whole} />
     <div class="contact">
+      {lead ? (
+        <p class="contact__lead">
+          <Phrases text={lead} />
+        </p>
+      ) : null}
       <ContactList {...links} />
     </div>
   </Screen>

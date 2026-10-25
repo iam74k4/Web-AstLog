@@ -1083,17 +1083,21 @@ describe('連絡先の行き先', () => {
     const contact = mainOf(await okText('/contact'))
     // 札と行き先は dt / dd の組。メールはアドレス、外のサイトは名前（X は @ を付ける）。札の頭に印
     expect(contact).toContain(
-      `Email</dt><dd><a class="contact-list__link" href="mailto:${SITE.email}">${SITE.email}</a></dd></div>`,
+      `Email</dt><dd><a class="contact-list__link" href="mailto:${SITE.email}"><span class="contact-list__to">${SITE.email}</span></a></dd></div>`,
     )
     expect(contact).toContain(
-      `GitHub</dt><dd><a class="contact-list__link" href="${SITE.github}" rel="me noreferrer" target="_blank">example</a></dd>`,
+      `GitHub</dt><dd><a class="contact-list__link" href="${SITE.github}" rel="me noreferrer" target="_blank"><span class="contact-list__to">example</span></a></dd>`,
     )
-    expect(contact).toContain('target="_blank">@example_x</a>')
-    expect(contact).toContain('target="_blank">example.ig</a>')
+    expect(contact).toContain(
+      'target="_blank"><span class="contact-list__to">@example_x</span></a>',
+    )
+    expect(contact).toContain(
+      'target="_blank"><span class="contact-list__to">example.ig</span></a>',
+    )
     // 全体ページ（印刷の宛先）も同じ表
     const whole = await okText('/all')
     expect(whole.slice(whole.indexOf('<section id="contact"'))).toContain(
-      `href="mailto:${SITE.email}">${SITE.email}</a>`,
+      `href="mailto:${SITE.email}"><span class="contact-list__to">${SITE.email}</span></a>`,
     )
   })
 })
@@ -1127,10 +1131,11 @@ describe('締めのページ（Contact）', () => {
     expect(rows[0]?.[1]).toBe(mail)
   })
 
-  it('Contact は見出しと連絡先の表だけ。誘いの1文は説明文に、足元には行き先を出さない', async () => {
+  it('Contact は見出し・誘いの1文・連絡先の表の3つ。足元には行き先を出さない', async () => {
     /*
-      持ち主の「シンプルに」。大見出し・誘いの1文・所在地を置いた形から、表だけに削った。
-      何の相談なら送ってよいかを言う1文（contactLead）は、検索結果の説明文に残す。
+      表だけだと、何の相談なら送ってよいかを言うものが無く、住所録に見えた。誘いの1文
+      （contactLead）を見出しと表のあいだに置き、検索結果の説明文にも同じ1文を使う。
+      受付状況のような2文目は置かない。所在地の行も置かない。
       ページは h1 をちょうど1つ持つ決まり（WCAG 1.3.1）も保つ。
     */
     await seedMember({ location: 'Kanagawa, Japan' })
@@ -1140,8 +1145,16 @@ describe('締めのページ（Contact）', () => {
     expect(main.match(/<h1[^>]*>/g)).toEqual(['<h1>'])
     expect(main).toContain('<div class="head"><h1>Contact</h1></div>')
     const contact = main.slice(main.indexOf('<div class="contact">'))
-    expect(contact.startsWith('<div class="contact"><dl class="contact-list">')).toBe(true)
-    expect(contact).not.toMatch(/<p\b/)
+    const lead = SITE.contactLead
+      .split(/(?<=[、。])/)
+      .map((part) => `<span class="phrase">${part}</span>`)
+      .join('')
+    expect(
+      contact.startsWith(
+        `<div class="contact"><p class="contact__lead">${lead}</p><dl class="contact-list">`,
+      ),
+    ).toBe(true)
+    expect(contact.match(/<p\b/g)).toHaveLength(1)
     expect(contact).not.toContain('Location')
     expect(html).toContain(`<meta name="description" content="${SITE.contactLead}"/>`)
     expect(main).toContain('aria-label="Contact"')
@@ -1150,13 +1163,15 @@ describe('締めのページ（Contact）', () => {
     expect(foot).not.toContain('class="socials"')
   })
 
-  it('全体ページの Contact にも同じ表を置く', async () => {
+  it('全体ページの Contact にも同じ1文と表を置く', async () => {
     await seedMember()
 
     const whole = await okText('/all')
     const contact = whole.slice(whole.indexOf('<section id="contact"'))
-    expect(contact).toContain(`href="mailto:${SITE.email}">${SITE.email}</a>`)
-    expect(contact).not.toContain('contact__lead')
+    expect(contact).toContain(
+      `href="mailto:${SITE.email}"><span class="contact-list__to">${SITE.email}</span></a>`,
+    )
+    expect(contact).toContain('<p class="contact__lead">')
   })
 
   it('全体ページでは、ほかの節と同じ見出しを目に見える形で置く', async () => {

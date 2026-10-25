@@ -370,6 +370,7 @@ export function renderBlock(
         description: describe(site.contactLead),
         node: (
           <Contact
+            lead={site.contactLead}
             email={site.email}
             github={site.github}
             x={site.x}

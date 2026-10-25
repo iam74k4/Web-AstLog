@@ -230,8 +230,10 @@ describe('サポートのページ', () => {
     // 連絡先は本文のあと。Contact のページと同じ表
     expect(main).toContain('<div class="head head--sub"><h2>Contact</h2></div>')
     expect(main).toContain(
-      `<a class="contact-list__link" href="mailto:${SITE.email}">${SITE.email}</a>`,
+      `<a class="contact-list__link" href="mailto:${SITE.email}"><span class="contact-list__to">${SITE.email}</span></a>`,
     )
+    // 誘いの1文は Contact のページだけ（サポートの表は本文の続き）
+    expect(main).not.toContain('contact__lead')
     expect(main.indexOf('よくある質問')).toBeLessThan(main.indexOf('mailto:'))
     expect(main).toContain(`href="${SITE.github}"`)
     // 同じ行き先を1つのページに2つ置かない（Contact のページと同じ）

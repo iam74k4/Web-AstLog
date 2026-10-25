@@ -995,7 +995,12 @@ body[data-site] > .frame {
   background: currentColor;
 }
 
-.hero__lead {
+/*
+  入口のリード文と、Contact の誘いの1文（.contact__lead）。どちらも見出しの下の短い1文で、
+  同じ段で組む（Contact の1文を大見出しにしない）
+*/
+.hero__lead,
+.contact__lead {
   max-width: 32em;
   color: var(--ink-mid);
   font-size: var(--fs-md);
@@ -2526,7 +2531,7 @@ body[data-site] > .frame {
 
 /*
   サイトの並びの最後のページ（components.tsx の Contact）。見出し（Contact）の下に、
-  連絡先の表だけを置く。ほかのページと同じ節で、見出しの錨を持つ（「ページの外枠」）。
+  誘いの1文と連絡先の表を置く。ほかのページと同じ節で、見出しの錨を持つ（「ページの外枠」）。
   箱（枠・面・影）には入れない。
 */
 .contact {
@@ -2537,14 +2542,21 @@ body[data-site] > .frame {
   min-width: 0;
 }
 
+.contact__lead {
+  margin: 0;
+}
+
 /*
-  連絡先の表（components.tsx の Contact）。行は「札（Email・GitHub …）| 行き先」の2列で、
-  行と行のあいだは罫線（一覧の行と同じ --line）。札は節の見出しと同じ Poppins の英大文字。
-  行き先は字で見せ（アドレスと @名前。紙に刷っても残る）、行の面ごと押せる——リンクの
-  ::before を行いっぱいに被せる（一覧の行の題の覆いと同じ）。矢印は行の右端で、メールは →、
-  外のサイト（別タブ）は ↗。札の列の幅は :root の --contact-label。札の頭に足元と同じ印
-  （大きさも足元と同じ --social-icon）。札は1行なので、行の縦の真ん中に置く（印は字の
-  ベースラインを持たず、ベースラインでそろえると札が下へずれる）
+  連絡先の表（components.tsx の Contact）。600 以上は行が「札（Email・GitHub …）| 行き先」の
+  2列で、600 未満は札の下に行き先を積む（行き先の字が大きいので、札の列と並べると電話の幅で
+  メールのアドレスが途中で折れる）。行と行のあいだは罫線（一覧の行と同じ --line）。札は節の
+  見出しと同じ Poppins の英大文字。行き先は字で見せ（アドレスと @名前。紙に刷っても残る）、
+  一覧の行の題と同じ段・同じ書体で組む——このページの主役は表で、本文の字の大きさのままでは
+  下に空いた白に負けた。行の面ごと押せる——リンクの ::before を行いっぱいに被せる（一覧の行の
+  題の覆いと同じ）。矢印は行の右端で、メールは →、外のサイト（別タブ）は ↗。札の列の幅は
+  :root の --contact-label。札の頭に足元と同じ印（大きさも足元と同じ --social-icon）。
+  2列のときの札は1行なので、行の縦の真ん中に置く（印は字のベースラインを持たず、
+  ベースラインでそろえると札が下へずれる）
 */
 .contact-list {
   width: min(100%, 40em);
@@ -2554,18 +2566,17 @@ body[data-site] > .frame {
 .contact-list__row {
   position: relative;
   display: grid;
-  grid-template-columns: var(--contact-label) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: baseline;
-  gap: var(--sp-4);
+  gap: var(--sp-3);
   min-height: var(--tap);
-  padding-block: var(--sp-4);
+  padding-block: var(--sp-5);
   border-bottom: 1px solid var(--line);
 }
 
 .contact-list dt {
   display: flex;
   align-items: center;
-  align-self: center;
   gap: var(--sp-3);
   color: var(--ink-mid);
   font-family: var(--font-latin);
@@ -2583,18 +2594,28 @@ body[data-site] > .frame {
 
 .contact-list dd {
   min-width: 0;
-  font-size: var(--fs-lg);
+  font-family: var(--font-display);
+  font-size: var(--fs-display-xs);
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
   overflow-wrap: anywhere;
 }
 
 .contact-list__link {
   display: flex;
+  align-items: baseline;
   justify-content: space-between;
   gap: var(--sp-4);
-  text-decoration-line: underline;
-  text-decoration-color: transparent;
-  text-underline-offset: var(--sp-1);
-  transition: text-decoration-color var(--dur) var(--ease);
+}
+
+/*
+  行き先の字の下線。一覧の行の題（.entry__link）と同じく、ふだんから幅0の線を引いておき、
+  押せる行にマウスを重ねたときに左から伸ばす（手触りの括り）
+*/
+.contact-list__to {
+  background: linear-gradient(currentColor, currentColor) 0 100% / 0% 1px no-repeat;
+  transition: background-size var(--dur) var(--ease);
 }
 
 .contact-list__link::before {
@@ -2603,11 +2624,17 @@ body[data-site] > .frame {
   inset: 0;
 }
 
+/* 矢印は一覧の行の矢印（.entry__go）と同じ字・同じ応え方（触ると送られて濃くなる） */
 .contact-list__link::after {
   content: '↗';
   flex-shrink: 0;
-  color: var(--ink-mid);
-  font-size: var(--fs-md);
+  color: var(--ink-weak);
+  font-family: var(--font-sans);
+  font-size: var(--fs-lg);
+  font-weight: 400;
+  transition:
+    color var(--dur-fast) var(--ease),
+    translate var(--dur-spring) var(--ease-spring);
 }
 
 .contact-list__link[href^='mailto:']::after {
@@ -2824,6 +2851,16 @@ body[data-site] > .frame {
   /* 押し手は列いっぱいに伸ばさず、字の幅に戻す（600 未満で伸ばす理由は素の .cta に） */
   .hero__actions > .cta {
     flex: none;
+  }
+
+  /* 連絡先の表: 札の列を左に立て、行き先をその右に並べる（600 未満は札の下に積む） */
+  .contact-list__row {
+    grid-template-columns: var(--contact-label) minmax(0, 1fr);
+    gap: var(--sp-4);
+  }
+
+  .contact-list dt {
+    align-self: center;
   }
 
   /*
@@ -3047,8 +3084,13 @@ body[data-site] > .frame {
     text-decoration-color: currentColor;
   }
 
-  .contact-list__row:has(.contact-list__link):hover .contact-list__link {
-    text-decoration-color: currentColor;
+  .contact-list__row:has(.contact-list__link):hover .contact-list__to {
+    background-size: 100% 1px;
+  }
+
+  .contact-list__row:has(.contact-list__link):hover .contact-list__link::after {
+    color: var(--ink);
+    translate: var(--sp-2) 0;
   }
 
   .gallery__item:hover .gallery__open {
@@ -3354,6 +3396,36 @@ body[data-site] > .frame {
 
 .hero--cover > .hero__actions {
   animation-delay: calc(var(--reveal-from) + var(--stagger) * 6);
+}
+
+/*
+  締めの幕開け。Contact は入口と対のページなので、同じ rise と同じ間で、誘いの1文 → 表の行の
+  順に1回だけ下から入る。表は最初の画面に収まるので、一覧の行のような画面に入るときの動き
+  （view()）では動かない。サポートのページの表（.doc-contact）は本文の続きなので動かさない
+*/
+.contact > .contact__lead,
+.contact .contact-list__row {
+  animation: rise var(--dur-reveal) var(--ease) both;
+}
+
+.contact .contact-list__row:nth-child(1) {
+  animation-delay: var(--stagger);
+}
+
+.contact .contact-list__row:nth-child(2) {
+  animation-delay: calc(var(--stagger) * 2);
+}
+
+.contact .contact-list__row:nth-child(3) {
+  animation-delay: calc(var(--stagger) * 3);
+}
+
+.contact .contact-list__row:nth-child(4) {
+  animation-delay: calc(var(--stagger) * 4);
+}
+
+.contact .contact-list__row:nth-child(n + 5) {
+  animation-delay: calc(var(--stagger) * 5);
 }
 
 /*
