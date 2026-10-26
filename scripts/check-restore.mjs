@@ -1,7 +1,7 @@
 /*
   npm run check:restore — deploy が残す D1 の写しが、空の D1 に戻せるかを確かめる。
 
-  deploy.yml は移行を流す前に本番の写しを取り、artifact に残す。写しは「戻せる」と
+  deploy.yml は移行を流す前に本番の写しを取り、非公開の R2 に残す。写しは「戻せる」と
   確かめて初めて控えになる。1本の `d1 export`（定義と中身を1つの SQL に）は
   **戻せなかった**——写しは表を sqlite_master の順に書くので、先に作った子の表
   （0000_init の item_links・item_tags）の INSERT が親（items）の CREATE TABLE より

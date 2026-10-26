@@ -8,3 +8,10 @@ node_modules/
 
 # Python の書き出し（scripts/blackhole/render.py を動かすと生える）
 __pycache__/
+
+# 本番の写し（README の「戻す」の手元の写しと、R2 から落とした控え）。本番の全行と全画像が
+# 入るので、公開リポジトリに載せない。置き場はリポジトリの外が正（README）で、これは保険
+/backup/
+/schema*.sql
+/data*.sql
+/site-backup-*

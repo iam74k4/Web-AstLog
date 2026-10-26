@@ -556,7 +556,7 @@ URL を動かすなら前の URL は転送で残す（貼られたリンクを�
   **commit の SHA で固定**し、行末にタグ名を残す（`test/deploy.test.ts` が形を見る）
 - **本番の写しは定義と中身の2本で取る**（`--no-data` と `--no-schema`）。1本の export は、子の表の
   行が親の CREATE TABLE より前に来て空の D1 に戻せない。戻せることは `npm run check:restore` が
-  毎回確かめる。画像も `scripts/media-backup.mjs` で控えを取り、取得済み D1 の参照とSHA-256を照合する。復元は `check:media-restore`、管理の実操作は `check:admin`。artifact は90日保持
+  毎回確かめる。画像も `scripts/media-backup.mjs` で控えを取り、取得済み D1 の参照とSHA-256を照合する。復元は `check:media-restore`、管理の実操作は `check:admin`。控えは非公開の R2 に90日
 
 ## 気をつける場所
 

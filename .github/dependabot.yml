@@ -1,0 +1,13 @@
+# 依存の注意喚起と更新の PR（リポジトリは公開で、Dependabot の alerts は Settings の
+# Code security で有効にする）。action は commit の SHA で固定したまま上がる——行末の
+# タグ名も Dependabot が書き換える（test/deploy.test.ts の「SHA で固定」）
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

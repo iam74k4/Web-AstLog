@@ -1,7 +1,9 @@
 import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test'
 import checkYml from 'virtual:repo:.github/workflows/check.yml'
 import deployYml from 'virtual:repo:.github/workflows/deploy.yml'
+import gitignore from 'virtual:repo:.gitignore'
 import packageJson from 'virtual:repo:package.json'
+import readme from 'virtual:repo:README.md'
 import seedSql from 'virtual:repo:seed.sql'
 import { drizzle } from 'drizzle-orm/d1'
 import { describe, expect, it } from 'vitest'
@@ -249,7 +251,7 @@ describe('本番へ出す道', () => {
     expect(deploy).not.toMatch(/inputs\.migrate|migrate:\s*\n\s*description/)
     const exported = deploy.indexOf('wrangler d1 export astlog --remote')
     const bookmark = deploy.indexOf('wrangler d1 time-travel info astlog')
-    const uploaded = deploy.indexOf('actions/upload-artifact')
+    const uploaded = deploy.indexOf('npx wrangler r2 object put "astlog-backups/')
     const migrated = deploy.indexOf('wrangler d1 migrations apply astlog --remote')
     const deployed = deploy.indexOf('npx wrangler deploy')
     for (const at of [exported, bookmark, uploaded, migrated, deployed])
@@ -268,12 +270,38 @@ describe('本番へ出す道', () => {
     expect(deploy).toMatch(/wrangler d1 export astlog --remote[^\n]*--no-data/)
     expect(deploy).toMatch(/wrangler d1 export astlog --remote[^\n]*--no-schema/)
     expect(deploy).not.toMatch(/wrangler d1 export astlog --remote(?![^\n]*--no-(?:data|schema))/)
-    // 栞（Time Travel）は30日まで。控えがそれと同じ日に消えては、30日より前へ戻せない
-    const days = Number(deploy.match(/retention-days: (\d+)/)?.[1])
+    // 栞（Time Travel）は30日まで。控えがそれと同じ日に消えては、30日より前へ戻せない。
+    // 控えの R2 のライフサイクル規則は README の手順で作る（日数はそこに1か所）
+    const days = Number(readme.match(/--expire-days (\d+)/)?.[1])
     expect(days).toBeGreaterThan(30)
     // 戻せることは check の門が毎回確かめる
     expect(uncommented(checkYml)).toContain('npm run check:restore')
     expect(scripts['check:restore']).toBe('node scripts/check-restore.mjs')
+  })
+
+  /*
+    リポジトリは公開で、公開リポジトリの artifact は GitHub にログインした誰でも落とせる。
+    写しは本番 D1 の全行と消した画像の控えまで含むので、非公開の R2 にだけ置く。
+    export が出力に書く署名付き URL（1時間、誰でも写しを落とせる）は、公開のログに出さない。
+  */
+  it('写しは公開の artifact に置かない。export の署名付き URL をログに出さない', () => {
+    expect(deployYml).not.toContain('upload-artifact')
+    expect(deploy).not.toMatch(/retention-days/)
+    const exports = deploy
+      .split('\n')
+      .filter((line) => /wrangler d1 export astlog --remote/.test(line))
+    expect(exports).toHaveLength(2)
+    for (const line of exports) expect(line).toMatch(/ 2>&1 \| hide_urls$/)
+    expect(deploy).toMatch(
+      /hide_urls\(\) \{ sed -E 's#https\?:\/\/\[\^\[:space:\]"\]\+#\[URL\]#g'; \}/,
+    )
+    // pipefail（shell: bash）が無いと、sed を挟んだ export の失敗で止まらない
+    const step = deploy.slice(deploy.lastIndexOf('- name:', deploy.indexOf('wrangler d1 export')))
+    expect(step.slice(0, step.indexOf('run: |'))).toContain('shell: bash')
+    // 手元で写しを取る手順（README）の書き出し先は、間違えて push しても載らない
+    for (const pattern of ['/backup/', '/schema*.sql', '/data*.sql', '/site-backup-*']) {
+      expect(gitignore.split('\n'), pattern).toContain(pattern)
+    }
   })
 
   /*
@@ -288,7 +316,9 @@ describe('本番へ出す道', () => {
     expect(head).not.toMatch(secret)
     expect(steps.length).toBeGreaterThan(5)
     for (const step of steps) {
-      const usesWrangler = /npx wrangler (?:d1|deploy)|node scripts\/media-backup\.mjs/.test(step)
+      const usesWrangler = /npx wrangler (?:d1|r2|deploy)|node scripts\/media-backup\.mjs/.test(
+        step,
+      )
       const checksToken = /\$CLOUDFLARE_API_TOKEN/.test(step)
       expect(secret.test(step), step).toBe(usesWrangler || checksToken)
     }

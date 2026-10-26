@@ -100,9 +100,11 @@ const assetPlugin = (): Plugin => ({
 */
 const REPO = 'virtual:repo:'
 const REPO_FILES = new Set([
+  '.gitignore',
   '.github/workflows/check.yml',
   '.github/workflows/deploy.yml',
   'package.json',
+  'README.md',
   'public/_headers',
   'public/.well-known/security.txt',
   'scripts/touch-site.mjs',

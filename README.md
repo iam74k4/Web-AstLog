@@ -336,7 +336,7 @@ Worker を出して `/admin` にログインしたら、サイト設定・プロ
    `check:fit`・`check:admin`。`check.yml` をそのまま呼ぶ）
 3. 本番 D1 の写し（`wrangler d1 export` の定義 `schema-<sha>.sql` と中身
    `data-<sha>.sql` の2本）と Time Travel の栞（`bookmark.json`）を取り、
-   画像の実体・メタデータ・SHA-256を含む `media/` とともに、artifact `site-backup-<run id>` に残す（90日）。取得済み D1 の全画像参照と控えの一致を確かめ、欠落があれば移行前に止める
+   画像の実体・メタデータ・SHA-256を含む `media/` とともに、1つの `site-backup-<run id>.tar.gz` にして**非公開の R2 バケット `astlog-backups`** に置く（90日で消える）。取得済み D1 の全画像参照と控えの一致を確かめ、欠落があれば移行前に止める。Actions の artifact には置かない——リポジトリは公開で、公開リポジトリの artifact は GitHub にログインした誰でも落とせる。export が出力に書く署名付き URL も、ログでは伏せ字にする
 4. **マイグレーションを流す**（`wrangler d1 migrations apply --remote`。当てた移行は D1 に
    記録されていて、未適用のものだけが当たる。何も無ければ何もしない）
 5. `wrangler deploy`
@@ -359,13 +359,23 @@ Worker を出して `/admin` にログインしたら、サイト設定・プロ
    足す。承認と同じく GitHub の側で効く——deploy.yml の「main から実行しているか」は、
    実行したブランチ自身の YAML に書いてあるので、そのブランチで消せる（分かりやすく
    止めるための1段で、守りではない）
-4. `CLOUDFLARE_API_TOKEN`（対象アカウントの D1・Workers Scripts・Workers KV Storage の編集と、デプロイに必要な設定権限を持つトークン）を、この
+4. `CLOUDFLARE_API_TOKEN`（対象アカウントの D1・Workers Scripts・Workers KV Storage・Workers R2 Storage の編集と、デプロイに必要な設定権限を持つトークン）を、この
    environment の **Environment secrets にだけ**置く。**リポジトリの secret
    （Settings → Secrets and variables → Actions → Repository secrets）には置かない**——
    そこに置くと、environment を外した workflow をどのブランチにでも書けば、承認も
    ブランチの制限も通らずに読める。前にリポジトリの secret に置いていたなら、
    environment の側に置き直してからリポジトリの側を消す
 5. Settings → Branches で `main` を保護する。PR、最新の `check` / `fit` 成功、会話の解決を必須にし、管理者にも適用。強制 push と削除は禁止。1人運用のためレビュー人数は0（本番の承認は production 側）。
+6. 写しの置き場（非公開の R2）を作る。Cloudflare のダッシュボードで R2 を有効にしてから
+   （アカウントに1度。無料枠の内でも支払い方法の登録を求められる）、手元で:
+
+   ```bash
+   npx wrangler r2 bucket create astlog-backups
+   npx wrangler r2 bucket lifecycle add astlog-backups expire-90-days --expire-days 90 -y
+   ```
+
+   バケットは公開しない（r2.dev の URL も独自ドメインも付けない）。90日は Time Travel
+   （有料プランで30日）より長く、壊れに気づくのが遅れた日の最後の控え
 
 設定内容は `node scripts/setup-production.mjs` で表示し、`--apply` で適用できる。
 GitHub 連携に Administration / Environments の書き込み権限が必要。403 の場合は設定できていない。
@@ -417,8 +427,14 @@ https://github.com/actions/<名前>` で引き直し、行末のタグ名も直�
 注意」）。D1 を戻したら、下記の画像復元を済ませてから `npm run site:touch`（公開ページの写しの版を上げる。上の
 「公開ページの写し」）。
 
-Time Travel で戻すのがふつう。deploy が残した artifact の `bookmark.json` の
-`"bookmark"` を使う。
+Time Travel で戻すのがふつう。deploy が R2 に残した控えの `bookmark.json` の
+`"bookmark"` を使う。控えはリポジトリの外に落として開く（本番の全行と全画像が入る）。
+
+```bash
+mkdir -p ~/astlog-restore && cd ~/astlog-restore
+npx wrangler r2 object get astlog-backups/site-backup-<run id>.tar.gz --file=site-backup.tar.gz --remote
+tar -xzf site-backup.tar.gz   # bookmark.json・schema-<sha>.sql・data-<sha>.sql・media/
+```
 
 ```bash
 npx wrangler d1 time-travel restore astlog --bookmark=<bookmark>
@@ -429,7 +445,7 @@ npx wrangler d1 time-travel restore astlog --timestamp=2026-09-27T09:00:00Z
 Time Travel は D1 に最初から入っていて、過去の任意の時点に戻せる（Workers の有料プランで
 30日、無料で7日まで。戻すこと自体も取り消せる——restore は戻す直前の bookmark を出す）。
 それより前へ戻す・別の D1 に写す（ステージングを作る・別のアカウントへ移す）なら、
-artifact の写し（90日残る）を**新しい空の D1 に、定義 → 中身の順で**流す。
+R2 の控え（90日残る）の写しを**新しい空の D1 に、定義 → 中身の順で**流す。
 
 ```bash
 npx wrangler d1 create astlog-restore
@@ -445,11 +461,13 @@ npx wrangler d1 execute astlog-restore --remote --file=data-<sha>.sql     # 行�
 写しには `d1_migrations` の行も入るので、戻した D1 にはそのとき当たっていた移行が記録
 されたままになる（次の deploy は、そのあとの移行だけを当てる）。
 
-手元で写しを取るのも同じ2本。
+手元で写しを取るのも同じ2本。書き出し先はリポジトリの外にする（`.gitignore` も
+`/schema*.sql` などを除外しているが、それは保険）。
 
 ```bash
-npx wrangler d1 export astlog --remote --no-data --output=schema.sql
-npx wrangler d1 export astlog --remote --no-schema --output=data.sql
+mkdir -p ~/astlog-backups
+npx wrangler d1 export astlog --remote --no-data --output=$HOME/astlog-backups/schema.sql
+npx wrangler d1 export astlog --remote --no-schema --output=$HOME/astlog-backups/data.sql
 ```
 
 写しにはメンバーの連絡先とログインの紐づけ（セッションの id は D1 にもハッシュでしか
@@ -460,13 +478,13 @@ npx wrangler d1 export astlog --remote --no-schema --output=data.sql
 D1 を復元して、`wrangler.toml` の DB が復元先を指すことを確認してから実行する。復元中は管理画面での更新を止める。
 
 ```bash
-# artifact の media/ を指定する。D1 が参照する画像だけを元の公開キーへ復元し、実体のSHAを照合する
-node scripts/media-backup.mjs restore --directory backup/media
+# 控えを開いた media/ を指定する。D1 が参照する画像だけを元の公開キーへ復元し、実体のSHAを照合する
+node scripts/media-backup.mjs restore --directory ~/astlog-restore/media
 npm run site:touch
 ```
 
-Time Travel の時点に合う artifact が無い場合は、削除画像の控えが90日で消える前に `node scripts/media-backup.mjs export --directory backup/media` で現在の KV（控えを含む）を取り出してから同じ手順で戻す。参照画像が欠落・破損していたら、書き込む前に止まる。改修前に削除された画像や保持期限切れの画像は復元できない。
-手元のバックアップにも `media-backup.mjs export` と `verify --schema schema.sql --data data.sql` を加える。
+Time Travel の時点に合う控えが無い場合は、削除画像の控えが90日で消える前に `node scripts/media-backup.mjs export --directory ~/astlog-restore/media` で現在の KV（控えを含む）を取り出してから同じ手順で戻す。参照画像が欠落・破損していたら、書き込む前に止まる。改修前に削除された画像や保持期限切れの画像は復元できない。
+手元のバックアップにも `media-backup.mjs export` と `verify --schema schema.sql --data data.sql` を加える（どちらもリポジトリの外の置き場で）。
 `npm run check:media-restore` がバイナリ・メタデータ・削除画像・破損拒否を検証する。
 
 **前の版の Worker へ戻すときの注意。** 移行を流したあとの D1 の上で、その移行より前の
