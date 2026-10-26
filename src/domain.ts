@@ -145,8 +145,10 @@ export const ITEM_DOCUMENT = Object.fromEntries(ITEM_DOCUMENTS.map((doc) => [doc
 }
 
 /*
-  Story の塊（src/blocks.ts の itemStory が開く）。heading はテンプレートの欄の小見出しで、
-  null はテンプレートより前に書いた本文（見出しの無い段落）
+  小見出しと段落の塊。開くのは2つ（src/blocks.ts）——作品の Story（itemStory）では heading は
+  テンプレートの欄の小見出しで、null はテンプレートより前に書いた本文。個人ページの About
+  （aboutParts）では heading は紹介文に書いた「Work:」などの小見出しで、null は最初の
+  小見出しより前の段落。どちらも components.tsx の StoryParts が描く
 */
 export type StoryPart = { heading: string | null; paragraphs: string[] }
 

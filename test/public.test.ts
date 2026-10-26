@@ -2266,6 +2266,62 @@ describe('個人ページは1ページ', () => {
     expect(main).not.toContain('id="career"')
   })
 
+  it('About は「Work:」「Personal:」の1行の段落で小見出しに分かれる。見出しだけの塊は作らない', async () => {
+    /*
+      仕事と個人開発の話が1つの段落の列に混ざると、どこからが個人の話か読み分けられなかった。
+      印は技術・経歴の欄の見出しと同じ「末尾が :」。長い文の末尾の : と、Markdown の印（箇条書き・
+      太字・リンク）を含む段落は見出しにしない——見出しは字のまま出るので、印が見出しに残る
+    */
+    await seedMember({
+      headline: 'つくる工程そのものを、速くする。',
+      bio: [
+        '金融系のシステム開発と、個人のアプリ開発をしています。',
+        'Work:',
+        '証券会社向けの基幹システムを担当しています。',
+        '- 担当した工程:',
+        '-　全角の空白の箇条書き:',
+        '**Bold**:',
+        'Personal:',
+        'Swift で Mac のアプリを作っています。',
+        '以下は長い文の末尾がたまたまコロンになっている段落の例です:',
+        'Later:',
+      ].join('\n\n'),
+    })
+
+    const html = await okText('/members/okazaki')
+    const main = mainOf(html)
+    const about = main.slice(
+      main.indexOf('id="about"'),
+      main.indexOf('</section>', main.indexOf('id="about"')),
+    )
+    // 小節（h2）の下の小見出しは h3。英字だけなので lang="en"。見た目は Skills の塊と同じ .side-head
+    expect(
+      [...about.matchAll(/<h3 class="side-head" lang="([a-z]+)">([^<]+)<\/h3>/g)].map((m) => [
+        m[1],
+        m[2],
+      ]),
+    ).toEqual([
+      ['en', 'Work'],
+      ['en', 'Personal'],
+    ])
+    // 見出しより前の段落が先。段落の無い「Later:」は塊にしない
+    expect(about.indexOf('金融系のシステム開発')).toBeLessThan(about.indexOf('>Work<'))
+    expect(about).not.toContain('Later')
+    // 箇条書きと長い文は、末尾が : でも見出しにならない
+    expect(about).toContain('<li>担当した工程:</li>')
+    expect(about).toContain('<li>全角の空白の箇条書き:</li>')
+    expect(about).toContain('<strong>Bold</strong>:')
+    expect(about).toContain('<p>以下は長い文の末尾がたまたまコロンになっている段落の例です:</p>')
+    // 説明文は見出しではなく、1段落目の文を続ける
+    expect(html).toContain(
+      '<meta name="description" content="つくる工程そのものを、速くする。金融系のシステム開発と、個人のアプリ開発をしています。"/>',
+    )
+    // 全体ページは About（h3）の下なので h4
+    const whole = await okText('/all')
+    expect(whole).toContain('<h4 class="side-head" lang="en">Work</h4>')
+    expect(whole).toContain('<h4 class="side-head" lang="en">Personal</h4>')
+  })
+
   it('下書きのメンバーは、ページも前の続きの URL も 404', async () => {
     await seedMember({ slug: 'hidden', published: 0, ...FULL })
 

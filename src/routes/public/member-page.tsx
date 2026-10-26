@@ -14,6 +14,7 @@ import {
   Screen,
   SectionHead,
   SkillGroups,
+  StoryParts,
 } from '../../ui/components'
 import { describe, nameWithRole, sentences } from './meta'
 
@@ -70,7 +71,7 @@ export function memberPage(
   titled = false,
 ) {
   // 開き方は src/blocks.ts の memberUnits が正（全体ページの Profile の節も同じ式を読む）
-  const { bio, skills, career } = memberUnits(member)
+  const { about, skills, career } = memberUnits(member)
 
   /*
     説明文は大見出しと紹介文の1段落目をつないだもの（検索結果と共有カードに出る）。
@@ -78,7 +79,8 @@ export function memberPage(
     しか出ず、検索結果から誰の何のページかが分からなかった。長さは describe が切る
   */
   const description = describe(
-    sentences(member.headline, plainText(bio[0] ?? '')) || `${nameWithRole(member)}のプロフィール`,
+    sentences(member.headline, plainText(about[0]?.paragraphs[0] ?? '')) ||
+      `${nameWithRole(member)}のプロフィール`,
   )
 
   const node = (
@@ -109,9 +111,14 @@ export function memberPage(
       {/* 添えは置かない。訳語（紹介）は見出しを2度言うだけ */}
       <Screen id="about" label="About">
         <SectionHead title="About" chapter />
-        <Note paragraphs={bio} rich>
-          {bio.length ? null : <Empty>準備中です</Empty>}
-        </Note>
+        {/* 小節の見出しが h2 なので、Work / Personal の小見出しは h3（Skills の塊と同じ） */}
+        {about.length ? (
+          <StoryParts parts={about} level={3} />
+        ) : (
+          <Note paragraphs={[]}>
+            <Empty>準備中です</Empty>
+          </Note>
+        )}
       </Screen>
       {skills.length ? (
         <Screen id="skills" label="Skills">

@@ -222,9 +222,11 @@ const paragraphed = (total, parts, shape, start) =>
     .map((n, i) => text(n, i + start))
     .join('\n\n')
 
-// 紹介文は6段落・900 字（以前の上限は 400 字・3段落）
+// 紹介文は6段落・900 字（以前の上限は 400 字・3段落）。「Work:」「Personal:」の小見出しで2つに分ける
+// （src/blocks.ts の aboutParts。小見出しの段が入っても、横にはみ出さず錨がそろうかを測る）
 function bio(shape) {
-  return paragraphed(900, 6, shape, 1)
+  const parts = paragraphed(900, 6, shape, 1).split('\n\n')
+  return ['Work:', ...parts.slice(0, 4), 'Personal:', ...parts.slice(4)].join('\n\n')
 }
 
 function memberRows() {

@@ -2212,22 +2212,23 @@ body[data-site] > .frame {
 .skill-rows {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
+  gap: var(--sp-4);
 }
 
 .skill-rows + .skill-list {
-  margin-top: var(--sp-3);
+  margin-top: var(--sp-4);
 }
 
 /*
-  1行 = 添え（dt）+ 項目の列（dd）。添えは縮めず、項目の列だけが折り返す。
-  ベースラインでそろえるのは、添えの小さな字と、1行目の項目の大きな字の下端を
-  同じ線に乗せるため（中心でそろえると、字の大きさの差の分だけ添えが浮いて見える）。
+  1行 = 添え（dt）+ 項目の列（dd）。600 未満は添えを項目の上に積む——添えの列を左に
+  立てると、添えの無い塊（Apple・AI …）だけ項目が左端から始まり、電話の幅では項目の
+  左端が塊ごとに行き来して読みにくかった。積めば、どの塊も項目は左端から始まり、
+  項目の列が全幅を使えて折れも減る。600 以上は添えを左に並べる（下の 600 の括り）。
 */
 .skill-row {
   display: flex;
-  align-items: baseline;
-  gap: var(--sp-3);
+  flex-direction: column;
+  gap: var(--sp-1);
 }
 
 .skill-row dd {
@@ -2884,6 +2885,25 @@ body[data-site] > .frame {
 
   .entry:has(.entry__icon) .entry__meta {
     padding-left: 0;
+  }
+
+  /*
+    技術の行: 添えを左に、項目の列を右に並べる。添えは縮めず、項目の列だけが折り返す。
+    ベースラインでそろえるのは、添えの小さな字と、1行目の項目の大きな字の下端を
+    同じ線に乗せるため（中心でそろえると、字の大きさの差の分だけ添えが浮いて見える）
+  */
+  .skill-rows {
+    gap: var(--sp-3);
+  }
+
+  .skill-rows + .skill-list {
+    margin-top: var(--sp-3);
+  }
+
+  .skill-row {
+    flex-direction: row;
+    align-items: baseline;
+    gap: var(--sp-3);
   }
 
   /*
