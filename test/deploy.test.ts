@@ -298,10 +298,36 @@ describe('本番へ出す道', () => {
     // pipefail（shell: bash）が無いと、sed を挟んだ export の失敗で止まらない
     const step = deploy.slice(deploy.lastIndexOf('- name:', deploy.indexOf('wrangler d1 export')))
     expect(step.slice(0, step.indexOf('run: |'))).toContain('shell: bash')
-    // 手元で写しを取る手順（README）の書き出し先は、間違えて push しても載らない
-    for (const pattern of ['/backup/', '/schema*.sql', '/data*.sql', '/site-backup-*']) {
+    // 手元で写しを取る・開く手順（README）の書き出し先は、間違えて push しても載らない
+    for (const pattern of [
+      '/backup/',
+      '/schema*.sql',
+      '/data*.sql',
+      '/site-backup*',
+      '/bookmark.json',
+      '/media/',
+    ]) {
       expect(gitignore.split('\n'), pattern).toContain(pattern)
     }
+  })
+
+  it('R2 の控えは本番に置き、試行ごとに名前を分け、wrangler の上限より小さく割る', () => {
+    const puts = deploy.split('\n').filter((line) => /npx wrangler r2 object put/.test(line))
+    expect(puts.length).toBeGreaterThan(0)
+    // --remote が無いと、wrangler は runner の手元に置いて「Upload complete」と言う
+    for (const line of puts) {
+      expect(line).toMatch(/ --remote(?![\w-])/)
+      expect(line).not.toMatch(/--local/)
+    }
+    // Re-run は run id が同じまま移行のあとの D1 を写し直す。試行の番号で前の控えを残す
+    expect(deploy).toMatch(/name="site-backup-\$\{GITHUB_RUN_ID\}-\$\{GITHUB_RUN_ATTEMPT\}"/)
+    // 1つの物は 300 MiB まで。割る大きさはそれより小さく、揃った印（.parts）は最後に置く
+    const size = Number(deploy.match(/split -b (\d+)M /)?.[1])
+    expect(size).toBeGreaterThan(0)
+    expect(size).toBeLessThan(300)
+    expect(deploy.lastIndexOf('r2 object put')).toBe(
+      deploy.search(/r2 object put "astlog-backups\/\$\{name\}\.parts"/),
+    )
   })
 
   /*

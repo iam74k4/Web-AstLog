@@ -19,7 +19,8 @@ export const IMAGE_LIMIT_NOTE = `${IMAGE_LABELS}（1MB まで。GIF は 3MB ま�
 export const SHOT_LIMIT_NOTE = `${IMAGE_LIMIT_NOTE}・動画は H.264 の MP4 か MOV で 10MB まで`
 
 /*
-  画像は KV に置く。R2 が未有効なのと、画像は読むばかりで書き換えが稀なため。
+  画像は KV に置く。画像は読むばかりで書き換えが稀なため（R2 は本番の写しの非公開の置き場に
+  だけ使う）。
   置き場は2つ——メンバーの顔（avatars/）と作品のスクリーンショット（items/）。
   取り込みの経路と検査（種類と大きさ）は1本で、置き場の名前だけが違う。
 

@@ -20,7 +20,7 @@ workers.dev とプレビュー URL は無効。公開はデプロイ後で、購
 | --- | --- | --- |
 | 実行環境 | Cloudflare Workers | 常時起動のサーバーを持たずに済む |
 | データ | D1（SQLite） | メンバーと Projects（個人開発 / 業務） |
-| 画像 | KV | アバター（`avatars/`）と作品の画像（メインの画像・アイコン・ほかの画像。`items/`）だけ。R2 が未有効なので当面こちら。受けるのは中身で確かめた PNG・JPEG・WebP・AVIF・GIF だけ。ほかに写しの版の1行（`site:version`）が同居している |
+| 画像 | KV | アバター（`avatars/`）と作品の画像（メインの画像・アイコン・ほかの画像。`items/`）だけ。読むばかりで書き換えが稀なので KV（R2 は本番の写しの非公開の置き場にだけ使う）。受けるのは中身で確かめた PNG・JPEG・WebP・AVIF・GIF だけ。ほかに写しの版の1行（`site:version`）が同居している |
 | 公開ページの写し | Cache API ＋ KV の版 | 訪問者の画面は D1 に聞かずに返し、D1 が落ちても前の写しを出す（下の「公開ページの写し」） |
 | 管理画面のログイン | GitHub / Google の OAuth | パスワードを持たない。本人は提供元の ID で照合する |
 | 言語 | TypeScript | |
@@ -336,7 +336,7 @@ Worker を出して `/admin` にログインしたら、サイト設定・プロ
    `check:fit`・`check:admin`。`check.yml` をそのまま呼ぶ）
 3. 本番 D1 の写し（`wrangler d1 export` の定義 `schema-<sha>.sql` と中身
    `data-<sha>.sql` の2本）と Time Travel の栞（`bookmark.json`）を取り、
-   画像の実体・メタデータ・SHA-256を含む `media/` とともに、1つの `site-backup-<run id>.tar.gz` にして**非公開の R2 バケット `astlog-backups`** に置く（90日で消える）。取得済み D1 の全画像参照と控えの一致を確かめ、欠落があれば移行前に止める。Actions の artifact には置かない——リポジトリは公開で、公開リポジトリの artifact は GitHub にログインした誰でも落とせる。export が出力に書く署名付き URL も、ログでは伏せ字にする
+   画像の実体・メタデータ・SHA-256を含む `media/` とともに、`site-backup-<run id>-<試行>.tar.gz` にまとめ、**非公開の R2 バケット `astlog-backups`** に 250 MiB ずつに割って置く（割った名前の一覧 `.parts` が揃った印。90日で消える）。取得済み D1 の全画像参照と控えの一致を確かめ、欠落があれば移行前に止める。Actions の artifact には置かない——リポジトリは公開で、公開リポジトリの artifact は GitHub にログインした誰でも落とせる。export が出力に書く署名付き URL も、ログでは伏せ字にする
 4. **マイグレーションを流す**（`wrangler d1 migrations apply --remote`。当てた移行は D1 に
    記録されていて、未適用のものだけが当たる。何も無ければ何もしない）
 5. `wrangler deploy`
@@ -375,7 +375,13 @@ Worker を出して `/admin` にログインしたら、サイト設定・プロ
    ```
 
    バケットは公開しない（r2.dev の URL も独自ドメインも付けない）。90日は Time Travel
-   （有料プランで30日）より長く、壊れに気づくのが遅れた日の最後の控え
+   （有料プランで30日）より長く、壊れに気づくのが遅れた日の最後の控え。
+   以前の deploy は控えを Actions の artifact（公開リポジトリでは GitHub にログインした誰でも
+   落とせる）に置いていた。残っていれば Actions の画面か下の1行で消す（元に戻せない）
+
+   ```bash
+   gh api 'repos/iam74k4/Web-AstLog/actions/artifacts?per_page=100' --paginate --jq '.artifacts[] | select(.name | startswith("site-backup-")) | .id' | xargs -I{} gh api -X DELETE repos/iam74k4/Web-AstLog/actions/artifacts/{}
+   ```
 
 設定内容は `node scripts/setup-production.mjs` で表示し、`--apply` で適用できる。
 GitHub 連携に Administration / Environments の書き込み権限が必要。403 の場合は設定できていない。
@@ -428,12 +434,18 @@ https://github.com/actions/<名前>` で引き直し、行末のタグ名も直�
 「公開ページの写し」）。
 
 Time Travel で戻すのがふつう。deploy が R2 に残した控えの `bookmark.json` の
-`"bookmark"` を使う。控えはリポジトリの外に落として開く（本番の全行と全画像が入る）。
+`"bookmark"` を使う。控えはリポジトリの外（`~/astlog-restore`）に落として開く（本番の全行と
+全画像が入る）。コマンドはどれもリポジトリの根で打つ（wrangler と scripts/ はここにある）。
 
 ```bash
-mkdir -p ~/astlog-restore && cd ~/astlog-restore
-npx wrangler r2 object get astlog-backups/site-backup-<run id>.tar.gz --file=site-backup.tar.gz --remote
-tar -xzf site-backup.tar.gz   # bookmark.json・schema-<sha>.sql・data-<sha>.sql・media/
+name=site-backup-<run id>-<試行>   # deploy の run の番号と、何回目の実行か（ふつうは 1）
+mkdir -p ~/astlog-restore
+npx wrangler r2 object get "astlog-backups/$name.parts" --file="$HOME/astlog-restore/$name.parts" --remote
+for part in $(cat "$HOME/astlog-restore/$name.parts"); do
+  npx wrangler r2 object get "astlog-backups/$part" --file="$HOME/astlog-restore/$part" --remote
+done
+cat "$HOME/astlog-restore/$name.tar.gz".??? | tar -xzf - -C ~/astlog-restore
+# ~/astlog-restore に bookmark.json・schema-<sha>.sql・data-<sha>.sql・media/
 ```
 
 ```bash
@@ -449,8 +461,8 @@ R2 の控え（90日残る）の写しを**新しい空の D1 に、定義 → �
 
 ```bash
 npx wrangler d1 create astlog-restore
-npx wrangler d1 execute astlog-restore --remote --file=schema-<sha>.sql   # 表と索引・移行の記録の表
-npx wrangler d1 execute astlog-restore --remote --file=data-<sha>.sql     # 行（d1_migrations の行も）
+npx wrangler d1 execute astlog-restore --remote --file=$HOME/astlog-restore/schema-<sha>.sql   # 表と索引・移行の記録の表
+npx wrangler d1 execute astlog-restore --remote --file=$HOME/astlog-restore/data-<sha>.sql     # 行（d1_migrations の行も）
 # 中身を確かめてから、wrangler.toml の database_id をこちらへ差し替えて出す
 ```
 

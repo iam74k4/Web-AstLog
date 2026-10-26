@@ -121,26 +121,32 @@ jobs:
           node scripts/media-backup.mjs export --directory backup/media
           node scripts/media-backup.mjs verify --directory backup/media --schema "backup/schema-${GITHUB_SHA}.sql" --data "backup/data-${GITHUB_SHA}.sql"
 
-      # 写しは非公開の R2 バケット astlog-backups に1つの tar.gz で置く。Actions の artifact には
+      # 写しは非公開の R2 バケット astlog-backups に置く。Actions の artifact には
       # 置かない——リポジトリは公開で、公開リポジトリの artifact は GitHub にログインした誰でも
       # 落とせる。中身は本番 D1 の全行（下書き・連絡先・ログインの紐づけ）と、消した画像の
       # 控え（archive/）まで含む KV の全画像。
       # バケットは公開しない（r2.dev も独自ドメインも付けない）。置いたものはバケットの
       # ライフサイクル規則で90日後に消える（作り方は README の「本番に出す」）——Time Travel
       # （30日・無料なら7日）より長く置く。栞の期限を過ぎてから壊れに気づいたときの、最後の
-      # 控えなので。wrangler で置ける1つの物は 300 MiB まで。超えたら移行の前に止まる
+      # 控えなので。
+      # - 名前に試行の番号（GITHUB_RUN_ATTEMPT）を入れる。同じ run を「Re-run」すると run id は
+      #   同じまま、移行を流したあとの D1 を写し直す——番号が無いと、移行の前の控えが上書きされる
+      # - 1つの tar.gz を 250 MiB ずつに割って置く（wrangler で置ける1つの物は 300 MiB まで。
+      #   画像は公開分だけで 300 MB まで置け、消した画像の控えはその外に90日ある）。割った名前の
+      #   一覧（.parts）を最後に置き、揃った印にする。戻し方は README の「戻す」
       - name: 写しを非公開の R2 に置く
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         shell: bash
         run: |
-          archive="site-backup-${GITHUB_RUN_ID}.tar.gz"
-          tar -C backup -czf "$archive" .
-          if [ "$(stat -c %s "$archive")" -gt 314572800 ]; then
-            echo "::error::写しが 300 MiB を超えた（wrangler の r2 object put の上限）。画像の控えを別の物に分けて置くよう、この step を直す"
-            exit 1
-          fi
-          npx wrangler r2 object put "astlog-backups/${archive}" --file "$archive" --content-type application/gzip --remote
+          name="site-backup-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          tar -C backup -czf "${name}.tar.gz" .
+          split -b 250M -d -a 3 "${name}.tar.gz" "${name}.tar.gz."
+          ls "${name}.tar.gz".??? > "${name}.parts"
+          for part in $(cat "${name}.parts"); do
+            npx wrangler r2 object put "astlog-backups/${part}" --file "$part" --content-type application/octet-stream --remote
+          done
+          npx wrangler r2 object put "astlog-backups/${name}.parts" --file "${name}.parts" --content-type text/plain --remote
 
       - name: マイグレーション（未適用のものだけ）
         env:

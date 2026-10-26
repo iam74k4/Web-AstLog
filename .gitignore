@@ -14,4 +14,6 @@ __pycache__/
 /backup/
 /schema*.sql
 /data*.sql
-/site-backup-*
+/site-backup*
+/bookmark.json
+/media/

@@ -3,7 +3,8 @@ import type { User } from './db/schema'
 export type Env = {
   DB: D1Database
   /*
-    アバターと作品の画像（avatars/ と items/）。R2 が未有効なので当面ここ。
+    アバターと作品の画像（avatars/ と items/）。読むばかりで書き換えが稀なので KV（R2 は本番の
+    写しの非公開の置き場にだけ使う。.github/workflows/deploy.yml）。
     ほかに1行だけ、公開ページの写しの内容の版（site:version。src/lib/page-cache.ts）。
     /images/* は IMAGE_KEY で2つの置き場しか開かないので、この行は外から読めない
   */
