@@ -933,6 +933,11 @@ describe('部品の作法', () => {
       'grid-template-columns: var(--entry-meta) minmax(0, 1fr)',
     )
     expect(bodyOf(wide, '.skill-group > :not(.side-head) {')).toContain('grid-column: 2')
+    // 600 未満は添えを項目の上に積む（添えの無い塊と項目の左端をそろえる）。600 以上は横に並べる
+    expect(bodyOf(sheet, '.skill-row {')).toContain('flex-direction: column')
+    const row = bodyOf(wide, '.skill-row {')
+    expect(row).toContain('flex-direction: row')
+    expect(row).toContain('align-items: baseline')
     // 添えの長さ（「3年以上」と取得年）が違っても、項目の頭を1本の縦の線にそろえる
     expect(bodyOf(sheet, '.skill-row__note {')).toContain('min-inline-size: var(--skill-note)')
     expect(bodyOf(sheet, ':root {')).toContain('--skill-note: 4em')

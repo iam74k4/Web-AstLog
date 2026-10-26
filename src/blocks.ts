@@ -8,7 +8,7 @@ import {
   parseLines,
   parseSkills,
 } from './lib/format'
-import { type DocumentBlock, documentBlocks, MARKDOWN_HINT } from './lib/markdown'
+import { type DocumentBlock, documentBlocks, MARKDOWN_HINT, prose } from './lib/markdown'
 
 /*
   トップページを組むブロックの一覧。
@@ -399,14 +399,60 @@ function memberPublishErrors(target: Extract<PublishTarget, { kind: 'member' }>)
 }
 
 /*
-  個人ページの中身を開く。紹介は段落、技術は塊（小見出しひとそろい）、経歴は行。
+  紹介文（members.bio）を、小見出しと段落の塊（src/domain.ts の StoryPart。作品の Story と
+  同じ形）の並びに開く。
+
+  - 前後を空行で挟んだ1行の段落で、末尾が : のもの（「Work:」「Personal:」）は次の塊の
+    小見出し。末尾の : は技術・経歴の欄の見出しと同じ印だが、こちらは段落の欄なので1行で
+    段落を成すものだけ——仕事と個人開発の話が1つの段落の列に混ざると、どこからが個人の話か
+    読み分けられなかった
+  - 小見出しと見なすのは ABOUT_HEADING_MAX 字まで。長い文の末尾がたまたま : でも、文のまま
+  - 小見出しは字だけ。Markdown の印（太字・リンク・行頭の「- 」）を含む段落は、末尾が : でも
+    段落のまま描く（見出しは字のまま出るので、「**Work**:」の * が見出しに残った）。どれが印かは
+    描く側と同じ prose に聞く（行頭の「-　」のように全角の空白が続く箇条書きも、描く側と同じく
+    箇条書き）
+  - 最初の小見出しより前の段落は、見出しの無い塊として先頭に。段落の無い小見出しは塊にしない
+    （見出しだけ残さない）
+*/
+export const ABOUT_HEADING_MAX = 24
+const aboutHeading = (block: string) => {
+  if (block.includes('\n') || !block.endsWith(':') || [...block].length > ABOUT_HEADING_MAX + 1) {
+    return null
+  }
+  const [only, ...rest] = prose(block)
+  const plain =
+    !rest.length &&
+    only?.kind === 'paragraph' &&
+    only.inlines.length === 1 &&
+    only.inlines[0]?.kind === 'text'
+  return plain ? block.slice(0, -1).trim() || null : null
+}
+
+export function aboutParts(text: string): StoryPart[] {
+  const parts: StoryPart[] = []
+  let current: StoryPart = { heading: null, paragraphs: [] }
+  for (const block of paragraphs(text)) {
+    const heading = aboutHeading(block)
+    if (heading === null) {
+      current.paragraphs.push(block)
+      continue
+    }
+    if (current.paragraphs.length) parts.push(current)
+    current = { heading, paragraphs: [] }
+  }
+  if (current.paragraphs.length) parts.push(current)
+  return parts
+}
+
+/*
+  個人ページの中身を開く。紹介は小見出しと段落の塊、技術は塊（小見出しひとそろい）、経歴は行。
   公開ページ（src/routes/public/member-page.tsx の memberPage と、全体ページの
   ProfileWhole）はこの列を描く。開き方を2か所に書くと、個人ページと全体ページで
   同じ人の中身が違って見える。
 */
 export function memberUnits(member: Pick<Member, 'bio' | 'skillsText' | 'careerText'>) {
   return {
-    bio: paragraphs(member.bio),
+    about: aboutParts(member.bio),
     skills: parseSkills(member.skillsText),
     career: parseCareer(member.careerText),
   }

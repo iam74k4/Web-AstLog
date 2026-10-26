@@ -32,7 +32,7 @@
 ので、同じ指定のまま和文はヒラギノに落ちる。本文は `--font-sans` のまま。
 
 **和文の最小は `--fs-meta`（12）。** `--fs-label`（11）は和文が入らない英大文字の小見出し
-と数字の札（Skills・Story の英字の小見出し・ADMIN・404 の番号・見出しの件数）だけ。
+と数字の札（Skills・Story・About の英字の小見出し・ADMIN・404 の番号・見出しの件数）だけ。
 **等幅（`--font-mono`）もその札だけ**——目次の行き先・一覧の札・タグ・実績値・GitHub の札は
 本文の書体（等幅の小さな大文字では、ページを移る手がいちばん読みにくかった）。
 英字だけの小見出しは `src/ui/components.tsx` の `langOf` が `lang="en"` を付け、等幅はその
@@ -297,7 +297,7 @@ Projects・Profile・Contact・打ち込むブロックがそれぞれ1ページ
 **1ページ = 1ドキュメント。** ページごとの URL はどれも `h1` を**ちょうど1つ**持ち、ページの
 中の小節は `h2`（個人ページの About / Skills / Career、作品の Story）。`/all` だけが Hero の `h1` に
 節が `h2` でぶら下がる（1人のサイトの Profile の節は `h3` / `h4` まで。`SectionHead` の `sub` と
-`SkillGroups` の `level`）。出し分けは `renderBlock` の `whole`（全体ページの節として描くか）1つが
+`StoryParts` / `SkillGroups` の `level`）。出し分けは `renderBlock` の `whole`（全体ページの節として描くか）1つが
 決める。**目に見える見出しの無いページ**（締めの Contact・見出しを空けたメモ）は
 `.sr-only` の `h1`（`HiddenHeading`）を置き、メモは名前「メモ」を持つ（`test/public.test.ts` の
 「サイトの全ページ」が `h1` を数える）。`<title>`・`description`・canonical・構造化データも
@@ -379,9 +379,8 @@ HTML に絵・件数の帯は置かない。
 **Contact は連絡先があるときだけ出す。** メール・GitHub・Discord のどれかがサイト設定にあれば
 （`src/site.ts` の `hasContact`）、`blockShown` が数える。無ければページも目次の行も作らない。
 
-**Contact は見える h1・誘いの1文・連絡先の表だけ**。1文（`contactLead`）は description にも
-使う。表は Email / GitHub / X / Instagram / Discord の `dt` / `dd` で、行き先は字（紙に刷っても
-残る）。札の頭に足元と同じ印。`/all` も同じ。
+**Contact は見える h1・誘いの1文・連絡先の表だけ**。1文（`contactLead`）は description
+にも使う。表は `dt` / `dd` で行き先は字（印刷に残る）。札の頭に足元の印。
 
 **ロゴは字で組む ΛSTLOG**（横棒の無い A。O は軌道の輪で、右上 45° に衛星を1つ）。上の帯・ログイン・共有カード・素材は
 同じ1つの形で、大きさで形を変えない。
@@ -399,7 +398,8 @@ HTML に絵・件数の帯は置かない。
 - 見出しは言い切り。動詞で終える
 - **本文は「です・ます」**（`SITE.heroLead`・紹介文・`SITE.contactLead`・作品の Story）
 - **長い文章の欄（紹介文・作品の本文・メモ）は小さな Markdown**（`src/lib/markdown.ts`。箇条書き・
-  太字・リンクだけ。HTML の文字列は作らず、リンクは `isSafeUrl`。説明文と題は `plainText`）
+  太字・リンクだけ。HTML の文字列は作らず、リンクは `isSafeUrl`。説明文と題は `plainText`）。紹介文の
+  「Work:」の行は小見出し（`aboutParts`）
 - **一覧の行の説明（`items.summary`）は常体の2文**（「何であるか。何をしたか。」）。目録の文なので
   本文と文体で分ける。管理画面の欄のヒントにも同じことを書いてある
 - ラベル（タグ・役割・年）は名詞のまま。文にしない

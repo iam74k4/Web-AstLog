@@ -277,7 +277,7 @@ const MemberForm = (props: {
             name="bio"
             value={value('bio')}
             rows={5}
-            hint={`「です・ます」で。空行で段落を分ける · ${MARKDOWN_HINT}`}
+            hint={`「です・ます」で。空行で段落を分ける。「Work:」「Personal:」のように末尾が : の1行を前後の空行で挟むと小見出し · ${MARKDOWN_HINT}`}
             error={props.errors?.bio}
           />
           <Area

@@ -990,21 +990,22 @@ export const ItemShots = ({ images }: { images: ItemImage[] }) =>
   本文（見出しの無い段落）が先で、テンプレートの欄（背景・取り組み・工夫・成果）が決まった
   順に続く——個人開発も業務も同じ見出しで並ぶ。
 
-  欄の小見出しは Skills の英字の小見出しと同じ形（.side-head。英語だけなので lang="en"）。
-  要素の段は置かれる場所の階層で変わる——作品のページは Story（h2）の下なので h3、
+  欄の小見出しは Skills の英字の小見出しと同じ形（.side-head。英字だけなら lang="en"。
+  langOf）。要素の段は置かれる場所の階層で変わる——作品のページは Story（h2）の下なので h3、
   全体ページは作品名（h3）の下なので h4（SkillGroups の level と同じ）。見た目は同じ。
+  個人ページの About（src/blocks.ts の aboutParts。Work / Personal）も同じ部品で描く。
 */
-const StoryParts = ({ parts, level }: { parts: StoryPart[]; level: 3 | 4 }) => (
+export const StoryParts = ({ parts, level }: { parts: StoryPart[]; level: 3 | 4 }) => (
   <div class="story-parts">
     {parts.map((part) =>
       part.heading ? (
         <div key={part.heading}>
           {level === 3 ? (
-            <h3 class="side-head" lang="en">
+            <h3 class="side-head" lang={langOf(part.heading)}>
               {part.heading}
             </h3>
           ) : (
-            <h4 class="side-head" lang="en">
+            <h4 class="side-head" lang={langOf(part.heading)}>
               {part.heading}
             </h4>
           )}
@@ -1708,11 +1709,11 @@ export const DocumentBody = ({
   1つの文書に積んだものなので、Team のカード1枚ではなく、プロフィールそのものを
   1つの節として置く。見出しの段は
   Hero の h1 → Profile の h2（節の SectionHead）→ About / Skills / Career の h3
-  （SectionHead の sub）→ 技術の小見出しの h4（SkillGroups の level）。
+  （SectionHead の sub）→ 紹介と技術の小見出しの h4（StoryParts / SkillGroups の level）。
 
   新しい見た目はほとんど持たない——名札（Nameplate）、大見出し（個人ページの h1 と
   同じ太さと大きさの1文。.profile__headline。節の中なので見出しの要素にはしない）、
-  紹介（Note）、技術（SkillGroups）、経歴（Timeline）。どれも個人ページと同じ部品。
+  紹介（StoryParts）、技術（SkillGroups）、経歴（Timeline）。どれも個人ページと同じ部品。
   足したのは小節を縦に並べる .profile の間隔と、h3 の段だけ。
 
   中身の無い小節は出さない（見出しだけ残さない）。個人ページの About は空でも
@@ -1722,13 +1723,13 @@ export const DocumentBody = ({
 */
 export const ProfileWhole = ({
   member,
-  bio,
+  about,
   skills,
   career,
   children,
 }: {
   member: Member
-  bio: string[]
+  about: StoryPart[]
   skills: SkillGroup[]
   career: CareerGroup[]
   children?: Child
@@ -1741,10 +1742,11 @@ export const ProfileWhole = ({
       </p>
     ) : null}
     {children}
-    {bio.length ? (
+    {about.length ? (
       <div>
         <SectionHead title="About" sub={3} />
-        <Note paragraphs={bio} rich />
+        {/* About の h3 の下なので、Work / Personal の小見出しは h4 */}
+        <StoryParts parts={about} level={4} />
       </div>
     ) : null}
     {skills.length ? (
