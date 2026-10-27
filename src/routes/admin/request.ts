@@ -16,45 +16,58 @@ export const db = (c: { env: { DB: D1Database } }) => drizzle(c.env.DB, { schema
 /*
   認証のあとでフォームを先に読む。壊れた multipart の境界などは入力の 400 で返し、
   サーバー障害の 500 にしない。Hono が formData を要求ごとにキャッシュするので、
-  各保存ルートは同じ内容を再利用できる。フォーム以外（本文の無い操作を含む）は触らない。
+  各保存ルートは同じ内容を再利用できる。本文の無い POST と長さ 0 の本文は、フォームの種類で
+  なくてもルートへ通す（読むものが無い）。
 
   1回の送信は合計 24MB まで（読む前に Content-Length で止める）。Worker のメモリは 128MB で、
   フォームを読むと中身が何重かに写される——動画（1本 10MB まで）を8本まとめて送ると収まらない。
   24MB なら動画2本と画像を何枚か足せる。止めたときはフォームを描き直せない（読んでいない）ので、
   戻って減らすように言う（ブラウザの「戻る」は書いた欄を残す）
 
-  長さを名乗らない送信（chunked）と数でない長さは 411 で断る。この上限は名乗った長さしか
-  見ないので、名乗らなければ素通りして全部を読んでしまう。ブラウザのフォームは送る前に長さが
-  決まっていて、いつも Content-Length を付ける
+  本文のある POST は、種類を問わずここで止める。長さを名乗らない送信（chunked）と数でない長さは
+  411、フォームの2種類でない本文は 415 で、どちらも読まずに断る。この上限は名乗った長さしか
+  見ないうえ、保存のルートは種類を見ずに formData を呼び、workerd は種類を断る前に本文を全部
+  読む——text/plain や、重ねて送られて畳まれた「multipart/form-data, text/plain」でも上限を
+  素通りして全部を読んでしまう。ブラウザのフォームは送る前に長さが決まっていて、いつも
+  Content-Length とフォームの種類を付ける
 */
 export const MAX_FORM_BYTES = 24_000_000
 
+const FORM_TYPES = new Set(['multipart/form-data', 'application/x-www-form-urlencoded'])
+
 export const readAdminForm = createMiddleware<AppEnv>(async (c, next) => {
-  const type = c.req.header('content-type')?.split(';', 1)[0]?.trim().toLowerCase()
-  if (
-    c.req.method === 'POST' &&
-    (type === 'multipart/form-data' || type === 'application/x-www-form-urlencoded')
-  ) {
-    const length = c.req.header('content-length')?.trim()
-    if (!length || !/^[0-9]+$/.test(length)) {
-      return c.text(
-        '送信の長さ（Content-Length）が分からないため受け取れません。ブラウザのフォームから送り直してください。',
-        411,
-      )
+  if (c.req.method === 'POST') {
+    const type = c.req.header('content-type')?.split(';', 1)[0]?.trim().toLowerCase() ?? ''
+    if (c.req.raw.body) {
+      const length = c.req.header('content-length')?.trim()
+      if (!length || !/^[0-9]+$/.test(length)) {
+        return c.text(
+          '送信の長さ（Content-Length）が分からないため受け取れません。ブラウザのフォームから送り直してください。',
+          411,
+        )
+      }
+      if (Number(length) > MAX_FORM_BYTES) {
+        return c.text(
+          '1回の保存で送れるのは合計 24MB までです。前の画面に戻り、動画や画像を分けて保存してください。',
+          413,
+        )
+      }
+      if (Number(length) > 0 && !FORM_TYPES.has(type)) {
+        return c.text(
+          'フォームの送信（multipart/form-data か application/x-www-form-urlencoded）しか受け取れません。ブラウザのフォームから送り直してください。',
+          415,
+        )
+      }
     }
-    if (Number(length) > MAX_FORM_BYTES) {
-      return c.text(
-        '1回の保存で送れるのは合計 24MB までです。前の画面に戻り、動画や画像を分けて保存してください。',
-        413,
-      )
-    }
-    try {
-      await c.req.formData()
-    } catch {
-      return c.text(
-        'フォームを読み取れませんでした。前の画面に戻り、もう一度送信してください。',
-        400,
-      )
+    if (FORM_TYPES.has(type)) {
+      try {
+        await c.req.formData()
+      } catch {
+        return c.text(
+          'フォームを読み取れませんでした。前の画面に戻り、もう一度送信してください。',
+          400,
+        )
+      }
     }
   }
   await next()

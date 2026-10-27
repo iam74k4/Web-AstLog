@@ -404,7 +404,8 @@ describe('保存前のサイト設定・見た目', () => {
       headers: { 'content-type': 'application/json' },
       body: '{}',
     })
-    expect(json.status).toBe(400)
+    // フォームでない本文は読まずに断る（src/routes/admin/request.ts の readAdminForm）
+    expect(json.status).toBe(415)
     expect(await loadSiteSettings(db())).toEqual(savedSite)
     expect(await env.MEDIA.get(SITE_VERSION_KEY)).toBe(version)
   })

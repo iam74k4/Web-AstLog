@@ -290,6 +290,44 @@ describe('1枚の上限は種類ごと', () => {
     expect(ok.status).toBe(303)
     expect(await db().select().from(schema.items)).toHaveLength(1)
   })
+
+  /*
+    保存のルートは種類を見ずに formData を呼び、workerd は種類を断る前に本文を全部読む。
+    フォームの種類でない本文（text/plain・重ねて送られて畳まれた種類）も、長さを名乗らなければ
+    411、名乗れば 415 で、上限を越える本文を読み切る前に断る
+  */
+  it('フォームでない種類の本文も、上限を素通りさせずに読まずに断る', async () => {
+    const signed = await signIn()
+    const chunk = 1_000_000
+    const chunks = Math.ceil(MAX_FORM_BYTES / chunk) + 2
+    const folded = 'multipart/form-data, text/plain; boundary=x'
+    for (const type of ['text/plain', folded, 'application/octet-stream']) {
+      let pulled = 0
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (pulled >= chunks * chunk) return controller.close()
+          pulled += chunk
+          controller.enqueue(new Uint8Array(chunk))
+        },
+      })
+      const chunked = await signed('/admin/items', {
+        method: 'POST',
+        headers: { 'content-type': type },
+        body,
+      })
+      expect(chunked.status, type).toBe(411)
+      expect(pulled, type).toBeLessThan(MAX_FORM_BYTES)
+
+      const sized = await signed('/admin/items', {
+        method: 'POST',
+        headers: { 'content-type': type },
+        body: 'type=app&title=Demo&slug=demo',
+      })
+      expect(sized.status, type).toBe(415)
+      expect(await sized.text(), type).toContain('フォームの送信')
+    }
+    expect(await db().select().from(schema.items)).toHaveLength(0)
+  })
 })
 
 /*
