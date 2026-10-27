@@ -444,7 +444,9 @@ describe('500 のログ', () => {
               get(inner, name) {
                 if (name === 'bind') {
                   return (...values: unknown[]) =>
-                    values.includes(marker) ? fail(target, inner) : inner.bind(...values)
+                    values.some((value) => typeof value === 'string' && value.includes(marker))
+                      ? fail(target, inner)
+                      : inner.bind(...values)
                 }
                 const value = Reflect.get(inner, name)
                 return typeof value === 'function' ? value.bind(inner) : value
@@ -481,11 +483,17 @@ describe('500 のログ', () => {
     }
   }
 
-  it('失敗したクエリの束縛値を書かない（method・path・例外の名前と文だけ）', async () => {
-    // 1文の INSERT が本物の D1 の失敗（無い表）で落ちる
+  it('失敗したクエリの束縛値を書かない（method・path・例外の名前と文とスタックの行だけ）', async () => {
+    // 1文の INSERT が本物の D1 の失敗（無い表）で落ちる。紹介文はスタックの行に見せかけた値で、
+    // 例外の文（params:）の中に入る——行の形だけで拾うと、これがログに出る
     const logged = await postLogged(
       '/admin/members',
-      form({ name: '目印', slug: 'marker', location: marker }),
+      form({
+        name: '目印',
+        slug: 'marker',
+        location: marker,
+        bio: `目印\n    at ${marker} (index.js:1:1)`,
+      }),
       failingOn((target) => target.prepare('select * from no_such_table_for_log_test')),
     )
     expect(logged.join('\n')).not.toContain(marker)
@@ -495,6 +503,8 @@ describe('500 のログ', () => {
     expect(logged[0]).not.toContain('log-test')
     expect(logged[0]).toContain('DrizzleQueryError: Failed query: insert into "members"')
     expect(logged[0]).toContain('no such table: no_such_table_for_log_test')
+    // どこで落ちたか（スタックの行）も書く
+    expect(logged[0]).toMatch(/\n\s+at /)
   })
 
   /*
@@ -515,6 +525,29 @@ describe('500 のログ', () => {
       expect(logged, path).toHaveLength(1)
       expect(logged[0], path).toMatch(new RegExp(`^500 POST ${path}: `))
       expect(logged[0], path).toContain("D1_TYPE_ERROR: Type 'object' not supported")
+      expect(logged[0], path).toMatch(/\n\s+at /)
+    }
+  })
+
+  // DB 以外で落ちた 500 も、どこで落ちたか（スタックの行）を書く
+  it('DB の外の例外もスタックの行を書く', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const ctx = createExecutionContext()
+      // D1 を持たない env——読み出しの手前で TypeError になる
+      const response = await app.fetch(
+        new Request('https://astlog.test/projects'),
+        uncachedEnv({ DB: undefined as unknown as D1Database }),
+        ctx,
+      )
+      await waitOnExecutionContext(ctx)
+      expect(response.status).toBe(500)
+      const logged = errors.mock.calls.map((args) => args.join(' '))
+      expect(logged).toHaveLength(1)
+      expect(logged[0]).toMatch(/^500 GET \/projects: TypeError: /)
+      expect(logged[0]).toMatch(/\n\s+at /)
+    } finally {
+      errors.mockRestore()
     }
   })
 })

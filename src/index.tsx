@@ -202,32 +202,47 @@ app.notFound((c) =>
 
 /*
   500 のログ（Workers Logs）には、要求の method と path（query は書かない）と、例外の連なり
-  （cause）の名前と文だけを書き、束縛した値はどこにも書かない。値は書こうとした名前・所在地・
-  メールで、ログに残ると D1 から消したあとも保持期間のあいだ消えない。
+  （cause）の名前・文・スタックの行（at …）を書き、束縛した値はどこにも書かない。値は
+  書こうとした名前・所在地・メールで、ログに残ると D1 から消したあとも保持期間のあいだ消えない。
   - Drizzle の失敗したクエリの例外（DrizzleQueryError）は文の中に「params:」として値を持つ。
     クエリの文（値は ? で渡す）だけを書く
   - D1 は受け取れない型の値を束縛されると（D1_TYPE_ERROR）、文の末尾「for value '…'」に
     その値を書く。そこから後ろを落とす
-  - スタックは書かない（1行目に同じ文が入る）
+  - スタックは頭（名前と文。文が複数行ならその行も）を、名前と文から組んだ同じ字で切り落とし、
+    残りの「at」の行だけを書く。頭が一致しなければ行は書かない——行の形だけで見分けると、値に
+    改行と「at」を入れた文が行に紛れる。行が無いと、DB 以外の 500 がどこで落ちたか分からない
 */
 const MAX_CAUSES = 5
 const BOUND_VALUE = / for value [\s\S]*$/
+
+function framesOf(error: Error): string {
+  const head = Error.prototype.toString.call(error)
+  const stack = typeof error.stack === 'string' ? error.stack : ''
+  if (!stack.startsWith(head)) return ''
+  return stack
+    .slice(head.length)
+    .split('\n')
+    .filter((line) => /^\s+at /.test(line))
+    .map((line) => `\n${line}`)
+    .join('')
+}
 
 function causeTrail(error: unknown): string {
   const parts: string[] = []
   let current = error
   for (let depth = 0; depth < MAX_CAUSES && current !== undefined && current !== null; depth++) {
     if (current instanceof DrizzleQueryError) {
-      parts.push(`DrizzleQueryError: Failed query: ${current.query}`)
+      parts.push(`DrizzleQueryError: Failed query: ${current.query}${framesOf(current)}`)
     } else if (current instanceof Error) {
-      parts.push(`${current.name}: ${current.message.replace(BOUND_VALUE, '')}`)
+      const message = current.message.replace(BOUND_VALUE, '')
+      parts.push(`${current.name}: ${message}${framesOf(current)}`)
     } else {
       // 例外でない値は中身を書かない（何が投げられたかは型で分かる）
       parts.push(`thrown ${typeof current}`)
     }
     current = current instanceof Error ? current.cause : undefined
   }
-  return parts.join(' <- ')
+  return parts.join('\n<- ')
 }
 
 app.onError((error, c) => {
