@@ -1,9 +1,19 @@
-import { env } from 'cloudflare:test'
+import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test'
 import { drizzle } from 'drizzle-orm/d1'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as schema from '../src/db/schema'
-import { createSession, HOST_SESSION_COOKIE, sessionKey, userForIdentity } from '../src/lib/auth'
+import app from '../src/index'
+import {
+  createSession,
+  getSessionUser,
+  HOST_SESSION_COOKIE,
+  SESSION_IDLE_MS,
+  SESSION_SEEN_EVERY_MS,
+  sessionKey,
+  userForIdentity,
+} from '../src/lib/auth'
 import { base64url } from '../src/lib/oauth'
+import { limitKey } from '../src/routes/admin/auth'
 import { db, ensureOwner, form, get, okText, resetDb, withCookie } from './helpers'
 
 /*
@@ -429,7 +439,11 @@ describe('state は1回きり', () => {
     expect(calls).toHaveLength(0)
   })
 
-  it('期限切れの札は start のたびに掃除する', async () => {
+  /*
+    掃除は応答のあと（waitUntil）。提供元へ送るのを待たせない。新しい札は応答の前に
+    書き終えている——callback がすぐ来ても札が無い、にならない
+  */
+  it('期限切れの札は start の応答のあとで掃除する。新しい札は応答の前に書く', async () => {
     await db()
       .insert(schema.oauthStates)
       .values({
@@ -439,8 +453,21 @@ describe('state は1回きり', () => {
         nonce: 'n',
         expiresAt: new Date(Date.now() - 60_000).toISOString(),
       })
-    await start('github')
-    expect((await states()).map((row) => row.state)).not.toContain('old')
+    const ctx = createExecutionContext()
+    const later: Promise<unknown>[] = []
+    const waitUntil = ctx.waitUntil.bind(ctx)
+    ctx.waitUntil = (promise) => {
+      later.push(promise)
+      waitUntil(promise)
+    }
+    const response = await app.fetch(new Request(`${ORIGIN}/admin/auth/github/start`), env, ctx)
+    expect(response.status).toBe(302)
+    const state = new URL(response.headers.get('location') ?? '').searchParams.get('state')
+    expect((await states()).map((row) => row.state)).toContain(state)
+    expect(later).toHaveLength(1)
+
+    await waitOnExecutionContext(ctx)
+    expect((await states()).map((row) => row.state)).toEqual([state])
   })
 
   it('提供元で断ったら、ログイン画面に知らせて戻す。札は使い切る', async () => {
@@ -525,6 +552,148 @@ describe('セッション', () => {
     const response = await withCookie(`${HOST_SESSION_COOKIE}=${token}`)('/admin/members')
     expect(response.status).toBe(303)
     expect(await db().select().from(schema.sessions)).toHaveLength(0)
+  })
+
+  /*
+    セッションは発行から14日（expires_at）と、最後に使ってから12時間（last_seen_at）の
+    早いほうで切れる。last_seen_at を書き直すのは前の記録から5分たったときだけ
+    （毎回書くと、管理画面を1回開くたびに D1 へ1行書く）
+  */
+  const ago = (ms: number) => new Date(Date.now() - ms).toISOString()
+  // D1 の datetime('now') と同じ形（UTC の「YYYY-MM-DD HH:MM:SS」）。created_at の値
+  const d1Ago = (ms: number) => ago(ms).slice(0, 19).replace('T', ' ')
+  const sessionRows = () => db().select().from(schema.sessions)
+  const seenAt = async () => (await sessionRows())[0]?.lastSeenAt ?? null
+  const signedSession = async () => {
+    const owner = await ensureOwner()
+    const { token } = await createSession(db(), owner.id)
+    return withCookie(`${HOST_SESSION_COOKIE}=${token}`)
+  }
+
+  it('12時間使わなかったセッションでは入れず、そのセッションを消す', async () => {
+    const signed = await signedSession()
+    await db()
+      .update(schema.sessions)
+      .set({ lastSeenAt: ago(SESSION_IDLE_MS + 60_000) })
+
+    const response = await signed('/admin/members')
+    expect(response.status).toBe(303)
+    expect(response.headers.get('location')).toBe('/admin/login?next=%2Fadmin%2Fmembers')
+    expect(await sessionRows()).toHaveLength(0)
+  })
+
+  it('使っていても、発行から14日の上限で切れる', async () => {
+    const signed = await signedSession()
+    await db()
+      .update(schema.sessions)
+      .set({ lastSeenAt: ago(0), expiresAt: ago(1000) })
+    expect((await signed('/admin/members')).status).toBe(303)
+    expect(await sessionRows()).toHaveLength(0)
+  })
+
+  it('使っているセッションは続き、最後に使った時刻を書き直すのは5分に1度まで', async () => {
+    const signed = await signedSession()
+    // 発行のときに書く
+    expect(Date.now() - Date.parse((await seenAt()) ?? '')).toBeLessThan(SESSION_SEEN_EVERY_MS)
+
+    // 前の記録から5分たっていなければ、何度開いても書かない
+    const recent = ago(SESSION_SEEN_EVERY_MS - 60_000)
+    await db().update(schema.sessions).set({ lastSeenAt: recent })
+    for (const path of ['/admin/members', '/admin/items', '/admin/members']) {
+      expect((await signed(path)).status, path).toBe(200)
+    }
+    expect(await seenAt()).toBe(recent)
+
+    // 11時間前の記録: 入れて、いまの時刻に書き直す（放置の期限がそこから数え直しになる）
+    await db()
+      .update(schema.sessions)
+      .set({ lastSeenAt: ago(SESSION_IDLE_MS - 3_600_000) })
+    expect((await signed('/admin/members')).status).toBe(200)
+    const refreshed = await seenAt()
+    expect(Date.now() - Date.parse(refreshed ?? '')).toBeLessThan(SESSION_SEEN_EVERY_MS)
+
+    // 書き直した直後は、また5分のあいだ書かない
+    expect((await signed('/admin/items')).status).toBe(200)
+    expect(await seenAt()).toBe(refreshed)
+  })
+
+  it('last_seen_at が空の行（列を足す前のセッション）は created_at から数える', async () => {
+    const signed = await signedSession()
+    await db()
+      .update(schema.sessions)
+      .set({ lastSeenAt: null, createdAt: d1Ago(3_600_000) })
+    expect((await signed('/admin/members')).status).toBe(200)
+    // 入れたので、いまの時刻を書く。以後は last_seen_at で数える
+    expect(Date.now() - Date.parse((await seenAt()) ?? '')).toBeLessThan(SESSION_SEEN_EVERY_MS)
+
+    await db()
+      .update(schema.sessions)
+      .set({ lastSeenAt: null, createdAt: d1Ago(SESSION_IDLE_MS + 60_000) })
+    expect((await signed('/admin/members')).status).toBe(303)
+    expect(await sessionRows()).toHaveLength(0)
+  })
+
+  it('最後に使った時刻を読めないセッションでは入れず、そのセッションを消す', async () => {
+    const signed = await signedSession()
+    await db().update(schema.sessions).set({ lastSeenAt: 'not-a-date' })
+    expect((await signed('/admin/members')).status).toBe(303)
+    expect(await sessionRows()).toHaveLength(0)
+  })
+
+  /*
+    クッキーは Path=/ なので、公開ページにも付いてくる。公開ページを見たことを「使った」に
+    数えると、共用の端末に閉じ忘れたクッキーは、誰かがサイトを見ている限り放置で切れない
+    （src/routes/public/page.tsx の adminHref は touch: false）
+  */
+  // 上の帯の管理画面への入口（AdminLink）
+  const ADMIN_ENTRY = 'class="top__admin"'
+
+  it('公開ページを見ても、最後に使った時刻は書き直さない（入口は出す）', async () => {
+    const signed = await signedSession()
+    const before = ago(SESSION_SEEN_EVERY_MS + 60_000)
+    await db().update(schema.sessions).set({ lastSeenAt: before })
+    for (let i = 0; i < 2; i += 1) {
+      const response = await signed('/')
+      expect(response.status).toBe(200)
+      // まだ切れていないので、ログインしている人の姿のまま
+      expect(response.headers.get('cache-control')).toBe('private, no-store')
+      expect(await response.text()).toContain(ADMIN_ENTRY)
+    }
+    expect(await seenAt()).toBe(before)
+
+    // 管理画面を開けば書き直す
+    expect((await signed('/admin/members')).status).toBe(200)
+    expect(await seenAt()).not.toBe(before)
+  })
+
+  it('公開ページを見ていても、管理画面を12時間開かなければ切れる', async () => {
+    const signed = await signedSession()
+    await db()
+      .update(schema.sessions)
+      .set({ lastSeenAt: ago(SESSION_IDLE_MS - 3_600_000) })
+    // 管理画面を最後に開いてから11時間: 公開ページにはまだ入口が出る
+    expect(await (await signed('/')).text()).toContain(ADMIN_ENTRY)
+
+    // そこから2時間たつ（記録を2時間前へずらす）。公開ページを見たことを数えていれば
+    // 記録はいまの時刻で、ずらしても2時間前——数えていないので13時間前になる
+    const seen = Date.parse((await seenAt()) ?? '')
+    await db()
+      .update(schema.sessions)
+      .set({ lastSeenAt: new Date(seen - 2 * 3_600_000).toISOString() })
+    expect((await signed('/admin/members')).status).toBe(303)
+    expect(await sessionRows()).toHaveLength(0)
+  })
+
+  it('切れたセッションで公開ページを開くと、訪問者の姿で返し、そのセッションを消す', async () => {
+    const signed = await signedSession()
+    await db()
+      .update(schema.sessions)
+      .set({ lastSeenAt: ago(SESSION_IDLE_MS + 60_000) })
+    const response = await signed('/')
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).not.toBe('private, no-store')
+    expect(await response.text()).not.toContain(ADMIN_ENTRY)
+    expect(await sessionRows()).toHaveLength(0)
   })
 
   it('D1 にはクッキーの値ではなく、その SHA-256 だけを置く', async () => {
@@ -776,30 +945,95 @@ describe('owner は1人', () => {
 })
 
 /*
-  SEC-N3。ログインの入口は開くたびに D1 へ書くので、IP ごとに回数の上限を持つ
-  （Workers の Rate Limiting。wrangler.toml の [[ratelimits]]: 60 秒で 10 回）。
+  SEC-N3。ログインの入口は開くたびに D1 へ書くので、IP ごと（IPv6 は /64 ごと）に回数の
+  上限を持つ（Workers の Rate Limiting。wrangler.toml の [[ratelimits]]: 60 秒で 10 回）。
   止めた要求は D1 に書かない。ほかの IP（持ち主）は止まらない。
+
+  Miniflare の上限は時計にそろった固定の窓（60 秒）で数えるので、窓の境が数える途中に
+  来ると、そこから数え直しになる。どのテストも、境がどこに来ても成り立つことだけを見る
 */
 describe('ログインの入口の回数', () => {
+  const from = (ip: string) => ({ headers: { 'cf-connecting-ip': ip } })
+
   it('同じ IP から続けて開くと 429 で止め、D1 に書かない。ほかの IP は入れる', async () => {
-    const from = (ip: string) => ({ headers: { 'cf-connecting-ip': ip } })
     const statuses: number[] = []
-    // 窓（60 秒）の境をまたいでも必ず上限を超える数（上限 10 の2倍 + 1）
+    let refused: Response | undefined
+    // 窓の境をまたいでも、どちらかの窓で必ず上限を超える数（上限 10 の2倍 + 1）
     for (let i = 0; i < 21; i += 1) {
-      statuses.push((await get('/admin/auth/github/start', from('203.0.113.7'))).status)
+      const response = await get('/admin/auth/github/start', from('203.0.113.7'))
+      statuses.push(response.status)
+      if (response.status === 429) refused ??= response
     }
     const passed = statuses.filter((status) => status === 302).length
-    expect(statuses).toContain(429)
     expect(passed).toBeLessThanOrEqual(20)
     expect(await states()).toHaveLength(passed)
 
-    const refused = await get('/admin/auth/github/start', from('203.0.113.7'))
-    expect(refused.status).toBe(429)
-    expect(refused.headers.get('retry-after')).toBe('60')
-    expect(await refused.text()).toContain('ログインの試行が多すぎます')
+    // 止めた応答はこの 21 回の中から見る（もう1度開くと、その間に窓が替わって通りうる）
+    expect(refused?.status).toBe(429)
+    expect(refused?.headers.get('retry-after')).toBe('60')
+    expect(await refused?.text()).toContain('ログインの試行が多すぎます')
 
     // 叩いている IP だけが止まる。持ち主の IP からは入口が開く
     expect((await get('/admin/auth/github/start', from('198.51.100.1'))).status).toBe(302)
+  })
+
+  /*
+    IPv6 は回線1本に /64 が丸ごと配られるので、アドレスごとに数えると、下の 64 ビットを
+    替えるだけで上限が無いのと同じになる。
+
+    見たいのは「どの鍵で数えるか」なので、上限を時計に頼らない数え手（鍵ごとに数えて
+    10 回を超えたら止める）に差し替える。本物の binding で止まることは上の IPv4 が見る
+  */
+  it('IPv6 は /64 ごとに数える。下の 64 ビットや書き方を替えても同じ鍵で、隣の /64 は別の鍵', async () => {
+    const counts = new Map<string, number>()
+    const limiter: RateLimit = {
+      limit: async ({ key }) => {
+        const count = (counts.get(key) ?? 0) + 1
+        counts.set(key, count)
+        return { success: count <= 10 }
+      },
+    }
+    const open = async (ip: string) => {
+      const ctx = createExecutionContext()
+      const response = await app.fetch(
+        new Request(`${ORIGIN}/admin/auth/github/start`, from(ip)),
+        { ...env, LOGIN_RATE_LIMIT: limiter },
+        ctx,
+      )
+      await waitOnExecutionContext(ctx)
+      return response.status
+    }
+
+    const statuses: number[] = []
+    for (let i = 0; i < 21; i += 1) {
+      const low = (i + 1).toString(16)
+      // 書き方を交互に替える（0 の省略と ::、省略しない大文字）
+      const ip =
+        i % 2 === 0
+          ? `2001:db8:abcd:12::${low}`
+          : `2001:0DB8:ABCD:0012:0000:0000:0000:${low.toUpperCase().padStart(4, '0')}`
+      statuses.push(await open(ip))
+    }
+    expect(statuses).toEqual([...Array(10).fill(302), ...Array(11).fill(429)])
+    expect([...counts]).toEqual([['login-start:2001:db8:abcd:12::/64', 21]])
+    expect(await states()).toHaveLength(10)
+
+    expect(await open('2001:db8:abcd:13::1')).toBe(302)
+    expect(counts.get('login-start:2001:db8:abcd:13::/64')).toBe(1)
+  })
+
+  it('数える鍵: IPv4 はそのまま、IPv6 は頭の 64 ビット。読めない値はそのままの字', () => {
+    expect(limitKey('203.0.113.7')).toBe('203.0.113.7')
+    expect(limitKey('2001:db8:abcd:12::1')).toBe('2001:db8:abcd:12::/64')
+    expect(limitKey('2001:0DB8:ABCD:0012:0000:0000:0000:0001')).toBe('2001:db8:abcd:12::/64')
+    expect(limitKey('2001:db8:abcd:12:ffff:ffff:ffff:ffff')).toBe('2001:db8:abcd:12::/64')
+    expect(limitKey('2001:db8::1')).toBe('2001:db8:0:0::/64')
+    expect(limitKey('::1')).toBe('0:0:0:0::/64')
+    // IPv4 を写した形は IPv4 として数える
+    expect(limitKey('::ffff:203.0.113.7')).toBe('203.0.113.7')
+    for (const odd of ['fe80::1%eth0', '1::2::3', '1:2:3:4:5:6:7:8:9', '1:2:3', 'g::1']) {
+      expect(limitKey(odd), odd).toBe(odd)
+    }
   })
 })
 
@@ -927,6 +1161,53 @@ describe('移行', () => {
         { provider: 'github', subject: '1001', label: '@owner' },
       ),
     ).toBeNull()
+  })
+
+  /*
+    0023: sessions に last_seen_at（放置の期限）を足す。足す前のセッションは null のまま
+    残り、created_at から数えて入れる（12時間たっていれば切れる）。列を足すだけで表を
+    作り直さない——作り直すと、D1 では DROP の時点で子の行が cascade で消える（0006 と同じ）
+  */
+  it('0023: 足す前のセッションは last_seen_at が空のまま残り、created_at から数える', async () => {
+    await clear()
+    await run((name) => name < '0023')
+    const d1Ago = (ms: number) =>
+      new Date(Date.now() - ms).toISOString().slice(0, 19).replace('T', ' ')
+    const insert = 'INSERT INTO sessions (id, user_id, expires_at, created_at) VALUES (?, 3, ?, ?)'
+    await d1().batch([
+      d1().prepare("INSERT INTO users (id, role) VALUES (3, 'owner')"),
+      d1()
+        .prepare(insert)
+        .bind(await sessionKey('used'), '2099-01-01T00:00:00.000Z', d1Ago(3_600_000)),
+      d1()
+        .prepare(insert)
+        .bind(
+          await sessionKey('left'),
+          '2099-01-01T00:00:00.000Z',
+          d1Ago(SESSION_IDLE_MS + 60_000),
+        ),
+    ])
+
+    await run((name) => name >= '0023')
+
+    const kept = await d1().prepare('SELECT last_seen_at FROM sessions').all()
+    expect(kept.results).toEqual([{ last_seen_at: null }, { last_seen_at: null }])
+    const migrated = drizzle(d1(), { schema })
+    // 管理画面の壁と同じ呼び方（touch: true。入れたら last_seen_at を書く）
+    expect((await getSessionUser(migrated, 'used', { touch: true }))?.id).toBe(3)
+    expect(await getSessionUser(migrated, 'left', { touch: true })).toBeNull()
+    const left = await d1()
+      .prepare('SELECT id, last_seen_at FROM sessions')
+      .all<{ id: string; last_seen_at: string | null }>()
+    expect(left.results.map((row) => row.id)).toEqual([await sessionKey('used')])
+    expect(left.results[0]?.last_seen_at).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+
+    const sql =
+      env.TEST_MIGRATIONS.find((one) => one.name.includes('session_last_seen'))?.queries.join(
+        '\n',
+      ) ?? ''
+    expect(sql).toContain('ALTER TABLE `sessions` ADD `last_seen_at` text')
+    expect(sql).not.toMatch(/__new_sessions|DROP TABLE|PRAGMA foreign_keys/)
   })
 
   it('0006 は表を作り直さない（D1 では PRAGMA foreign_keys=OFF が効かない）', () => {
