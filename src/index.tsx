@@ -1,3 +1,4 @@
+import { DrizzleQueryError } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { AppEnv } from './env'
 import { yearInJapan } from './lib/format'
@@ -189,8 +190,34 @@ app.notFound((c) =>
   ),
 )
 
+/*
+  500 のログ（Workers Logs）には、要求の method と path（query は書かない）と、例外の連なり
+  （cause）の名前と文だけを書く。例外をそのまま渡すと、Drizzle の失敗したクエリの例外
+  （DrizzleQueryError）は文の中に「params:」として束縛した値を持っているので、書こうとした
+  名前・所在地・メールが平文で残り、D1 から消したあともログの保持期間のあいだ消えない。
+  クエリの文は値を ? で渡すので残す。スタックは書かない（1行目に同じ文が入る）
+*/
+const MAX_CAUSES = 5
+
+function causeTrail(error: unknown): string {
+  const parts: string[] = []
+  let current = error
+  for (let depth = 0; depth < MAX_CAUSES && current !== undefined && current !== null; depth++) {
+    if (current instanceof DrizzleQueryError) {
+      parts.push(`DrizzleQueryError: Failed query: ${current.query}`)
+    } else if (current instanceof Error) {
+      parts.push(`${current.name}: ${current.message}`)
+    } else {
+      // 例外でない値は中身を書かない（何が投げられたかは型で分かる）
+      parts.push(`thrown ${typeof current}`)
+    }
+    current = current instanceof Error ? current.cause : undefined
+  }
+  return parts.join(' <- ')
+}
+
 app.onError((error, c) => {
-  console.error(error)
+  console.error(`500 ${c.req.method} ${new URL(c.req.url).pathname}: ${causeTrail(error)}`)
   return c.html(
     <ErrorPage
       code="500"

@@ -3,12 +3,24 @@ import assetSums from 'virtual:asset-sha256'
 import assetFiles from 'virtual:assets'
 import securityTxt from 'virtual:repo:public/.well-known/security.txt'
 import assetHeaders from 'virtual:repo:public/_headers'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import appCss from '../public/app.css'
 import app from '../src/index'
+import { createSession, HOST_SESSION_COOKIE } from '../src/lib/auth'
 import { HSTS, OPENER_POLICY, PERMISSIONS_POLICY } from '../src/lib/headers'
 import { ADMIN_BEHAVIOR, ADMIN_CSP } from '../src/ui/admin-behavior'
-import { get, okText, resetDb, seedItem, seedMember, signIn, uncachedEnv } from './helpers'
+import {
+  db,
+  ensureOwner,
+  form,
+  get,
+  okText,
+  resetDb,
+  seedItem,
+  seedMember,
+  signIn,
+  uncachedEnv,
+} from './helpers'
 
 beforeEach(resetDb)
 
@@ -347,6 +359,80 @@ describe('応答のヘッダ', () => {
         label,
       ).toEqual(['/app.css', '/admin.css'])
       for (const href of links) expect(href, label).toMatch(version)
+    }
+  })
+})
+
+/*
+  500 のログ（Workers Logs）。Drizzle の失敗したクエリの例外は、文に「params:」として束縛した
+  値を持つ。例外をそのまま console.error に渡していたころは、メンバーの新規作成（1文の
+  INSERT）が落ちると、書こうとした名前・所在地・メールが平文でログに残った
+*/
+describe('500 のログ', () => {
+  // 例外は文だけでなく、スタックと連なり（cause）まで開いて見る（ログに出うるものを全部）
+  const spelled = (value: unknown, depth = 0): string =>
+    value instanceof Error
+      ? [
+          value.stack ?? String(value),
+          String(value),
+          depth < 5 ? spelled(value.cause, depth + 1) : '',
+        ].join('\n')
+      : typeof value === 'object' && value !== null
+        ? JSON.stringify(value)
+        : String(value)
+
+  it('失敗したクエリの束縛値を書かない（method・path・例外の名前と文だけ）', async () => {
+    const marker = 'leak-marker-5e1f'
+    // 目印の値を束縛した文だけを、本物の D1 の失敗（無い表）に差し替える
+    const failing = new Proxy(env.DB, {
+      get(target, key) {
+        if (key === 'prepare') {
+          return (query: string) => {
+            const statement = target.prepare(query)
+            return new Proxy(statement, {
+              get(inner, name) {
+                if (name === 'bind') {
+                  return (...values: unknown[]) =>
+                    values.includes(marker)
+                      ? target.prepare('select * from no_such_table_for_log_test')
+                      : inner.bind(...values)
+                }
+                const value = Reflect.get(inner, name)
+                return typeof value === 'function' ? value.bind(inner) : value
+              },
+            })
+          }
+        }
+        const value = Reflect.get(target, key)
+        return typeof value === 'function' ? value.bind(target) : value
+      },
+    })
+    const owner = await ensureOwner()
+    const { token } = await createSession(db(), owner.id)
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const ctx = createExecutionContext()
+      const response = await app.fetch(
+        new Request('https://astlog.test/admin/members?from=log-test', {
+          method: 'POST',
+          headers: { cookie: `${HOST_SESSION_COOKIE}=${token}` },
+          body: form({ name: '目印', slug: 'marker', location: marker }),
+        }),
+        uncachedEnv({ DB: failing }),
+        ctx,
+      )
+      await waitOnExecutionContext(ctx)
+      expect(response.status).toBe(500)
+      const logged = errors.mock.calls.map((args) => args.map((arg) => spelled(arg)).join(' '))
+      expect(logged.join('\n')).not.toContain(marker)
+      // 何が落ちたかは読める——method と path（query は書かない）、クエリの文（値は ? のまま）、D1 の失敗の文
+      expect(logged).toHaveLength(1)
+      expect(logged[0]).toMatch(/^500 POST \/admin\/members: /)
+      expect(logged[0]).not.toContain('log-test')
+      expect(logged[0]).toContain('DrizzleQueryError: Failed query: insert into "members"')
+      expect(logged[0]).toContain('no such table: no_such_table_for_log_test')
+    } finally {
+      errors.mockRestore()
     }
   })
 })
