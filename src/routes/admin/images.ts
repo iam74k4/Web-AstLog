@@ -89,6 +89,10 @@ export const pickImages = (form: FormData, field: string): Promise<Picked[]> =>
   名前 / 英数字で始まり英数字と . _ - だけ）を必ず通る形にする。name は
   slug から作るので toSlug を通す（空なら置き場ごとの控えの名前）。
   拡張子と content-type は判定の結果から付ける（名乗りを KV に入れない）。
+
+  乱数は 16 バイト（16進 32 字）。/images/* はログインも公開かどうかも見ずに返すので、
+  下書きの画像を隠しているのは URL を知られていないことだけ——当てられない長さにする。
+  前の 8 字のキーも IMAGE_KEY は通す（貼られた画像の URL を殺さない）。
 */
 export async function putImage(
   kv: KVNamespace,
@@ -97,7 +101,7 @@ export async function putImage(
   name: string,
 ) {
   const fallback = folder === 'avatars' ? 'member' : 'item'
-  const key = `${folder}/${toSlug(name) || fallback}-${newToken(4)}.${image.extension}`
+  const key = `${folder}/${toSlug(name) || fallback}-${newToken(16)}.${image.extension}`
   // 大きさも添える（容量を数えるとき、中身を読まずに一覧の metadata だけで足せる。src/lib/media-usage.ts）
   await kv.put(key, image.bytes, {
     metadata: { contentType: image.type, size: image.bytes.byteLength },

@@ -76,7 +76,7 @@ describe('動画を上げる', () => {
     const [row] = await db().select().from(schema.items)
     const shots = await shotsOf(row?.id ?? 0)
     const video = shots[1]
-    expect(video?.url).toMatch(/^\/images\/items\/demo-[0-9a-f]{8}\.mp4$/)
+    expect(video?.url).toMatch(/^\/images\/items\/demo-[0-9a-f]{32}\.mp4$/)
     // 寸法は表示の向き（縦の動画）
     expect([video?.width, video?.height]).toEqual([1080, 1920])
 
@@ -115,7 +115,7 @@ describe('動画を上げる', () => {
     )
     const html = await okText('/apps/item/demo')
     expect(html).toMatch(
-      /<meta property="og:image" content="https:\/\/[^"]+\/images\/items\/demo-[0-9a-f]{8}\.png"/,
+      /<meta property="og:image" content="https:\/\/[^"]+\/images\/items\/demo-[0-9a-f]{32}\.png"/,
     )
   })
 
@@ -140,7 +140,7 @@ describe('動画を上げる', () => {
     const [row] = await db().select().from(schema.items)
     const [shot] = await shotsOf(row?.id ?? 0)
     // 拡張子と content-type は判定の結果から（名乗りの video/quicktime は使わない）
-    expect(shot?.url).toMatch(/^\/images\/items\/demo-[0-9a-f]{8}\.mp4$/)
+    expect(shot?.url).toMatch(/^\/images\/items\/demo-[0-9a-f]{32}\.mp4$/)
     const key = (shot?.url ?? '').replace('/images/', '')
     const stored = await env.MEDIA.getWithMetadata<{ contentType: string }>(key, 'arrayBuffer')
     expect(stored.metadata?.contentType).toBe('video/mp4')
@@ -344,5 +344,33 @@ describe('動画を配る', () => {
     // 一覧の見本に動画を <img> で出さない
     const list = await (await signed('/admin/items')).text()
     expect(list).not.toContain(`src="/images/${key}"`)
+  })
+})
+
+/*
+  KV のキーの乱数は 16 バイト（16進 32 字。src/routes/admin/images.ts の putImage）。/images/* は
+  公開かどうかを見ずに返すので、下書きの画像を守るのは当てられない URL だけ。前に置いた 8 字の
+  キーも同じ形の検査で配り続ける（貼られた URL を殺さない）
+*/
+describe('画像のキー', () => {
+  it('上げた画像のキーは 32 字の乱数。前の 8 字のキーも配る', async () => {
+    const signed = await signIn()
+    const response = await signed('/admin/items', {
+      method: 'POST',
+      body: withFiles({ type: 'app', title: 'Demo', slug: 'demo' }, [
+        ['image', file(png(), 'a.png', 'image/png')],
+      ]),
+    })
+    expect(response.status).toBe(303)
+    const [row] = await db().select().from(schema.items)
+    expect(row?.imageUrl).toMatch(/^\/images\/items\/demo-[0-9a-f]{32}\.png$/)
+
+    const old = 'items/legacy-0123abcd.png'
+    await env.MEDIA.put(old, png(), { metadata: { contentType: 'image/png' } })
+    for (const url of [row?.imageUrl ?? '', `/images/${old}`]) {
+      const served = await get(url)
+      expect(served.status, url).toBe(200)
+      expect(served.headers.get('content-type'), url).toBe('image/png')
+    }
   })
 })
