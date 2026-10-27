@@ -243,6 +243,39 @@ describe('1枚の上限は種類ごと', () => {
     expect(await response.text()).toContain('合計 24MB まで')
     expect(await mediaKeys()).toEqual([])
   })
+
+  /*
+    上限は名乗った長さ（Content-Length）で見るので、名乗らない送信（chunked）は読まずに断る。
+    ブラウザのフォーム（ここのほかのテストの FormData も）は長さを名乗るので、そちらは通る
+  */
+  it('長さを名乗らないフォームの送信は、読まずに 411 で断る', async () => {
+    const signed = await signIn()
+    const encoder = new TextEncoder()
+    for (const type of ['multipart/form-data; boundary=x', 'application/x-www-form-urlencoded']) {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode('--x--\r\n'))
+          controller.close()
+        },
+      })
+      const response = await signed('/admin/items', {
+        method: 'POST',
+        headers: { 'content-type': type },
+        body,
+      })
+      expect(response.status, type).toBe(411)
+      expect(await response.text(), type).toContain('Content-Length')
+    }
+    expect(await db().select().from(schema.items)).toHaveLength(0)
+
+    // 名乗る送信はこれまでどおり読む（作品が1件できる）
+    const ok = await signed('/admin/items', {
+      method: 'POST',
+      body: form({ type: 'app', title: 'Demo', slug: 'demo' }),
+    })
+    expect(ok.status).toBe(303)
+    expect(await db().select().from(schema.items)).toHaveLength(1)
+  })
 })
 
 describe('全体の容量', () => {

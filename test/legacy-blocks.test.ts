@@ -50,12 +50,24 @@ beforeEach(async () => {
 async function open(path: string, init: RequestInit = {}, signed = true) {
   const headers = new Headers(init.headers)
   if (signed) headers.set('cookie', cookie)
+  let request = new Request(`https://astlog.test${path}`, { ...init, headers, redirect: 'manual' })
+  if (request.body) {
+    /*
+      ブラウザのフォームと同じく長さを名乗る。手元で組んだ Request は送るまで Content-Length を
+      持たず、名乗らない送信は src/routes/admin/request.ts の readAdminForm が 411 で断る
+    */
+    const body = await request.arrayBuffer()
+    const sent = new Headers(request.headers)
+    sent.set('content-length', String(body.byteLength))
+    request = new Request(request.url, {
+      method: request.method,
+      headers: sent,
+      body,
+      redirect: 'manual',
+    })
+  }
   const ctx = createExecutionContext()
-  const response = await app.fetch(
-    new Request(`https://astlog.test${path}`, { ...init, headers, redirect: 'manual' }),
-    uncachedEnv({ DB: d1() }),
-    ctx,
-  )
+  const response = await app.fetch(request, uncachedEnv({ DB: d1() }), ctx)
   await waitOnExecutionContext(ctx)
   return response
 }

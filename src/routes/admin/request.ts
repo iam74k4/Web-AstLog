@@ -22,6 +22,10 @@ export const db = (c: { env: { DB: D1Database } }) => drizzle(c.env.DB, { schema
   フォームを読むと中身が何重かに写される——動画（1本 10MB まで）を8本まとめて送ると収まらない。
   24MB なら動画2本と画像を何枚か足せる。止めたときはフォームを描き直せない（読んでいない）ので、
   戻って減らすように言う（ブラウザの「戻る」は書いた欄を残す）
+
+  長さを名乗らない送信（chunked）と数でない長さは 411 で断る。この上限は名乗った長さしか
+  見ないので、名乗らなければ素通りして全部を読んでしまう。ブラウザのフォームは送る前に長さが
+  決まっていて、いつも Content-Length を付ける
 */
 export const MAX_FORM_BYTES = 24_000_000
 
@@ -31,7 +35,14 @@ export const readAdminForm = createMiddleware<AppEnv>(async (c, next) => {
     c.req.method === 'POST' &&
     (type === 'multipart/form-data' || type === 'application/x-www-form-urlencoded')
   ) {
-    if (Number(c.req.header('content-length') ?? 0) > MAX_FORM_BYTES) {
+    const length = c.req.header('content-length')?.trim()
+    if (!length || !/^[0-9]+$/.test(length)) {
+      return c.text(
+        '送信の長さ（Content-Length）が分からないため受け取れません。ブラウザのフォームから送り直してください。',
+        411,
+      )
+    }
+    if (Number(length) > MAX_FORM_BYTES) {
       return c.text(
         '1回の保存で送れるのは合計 24MB までです。前の画面に戻り、動画や画像を分けて保存してください。',
         413,
