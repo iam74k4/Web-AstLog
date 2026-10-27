@@ -202,8 +202,9 @@ const chunk = (type: string, ...data: (number[] | string | Uint8Array)[]) => {
 }
 
 /*
-  付け足しを持つ PNG。eXIf（GPS）・tEXt・iTXt（XMP）・zTXt・tIME と、残す pHYs・IDAT・IEND・
-  IEND の後ろの付け足し。clean で外したあとの形
+  付け足しを持つ PNG。eXIf（GPS）・tEXt・iTXt（XMP）・zTXt・tIME・名前の決まっていない付け足し
+  （ImageMagick の前の exIf・C2PA の caBX）と、残す pHYs・IDAT・IEND・IEND の後ろの付け足し。
+  clean で外したあとの形
 */
 export const photoPng = ({
   width = 1200,
@@ -229,14 +230,27 @@ export const photoPng = ({
     clean ? [] : chunk('iTXt', 'XML:com.adobe.xmp', zeros(5), XMP),
     clean ? [] : chunk('zTXt', 'Location', [0, 0], PLACE),
     clean ? [] : chunk('tIME', u16(2026), [10, 27, 9, 30, 0]),
+    clean ? [] : chunk('exIf', gpsTiff()),
+    clean ? [] : chunk('caBX', 'c2pa', PLACE),
     chunk('IDAT', [0x78, 0x9c, 0x63, 0, 0, 0, 1, 0, 1]),
     chunk('IEND'),
     clean ? [] : bytes(PLACE),
   )
 
+// WebP のチャンク（型・長さ（リトルエンディアン）・中身・奇数なら詰め物）
+const riffChunk = (type: string, data: Uint8Array) =>
+  bytes(type, u32le(data.length), data, data.length % 2 ? [0] : [])
+const vp8l = (width: number, height: number) => {
+  const bits = (width - 1) | ((height - 1) << 14)
+  return riffChunk(
+    'VP8L',
+    bytes([0x2f], [bits & 0xff, (bits >>> 8) & 0xff, (bits >>> 16) & 0xff, (bits >>> 24) & 0xff]),
+  )
+}
+
 /*
   付け足しを持つ WebP（拡張の形）。VP8X（ICC・EXIF・XMP の印）・ICCP・VP8L・EXIF（GPS。長さが
-  奇数なら詰め物）・XMP と、RIFF の後ろの付け足し。clean で外したあとの形（印を下ろし、
+  奇数なら詰め物）・XMP・C2PA と、RIFF の後ろの付け足し。clean で外したあとの形（印を下ろし、
   向きが 1 でなければ向きだけの EXIF を同じ場所に置き、RIFF の長さを合わせる）
 */
 export const photoWebp = ({
@@ -251,26 +265,36 @@ export const photoWebp = ({
   clean?: boolean
 } = {}) => {
   const turned = clean && orientation !== undefined && orientation !== 1
-  const riffChunk = (type: string, data: Uint8Array) =>
-    bytes(type, u32le(data.length), data, data.length % 2 ? [0] : [])
   const flags = 0x20 | (clean ? (turned ? 0x08 : 0) : 0x08 | 0x04)
-  const bits = (width - 1) | ((height - 1) << 14)
   const body = bytes(
     'WEBP',
     riffChunk('VP8X', bytes([flags], zeros(3), u24le(width - 1), u24le(height - 1))),
     riffChunk('ICCP', bytes('sRGB profile')),
-    riffChunk(
-      'VP8L',
-      bytes([0x2f], [bits & 0xff, (bits >>> 8) & 0xff, (bits >>> 16) & 0xff, (bits >>> 24) & 0xff]),
-    ),
+    vp8l(width, height),
     clean
       ? turned
         ? riffChunk('EXIF', orientationTiff(orientation))
         : []
       : riffChunk('EXIF', gpsTiff(orientation)),
     clean ? [] : riffChunk('XMP ', bytes(XMP)),
+    clean ? [] : riffChunk('C2PA', bytes('c2pa', PLACE)),
   )
   return bytes('RIFF', u32le(body.length), body, clean ? [] : bytes(PLACE))
+}
+
+/*
+  最後のチャンクが奇数の長さの EXIF（GPS）で、詰め物を欠く WebP（RIFF の長さもそれに合わせる）。
+  clean で外したあとの形
+*/
+export const unpaddedExifWebp = ({ clean = false } = {}) => {
+  const exif = gpsTiff()
+  const body = bytes(
+    'WEBP',
+    riffChunk('VP8X', bytes([clean ? 0 : 0x08], zeros(3), u24le(1023), u24le(511))),
+    vp8l(1024, 512),
+    clean ? [] : bytes('EXIF', u32le(exif.length), exif),
+  )
+  return bytes('RIFF', u32le(body.length), body)
 }
 
 // 拡張の形（VP8X）。寸法は 1 を引いて 24 ビットで持つ
@@ -294,9 +318,10 @@ export const webpLossless = (width = 640, height = 480) => {
     u32(0),
     'WEBP',
     'VP8L',
-    u32(0),
+    u32le(5),
     [0x2f],
     [bits & 0xff, (bits >>> 8) & 0xff, (bits >>> 16) & 0xff, (bits >>> 24) & 0xff],
+    [0],
   )
 }
 
@@ -307,7 +332,7 @@ export const webpLossy = (width = 300, height = 200) =>
     u32(0),
     'WEBP',
     'VP8 ',
-    u32(0),
+    u32le(10),
     zeros(3),
     [0x9d, 0x01, 0x2a],
     u16le(width),
@@ -359,7 +384,7 @@ export const mp4 = ({
   height?: number
   turned?: boolean
   handler?: string
-  // moov の終わりに足す箱（付け足しの udta・meta。位置の書き方は下の movieLocation）
+  // moov の終わりに足す箱（付け足しの udta・meta。位置の書き方は下の appleLocation など）
   extra?: Uint8Array[]
 } = {}) => {
   const one = 0x00010000
@@ -400,34 +425,53 @@ export const mp4 = ({
 /*
   付け足しの品目を持つ AVIF。iinf に絵（av01）と付け足し（EXIF なら Exif、XMP なら mime）、iloc に
   それぞれの場所。EXIF の中身は TIFF の頭までの offset（4 バイト）と TIFF。gps で位置を持たせる。
-  inIdat なら付け足しを meta > idat に置き（iloc 版 1・作り方 1）、そうでなければ mdat に置く
-  （iloc 版 0。場所はファイルの頭から）
+  inIdat なら付け足しを meta > idat に置き（作り方 1。iloc 版 1 以上）、そうでなければ mdat に置く
+  （場所はファイルの頭から）。version は iloc の版（0〜2。2 は品目の数と id が 4 バイト）、wide で
+  offset と長さを 8 バイトにする。sizes を渡すと offset と長さの幅の 1 バイトをその値にする（読めない
+  幅を確かめる）
 */
-export const avifWithMetadata = ({ gps = true, inIdat = false, xmp = false } = {}) => {
+export const avifWithMetadata = ({
+  gps = true,
+  inIdat = false,
+  xmp = false,
+  version = inIdat ? 1 : 0,
+  wide = false,
+  sizes,
+}: {
+  gps?: boolean
+  inIdat?: boolean
+  xmp?: boolean
+  version?: 0 | 1 | 2
+  wide?: boolean
+  sizes?: number
+} = {}) => {
   const extra = xmp
     ? bytes(gps ? XMP : '<x:xmpmeta xmlns:x="adobe:ns:meta/"/>')
     : bytes(u32(0), gps ? gpsTiff() : orientationTiff(1))
   const picture = bytes(zeros(16))
   const infe = (id: number, type: string, ...rest: (number[] | string)[]) =>
     box('infe', [2, 0, 0, 0], u16(id), u16(0), type, [0], ...rest)
-  const iloc = (pictureAt: number, extraAt: number) =>
-    inIdat
-      ? box(
-          'iloc',
-          [1, 0, 0, 0],
-          [0x44, 0],
-          u16(2),
-          [...u16(1), ...u16(0), ...u16(0), ...u16(1), ...u32(pictureAt), ...u32(picture.length)],
-          [...u16(2), ...u16(1), ...u16(0), ...u16(1), ...u32(0), ...u32(extra.length)],
-        )
-      : box(
-          'iloc',
-          zeros(4),
-          [0x44, 0],
-          u16(2),
-          [...u16(1), ...u16(0), ...u16(1), ...u32(pictureAt), ...u32(picture.length)],
-          [...u16(2), ...u16(0), ...u16(1), ...u32(extraAt), ...u32(extra.length)],
-        )
+  const iloc = (pictureAt: number, extraAt: number) => {
+    const number = (n: number) => (wide ? [...u32(0), ...u32(n)] : u32(n))
+    const id = (n: number) => (version === 2 ? u32(n) : u16(n))
+    // 版 1・2 だけが作り方（construction_method）を持つ。data_reference_index・範囲の数は 1
+    const item = (n: number, method: number, at: number, length: number) => [
+      ...id(n),
+      ...(version === 0 ? [] : u16(method)),
+      ...u16(0),
+      ...u16(1),
+      ...number(at),
+      ...number(length),
+    ]
+    return box(
+      'iloc',
+      [version, 0, 0, 0],
+      [sizes ?? (wide ? 0x88 : 0x44), 0],
+      id(2),
+      item(1, 0, pictureAt, picture.length),
+      inIdat ? item(2, 1, 0, extra.length) : item(2, 0, extraAt, extra.length),
+    )
+  }
   const meta = (pictureAt: number, extraAt: number) =>
     box(
       'meta',

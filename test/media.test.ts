@@ -391,6 +391,14 @@ describe('写真の付け足しを外して置く', () => {
     expect(await avifResponse.text()).toContain(
       '撮った場所（位置情報）が入っているので受け付けません',
     )
+    // アバターも同じ取り込み（pickFile）を通る
+    const avatar = form({ name: 'Eve', slug: 'eve' })
+    avatar.append('avatar', file(avifWithMetadata(), 'eve.avif', 'image/avif'))
+    const avatarResponse = await signed('/admin/members', { method: 'POST', body: avatar })
+    expect(avatarResponse.status).toBe(400)
+    expect(await avatarResponse.text()).toContain('位置情報を外して書き出してから')
+    expect(await mediaKeys('avatars/')).toEqual([])
+    expect(await db().select().from(schema.members)).toHaveLength(0)
 
     for (const movie of [
       mp4({ brand: 'qt  ', extra: [appleLocation()] }),
@@ -400,6 +408,20 @@ describe('写真の付け足しを外して置く', () => {
       expect(response.status).toBe(400)
       expect(await response.text()).toContain('位置情報を外して書き出してから選び直してください')
     }
+    expect(await mediaKeys()).toEqual([])
+    expect(await db().select().from(schema.items)).toHaveLength(0)
+  })
+
+  it('並びが途中で読めず付け足しが残る写真は、黙って置かずに書き出し直してもらう', async () => {
+    const signed = await signIn()
+    const response = await signed('/admin/items', {
+      method: 'POST',
+      body: withFiles({ type: 'app', title: 'Demo', slug: 'demo' }, [
+        ['image', file(photoJpeg().slice(0, 30), 'IMG_0001.jpg', 'image/jpeg')],
+      ]),
+    })
+    expect(response.status).toBe(400)
+    expect(await response.text()).toContain('撮った場所などの付け足しを外せません')
     expect(await mediaKeys()).toEqual([])
     expect(await db().select().from(schema.items)).toHaveLength(0)
   })

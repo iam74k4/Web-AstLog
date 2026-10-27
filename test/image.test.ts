@@ -27,6 +27,7 @@ import {
   plainMovieMeta,
   png,
   svg,
+  unpaddedExifWebp,
   webp,
   webpLossless,
   webpLossy,
@@ -172,17 +173,20 @@ describe('範囲の要求', () => {
 
 /*
   上げた写真の付け足し（撮った場所・日時・機種）は、置く前に外す（src/lib/image-metadata.ts）。
-  JPEG・PNG・WebP は区画を落とし、外せない AVIF と動画は位置があれば断る。外したあとも同じ
-  種類・同じ寸法として読め、向きが 1 でなければ向きだけを残す
+  JPEG・PNG・WebP は絵に要る区画だけを残し、外せない AVIF と動画は位置があれば断る。外したあとも
+  同じ種類・同じ寸法として読め、向きが 1 でなければ向きだけを残す。並びが途中で読めず付け足しが
+  残るものは断る
 */
 describe('写真の付け足しを外す', () => {
   const latin1 = (bytes: Uint8Array) =>
     Array.from(bytes, (byte) => String.fromCharCode(byte)).join('')
   const cleaned = (type: string, bytes: Uint8Array<ArrayBuffer>) => {
     const result = stripMetadata(type, bytes)
-    if (result === 'location') throw new Error(`${type} を位置ありとして断った`)
+    if (typeof result === 'string') throw new Error(`${type} を ${result} として断った`)
     return result
   }
+  const join = (...parts: (Uint8Array | number[])[]) =>
+    new Uint8Array(parts.flatMap((part) => Array.from(part)))
   const leaks = (bytes: Uint8Array) =>
     [PLACE, 'GPSLatitude', 'MotionPhoto', 'Photoshop', 'MPF\0'].filter((mark) =>
       latin1(bytes).includes(mark),
@@ -205,7 +209,24 @@ describe('写真の付け足しを外す', () => {
     expect(latin1(cleaned('image/jpeg', photoJpeg({ orientation: 1 })))).not.toContain('Exif')
   })
 
-  it('PNG は eXIf・tEXt・iTXt・zTXt・tIME と IEND の後ろを落とす', () => {
+  /*
+    区画の間の余計なバイト（FF でない字・FF 00）は libjpeg が読み飛ばし、ブラウザは何事もなく
+    描く。そこで読むのをやめると、後ろの EXIF の位置がそのまま出る
+  */
+  it('JPEG の区画の間の余計なバイトは読み飛ばして落とし、後ろの EXIF も外す', () => {
+    const photo = photoJpeg({ orientation: 6 })
+    // APP0（SOI の 2 バイトのあと 18 バイト）と EXIF の APP1 のあいだ
+    for (const stray of [[0x00], [0x12, 0x34], [0x12, 0xff, 0x00]]) {
+      const label = stray.join(',')
+      const broken = join(photo.subarray(0, 20), stray, photo.subarray(20))
+      expect(sniffImage(broken), label).toMatchObject({ type: 'image/jpeg' })
+      const clean = cleaned('image/jpeg', broken)
+      expect(clean, label).toEqual(photoJpeg({ orientation: 6, clean: true }))
+      expect(leaks(clean), label).toEqual([])
+    }
+  })
+
+  it('PNG は絵に要るチャンクだけを残し、eXIf・tEXt・iTXt・zTXt・tIME・知らないチャンク（exIf・caBX）と IEND の後ろを落とす', () => {
     for (const orientation of [undefined, 1, 8]) {
       const photo = photoPng({ orientation })
       expect(leaks(photo), String(orientation)).not.toEqual([])
@@ -216,7 +237,7 @@ describe('写真の付け足しを外す', () => {
     }
   })
 
-  it('WebP は EXIF と XMP のチャンクを落とし、VP8X の印と RIFF の長さを合わせる', () => {
+  it('WebP は絵に要るチャンクだけを残し、EXIF・XMP・知らないチャンク（C2PA）を落とし、VP8X の印と RIFF の長さを合わせる', () => {
     for (const orientation of [undefined, 1, 6]) {
       const photo = photoWebp({ orientation })
       expect(leaks(photo), String(orientation)).not.toEqual([])
@@ -225,6 +246,15 @@ describe('写真の付け足しを外す', () => {
       expect(leaks(clean), String(orientation)).toEqual([])
       expect(sniffImage(clean), String(orientation)).toEqual(sniffImage(photo))
     }
+  })
+
+  it('WebP の最後の EXIF が奇数の長さで詰め物を欠いていても、落とす', () => {
+    const photo = unpaddedExifWebp()
+    expect(leaks(photo)).toEqual([PLACE])
+    const clean = cleaned('image/webp', photo)
+    expect(clean).toEqual(unpaddedExifWebp({ clean: true }))
+    expect(leaks(clean)).toEqual([])
+    expect(sniffImage(clean)).toEqual(sniffImage(photo))
   })
 
   it('付け足しの無いもの・GIF・途中で切れたものは、同じバイトのまま返す', () => {
@@ -238,22 +268,68 @@ describe('写真の付け足しを外す', () => {
       ['image/avif', avif()],
       ['video/mp4', mp4()],
       ['video/mp4', mp4({ brand: 'qt  ', extra: [plainMovieMeta()] })],
-      ['image/jpeg', photoJpeg().slice(0, 30)],
+      // 絵の頭や中身の途中で切れたもの（後ろに付け足しは無い）
+      ['image/jpeg', jpeg().slice(0, 25)],
       ['image/png', photoPng().slice(0, 40)],
+      ['image/webp', photoWebp().slice(0, 40)],
     ]
     for (const [type, bytes] of cases) expect(stripMetadata(type, bytes), type).toBe(bytes)
   })
 
-  it('AVIF は EXIF か XMP に位置があれば断る（mdat に置いても idat に置いても）', () => {
+  /*
+    並びが途中で読めないと、そこから後ろは区画に分けられず外せない。そこが落とす区画か、後ろに
+    付け足しの目印があれば、黙って写さずに断る
+  */
+  it('途中で読めなくなり、その後ろに付け足しが残るものは断る', () => {
+    const photo = photoPng()
+    const exifAt = latin1(photo).indexOf('eXIf') - 4
+    const webpPhoto = photoWebp()
+    const webpExifAt = latin1(webpPhoto).indexOf('EXIF')
+    const cases: [string, string, Uint8Array<ArrayBuffer>][] = [
+      // 落とす区画（EXIF の APP1・eXIf・EXIF）の途中で切れた
+      ['JPEG の EXIF の途中', 'image/jpeg', photoJpeg().slice(0, 30)],
+      ['PNG の eXIf の途中', 'image/png', photo.slice(0, exifAt + 20)],
+      ['WebP の EXIF の途中', 'image/webp', webpPhoto.slice(0, webpExifAt + 20)],
+      // 残す区画の長さがファイルの外を指し、その後ろに EXIF が続く
+      [
+        'JPEG の長さの合わない DQT のあとの EXIF',
+        'image/jpeg',
+        join([0xff, 0xd8, 0xff, 0xdb, 0xff, 0xff], photoJpeg().subarray(2)),
+      ],
+    ]
+    for (const [label, type, bytes] of cases) {
+      expect(stripMetadata(type, bytes), label).toBe('unreadable')
+    }
+  })
+
+  it('AVIF は EXIF か XMP に位置があれば断る（mdat に置いても idat に置いても、iloc の版と欄の幅を問わず）', () => {
+    const layouts = [
+      { version: 0, inIdat: false },
+      { version: 1, inIdat: false },
+      { version: 1, inIdat: true },
+      { version: 2, inIdat: false },
+      { version: 2, inIdat: true },
+    ] as const
     for (const xmp of [false, true]) {
-      for (const inIdat of [false, true]) {
-        const label = `xmp: ${xmp}, idat: ${inIdat}`
-        const photo = avifWithMetadata({ xmp, inIdat })
-        expect(sniffImage(photo), label).toMatchObject({ type: 'image/avif', width: 1600 })
-        expect(stripMetadata('image/avif', photo), label).toBe('location')
-        const plain = avifWithMetadata({ gps: false, xmp, inIdat })
-        expect(stripMetadata('image/avif', plain), label).toBe(plain)
+      for (const layout of layouts) {
+        for (const wide of [false, true]) {
+          const label = `xmp: ${xmp}, iloc: v${layout.version}, idat: ${layout.inIdat}, wide: ${wide}`
+          const photo = avifWithMetadata({ xmp, wide, ...layout })
+          expect(sniffImage(photo), label).toMatchObject({ type: 'image/avif', width: 1600 })
+          expect(stripMetadata('image/avif', photo), label).toBe('location')
+          const plain = avifWithMetadata({ gps: false, xmp, wide, ...layout })
+          expect(stripMetadata('image/avif', plain), label).toBe(plain)
+        }
       }
+    }
+  })
+
+  it('AVIF が EXIF・XMP の品目を名乗るのに中身を引けなければ、位置が無いとは言わずに断る', () => {
+    // offset と長さの幅が 2 バイト（0・4・8 のどれでもない）の iloc は読まない
+    for (const gps of [true, false]) {
+      expect(stripMetadata('image/avif', avifWithMetadata({ gps, sizes: 0x22 })), String(gps)).toBe(
+        'unreadable',
+      )
     }
   })
 

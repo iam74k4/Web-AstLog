@@ -18,21 +18,25 @@ import {
   日時・機種の製造番号を持ち、家で撮れば家の位置がそのまま出る。iPhone の「JPEG で書き出す」も
   既定では位置を残す。
 
-  - JPEG・PNG・WebP: 付け足しの区画をバイトの並びのまま落とす（絵は描き直さないので画質は
-    変わらない）。向き（Orientation）が 1 でなければ、向きだけを持つ最小の EXIF を元の場所に
-    置き直す——向きごと外すと、縦に撮った写真が横に寝て出る
+  - JPEG・PNG・WebP: 絵を描くのに要る区画だけを残し、ほかは知らない区画も含めてバイトの並びの
+    まま落とす（絵は描き直さないので画質は変わらない）。付け足しの区画の名前は決まっていない
+    （ImageMagick の PNG の exIf・C2PA の caBX など）ので、落とすものを並べると漏れる。向き
+    （Orientation）が 1 でなければ、向きだけを持つ最小の EXIF を元の場所に置き直す——向きごと
+    外すと、縦に撮った写真が横に寝て出る
   - AVIF・MP4・MOV: 区画を落とすと、中身の位置を指す表（iloc・stco）を組み直すことになる。
     位置を見つけたら置かずに断り（'location'）、外して書き出し直してもらう。位置の無いものは
     そのまま置く
   - GIF: 写真の入れ物ではないので、そのまま
 
-  並びを読めなくなったところ（途中で切れた・長さが合わない）から後ろは、そのまま写す。
-  上げるのはログインした持ち主だけで、守る相手は手元の機器が書いた付け足しのうっかりした
-  公開。機器が書く並びは読めるので、壊れた並びを直したり断ったりはしない（描けるかは
-  ブラウザが決める）。付け足しの無いファイルは同じバイトのまま返す。
+  JPEG・PNG・WebP の並びが途中で読めなくなったら（途中で切れた・長さが合わない）、そこから後ろは
+  区画に分けられず外せない。そこが（名前まで読める）落とす区画か、後ろに付け足しの目印
+  （METADATA_MARKS）があれば断り（'unreadable'）、無ければそのまま写す（絵の途中で切れたファイルは、描けるだけ描くのを
+  ブラウザに任せる）。AVIF も、EXIF・XMP の品目を名乗るのに中身を引けなければ断る。読めない
+  ものを黙って写すと、少し崩れただけのファイルの位置がそのまま出る。付け足しの無いファイルは
+  同じバイトのまま返す。
 */
 
-export type Cleaned = Uint8Array<ArrayBuffer> | 'location'
+export type Cleaned = Uint8Array<ArrayBuffer> | 'location' | 'unreadable'
 
 export function stripMetadata(type: string, bytes: Uint8Array<ArrayBuffer>): Cleaned {
   switch (type) {
@@ -43,7 +47,7 @@ export function stripMetadata(type: string, bytes: Uint8Array<ArrayBuffer>): Cle
     case 'image/webp':
       return stripWebp(bytes)
     case 'image/avif':
-      return avifHasLocation(bytes) ? 'location' : bytes
+      return avifLocation(bytes) ?? bytes
     case 'video/mp4':
       return movieHasLocation(bytes, 0, bytes.length, 0) ? 'location' : bytes
     default:
@@ -69,6 +73,30 @@ const u32le = (n: number) => [n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n 
 const readU32le = (bytes: Uint8Array, at: number) =>
   readU16le(bytes, at) + readU16le(bytes, at + 2) * 0x10000
 const text = (value: string) => [...value].map((char) => char.charCodeAt(0))
+
+/*
+  読めなくなったところから後ろに付け足しがあるかの目印。EXIF（JPEG の頭と、TIFF の頭の2つの
+  並び順）・XMP・IPTC と、PNG・WebP の付け足しのチャンクの名前。4 字以上にして、圧縮した絵の
+  データにたまたま並ぶことをまず無くす
+*/
+const METADATA_MARKS = [
+  'Exif\0\0',
+  'II*\0',
+  'MM\0*',
+  '<x:xmpmeta',
+  'GPSLatitude',
+  'GPSLongitude',
+  'Photoshop 3.0',
+  'eXIf',
+  'tEXt',
+  'iTXt',
+  'zTXt',
+  'EXIF',
+  'XMP ',
+]
+
+const carriesMetadata = (bytes: Uint8Array, start: number, end: number) =>
+  METADATA_MARKS.some((mark) => includes(bytes, start, end, mark))
 
 /*
   向きだけを持つ EXIF（TIFF。MM・IFD0 に Orientation の1項目）。JPEG は頭に Exif\0\0 を足して
@@ -98,7 +126,9 @@ const orientationTiff = (orientation: number) => [
   位置が入る。MPF はその後ろを指す表なので、後ろと一緒に外す。
 
   区画は FF xx と長さで進む。画像データ（SOS のあと）は長さを持たないので、次の区画の頭
-  （FF のあとが 00 でも RSTn でもない）まで送る。
+  （FF のあとが 00 でも RSTn でもない）まで送る。区画の間の余計なバイト（FF でない字・FF 00）は、
+  libjpeg と同じく次の区画の頭まで読み飛ばして落とす——ブラウザは何事もなく描くので、そこで
+  読むのをやめると後ろの EXIF をそのまま写してしまう。
 */
 const ICC = 'ICC_PROFILE\0'
 
@@ -124,7 +154,7 @@ function scanEnd(bytes: Uint8Array, from: number): number {
   }
 }
 
-function stripJpeg(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
+function stripJpeg(bytes: Uint8Array<ArrayBuffer>): Cleaned {
   const parts: Uint8Array[] = [bytes.subarray(0, 2)]
   let changed = false
   let orientation = 1
@@ -132,9 +162,10 @@ function stripJpeg(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
   let at = 2
   while (at < bytes.length) {
     const marker = bytes[at + 1] ?? 0
-    if (bytes[at] !== 0xff || at + 1 >= bytes.length) {
-      parts.push(bytes.subarray(at))
-      break
+    if (bytes[at] !== 0xff || marker === 0x00) {
+      at = scanEnd(bytes, at)
+      changed = true
+      continue
     }
     if (marker === 0xff || standalone(marker)) {
       // 詰め物の FF は1バイト、長さを持たない区画は2バイト
@@ -150,6 +181,9 @@ function stripJpeg(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
     }
     const end = at + 2 + readU16(bytes, at + 2)
     if (end < at + 4 || end > bytes.length) {
+      if (dropsSegment(bytes, marker, at) || carriesMetadata(bytes, at, bytes.length)) {
+        return 'unreadable'
+      }
       parts.push(bytes.subarray(at))
       break
     }
@@ -179,10 +213,37 @@ function stripJpeg(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
 
 /* ------------------------------------------------------------ PNG */
 
-// チャンクは 長さ 4・型 4・中身・CRC 4。IEND より後ろも落とす
-const PNG_DROPPED = new Set(['eXIf', 'tEXt', 'iTXt', 'zTXt', 'tIME'])
+/*
+  チャンクは 長さ 4・型 4・中身・CRC 4。残すのは絵の頭と中身・色・透明・背景・解像度・
+  アニメーション（APNG）のチャンクだけ（mDCv・cLLi は mDCV・cLLI の前の名前）。IEND より後ろも
+  落とす
+*/
+const PNG_KEPT = new Set([
+  'IHDR',
+  'PLTE',
+  'IDAT',
+  'IEND',
+  'tRNS',
+  'cHRM',
+  'gAMA',
+  'iCCP',
+  'sBIT',
+  'sRGB',
+  'cICP',
+  'mDCV',
+  'cLLI',
+  'mDCv',
+  'cLLi',
+  'bKGD',
+  'hIST',
+  'pHYs',
+  'sPLT',
+  'acTL',
+  'fcTL',
+  'fdAT',
+])
 
-function stripPng(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
+function stripPng(bytes: Uint8Array<ArrayBuffer>): Cleaned {
   const parts: Uint8Array[] = [bytes.subarray(0, 8)]
   let changed = false
   let orientation = 1
@@ -190,12 +251,14 @@ function stripPng(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
   let at = 8
   while (at < bytes.length) {
     const end = at + 12 + readU32(bytes, at)
+    const type = ascii(bytes, at + 4, 4)
     if (at + 12 > bytes.length || end > bytes.length) {
+      const dropped = at + 8 <= bytes.length && !PNG_KEPT.has(type)
+      if (dropped || carriesMetadata(bytes, at, bytes.length)) return 'unreadable'
       parts.push(bytes.subarray(at))
       break
     }
-    const type = ascii(bytes, at + 4, 4)
-    if (PNG_DROPPED.has(type)) {
+    if (!PNG_KEPT.has(type)) {
       changed = true
       if (type === 'eXIf' && exifSlot < 0) {
         orientation = exifOrientation(bytes, at + 8, end - 4)
@@ -237,11 +300,14 @@ function crc32(bytes: readonly number[]): number {
 /* ------------------------------------------------------------ WebP */
 
 /*
-  RIFF の中のチャンク（型 4・長さ 4（リトルエンディアン）・中身・奇数なら詰め物 1）。EXIF と
-  XMP を落とし、拡張の頭（VP8X）の印（EXIF 0x08・XMP 0x04）を下ろし、RIFF の長さを書き直す。
-  RIFF の長さより後ろも落とす
+  RIFF の中のチャンク（型 4・長さ 4（リトルエンディアン）・中身・奇数なら詰め物 1）。残すのは
+  拡張の頭（VP8X）・絵（VP8・VP8L・ALPH）・アニメーション（ANIM・ANMF）・色（ICCP）だけで、
+  EXIF・XMP と知らないチャンク（C2PA など）を落とし、VP8X の印（EXIF 0x08・XMP 0x04）を下ろし、
+  RIFF の長さを書き直す。RIFF の長さより後ろも落とす
 */
-function stripWebp(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
+const WEBP_KEPT = new Set(['VP8X', 'VP8 ', 'VP8L', 'ALPH', 'ANIM', 'ANMF', 'ICCP'])
+
+function stripWebp(bytes: Uint8Array<ArrayBuffer>): Cleaned {
   const declared = 8 + readU32le(bytes, 4)
   const end = declared >= 12 && declared <= bytes.length ? declared : bytes.length
   const parts: Uint8Array[] = [bytes.subarray(0, 12)]
@@ -251,18 +317,22 @@ function stripWebp(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
   let at = 12
   while (at < end) {
     const size = readU32le(bytes, at + 4)
-    const next = at + 8 + size + (size % 2)
-    if (at + 8 > end || next > end) {
+    const body = at + 8 + size
+    const type = ascii(bytes, at, 4)
+    if (at + 8 > end || body > end) {
+      const dropped = at + 8 <= end && !WEBP_KEPT.has(type)
+      if (dropped || carriesMetadata(bytes, at, end)) return 'unreadable'
       parts.push(bytes.subarray(at, end))
       break
     }
-    const type = ascii(bytes, at, 4)
-    if (type === 'EXIF' || type === 'XMP ') {
+    // 最後のチャンクは、奇数の長さの詰め物を欠いて書かれることがある
+    const next = Math.min(body + (size % 2), end)
+    if (!WEBP_KEPT.has(type)) {
       changed = true
       if (type === 'EXIF' && exifSlot < 0) {
         // 中身は TIFF。頭に Exif\0\0 を付けて書く道具もある
         const tiff = ascii(bytes, at + 8, 6) === 'Exif\0\0' ? at + 14 : at + 8
-        orientation = exifOrientation(bytes, tiff, at + 8 + size)
+        orientation = exifOrientation(bytes, tiff, body)
         exifSlot = parts.length
       }
     } else {
@@ -309,23 +379,28 @@ function includes(bytes: Uint8Array, start: number, end: number, value: string):
 /*
   AVIF（HEIF の入れ物）。EXIF と XMP は絵と同じ「品目」で、meta > iinf が品目の種類（Exif・
   mime）を、meta > iloc が中身の場所（ファイルの頭か idat からの位置と長さ）を持つ。EXIF の
-  品目の中身は、TIFF の頭までの offset（4 バイト）のあとに TIFF が続く
+  品目の中身は、TIFF の頭までの offset（4 バイト）のあとに TIFF が続く。品目を名乗るのに iloc から
+  中身を引けなければ（場所の表を読めない・ファイルの外を指す）、位置の有無を確かめられないので
+  断る
 */
-function avifHasLocation(bytes: Uint8Array): boolean {
+function avifLocation(bytes: Uint8Array): 'location' | 'unreadable' | null {
   const meta = findBox(bytes, 0, bytes.length, 'meta')
-  if (!meta) return false
+  if (!meta) return null
   // meta は full box（版と印の 4 バイトのあとに子が続く）
   const iinf = findBox(bytes, meta.body + 4, meta.end, 'iinf')
+  const kinds = iinf ? metadataItems(bytes, iinf) : new Map<number, 'Exif' | 'mime'>()
+  if (!kinds.size) return null
   const iloc = findBox(bytes, meta.body + 4, meta.end, 'iloc')
-  if (!iinf || !iloc) return false
-  const kinds = metadataItems(bytes, iinf)
-  if (!kinds.size) return false
+  if (!iloc) return 'unreadable'
   const idat = findBox(bytes, meta.body + 4, meta.end, 'idat')
-  for (const [id, data] of itemData(bytes, iloc, idat, kinds)) {
-    if (kinds.get(id) === 'mime' ? xmpHasLocation(data, 0, data.length) : exifItemHasLocation(data))
-      return true
+  const found = itemData(bytes, iloc, idat, kinds)
+  for (const [id, kind] of kinds) {
+    const data = found.get(id)
+    if (!data) return 'unreadable'
+    if (kind === 'mime' ? xmpHasLocation(data, 0, data.length) : exifItemHasLocation(data))
+      return 'location'
   }
-  return false
+  return null
 }
 
 function exifItemHasLocation(data: Uint8Array): boolean {
@@ -351,7 +426,8 @@ function metadataItems(bytes: Uint8Array, iinf: Box): Map<number, 'Exif' | 'mime
 /*
   iloc から品目の中身を引く（範囲が分かれていればつなぐ）。欄の幅（offset・長さ・基点・番号）は
   0・4・8 バイトのどれかで、それ以外なら読まない。場所の作り方（construction_method）は
-  0 がファイルの頭から、1 が idat の中身から
+  0 がファイルの頭から、1 が idat の中身から。範囲を1つでも引けなければ、その品目は返さない
+  （一部だけを見て位置が無いとは言えない）
 */
 function itemData(
   bytes: Uint8Array,
@@ -397,17 +473,22 @@ function itemData(
     const extents = offsetSize + lengthSize + indexSize ? readU16(bytes, at) : 1
     at += 2
     const parts: Uint8Array[] = []
-    for (let extent = 0; extent < extents && at < iloc.end; extent += 1) {
+    let whole = true
+    for (let extent = 0; extent < extents; extent += 1) {
+      if (at >= iloc.end) {
+        whole = false
+        break
+      }
       field(indexSize)
       const offset = field(offsetSize)
       const length = field(lengthSize)
       const origin = method === 0 ? 0 : method === 1 && idat ? idat.body : null
-      if (origin === null) continue
-      const from = origin + base + offset
+      const from = (origin ?? 0) + base + offset
       const to = length === 0 ? (method === 1 && idat ? idat.end : bytes.length) : from + length
-      if (from <= to && to <= bytes.length) parts.push(bytes.subarray(from, to))
+      if (origin !== null && from <= to && to <= bytes.length) parts.push(bytes.subarray(from, to))
+      else whole = false
     }
-    if (wanted.has(id) && parts.length) found.set(id, concat(parts))
+    if (wanted.has(id) && whole && parts.length) found.set(id, concat(parts))
   }
   return found
 }

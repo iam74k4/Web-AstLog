@@ -24,7 +24,8 @@ export const SHOT_LIMIT_NOTE = `${IMAGE_LIMIT_NOTE}・動画は位置情報を�
   置き場は2つ——メンバーの顔（avatars/）と作品のスクリーンショット（items/）。
   取り込みの経路と検査（種類と大きさ）は1本で、置き場の名前だけが違う。種類を決めたら、
   撮った場所などの付け足しを外してから置く（src/lib/image-metadata.ts の stripMetadata。
-  外せない AVIF と動画は、位置があれば断る）。大きさの上限は外す前の大きさで見る。
+  外せない AVIF と動画は、位置があれば断る。並びが途中で読めず付け足しが残るものも断る）。
+  大きさの上限は外す前の大きさで見る。
 
   種類は中身の先頭のバイトで決める（src/lib/image.ts の sniffImage）。ブラウザが
   名乗る file.type は見ない——image/png を名乗った SVG を名乗りのまま保存して
@@ -50,9 +51,17 @@ const IMAGE_SIZE_ERROR = '画像は 1MB まで（GIF は 3MB まで）です。�
 // ほかの画像の欄で、中身を読む前に止めるとき（画像か動画かはまだ分からない）
 const SHOT_SIZE_ERROR =
   '画像は 1MB まで（GIF は 3MB まで）、動画は 10MB までです。小さくしてから選び直してください'
-// AVIF と動画は付け足しを外せないので、位置があれば置かずに戻す。外し方まで言う
-const LOCATION_ERROR =
-  '撮った場所（位置情報）が入っているので受け付けません。位置情報を外して書き出してから選び直してください（iPhone は写真アプリの共有で「オプション」を開き、「位置情報」を切って「ファイルに保存」）'
+/*
+  外せずに置かないとき（src/lib/image-metadata.ts の stripMetadata）。AVIF と動画は付け足しを
+  外せないので、位置があれば外し方まで言う。並びが途中で読めず、その後ろに付け足しが残るものは
+  書き出し直してもらう
+*/
+const STRIP_ERRORS = {
+  location:
+    '撮った場所（位置情報）が入っているので受け付けません。位置情報を外して書き出してから選び直してください（iPhone は写真アプリの共有で「オプション」を開き、「位置情報」を切って「ファイルに保存」）',
+  unreadable:
+    'ファイルの並びが途中で読めないため、撮った場所などの付け足しを外せません。書き出し直してから選び直してください',
+} as const
 const VIDEO_ERRORS = {
   hevc: 'HEVC（H.265）の動画は Chrome などで再生できません。H.264 で書き出してください（iPhone はカメラのフォーマットを「互換性優先」に、Mac の QuickTime Player は書き出しで HEVC を外す）',
   codec: 'この動画の形式は受け付けません。H.264 の MP4 か MOV で書き出してください',
@@ -81,7 +90,7 @@ async function pickFile(file: File | string | null, video = false): Promise<Pick
 // 付け足しを外した中身で渡す（KV にも、プレビューの埋め込みにも、外したあとのバイトだけが行く）
 function cleaned(format: SniffedImage, view: Uint8Array<ArrayBuffer>): Picked {
   const clean = stripMetadata(format.type, view)
-  if (clean === 'location') return { image: null, error: LOCATION_ERROR }
+  if (typeof clean === 'string') return { image: null, error: STRIP_ERRORS[clean] }
   // 外すものが無ければ受け取った中身そのもの（写さない。動画は 10MB ある）
   const bytes = clean.byteLength === clean.buffer.byteLength ? clean.buffer : clean.slice().buffer
   return { image: { ...format, bytes } }
