@@ -1,7 +1,15 @@
 import { env } from 'cloudflare:test'
+import { getTableColumns } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { publishedItemsQuery } from '../src/db/queries'
-import { db, resetDb, seedMember } from './helpers'
+import {
+  findPublishedItem,
+  findPublishedMember,
+  listPublishedItems,
+  listPublishedMembers,
+  publishedItemsQuery,
+} from '../src/db/queries'
+import * as schema from '../src/db/schema'
+import { db, resetDb, seedItem, seedMember } from './helpers'
 
 beforeEach(resetDb)
 
@@ -139,5 +147,89 @@ describe('索引', () => {
         'idx_items_public',
       ].sort(),
     )
+  })
+})
+
+describe('公開の問い合わせが読む列', () => {
+  /*
+    公開ページの問い合わせは、公開する列だけを返す。行を丸ごと返すと、members に足した列
+    （公開しない値）も公開のリクエストのたびに読まれ、描く側で1回 `...member` と書くだけで
+    ページに出る。期待する列はここに字で書く——公開する列を足すのは、この一覧を直す判断にする
+    （ソースの一覧を import して比べると、足した列がそのまま緑になる）。
+  */
+  const PUBLIC_MEMBER_KEYS = [
+    'avatarUrl',
+    'bio',
+    'careerText',
+    'email',
+    'github',
+    'headline',
+    'id',
+    'location',
+    'name',
+    'nameLatin',
+    'role',
+    'skillsText',
+    'slug',
+  ]
+  // 公開しない列に入れておく印。公開の問い合わせの返り値のどこにも出てはいけない
+  const SENTINEL = 'private-sentinel'
+
+  async function seedPrivate() {
+    const member = await seedMember({
+      formKey: `${SENTINEL}-form`,
+      celestialBody: `${SENTINEL}-body`,
+      celestialAccent: `${SENTINEL}-accent`,
+      createdAt: `${SENTINEL}-created`,
+    })
+    await seedItem({ slug: 'appmixer', memberId: member.id, platformKey: 'web' })
+    return member
+  }
+
+  it('メンバーは公開する列だけを返す', async () => {
+    const member = await seedPrivate()
+    // 公開しない列は schema に在って一覧に無いもの全部。印の入った列もその中にある
+    const hidden = Object.keys(getTableColumns(schema.members)).filter(
+      (key) => !PUBLIC_MEMBER_KEYS.includes(key),
+    )
+    expect(hidden).toEqual(
+      expect.arrayContaining(['formKey', 'celestialBody', 'createdAt', 'published', 'sortOrder']),
+    )
+
+    const listed = await listPublishedMembers(db())
+    const found = await findPublishedMember(db(), member.slug)
+    expect(listed).toHaveLength(1)
+    expect(found).toBeDefined()
+    for (const one of [...listed, found]) {
+      expect(Object.keys(one ?? {}).sort()).toEqual(PUBLIC_MEMBER_KEYS)
+    }
+    expect(JSON.stringify([listed, found])).not.toContain(SENTINEL)
+  })
+
+  it('作品は担当とプラットフォームの行を運ばず、名前と札だけを持つ', async () => {
+    await seedPrivate()
+    const listed = await listPublishedItems(db())
+    const found = await findPublishedItem(db(), 'appmixer')
+    expect(listed).toHaveLength(1)
+    expect(found).not.toBeNull()
+
+    const keys = [
+      ...Object.keys(getTableColumns(schema.items)),
+      'tags',
+      'links',
+      'shots',
+      'platformLabel',
+      'memberName',
+      'memberSlug',
+    ].sort()
+    for (const view of [...listed, found]) {
+      expect(Object.keys(view ?? {}).sort()).toEqual(keys)
+      expect(view).toMatchObject({
+        platformLabel: 'Web',
+        memberName: '岡崎 昂功',
+        memberSlug: 'okazaki',
+      })
+    }
+    expect(JSON.stringify([listed, found])).not.toContain(SENTINEL)
   })
 })
