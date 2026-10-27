@@ -171,7 +171,7 @@ npx wrangler d1 execute astlog --remote --command "DELETE FROM owner_claims WHER
 
 ログインの入口（`/admin/auth/<提供元>/start`）は、同じ IP から 60 秒に 10 回まで
 （`wrangler.toml` の `[[ratelimits]]`。作っておくものは無い）。超えると 1 分ほど 429 になる。
-IPv6 は /64 ごと。多くの IP からの分はダッシュボードの WAF で `/admin/auth/*/start` にレート制限を置いて止める。
+IPv6 は /64 ごと。多くの IP からの分はこれでは止まらない。止めるならダッシュボードで WAF のカスタムルール（`/admin/auth/*/start` に Managed Challenge）か Cloudflare Access を置く（WAF のレート制限は IP ごとに数えるので、1つの IP の速さを下げるだけ）。
 
 端末を失くした・共用の端末でログアウトし忘れたときは、管理画面の「アカウント」
 （左ナビの足元の名前）→「すべての端末からログアウト」。管理画面に入れないときは、

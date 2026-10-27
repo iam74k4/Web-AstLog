@@ -34,8 +34,8 @@ export type Env = {
     ログインの入口（/admin/auth/:provider/start）の回数の上限。IP ごと（IPv6 は /64
     ごと）に数える Workers の Rate Limiting（wrangler.toml の [[ratelimits]]）。入口は
     開くたびに D1 へ1行書くので、1つの送り元が書き込みの枠を削り続けないように止める。
-    多くの IP からの分はダッシュボードの WAF が止める（src/routes/admin/auth.tsx の
-    tooManyStarts）。無い環境では数えない
+    多くの IP からの分はこれでは止まらない（ダッシュボードで置く WAF のカスタムルールの
+    役目。src/routes/admin/auth.tsx の tooManyStarts）。無い環境では数えない
   */
   LOGIN_RATE_LIMIT?: RateLimit
   /*
