@@ -431,10 +431,11 @@ describe('500 のログ', () => {
         ? JSON.stringify(value)
         : String(value)
 
-  it('失敗したクエリの束縛値を書かない（method・path・例外の名前と文だけ）', async () => {
-    const marker = 'leak-marker-5e1f'
-    // 目印の値を束縛した文だけを、本物の D1 の失敗（無い表）に差し替える
-    const failing = new Proxy(env.DB, {
+  const marker = 'leak-marker-5e1f'
+
+  // 目印の値を束縛した文だけを、本物の D1 の失敗に差し替える
+  const failingOn = (fail: (target: D1Database, inner: D1PreparedStatement) => unknown) =>
+    new Proxy(env.DB, {
       get(target, key) {
         if (key === 'prepare') {
           return (query: string) => {
@@ -443,9 +444,7 @@ describe('500 のログ', () => {
               get(inner, name) {
                 if (name === 'bind') {
                   return (...values: unknown[]) =>
-                    values.includes(marker)
-                      ? target.prepare('select * from no_such_table_for_log_test')
-                      : inner.bind(...values)
+                    values.includes(marker) ? fail(target, inner) : inner.bind(...values)
                 }
                 const value = Reflect.get(inner, name)
                 return typeof value === 'function' ? value.bind(inner) : value
@@ -457,32 +456,65 @@ describe('500 のログ', () => {
         return typeof value === 'function' ? value.bind(target) : value
       },
     })
+
+  // ログインした管理画面へ POST し、500 と console.error に書いた行を返す
+  async function postLogged(path: string, body: FormData, database: D1Database) {
     const owner = await ensureOwner()
     const { token } = await createSession(db(), owner.id)
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
       const ctx = createExecutionContext()
       const response = await app.fetch(
-        new Request('https://astlog.test/admin/members?from=log-test', {
+        new Request(`https://astlog.test${path}?from=log-test`, {
           method: 'POST',
           headers: { cookie: `${HOST_SESSION_COOKIE}=${token}` },
-          body: form({ name: '目印', slug: 'marker', location: marker }),
+          body,
         }),
-        uncachedEnv({ DB: failing }),
+        uncachedEnv({ DB: database }),
         ctx,
       )
       await waitOnExecutionContext(ctx)
-      expect(response.status).toBe(500)
-      const logged = errors.mock.calls.map((args) => args.map((arg) => spelled(arg)).join(' '))
-      expect(logged.join('\n')).not.toContain(marker)
-      // 何が落ちたかは読める——method と path（query は書かない）、クエリの文（値は ? のまま）、D1 の失敗の文
-      expect(logged).toHaveLength(1)
-      expect(logged[0]).toMatch(/^500 POST \/admin\/members: /)
-      expect(logged[0]).not.toContain('log-test')
-      expect(logged[0]).toContain('DrizzleQueryError: Failed query: insert into "members"')
-      expect(logged[0]).toContain('no such table: no_such_table_for_log_test')
+      expect(response.status, path).toBe(500)
+      return errors.mock.calls.map((args) => args.map((arg) => spelled(arg)).join(' '))
     } finally {
       errors.mockRestore()
+    }
+  }
+
+  it('失敗したクエリの束縛値を書かない（method・path・例外の名前と文だけ）', async () => {
+    // 1文の INSERT が本物の D1 の失敗（無い表）で落ちる
+    const logged = await postLogged(
+      '/admin/members',
+      form({ name: '目印', slug: 'marker', location: marker }),
+      failingOn((target) => target.prepare('select * from no_such_table_for_log_test')),
+    )
+    expect(logged.join('\n')).not.toContain(marker)
+    // 何が落ちたかは読める——method と path（query は書かない）、クエリの文（値は ? のまま）、D1 の失敗の文
+    expect(logged).toHaveLength(1)
+    expect(logged[0]).toMatch(/^500 POST \/admin\/members: /)
+    expect(logged[0]).not.toContain('log-test')
+    expect(logged[0]).toContain('DrizzleQueryError: Failed query: insert into "members"')
+    expect(logged[0]).toContain('no such table: no_such_table_for_log_test')
+  })
+
+  /*
+    D1 は受け取れない型の値（配列など）を束縛されると、D1_TYPE_ERROR の文の末尾にその値を
+    書く。1文のクエリでは DrizzleQueryError の cause に、batch では Drizzle に包まれずそのまま
+    上がってくる。どちらでも値は書かない
+  */
+  it('D1 が受け取れない値の文（D1_TYPE_ERROR）からも値を落とす。1文でも batch でも', async () => {
+    const typeError = failingOn((_, inner) => inner.bind([marker, 'x']))
+    for (const [path, body] of [
+      // 1文の INSERT
+      ['/admin/members', form({ name: '目印', slug: 'marker', location: marker })],
+      // 作品の保存は1つの batch
+      ['/admin/items', form({ type: 'work', title: '目印', summary: marker })],
+    ] as const) {
+      const logged = await postLogged(path, body, typeError)
+      expect(logged.join('\n'), path).not.toContain(marker)
+      expect(logged, path).toHaveLength(1)
+      expect(logged[0], path).toMatch(new RegExp(`^500 POST ${path}: `))
+      expect(logged[0], path).toContain("D1_TYPE_ERROR: Type 'object' not supported")
     }
   })
 })

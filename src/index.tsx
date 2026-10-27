@@ -202,12 +202,16 @@ app.notFound((c) =>
 
 /*
   500 のログ（Workers Logs）には、要求の method と path（query は書かない）と、例外の連なり
-  （cause）の名前と文だけを書く。例外をそのまま渡すと、Drizzle の失敗したクエリの例外
-  （DrizzleQueryError）は文の中に「params:」として束縛した値を持っているので、書こうとした
-  名前・所在地・メールが平文で残り、D1 から消したあともログの保持期間のあいだ消えない。
-  クエリの文は値を ? で渡すので残す。スタックは書かない（1行目に同じ文が入る）
+  （cause）の名前と文だけを書き、束縛した値はどこにも書かない。値は書こうとした名前・所在地・
+  メールで、ログに残ると D1 から消したあとも保持期間のあいだ消えない。
+  - Drizzle の失敗したクエリの例外（DrizzleQueryError）は文の中に「params:」として値を持つ。
+    クエリの文（値は ? で渡す）だけを書く
+  - D1 は受け取れない型の値を束縛されると（D1_TYPE_ERROR）、文の末尾「for value '…'」に
+    その値を書く。そこから後ろを落とす
+  - スタックは書かない（1行目に同じ文が入る）
 */
 const MAX_CAUSES = 5
+const BOUND_VALUE = / for value [\s\S]*$/
 
 function causeTrail(error: unknown): string {
   const parts: string[] = []
@@ -216,7 +220,7 @@ function causeTrail(error: unknown): string {
     if (current instanceof DrizzleQueryError) {
       parts.push(`DrizzleQueryError: Failed query: ${current.query}`)
     } else if (current instanceof Error) {
-      parts.push(`${current.name}: ${current.message}`)
+      parts.push(`${current.name}: ${current.message.replace(BOUND_VALUE, '')}`)
     } else {
       // 例外でない値は中身を書かない（何が投げられたかは型で分かる）
       parts.push(`thrown ${typeof current}`)
