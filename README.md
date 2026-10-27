@@ -40,8 +40,9 @@ HTML は約 4.5KB。天体の飾り（夜明けの窓のすばると星・経歴
 疑似要素が描く（`CLAUDE.md` の「動き」「天体の飾り」）。
 絞り込みとページの移動は URL とサーバー、管理画面は HTML フォームと 303 で動く。
 全部の応答に CSP（管理画面の HTML は補助1本の exact SHA-256 だけ、それ以外は `script-src 'none'`）と
-`X-Content-Type-Options: nosniff`・`Referrer-Policy: strict-origin-when-cross-origin`・
-`Cross-Origin-Opener-Policy: same-origin` を付ける。任意の script は許さない。管理画面は `Cache-Control: no-store`。
+`X-Content-Type-Options: nosniff`・`Referrer-Policy: strict-origin-when-cross-origin`
+を付ける。任意の script は許さない。管理画面は `Cache-Control: no-store` と
+`Cross-Origin-Opener-Policy: same-origin`（公開ページには付けない。理由は `src/index.tsx`）。
 付けているのは `src/index.tsx` のミドルウェアと、Worker を通らない `public/` の
 ファイルには `public/_headers`（決まりは `CLAUDE.md` の「応答のヘッダ」）。
 
@@ -673,7 +674,7 @@ public/
   BingSiteAuth.xml   Bing Webmaster Tools の所有の確認（Bing が決めた名前と形。中の値は
                      Bing の管理画面が出したもの。消すと Bing の確認が外れる）
   _headers           静的なファイルに付けるヘッダ（Worker を通らないので、ここで付ける）。
-                     HSTS・COOP・Permissions-Policy は Worker の応答と同じ値（src/lib/headers.ts）
+                     HSTS と Permissions-Policy は Worker の応答と同じ値（src/lib/headers.ts）
                      Workers Static Assets が読む規則で、ファイルとしては配られない
                      3枚の CSS は 1年・immutable（中身の版つきの URL
                      /app.css?v=… などで読むので、変えてデプロイすれば URL が変わる）

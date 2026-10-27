@@ -9,10 +9,11 @@
 CSP（`default-src 'self'; script-src 'none'; object-src 'none'; base-uri 'none';
 form-action 'self'; frame-ancestors 'none'; img-src 'self';
 style-src 'self' 'unsafe-inline'`）・`X-Content-Type-Options: nosniff`・
-`Referrer-Policy: strict-origin-when-cross-origin`・`Cross-Origin-Opener-Policy: same-origin`
-（ほかのサイトが開いた窓に手を出させない）を付ける。公開 HTML の `script-src` は `'none'`
+`Referrer-Policy: strict-origin-when-cross-origin` を付ける。公開 HTML の `script-src` は `'none'`
 （実行する script を1本も持たない）。管理画面は編集補助の `ADMIN_CSP` だけを許す。保存前プレビューは script 無しで、`frame-ancestors` を同一オリジンに限って許す。自分の CSP を持つ
-`/images/*` はそのまま（上書きしない）。`/admin/*` はさらに `Cache-Control: no-store`。
+`/images/*` はそのまま（上書きしない）。`/admin/*` はさらに `Cache-Control: no-store` と
+`Cross-Origin-Opener-Policy: same-origin`（ほかのサイトが開いた窓に手を出させない。公開ページに
+付けると、sandbox の枠から開いた窓がページを開けない）。
 Worker を通らない `public/` のファイル（`/app.css`・`/admin.css`・`/preview.css`・`/assets/…`）には
 `public/_headers` が nosniff・Referrer-Policy・`default-src 'none'; sandbox` を付ける。
 3枚の CSS にはさらに `Cache-Control: public, max-age=31536000, immutable`（HTML が

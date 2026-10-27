@@ -2,7 +2,7 @@ import { DrizzleQueryError } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { AppEnv } from './env'
 import { yearInJapan } from './lib/format'
-import { HSTS, OPENER_POLICY, PERMISSIONS_POLICY } from './lib/headers'
+import { HSTS, PERMISSIONS_POLICY } from './lib/headers'
 import { pageCache } from './lib/page-cache'
 import { adminRoutes } from './routes/admin/index'
 import { publicRoutes } from './routes/public/routes'
@@ -48,11 +48,21 @@ const app = new Hono<AppEnv>()
   POST に Origin: null を付け、sameOrigin（src/routes/admin/session.ts）がそれを
   403 で弾くので、ログインしたあとの保存がすべて止まる。
 
-  HSTS・Cross-Origin-Opener-Policy・Permissions-Policy の値は src/lib/headers.ts に置き、
-  public/_headers と同じ値を付ける（理由もそちら）。
+  HSTS・Permissions-Policy の値は src/lib/headers.ts に置き、public/_headers と同じ値を
+  付ける（理由もそちら）。
 
   管理画面（/admin/*）は no-store。共用の端末でログアウトしたあと「戻る」で、
   下書きの中身が履歴のキャッシュから出てこないようにする。
+
+  管理画面（ログインの画面も）は Cross-Origin-Opener-Policy: same-origin。ほかのサイトが
+  window.open で開いた窓に、開いた側から手を出させない——手が届くと、窓の中の枠の数
+  （window.length）でログインしているかが分かり（ログイン後の画面にはプレビューの iframe が
+  ある）、開いた窓をあとで偽のページへ移せる。公開ページの窓から /admin へ移っても、そこで
+  つながりが切れる。同じオリジンの窓（プレビューを別タブで開く）と iframe はつながったまま、
+  OAuth は画面ごとの遷移なので止まらない。
+  公開ページと public/ のファイルには付けない。sandbox の枠（allow-popups-to-escape-sandbox を
+  持たないもの。メールの表示や埋め込みのプレビュー）から開いた窓は、COOP を持つページを
+  開けずにエラーで終わる。公開ページには、開いた側に数えられて困るものが無い。
 
   public/ の静的なファイルは Worker を通らない（[assets] が先に配る）。
   あちらのヘッダは public/_headers が持つ。
@@ -92,9 +102,9 @@ app.use(async (c, next) => {
   headers.set('x-content-type-options', 'nosniff')
   headers.set('referrer-policy', 'strict-origin-when-cross-origin')
   headers.set('permissions-policy', PERMISSIONS_POLICY)
-  headers.set('cross-origin-opener-policy', OPENER_POLICY)
   if (new URL(c.req.url).protocol === 'https:') headers.set('strict-transport-security', HSTS)
   if (admin) {
+    headers.set('cross-origin-opener-policy', 'same-origin')
     headers.set('cache-control', preview ? 'private, no-store' : 'no-store')
     if (preview) headers.set('x-robots-tag', 'noindex, nofollow')
   }

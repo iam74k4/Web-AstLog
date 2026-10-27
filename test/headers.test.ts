@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import appCss from '../public/app.css'
 import app from '../src/index'
 import { createSession, HOST_SESSION_COOKIE } from '../src/lib/auth'
-import { HSTS, OPENER_POLICY, PERMISSIONS_POLICY } from '../src/lib/headers'
+import { HSTS, PERMISSIONS_POLICY } from '../src/lib/headers'
 import { ADMIN_BEHAVIOR, ADMIN_CSP } from '../src/ui/admin-behavior'
 import {
   db,
@@ -59,8 +59,6 @@ function expectPageHeaders(response: Response, label: string, admin = false) {
     Origin: null を付け、sameOrigin が 403 で弾く（管理画面の保存が全部止まる）
   */
   expect(response.headers.get('referrer-policy'), label).toBe('strict-origin-when-cross-origin')
-  // ほかのサイトが開いた窓から、ログインの有無（枠の数）を数えさせない（src/lib/headers.ts）
-  expect(response.headers.get('cross-origin-opener-policy'), label).toBe(OPENER_POLICY)
 }
 
 describe('応答のヘッダ', () => {
@@ -202,11 +200,10 @@ describe('応答のヘッダ', () => {
   }
 
   /*
-    https を1年覚えさせ（HSTS）、ほかのサイトが開いた窓に手を出させず（COOP）、使わない
-    端末の機能を止める（Permissions-Policy）。公開・管理画面・リダイレクト・404・画像の
-    どれにも、同じ1本のミドルウェアが付ける
+    https を1年覚えさせ（HSTS）、使わない端末の機能を止める（Permissions-Policy）。公開・
+    管理画面・リダイレクト・404・画像のどれにも、同じ1本のミドルウェアが付ける
   */
-  it('どの応答にも HSTS・COOP・Permissions-Policy を付ける', async () => {
+  it('どの応答にも HSTS と Permissions-Policy を付ける', async () => {
     await seedItem()
     await env.MEDIA.put('items/shot-ab90.png', 'image-bytes', {
       metadata: { contentType: 'image/png' },
@@ -223,15 +220,61 @@ describe('応答のヘッダ', () => {
       expect(response.status, path).toBe(status)
       expect(response.headers.get('strict-transport-security'), path).toBe(HSTS)
       expect(response.headers.get('permissions-policy'), path).toBe(PERMISSIONS_POLICY)
-      expect(response.headers.get('cross-origin-opener-policy'), path).toBe(OPENER_POLICY)
     }
-    // ログイン後の画面（プレビューの iframe を持つ）にも
-    const signed = await signIn()
-    expect((await signed('/admin/items')).headers.get('cross-origin-opener-policy')).toBe(
-      OPENER_POLICY,
-    )
     // 全画面（動画の操作の手）は止めない
     expect(PERMISSIONS_POLICY).not.toContain('fullscreen')
+  })
+
+  /*
+    COOP（same-origin）は管理画面だけ。ほかのサイトが開いた窓から、ログインの有無（ログイン後の
+    画面はプレビューの iframe を持つので、枠の数が変わる）を数えさせない。公開ページに付けると、
+    sandbox の枠（allow-popups-to-escape-sandbox を持たないもの）から開いた窓がページを開けずに
+    エラーで終わる（src/index.tsx）
+  */
+  it('COOP は管理画面だけに付け、公開ページと画像には付けない', async () => {
+    await seedItem({ slug: 'appmixer' })
+    await env.MEDIA.put('items/shot-ab90.png', 'image-bytes', {
+      metadata: { contentType: 'image/png' },
+    })
+    for (const [path, status] of [
+      ['/admin', 303],
+      ['/admin/login', 200],
+      ['/admin/items', 303],
+    ] as const) {
+      const response = await get(path)
+      expect(response.status, path).toBe(status)
+      expect(response.headers.get('cross-origin-opener-policy'), path).toBe('same-origin')
+    }
+    // ログイン後の画面（プレビューの iframe を持つ）とプレビューにも
+    const signed = await signIn()
+    for (const path of ['/admin/items', '/admin/members/new']) {
+      const response = await signed(path)
+      expect(response.status, path).toBe(200)
+      expect(response.headers.get('cross-origin-opener-policy'), path).toBe('same-origin')
+    }
+    const preview = await signed('/admin/preview/items', {
+      method: 'POST',
+      body: form({ type: 'app', title: '下見' }),
+    })
+    expect(preview.status).toBe(200)
+    expect(preview.headers.get('cross-origin-opener-policy')).toBe('same-origin')
+    for (const [path, status] of [
+      ['/', 200],
+      ['/projects', 200],
+      ['/apps/item/appmixer', 200],
+      ['/apps', 301],
+      ['/no-such-page', 404],
+      ['/robots.txt', 200],
+      ['/images/items/shot-ab90.png', 200],
+      // /admin に似た名前の公開の URL は管理画面ではない
+      ['/administrator', 404],
+    ] as const) {
+      const response = await get(path)
+      expect(response.status, path).toBe(status)
+      expect(response.headers.get('cross-origin-opener-policy'), path).toBeNull()
+    }
+    // ログイン中に見る公開ページも公開ページ
+    expect((await signed('/')).headers.get('cross-origin-opener-policy')).toBeNull()
   })
 
   /*
@@ -272,10 +315,13 @@ describe('応答のヘッダ', () => {
       ブラウザによっては <img> や favicon で使うときもこの CSP が効く
     */
     expect(values['content-security-policy']).toBe("default-src 'none'; sandbox")
-    // HSTS・COOP・Permissions-Policy は Worker の応答と同じ値（静的なファイルだけ素で出さない）
+    // HSTS と Permissions-Policy は Worker の応答と同じ値（静的なファイルだけ素で出さない）
     expect(values['strict-transport-security']).toBe(HSTS)
-    expect(values['cross-origin-opener-policy']).toBe(OPENER_POLICY)
     expect(values['permissions-policy']).toBe(PERMISSIONS_POLICY)
+    // COOP は管理画面だけ。素材にも付けない（sandbox の枠から開いた窓で開けなくなる）
+    for (const [path, rule] of rules) {
+      expect(rule['cross-origin-opener-policy'], path).toBeUndefined()
+    }
     // 規則の数には上限がある（Workers Static Assets は 100 まで）
     expect(rules.size).toBeLessThanOrEqual(100)
   })

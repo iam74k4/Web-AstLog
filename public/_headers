@@ -3,9 +3,9 @@
 # src/index.tsx のミドルウェアは届かない。Workers Static Assets がこのファイルを
 # 読んで付け、このファイル自身は配らない。
 #
-# HSTS・Cross-Origin-Opener-Policy・Permissions-Policy は Worker の応答と同じ値
-# （src/lib/headers.ts の HSTS・OPENER_POLICY・PERMISSIONS_POLICY。
-# test/headers.test.ts が突き合わせる）。
+# HSTS と Permissions-Policy は Worker の応答と同じ値（src/lib/headers.ts の HSTS と
+# PERMISSIONS_POLICY。test/headers.test.ts が突き合わせる）。
+# Cross-Origin-Opener-Policy は管理画面だけのもので、ここには付けない（src/index.tsx）。
 #
 # CSP は /images/* と同じ狭い約束。ここにあるのは文書ではなく素材なので、
 # SVG を直に開かれてもスクリプトを走らせず、外のものを読み込ませない。
@@ -17,7 +17,6 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Content-Security-Policy: default-src 'none'; sandbox
   Strict-Transport-Security: max-age=31536000; includeSubDomains
-  Cross-Origin-Opener-Policy: same-origin
   Permissions-Policy: accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()
 
 # security.txt は字の符号を名乗って配る（RFC 9116 は text/plain; charset=utf-8 を求める。
