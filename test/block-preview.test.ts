@@ -114,7 +114,8 @@ describe('文章ページの保存前プレビュー', () => {
     }
   })
 
-  it('フォーム以外のPOSTは500にせず400を返し、既存ページと公開の版を変えない', async () => {
+  // 本文を読む前に src/routes/admin/request.ts の readAdminForm が種類で断る
+  it('フォーム以外のPOSTは500にせず読まずに415を返し、既存ページと公開の版を変えない', async () => {
     const [block] = await db()
       .insert(schema.blocks)
       .values({ type: 'note', body: '保存済みの本文', published: 1 })
@@ -128,9 +129,9 @@ describe('文章ページの保存前プレビュー', () => {
         headers: { 'content-type': 'application/json' },
         body: '{"type":"note","body":"未保存"}',
       })
-      expect(response.status).toBe(400)
+      expect(response.status).toBe(415)
       expect(response.headers.get('cache-control')).toBe('private, no-store')
-      expect(await response.text()).toContain('フォームを読み取れませんでした')
+      expect(await response.text()).toContain('フォームの送信')
     }
     expect(await db().query.blocks.findMany()).toEqual([block])
     expect(await env.MEDIA.get(SITE_VERSION_KEY)).toBe(version)

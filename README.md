@@ -20,7 +20,7 @@ workers.dev とプレビュー URL は無効。公開はデプロイ後で、購
 | --- | --- | --- |
 | 実行環境 | Cloudflare Workers | 常時起動のサーバーを持たずに済む |
 | データ | D1（SQLite） | メンバーと Projects（個人開発 / 業務） |
-| 画像 | KV | アバター（`avatars/`）と作品の画像（メインの画像・アイコン・ほかの画像。`items/`）だけ。R2 が未有効なので当面こちら。受けるのは中身で確かめた PNG・JPEG・WebP・AVIF・GIF だけ。ほかに写しの版の1行（`site:version`）が同居している |
+| 画像 | KV | アバター（`avatars/`）と作品の画像（メインの画像・アイコン・ほかの画像。`items/`）だけ。R2 が未有効なので当面こちら。受けるのは中身で確かめた PNG・JPEG・WebP・AVIF・GIF だけ。JPEG・PNG・WebP は付け足しを外す。ほかに写しの版の1行（`site:version`）が同居している |
 | 公開ページの写し | Cache API ＋ KV の版 | 訪問者の画面は D1 に聞かずに返し、D1 が落ちても前の写しを出す（下の「公開ページの写し」） |
 | 管理画面のログイン | GitHub / Google の OAuth | パスワードを持たない。本人は提供元の ID で照合する |
 | 言語 | TypeScript | |
@@ -565,6 +565,10 @@ SVG と HEIC は弾く。この検査より前に上げた SVG / HEIC が KV に
 そのアバター・作品の画像は壊れて見える。管理画面から画像を選び直せば直る
 （前の画像はそのとき KV から消える）。
 
+JPEG・PNG・WebP は撮った場所・日時・機種などの付け足し（EXIF・XMP ほか）を外してから置き、
+外せない AVIF と動画は位置を持てば断る（`src/lib/image-metadata.ts`）。これより前に置いた
+画像は付け足しを持ったままなので、気になるものは選び直して保存する。
+
 パスワードのログインから OAuth へ移す移行（`0006_oauth_identities` と
 `0007_hash_sessions`）を当てると、`users` からメールアドレスとパスワードの
 ハッシュが外れ、ログイン中のセッションは全部消える（セッションの id を D1 には
@@ -616,6 +620,7 @@ src/
     page-cache.ts    公開ページの写し（Cache API）と、その版（KV の site:version）の上げ方
     sequence.ts      サイトのページの並びから目次と印を組む（tableOfContents。重なりは例外）
     image.ts         受け取る画像の種類（IMAGE_FORMATS。中身の先頭のバイトで決める）
+    image-metadata.ts 置く前に外す写真の付け足し（撮った場所など）と、位置を持つ AVIF・動画の判定
     media-retention.ts 消した画像の控え（archive/）を残す期間
   routes/
     public/          公開ページ

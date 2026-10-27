@@ -2,10 +2,25 @@ import { env } from 'cloudflare:test'
 import { asc, eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import * as schema from '../src/db/schema'
+import { sniffImage } from '../src/lib/image'
 import { MEDIA_QUOTA_BYTES } from '../src/lib/media-usage'
 import { MAX_FORM_BYTES } from '../src/routes/admin/request'
 import { db, form, get, okText, resetDb, seedItem, signIn, touch } from './helpers'
-import { file, gif, mp4, padded, png } from './images'
+import {
+  androidLocation,
+  appleLocation,
+  avifWithMetadata,
+  file,
+  gif,
+  mp4,
+  PLACE,
+  padded,
+  photoJpeg,
+  photoPng,
+  photoWebp,
+  png,
+  timedTrack,
+} from './images'
 
 /*
   管理画面から上げる画像と動画の上限（種類ごとの1枚の上限・1回の送信の上限・全体の容量）と、
@@ -76,7 +91,7 @@ describe('動画を上げる', () => {
     const [row] = await db().select().from(schema.items)
     const shots = await shotsOf(row?.id ?? 0)
     const video = shots[1]
-    expect(video?.url).toMatch(/^\/images\/items\/demo-[0-9a-f]{8}\.mp4$/)
+    expect(video?.url).toMatch(/^\/images\/items\/demo-[0-9a-f]{32}\.mp4$/)
     // 寸法は表示の向き（縦の動画）
     expect([video?.width, video?.height]).toEqual([1080, 1920])
 
@@ -115,7 +130,7 @@ describe('動画を上げる', () => {
     )
     const html = await okText('/apps/item/demo')
     expect(html).toMatch(
-      /<meta property="og:image" content="https:\/\/[^"]+\/images\/items\/demo-[0-9a-f]{8}\.png"/,
+      /<meta property="og:image" content="https:\/\/[^"]+\/images\/items\/demo-[0-9a-f]{32}\.png"/,
     )
   })
 
@@ -140,7 +155,7 @@ describe('動画を上げる', () => {
     const [row] = await db().select().from(schema.items)
     const [shot] = await shotsOf(row?.id ?? 0)
     // 拡張子と content-type は判定の結果から（名乗りの video/quicktime は使わない）
-    expect(shot?.url).toMatch(/^\/images\/items\/demo-[0-9a-f]{8}\.mp4$/)
+    expect(shot?.url).toMatch(/^\/images\/items\/demo-[0-9a-f]{32}\.mp4$/)
     const key = (shot?.url ?? '').replace('/images/', '')
     const stored = await env.MEDIA.getWithMetadata<{ contentType: string }>(key, 'arrayBuffer')
     expect(stored.metadata?.contentType).toBe('video/mp4')
@@ -243,6 +258,175 @@ describe('1枚の上限は種類ごと', () => {
     expect(await response.text()).toContain('合計 24MB まで')
     expect(await mediaKeys()).toEqual([])
   })
+
+  /*
+    上限は名乗った長さ（Content-Length）で見るので、名乗らない送信（chunked）は読まずに断る。
+    ブラウザのフォーム（ここのほかのテストの FormData も）は長さを名乗るので、そちらは通る
+  */
+  it('長さを名乗らないフォームの送信は、読まずに 411 で断る', async () => {
+    const signed = await signIn()
+    const encoder = new TextEncoder()
+    for (const type of ['multipart/form-data; boundary=x', 'application/x-www-form-urlencoded']) {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode('--x--\r\n'))
+          controller.close()
+        },
+      })
+      const response = await signed('/admin/items', {
+        method: 'POST',
+        headers: { 'content-type': type },
+        body,
+      })
+      expect(response.status, type).toBe(411)
+      expect(await response.text(), type).toContain('Content-Length')
+    }
+    expect(await db().select().from(schema.items)).toHaveLength(0)
+
+    // 名乗る送信はこれまでどおり読む（作品が1件できる）
+    const ok = await signed('/admin/items', {
+      method: 'POST',
+      body: form({ type: 'app', title: 'Demo', slug: 'demo' }),
+    })
+    expect(ok.status).toBe(303)
+    expect(await db().select().from(schema.items)).toHaveLength(1)
+  })
+
+  /*
+    保存のルートは種類を見ずに formData を呼び、workerd は種類を断る前に本文を全部読む。
+    フォームの種類でない本文（text/plain・重ねて送られて畳まれた種類）も、長さを名乗らなければ
+    411、名乗れば 415 で、上限を越える本文を読み切る前に断る
+  */
+  it('フォームでない種類の本文も、上限を素通りさせずに読まずに断る', async () => {
+    const signed = await signIn()
+    const chunk = 1_000_000
+    const chunks = Math.ceil(MAX_FORM_BYTES / chunk) + 2
+    const folded = 'multipart/form-data, text/plain; boundary=x'
+    for (const type of ['text/plain', folded, 'application/octet-stream']) {
+      let pulled = 0
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (pulled >= chunks * chunk) return controller.close()
+          pulled += chunk
+          controller.enqueue(new Uint8Array(chunk))
+        },
+      })
+      const chunked = await signed('/admin/items', {
+        method: 'POST',
+        headers: { 'content-type': type },
+        body,
+      })
+      expect(chunked.status, type).toBe(411)
+      expect(pulled, type).toBeLessThan(MAX_FORM_BYTES)
+
+      const sized = await signed('/admin/items', {
+        method: 'POST',
+        headers: { 'content-type': type },
+        body: 'type=app&title=Demo&slug=demo',
+      })
+      expect(sized.status, type).toBe(415)
+      expect(await sized.text(), type).toContain('フォームの送信')
+    }
+    expect(await db().select().from(schema.items)).toHaveLength(0)
+  })
+})
+
+/*
+  写真の付け足し（撮った場所・日時・機種）は KV に置く前に外し、/images/* から配るのも外した
+  あとのバイトだけ（src/lib/image-metadata.ts）。外せない AVIF と動画は、位置があれば断る
+*/
+describe('写真の付け足しを外して置く', () => {
+  const latin1 = (bytes: Uint8Array) =>
+    Array.from(bytes, (byte) => String.fromCharCode(byte)).join('')
+
+  it('JPEG・PNG・WebP の位置は、保存した中身にも配る中身にも残らない', async () => {
+    const photos = {
+      image: photoJpeg({ orientation: 6 }),
+      icon: photoPng({ width: 512, height: 512 }),
+      newShot: photoWebp(),
+    }
+    const signed = await signIn()
+    const response = await signed('/admin/items', {
+      method: 'POST',
+      body: withFiles({ type: 'app', title: 'Demo', slug: 'demo', newShotAlt: '設定の画面' }, [
+        ['image', file(photos.image, 'IMG_0001.jpg', 'image/jpeg')],
+        ['icon', file(photos.icon, 'icon.png', 'image/png')],
+        ['newShot', file(photos.newShot, 'shot.webp', 'image/webp')],
+      ]),
+    })
+    expect(response.status).toBe(303)
+
+    const [row] = await db().select().from(schema.items)
+    const [shot] = await shotsOf(row?.id ?? 0)
+    const urls = { image: row?.imageUrl, icon: row?.iconUrl, newShot: shot?.url }
+    for (const [field, url] of Object.entries(urls)) {
+      // 乱数は 16 バイト（16進 32 字）。当てられない長さにして、/images/* はこの形も通す
+      expect(url, field).toMatch(/^\/images\/items\/demo-(?:icon-)?[0-9a-f]{32}\.(?:jpg|png|webp)$/)
+      const key = (url ?? '').replace('/images/', '')
+      const stored = await env.MEDIA.getWithMetadata<{ size: number }>(key, 'arrayBuffer')
+      const served = await get(`/images/${key}`)
+      expect(served.status, field).toBe(200)
+      const bytes = new Uint8Array(await served.arrayBuffer())
+      expect(bytes, field).toEqual(new Uint8Array(stored.value ?? new ArrayBuffer(0)))
+      expect(stored.metadata?.size, field).toBe(bytes.length)
+      for (const mark of [PLACE, 'GPSLatitude', 'MotionPhoto']) {
+        expect(latin1(bytes), `${field}: ${mark}`).not.toContain(mark)
+      }
+      // 外したあとも同じ種類・同じ寸法として読める
+      const original = sniffImage(photos[field as keyof typeof photos])
+      expect(sniffImage(bytes), field).toEqual(original)
+    }
+    // 向き（6）は残すので、縦の写真の寸法は縦のまま
+    expect([row?.imageWidth, row?.imageHeight]).toEqual([600, 800])
+  })
+
+  it('位置を持つ AVIF・MOV・MP4 は理由を言って断り、何も置かない', async () => {
+    const signed = await signIn()
+    const avifResponse = await signed('/admin/items', {
+      method: 'POST',
+      body: withFiles({ type: 'app', title: 'Demo', slug: 'demo' }, [
+        ['image', file(avifWithMetadata(), 'photo.avif', 'image/avif')],
+      ]),
+    })
+    expect(avifResponse.status).toBe(400)
+    expect(await avifResponse.text()).toContain(
+      '撮った場所（位置情報）が入っているので受け付けません',
+    )
+    // アバターも同じ取り込み（pickFile）を通る
+    const avatar = form({ name: 'Eve', slug: 'eve' })
+    avatar.append('avatar', file(avifWithMetadata(), 'eve.avif', 'image/avif'))
+    const avatarResponse = await signed('/admin/members', { method: 'POST', body: avatar })
+    expect(avatarResponse.status).toBe(400)
+    expect(await avatarResponse.text()).toContain('位置情報を外して書き出してから')
+    expect(await mediaKeys('avatars/')).toEqual([])
+    expect(await db().select().from(schema.members)).toHaveLength(0)
+
+    for (const movie of [
+      mp4({ brand: 'qt  ', extra: [appleLocation()] }),
+      mp4({ extra: [androidLocation()] }),
+      mp4({ extra: [timedTrack('gpmd')] }),
+    ]) {
+      const response = await postShots([['newShot', mp4File(movie)]], ['動く画面'])
+      expect(response.status).toBe(400)
+      expect(await response.text()).toContain('位置情報を外して書き出してから選び直してください')
+    }
+    expect(await mediaKeys()).toEqual([])
+    expect(await db().select().from(schema.items)).toHaveLength(0)
+  })
+
+  it('並びが途中で読めず付け足しが残る写真は、黙って置かずに書き出し直してもらう', async () => {
+    const signed = await signIn()
+    const response = await signed('/admin/items', {
+      method: 'POST',
+      body: withFiles({ type: 'app', title: 'Demo', slug: 'demo' }, [
+        ['image', file(photoJpeg().slice(0, 30), 'IMG_0001.jpg', 'image/jpeg')],
+      ]),
+    })
+    expect(response.status).toBe(400)
+    expect(await response.text()).toContain('撮った場所などの付け足しを外せません')
+    expect(await mediaKeys()).toEqual([])
+    expect(await db().select().from(schema.items)).toHaveLength(0)
+  })
 })
 
 describe('全体の容量', () => {
@@ -255,8 +439,9 @@ describe('全体の容量', () => {
     await env.MEDIA.put('archive/items/gone-bbbb2222.png', 'x', {
       metadata: { contentType: 'image/png', size: 50_000_000 },
     })
+    // 数えるのは置く大きさ。PNG の後ろの詰め物は付け足しとして外れるので、そのまま置く GIF で量る
     const response = await postShots(
-      [['newShot', file(padded(png(), 200_000), 'a.png', 'image/png')]],
+      [['newShot', file(padded(gif(), 200_000), 'a.gif', 'image/gif')]],
       ['設定の画面'],
     )
     expect(response.status).toBe(400)
@@ -347,5 +532,33 @@ describe('動画を配る', () => {
     // 一覧の見本に動画を <img> で出さない
     const list = await (await signed('/admin/items')).text()
     expect(list).not.toContain(`src="/images/${key}"`)
+  })
+})
+
+/*
+  KV のキーの乱数は 16 バイト（16進 32 字。src/routes/admin/images.ts の putImage）。/images/* は
+  公開かどうかを見ずに返すので、下書きの画像を守るのは当てられない URL だけ。前に置いた 8 字の
+  キーも同じ形の検査で配り続ける（貼られた URL を殺さない）
+*/
+describe('画像のキー', () => {
+  it('上げた画像のキーは 32 字の乱数。前の 8 字のキーも配る', async () => {
+    const signed = await signIn()
+    const response = await signed('/admin/items', {
+      method: 'POST',
+      body: withFiles({ type: 'app', title: 'Demo', slug: 'demo' }, [
+        ['image', file(png(), 'a.png', 'image/png')],
+      ]),
+    })
+    expect(response.status).toBe(303)
+    const [row] = await db().select().from(schema.items)
+    expect(row?.imageUrl).toMatch(/^\/images\/items\/demo-[0-9a-f]{32}\.png$/)
+
+    const old = 'items/legacy-0123abcd.png'
+    await env.MEDIA.put(old, png(), { metadata: { contentType: 'image/png' } })
+    for (const url of [row?.imageUrl ?? '', `/images/${old}`]) {
+      const served = await get(url)
+      expect(served.status, url).toBe(200)
+      expect(served.headers.get('content-type'), url).toBe('image/png')
+    }
   })
 })
