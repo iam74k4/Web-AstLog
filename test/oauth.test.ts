@@ -948,25 +948,30 @@ describe('owner は1人', () => {
   SEC-N3。ログインの入口は開くたびに D1 へ書くので、IP ごと（IPv6 は /64 ごと）に回数の
   上限を持つ（Workers の Rate Limiting。wrangler.toml の [[ratelimits]]: 60 秒で 10 回）。
   止めた要求は D1 に書かない。ほかの IP（持ち主）は止まらない。
+
+  Miniflare の上限は時計にそろった固定の窓（60 秒）で数えるので、窓の境が数える途中に
+  来ると、そこから数え直しになる。どのテストも、境がどこに来ても成り立つことだけを見る
 */
 describe('ログインの入口の回数', () => {
   const from = (ip: string) => ({ headers: { 'cf-connecting-ip': ip } })
 
   it('同じ IP から続けて開くと 429 で止め、D1 に書かない。ほかの IP は入れる', async () => {
     const statuses: number[] = []
-    // 窓（60 秒）の境をまたいでも必ず上限を超える数（上限 10 の2倍 + 1）
+    let refused: Response | undefined
+    // 窓の境をまたいでも、どちらかの窓で必ず上限を超える数（上限 10 の2倍 + 1）
     for (let i = 0; i < 21; i += 1) {
-      statuses.push((await get('/admin/auth/github/start', from('203.0.113.7'))).status)
+      const response = await get('/admin/auth/github/start', from('203.0.113.7'))
+      statuses.push(response.status)
+      if (response.status === 429) refused ??= response
     }
     const passed = statuses.filter((status) => status === 302).length
-    expect(statuses).toContain(429)
     expect(passed).toBeLessThanOrEqual(20)
     expect(await states()).toHaveLength(passed)
 
-    const refused = await get('/admin/auth/github/start', from('203.0.113.7'))
-    expect(refused.status).toBe(429)
-    expect(refused.headers.get('retry-after')).toBe('60')
-    expect(await refused.text()).toContain('ログインの試行が多すぎます')
+    // 止めた応答はこの 21 回の中から見る（もう1度開くと、その間に窓が替わって通りうる）
+    expect(refused?.status).toBe(429)
+    expect(refused?.headers.get('retry-after')).toBe('60')
+    expect(await refused?.text()).toContain('ログインの試行が多すぎます')
 
     // 叩いている IP だけが止まる。持ち主の IP からは入口が開く
     expect((await get('/admin/auth/github/start', from('198.51.100.1'))).status).toBe(302)
@@ -974,19 +979,47 @@ describe('ログインの入口の回数', () => {
 
   /*
     IPv6 は回線1本に /64 が丸ごと配られるので、アドレスごとに数えると、下の 64 ビットを
-    替えるだけで上限が無いのと同じになる
+    替えるだけで上限が無いのと同じになる。
+
+    見たいのは「どの鍵で数えるか」なので、上限を時計に頼らない数え手（鍵ごとに数えて
+    10 回を超えたら止める）に差し替える。本物の binding で止まることは上の IPv4 が見る
   */
-  it('IPv6 は /64 ごとに数える。下の 64 ビットを替えても同じ上限に当たり、隣の /64 は入れる', async () => {
+  it('IPv6 は /64 ごとに数える。下の 64 ビットや書き方を替えても同じ鍵で、隣の /64 は別の鍵', async () => {
+    const counts = new Map<string, number>()
+    const limiter: RateLimit = {
+      limit: async ({ key }) => {
+        const count = (counts.get(key) ?? 0) + 1
+        counts.set(key, count)
+        return { success: count <= 10 }
+      },
+    }
+    const open = async (ip: string) => {
+      const ctx = createExecutionContext()
+      const response = await app.fetch(
+        new Request(`${ORIGIN}/admin/auth/github/start`, from(ip)),
+        { ...env, LOGIN_RATE_LIMIT: limiter },
+        ctx,
+      )
+      await waitOnExecutionContext(ctx)
+      return response.status
+    }
+
     const statuses: number[] = []
     for (let i = 0; i < 21; i += 1) {
-      const ip = `2001:db8:abcd:12::${(i + 1).toString(16)}`
-      statuses.push((await get('/admin/auth/github/start', from(ip))).status)
+      const low = (i + 1).toString(16)
+      // 書き方を交互に替える（0 の省略と ::、省略しない大文字）
+      const ip =
+        i % 2 === 0
+          ? `2001:db8:abcd:12::${low}`
+          : `2001:0DB8:ABCD:0012:0000:0000:0000:${low.toUpperCase().padStart(4, '0')}`
+      statuses.push(await open(ip))
     }
-    expect(statuses).toContain(429)
-    // 書き方（0 の省略・大小）が違っても同じ /64
-    const spelled = from('2001:0DB8:ABCD:0012:FFFF:FFFF:FFFF:FFFF')
-    expect((await get('/admin/auth/github/start', spelled)).status).toBe(429)
-    expect((await get('/admin/auth/github/start', from('2001:db8:abcd:13::1'))).status).toBe(302)
+    expect(statuses).toEqual([...Array(10).fill(302), ...Array(11).fill(429)])
+    expect([...counts]).toEqual([['login-start:2001:db8:abcd:12::/64', 21]])
+    expect(await states()).toHaveLength(10)
+
+    expect(await open('2001:db8:abcd:13::1')).toBe(302)
+    expect(counts.get('login-start:2001:db8:abcd:13::/64')).toBe(1)
   })
 
   it('数える鍵: IPv4 はそのまま、IPv6 は頭の 64 ビット。読めない値はそのままの字', () => {
