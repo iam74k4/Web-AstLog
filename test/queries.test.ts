@@ -152,10 +152,11 @@ describe('索引', () => {
 
 describe('公開の問い合わせが読む列', () => {
   /*
-    公開ページの問い合わせは、公開する列だけを返す。行を丸ごと返すと、members に足した列
-    （公開しない値）も公開のリクエストのたびに読まれ、描く側で1回 `...member` と書くだけで
-    ページに出る。期待する列はここに字で書く——公開する列を足すのは、この一覧を直す判断にする
-    （ソースの一覧を import して比べると、足した列がそのまま緑になる）。
+    公開ページの問い合わせが返す列を、ここに字で書いて固定する。メンバーは公開する列だけ。
+    作品は items の列を全部持つ（ItemView = Item & …）ので、items に足した列はそのまま公開の
+    作品の形に乗る。行を丸ごと返すと、members に足した列（公開しない値）も公開のリクエストの
+    たびに読まれ、描く側で1回 `...member` と書くだけでページに出る。列を足すのは、ここの一覧を
+    直す判断にする（ソースや schema の一覧から期待を作ると、足した列がそのまま緑になる）。
   */
   const PUBLIC_MEMBER_KEYS = [
     'avatarUrl',
@@ -172,6 +173,45 @@ describe('公開の問い合わせが読む列', () => {
     'skillsText',
     'slug',
   ]
+  // 作品の形の列。items の列（schema の順）に、子と担当・プラットフォームから開いた名前と札
+  const ITEM_VIEW_KEYS = [
+    'id',
+    'type',
+    'memberId',
+    'platformKey',
+    'category',
+    'title',
+    'slug',
+    'year',
+    'yearFrom',
+    'summary',
+    'body',
+    'storyBackground',
+    'storyApproach',
+    'storyHighlights',
+    'storyResults',
+    'privacy',
+    'support',
+    'imageUrl',
+    'imageAlt',
+    'imageWidth',
+    'imageHeight',
+    'iconUrl',
+    'metricValue',
+    'metricUnit',
+    'metricNote',
+    'published',
+    'sortOrder',
+    'formKey',
+    'createdAt',
+    'updatedAt',
+    'tags',
+    'links',
+    'shots',
+    'platformLabel',
+    'memberName',
+    'memberSlug',
+  ].sort()
   // 公開しない列に入れておく印。公開の問い合わせの返り値のどこにも出てはいけない
   const SENTINEL = 'private-sentinel'
 
@@ -213,17 +253,8 @@ describe('公開の問い合わせが読む列', () => {
     expect(listed).toHaveLength(1)
     expect(found).not.toBeNull()
 
-    const keys = [
-      ...Object.keys(getTableColumns(schema.items)),
-      'tags',
-      'links',
-      'shots',
-      'platformLabel',
-      'memberName',
-      'memberSlug',
-    ].sort()
     for (const view of [...listed, found]) {
-      expect(Object.keys(view ?? {}).sort()).toEqual(keys)
+      expect(Object.keys(view ?? {}).sort()).toEqual(ITEM_VIEW_KEYS)
       expect(view).toMatchObject({
         platformLabel: 'Web',
         memberName: '岡崎 昂功',
@@ -231,5 +262,22 @@ describe('公開の問い合わせが読む列', () => {
       })
     }
     expect(JSON.stringify([listed, found])).not.toContain(SENTINEL)
+  })
+
+  /*
+    作品の形（ItemView）だけを見ると、担当とプラットフォームの行を丸ごと引いても緑のまま——
+    toItemView が行を開いてから捨てるので、引いた列は形に残らない。読んだ列は問い合わせの
+    返り値で見る。一覧・作品1件・管理のプレビューは同じ itemWith を読むので、この1本で3つ
+    とも見ている。
+  */
+  it('作品の問い合わせは、担当とプラットフォームの行から名前と札に要る列だけを読む', async () => {
+    await seedPrivate()
+    const [row] = await publishedItemsQuery(db())
+    expect(row).toBeDefined()
+    expect(row?.member).not.toBeNull()
+    expect(row?.platform).not.toBeNull()
+    expect(Object.keys(row?.member ?? {}).sort()).toEqual(['name', 'published', 'slug'])
+    expect(Object.keys(row?.platform ?? {})).toEqual(['label'])
+    expect(JSON.stringify(row)).not.toContain(SENTINEL)
   })
 })
