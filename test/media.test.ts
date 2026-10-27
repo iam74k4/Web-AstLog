@@ -2,10 +2,24 @@ import { env } from 'cloudflare:test'
 import { asc, eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import * as schema from '../src/db/schema'
+import { sniffImage } from '../src/lib/image'
 import { MEDIA_QUOTA_BYTES } from '../src/lib/media-usage'
 import { MAX_FORM_BYTES } from '../src/routes/admin/request'
 import { db, form, get, okText, resetDb, seedItem, signIn, touch } from './helpers'
-import { file, gif, mp4, padded, png } from './images'
+import {
+  androidLocation,
+  appleLocation,
+  avifWithMetadata,
+  file,
+  gif,
+  mp4,
+  PLACE,
+  padded,
+  photoJpeg,
+  photoPng,
+  photoWebp,
+  png,
+} from './images'
 
 /*
   管理画面から上げる画像と動画の上限（種類ごとの1枚の上限・1回の送信の上限・全体の容量）と、
@@ -278,6 +292,81 @@ describe('1枚の上限は種類ごと', () => {
   })
 })
 
+/*
+  写真の付け足し（撮った場所・日時・機種）は KV に置く前に外し、/images/* から配るのも外した
+  あとのバイトだけ（src/lib/image-metadata.ts）。外せない AVIF と動画は、位置があれば断る
+*/
+describe('写真の付け足しを外して置く', () => {
+  const latin1 = (bytes: Uint8Array) =>
+    Array.from(bytes, (byte) => String.fromCharCode(byte)).join('')
+
+  it('JPEG・PNG・WebP の位置は、保存した中身にも配る中身にも残らない', async () => {
+    const photos = {
+      image: photoJpeg({ orientation: 6 }),
+      icon: photoPng({ width: 512, height: 512 }),
+      newShot: photoWebp(),
+    }
+    const signed = await signIn()
+    const response = await signed('/admin/items', {
+      method: 'POST',
+      body: withFiles({ type: 'app', title: 'Demo', slug: 'demo', newShotAlt: '設定の画面' }, [
+        ['image', file(photos.image, 'IMG_0001.jpg', 'image/jpeg')],
+        ['icon', file(photos.icon, 'icon.png', 'image/png')],
+        ['newShot', file(photos.newShot, 'shot.webp', 'image/webp')],
+      ]),
+    })
+    expect(response.status).toBe(303)
+
+    const [row] = await db().select().from(schema.items)
+    const [shot] = await shotsOf(row?.id ?? 0)
+    const urls = { image: row?.imageUrl, icon: row?.iconUrl, newShot: shot?.url }
+    for (const [field, url] of Object.entries(urls)) {
+      // 乱数は 16 バイト（16進 32 字）。当てられない長さにして、/images/* はこの形も通す
+      expect(url, field).toMatch(/^\/images\/items\/demo-(?:icon-)?[0-9a-f]{32}\.(?:jpg|png|webp)$/)
+      const key = (url ?? '').replace('/images/', '')
+      const stored = await env.MEDIA.getWithMetadata<{ size: number }>(key, 'arrayBuffer')
+      const served = await get(`/images/${key}`)
+      expect(served.status, field).toBe(200)
+      const bytes = new Uint8Array(await served.arrayBuffer())
+      expect(bytes, field).toEqual(new Uint8Array(stored.value ?? new ArrayBuffer(0)))
+      expect(stored.metadata?.size, field).toBe(bytes.length)
+      for (const mark of [PLACE, 'GPSLatitude', 'MotionPhoto']) {
+        expect(latin1(bytes), `${field}: ${mark}`).not.toContain(mark)
+      }
+      // 外したあとも同じ種類・同じ寸法として読める
+      const original = sniffImage(photos[field as keyof typeof photos])
+      expect(sniffImage(bytes), field).toEqual(original)
+    }
+    // 向き（6）は残すので、縦の写真の寸法は縦のまま
+    expect([row?.imageWidth, row?.imageHeight]).toEqual([600, 800])
+  })
+
+  it('位置を持つ AVIF・MOV・MP4 は理由を言って断り、何も置かない', async () => {
+    const signed = await signIn()
+    const avifResponse = await signed('/admin/items', {
+      method: 'POST',
+      body: withFiles({ type: 'app', title: 'Demo', slug: 'demo' }, [
+        ['image', file(avifWithMetadata(), 'photo.avif', 'image/avif')],
+      ]),
+    })
+    expect(avifResponse.status).toBe(400)
+    expect(await avifResponse.text()).toContain(
+      '撮った場所（位置情報）が入っているので受け付けません',
+    )
+
+    for (const movie of [
+      mp4({ brand: 'qt  ', extra: [appleLocation()] }),
+      mp4({ extra: [androidLocation()] }),
+    ]) {
+      const response = await postShots([['newShot', mp4File(movie)]], ['動く画面'])
+      expect(response.status).toBe(400)
+      expect(await response.text()).toContain('位置情報を外して書き出してから選び直してください')
+    }
+    expect(await mediaKeys()).toEqual([])
+    expect(await db().select().from(schema.items)).toHaveLength(0)
+  })
+})
+
 describe('全体の容量', () => {
   it('上限を超える保存は止め、何も置かない。外した画像の控えは数えない', async () => {
     // 上限の手前まで使っている（大きさは metadata の size で数える）
@@ -288,8 +377,9 @@ describe('全体の容量', () => {
     await env.MEDIA.put('archive/items/gone-bbbb2222.png', 'x', {
       metadata: { contentType: 'image/png', size: 50_000_000 },
     })
+    // 数えるのは置く大きさ。PNG の後ろの詰め物は付け足しとして外れるので、そのまま置く GIF で量る
     const response = await postShots(
-      [['newShot', file(padded(png(), 200_000), 'a.png', 'image/png')]],
+      [['newShot', file(padded(gif(), 200_000), 'a.gif', 'image/gif')]],
       ['設定の画面'],
     )
     expect(response.status).toBe(400)
