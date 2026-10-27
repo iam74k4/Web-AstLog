@@ -494,19 +494,27 @@ function itemData(
 }
 
 /*
-  MP4・MOV（ISO BMFF / QuickTime）。位置の書き方は3つあり、どれも moov の下の付け足しの箱に
-  入る（中身の mdat は読まない）——
-  - iPhone の写真アプリと QuickTime: meta > keys の com.apple.quicktime.location.ISO6709
-  - Android と以前の QuickTime: udta > ©xyz（「+35.6812+139.7671/」の文字）。3GPP の loci も
-  - Adobe などの XMP: udta > XMP_ か、XMP の uuid の箱
+  MP4・MOV（ISO BMFF / QuickTime）。見るのは箱の並びだけで、中身の mdat は読まない。位置を
+  見つけるのは次の書き方——
+  - 付け足しの箱（moov の下でもトラックの下でも）: meta > keys の
+    com.apple.quicktime.location.ISO6709（iPhone の写真アプリと QuickTime）、udta > ©xyz
+    （Android と以前の QuickTime。「+35.6812+139.7671/」の文字）、3GPP の loci、XMP（udta > XMP_
+    か、XMP の uuid の箱。ファイルの最上段でもよい）
+  - 位置を時刻ごとに記録するトラック（trak > … > stsd の見本の種類）: gpmd（GoPro）・camm
+    （Google のカメラの動き）・djmd（DJI）と、keys に com.apple.quicktime.location を持つ mebx
+    （Apple）。記録は mdat にあって読まないので、トラックがあれば断る
+  ほかの書き方（字幕のトラックの文字に位置を書くものなど）は見つけられない。動画の欄の案内
+  （src/routes/admin/images.ts の SHOT_LIMIT_NOTE）が、位置情報を外して書き出すように言う。
   meta は ISO の形（版と印の 4 バイトのあとに hdlr）と QuickTime の形（すぐ hdlr）があるので、
   中の最初の箱が hdlr と読める方を採る
 */
 const LOCATION_KEY = 'com.apple.quicktime.location.ISO6709'
+const LOCATION_KEY_PREFIX = 'com.apple.quicktime.location'
 const XMP_UUID = [
   0xbe, 0x7a, 0xcf, 0xcb, 0x97, 0xa9, 0x42, 0xe8, 0x9c, 0x71, 0x99, 0x94, 0x91, 0xe3, 0xaf, 0xac,
 ]
-const MOVIE_CONTAINERS = new Set(['moov', 'trak', 'udta', 'ilst'])
+const MOVIE_CONTAINERS = new Set(['moov', 'trak', 'mdia', 'minf', 'stbl', 'udta', 'ilst'])
+const LOCATION_TRACKS = new Set(['gpmd', 'camm', 'djmd'])
 
 function movieHasLocation(bytes: Uint8Array, start: number, end: number, depth: number): boolean {
   if (depth > 6) return false
@@ -533,6 +541,14 @@ function movieHasLocation(bytes: Uint8Array, start: number, end: number, depth: 
         if (movieHasLocation(bytes, first, box.end, depth + 1)) return true
         break
       }
+      case 'stsd':
+        // full box（版と印 4・個数 4 のあとに見本の箱が並ぶ）
+        for (const entry of boxes(bytes, box.body + 8, box.end)) {
+          if (LOCATION_TRACKS.has(entry.type)) return true
+          if (entry.type === 'mebx' && includes(bytes, entry.body, entry.end, LOCATION_KEY_PREFIX))
+            return true
+        }
+        break
       default:
         if (MOVIE_CONTAINERS.has(box.type) && movieHasLocation(bytes, box.body, box.end, depth + 1))
           return true

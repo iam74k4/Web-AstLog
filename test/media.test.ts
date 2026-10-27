@@ -19,6 +19,7 @@ import {
   photoPng,
   photoWebp,
   png,
+  timedTrack,
 } from './images'
 
 /*
@@ -403,6 +404,7 @@ describe('写真の付け足しを外して置く', () => {
     for (const movie of [
       mp4({ brand: 'qt  ', extra: [appleLocation()] }),
       mp4({ extra: [androidLocation()] }),
+      mp4({ extra: [timedTrack('gpmd')] }),
     ]) {
       const response = await postShots([['newShot', mp4File(movie)]], ['動く画面'])
       expect(response.status).toBe(400)

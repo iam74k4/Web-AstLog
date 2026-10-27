@@ -377,6 +377,8 @@ export const mp4 = ({
   turned = false,
   handler = 'vide',
   extra = [],
+  inTrack = [],
+  trailing = [],
 }: {
   brand?: string
   codec?: string
@@ -384,8 +386,12 @@ export const mp4 = ({
   height?: number
   turned?: boolean
   handler?: string
-  // moov の終わりに足す箱（付け足しの udta・meta。位置の書き方は下の appleLocation など）
+  // moov の終わりに足す箱（付け足しの udta・meta・ほかのトラック。位置の書き方は下の appleLocation など）
   extra?: Uint8Array[]
+  // 映像のトラック（trak）の終わりに足す箱
+  inTrack?: Uint8Array[]
+  // moov の後ろ（ファイルの最上段）に足す箱
+  trailing?: Uint8Array[]
 } = {}) => {
   const one = 0x00010000
   const matrix = turned
@@ -416,9 +422,11 @@ export const mp4 = ({
           box('hdlr', zeros(8), handler, zeros(12), [0]),
           box('minf', box('stbl', box('stsd', zeros(4), u32(1), sample))),
         ),
+        ...inTrack,
       ),
       ...extra,
     ),
+    ...trailing,
   )
 }
 
@@ -514,6 +522,59 @@ export const appleLocation = () =>
 export const androidLocation = () =>
   box('udta', box('\u00a9xyz', u16(LOCATION_ISO6709.length), u16(0x15c7), LOCATION_ISO6709))
 export const xmpLocation = () => box('udta', box('XMP_', XMP))
+// 3GPP の位置（udta > loci）。中身は言語・名前・役割・経度・緯度・高度…
+export const lociLocation = () =>
+  box('udta', box('loci', zeros(4), u16(0x15c7), 'Home', [0], [0], u32(139), u32(35), u32(3)))
+// ISO の形の meta（版と印の 4 バイトのあとに hdlr）> ilst > ©xyz
+export const isoMetaLocation = () =>
+  box(
+    'udta',
+    box(
+      'meta',
+      zeros(4),
+      box('hdlr', zeros(8), 'mdir', zeros(12), [0]),
+      box('ilst', box('\u00a9xyz', box('data', u32(1), u32(0), LOCATION_ISO6709))),
+    ),
+  )
+// XMP の uuid の箱（Adobe などがファイルの最上段や moov の下に置く）
+export const xmpUuid = () =>
+  box(
+    'uuid',
+    [
+      0xbe, 0x7a, 0xcf, 0xcb, 0x97, 0xa9, 0x42, 0xe8, 0x9c, 0x71, 0x99, 0x94, 0x91, 0xe3, 0xaf,
+      0xac,
+    ],
+    XMP,
+  )
+/*
+  時刻ごとの記録のトラック（hdlr が meta、stsd の見本が entry）。GoPro は gpmd、Google は camm、
+  Apple は mebx で、mebx は keys > （番号の箱）> keyd に記録の名前を持つ
+*/
+export const timedTrack = (entry: string, key?: string) =>
+  box(
+    'trak',
+    box(
+      'mdia',
+      box('hdlr', zeros(8), 'meta', zeros(12), [0]),
+      box(
+        'minf',
+        box(
+          'stbl',
+          box(
+            'stsd',
+            zeros(4),
+            u32(1),
+            box(
+              entry,
+              zeros(6),
+              u16(1),
+              key ? box('keys', box('\u0000\u0000\u0000\u0001', box('keyd', 'mdta', key))) : [],
+            ),
+          ),
+        ),
+      ),
+    ),
+  )
 // 位置ではない付け足し（作った道具の名前）。これだけなら断らない
 export const plainMovieMeta = () =>
   box(

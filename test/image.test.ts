@@ -18,7 +18,9 @@ import {
   avifWithMetadata,
   gif,
   heic,
+  isoMetaLocation,
   jpeg,
+  lociLocation,
   mp4,
   PLACE,
   photoJpeg,
@@ -27,11 +29,13 @@ import {
   plainMovieMeta,
   png,
   svg,
+  timedTrack,
   unpaddedExifWebp,
   webp,
   webpLossless,
   webpLossy,
   xmpLocation,
+  xmpUuid,
 } from './images'
 
 /*
@@ -268,6 +272,7 @@ describe('写真の付け足しを外す', () => {
       ['image/avif', avif()],
       ['video/mp4', mp4()],
       ['video/mp4', mp4({ brand: 'qt  ', extra: [plainMovieMeta()] })],
+      ['video/mp4', mp4({ extra: [timedTrack('mebx', 'com.apple.quicktime.video-orientation')] })],
       // 絵の頭や中身の途中で切れたもの（後ろに付け足しは無い）
       ['image/jpeg', jpeg().slice(0, 25)],
       ['image/png', photoPng().slice(0, 40)],
@@ -333,13 +338,43 @@ describe('写真の付け足しを外す', () => {
     }
   })
 
-  it('MP4・MOV は位置（Apple の ISO6709・Android の ©xyz・XMP）があれば断る', () => {
-    for (const extra of [appleLocation(), androidLocation(), xmpLocation()]) {
+  it('MP4・MOV は付け足しの箱の位置（Apple の ISO6709・©xyz・loci・XMP）があれば、置き場を問わず断る', () => {
+    const movies: Record<string, Parameters<typeof mp4>[0]> = {
+      'moov > meta > keys（QuickTime の形）': { extra: [appleLocation()] },
+      'moov > udta > ©xyz': { extra: [androidLocation()] },
+      'moov > udta > XMP_': { extra: [xmpLocation()] },
+      'moov > udta > loci': { extra: [lociLocation()] },
+      'moov > udta > meta（ISO の形）> ilst > ©xyz': { extra: [isoMetaLocation()] },
+      'moov > uuid（XMP）': { extra: [xmpUuid()] },
+      '最上段の uuid（XMP）': { trailing: [xmpUuid()] },
+      'trak > udta > ©xyz': { inTrack: [androidLocation()] },
+    }
+    for (const [label, options] of Object.entries(movies)) {
       for (const brand of ['isom', 'qt  ']) {
-        const movie = mp4({ brand, extra: [extra] })
-        expect(sniffVideo(movie), brand).toMatchObject({ video: { type: 'video/mp4' } })
-        expect(stripMetadata('video/mp4', movie), brand).toBe('location')
+        const movie = mp4({ brand, ...options })
+        expect(sniffVideo(movie), `${label} ${brand}`).toMatchObject({
+          video: { type: 'video/mp4' },
+        })
+        expect(stripMetadata('video/mp4', movie), `${label} ${brand}`).toBe('location')
       }
+    }
+  })
+
+  /*
+    アクションカメラ・ドローン・iPhone は、位置を時刻ごとの記録のトラックに書く。記録の中身は
+    mdat にあって読まないので、トラックの見本の種類で断る
+  */
+  it('MP4・MOV は位置を記録するトラック（gpmd・camm・djmd・位置の mebx）があれば断る', () => {
+    const tracks = [
+      timedTrack('gpmd'),
+      timedTrack('camm'),
+      timedTrack('djmd'),
+      timedTrack('mebx', 'com.apple.quicktime.location.ISO6709'),
+    ]
+    for (const track of tracks) {
+      const movie = mp4({ extra: [track] })
+      expect(sniffVideo(movie)).toMatchObject({ video: { type: 'video/mp4' } })
+      expect(stripMetadata('video/mp4', movie)).toBe('location')
     }
   })
 })
