@@ -466,11 +466,22 @@ describe('500 のログ', () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
       const ctx = createExecutionContext()
+      /*
+        app.fetch を直に呼ぶので、FormData の本文には Content-Length が付かない（SELF.fetch なら
+        HTTP の層が付ける）。管理画面は長さを名乗らない POST を 411 で断るので
+        （src/routes/admin/request.ts の readAdminForm）、ブラウザと同じく長さと種類を付けて送る
+      */
+      const draft = new Request('https://astlog.test/', { method: 'POST', body })
+      const bytes = await draft.arrayBuffer()
       const response = await app.fetch(
         new Request(`https://astlog.test${path}?from=log-test`, {
           method: 'POST',
-          headers: { cookie: `${HOST_SESSION_COOKIE}=${token}` },
-          body,
+          headers: {
+            cookie: `${HOST_SESSION_COOKIE}=${token}`,
+            'content-type': draft.headers.get('content-type') ?? '',
+            'content-length': String(bytes.byteLength),
+          },
+          body: bytes,
         }),
         uncachedEnv({ DB: database }),
         ctx,
