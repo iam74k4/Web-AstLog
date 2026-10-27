@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { AppEnv } from './env'
 import { yearInJapan } from './lib/format'
-import { HSTS, PERMISSIONS_POLICY } from './lib/headers'
+import { HSTS, OPENER_POLICY, PERMISSIONS_POLICY } from './lib/headers'
 import { pageCache } from './lib/page-cache'
 import { adminRoutes } from './routes/admin/index'
 import { publicRoutes } from './routes/public/routes'
@@ -47,6 +47,9 @@ const app = new Hono<AppEnv>()
   POST に Origin: null を付け、sameOrigin（src/routes/admin/session.ts）がそれを
   403 で弾くので、ログインしたあとの保存がすべて止まる。
 
+  HSTS・Cross-Origin-Opener-Policy・Permissions-Policy の値は src/lib/headers.ts に置き、
+  public/_headers と同じ値を付ける（理由もそちら）。
+
   管理画面（/admin/*）は no-store。共用の端末でログアウトしたあと「戻る」で、
   下書きの中身が履歴のキャッシュから出てこないようにする。
 
@@ -88,6 +91,7 @@ app.use(async (c, next) => {
   headers.set('x-content-type-options', 'nosniff')
   headers.set('referrer-policy', 'strict-origin-when-cross-origin')
   headers.set('permissions-policy', PERMISSIONS_POLICY)
+  headers.set('cross-origin-opener-policy', OPENER_POLICY)
   if (new URL(c.req.url).protocol === 'https:') headers.set('strict-transport-security', HSTS)
   if (admin) {
     headers.set('cache-control', preview ? 'private, no-store' : 'no-store')

@@ -12,6 +12,15 @@
 export const HSTS = 'max-age=31536000; includeSubDomains'
 
 /*
+  ほかのサイトが window.open で開いたこのサイトの窓に、開いた側から手を出させない
+  （Cross-Origin-Opener-Policy）。手が届くと、窓の中の枠の数（window.length）で管理画面に
+  ログインしているかが分かり（ログイン後の画面にはプレビューの iframe がある）、開いた窓を
+  あとで偽のページへ移すこともできる。同じオリジンの窓どうし（プレビューを別タブで開く）と
+  iframe は今までどおりつながり、OAuth は窓をまたがない画面ごとの遷移なので止まらない
+*/
+export const OPENER_POLICY = 'same-origin'
+
+/*
   使わない端末の機能を、ページにも埋め込みにも許さない（Permissions-Policy）。注入口が1つ
   見つかっても、カメラ・マイク・位置などには届かない。全画面（動画の操作の手）は使うので
   止めない。ブラウザが知らない機能名を並べると警告が出るので、知られた名前だけ

@@ -6,7 +6,7 @@ import assetHeaders from 'virtual:repo:public/_headers'
 import { beforeEach, describe, expect, it } from 'vitest'
 import appCss from '../public/app.css'
 import app from '../src/index'
-import { HSTS, PERMISSIONS_POLICY } from '../src/lib/headers'
+import { HSTS, OPENER_POLICY, PERMISSIONS_POLICY } from '../src/lib/headers'
 import { ADMIN_BEHAVIOR, ADMIN_CSP } from '../src/ui/admin-behavior'
 import { get, okText, resetDb, seedItem, seedMember, signIn, uncachedEnv } from './helpers'
 
@@ -47,6 +47,8 @@ function expectPageHeaders(response: Response, label: string, admin = false) {
     Origin: null を付け、sameOrigin が 403 で弾く（管理画面の保存が全部止まる）
   */
   expect(response.headers.get('referrer-policy'), label).toBe('strict-origin-when-cross-origin')
+  // ほかのサイトが開いた窓から、ログインの有無（枠の数）を数えさせない（src/lib/headers.ts）
+  expect(response.headers.get('cross-origin-opener-policy'), label).toBe(OPENER_POLICY)
 }
 
 describe('応答のヘッダ', () => {
@@ -182,22 +184,34 @@ describe('応答のヘッダ', () => {
   }
 
   /*
-    https を1年覚えさせ（HSTS）、使わない端末の機能を止める（Permissions-Policy）。公開・
-    管理画面・リダイレクト・404・画像のどれにも、同じ1本のミドルウェアが付ける
+    https を1年覚えさせ（HSTS）、ほかのサイトが開いた窓に手を出させず（COOP）、使わない
+    端末の機能を止める（Permissions-Policy）。公開・管理画面・リダイレクト・404・画像の
+    どれにも、同じ1本のミドルウェアが付ける
   */
-  it('どの応答にも HSTS と Permissions-Policy を付ける', async () => {
+  it('どの応答にも HSTS・COOP・Permissions-Policy を付ける', async () => {
     await seedItem()
+    await env.MEDIA.put('items/shot-ab90.png', 'image-bytes', {
+      metadata: { contentType: 'image/png' },
+    })
     for (const [path, status] of [
       ['/', 200],
       ['/admin', 303],
+      ['/admin/login', 200],
       ['/no-such-page', 404],
       ['/robots.txt', 200],
+      ['/images/items/shot-ab90.png', 200],
     ] as const) {
       const response = await get(path)
       expect(response.status, path).toBe(status)
       expect(response.headers.get('strict-transport-security'), path).toBe(HSTS)
       expect(response.headers.get('permissions-policy'), path).toBe(PERMISSIONS_POLICY)
+      expect(response.headers.get('cross-origin-opener-policy'), path).toBe(OPENER_POLICY)
     }
+    // ログイン後の画面（プレビューの iframe を持つ）にも
+    const signed = await signIn()
+    expect((await signed('/admin/items')).headers.get('cross-origin-opener-policy')).toBe(
+      OPENER_POLICY,
+    )
     // 全画面（動画の操作の手）は止めない
     expect(PERMISSIONS_POLICY).not.toContain('fullscreen')
   })
@@ -236,8 +250,9 @@ describe('応答のヘッダ', () => {
       ブラウザによっては <img> や favicon で使うときもこの CSP が効く
     */
     expect(values['content-security-policy']).toBe("default-src 'none'; sandbox")
-    // HSTS と Permissions-Policy は Worker の応答と同じ値（静的なファイルだけ素で出さない）
+    // HSTS・COOP・Permissions-Policy は Worker の応答と同じ値（静的なファイルだけ素で出さない）
     expect(values['strict-transport-security']).toBe(HSTS)
+    expect(values['cross-origin-opener-policy']).toBe(OPENER_POLICY)
     expect(values['permissions-policy']).toBe(PERMISSIONS_POLICY)
     // 規則の数には上限がある（Workers Static Assets は 100 まで）
     expect(rules.size).toBeLessThanOrEqual(100)
