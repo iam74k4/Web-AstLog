@@ -89,7 +89,8 @@ export const isHttps = (c: Context<AppEnv>) => new URL(c.req.url).protocol === '
 
 export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   const token = getCookie(c, sessionCookie(c.req.url))
-  const user = token ? await getSessionUser(db(c), token) : null
+  // 放置の期限を数え直すのは、管理画面を開いたときだけ（getSessionUser の touch）
+  const user = token ? await getSessionUser(db(c), token, { touch: true }) : null
   if (!user) {
     // GET なら行き先を持ち回す（POST の宛先は開き直せないので持たない）
     const url = new URL(c.req.url)

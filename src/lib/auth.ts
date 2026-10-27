@@ -13,8 +13,8 @@ import type { Identity } from './oauth'
 */
 const SESSION_DAYS = 14
 /*
-  触らずに置いたセッションが切れるまでの時間。使われないまま残ったクッキー（共用の
-  端末での閉じ忘れ・抜き取られた写し）を、14日の上限まで生かさない。
+  管理画面を開かずに置いたセッションが切れるまでの時間。使われないまま残ったクッキー
+  （共用の端末での閉じ忘れ・抜き取られた写し）を、14日の上限まで生かさない。
 */
 export const SESSION_IDLE_MS = 12 * 3_600_000
 /*
@@ -83,9 +83,14 @@ function sessionTime(value: string): number {
   切れるのは、発行から14日（expires_at）か、最後に使ってから12時間（last_seen_at。
   列を足す前の行は null なので created_at から数える）。読めない時刻も切れたとして
   扱う——Invalid Date の比較は false になり、無期限で通ってしまう。
-  last_seen_at を書き直すのは前の記録から5分たったときだけ
+
+  「使った」と数えるのは touch を渡す呼び手（管理画面の壁 requireAuth）だけで、
+  last_seen_at を書き直すのはそのうえ前の記録から5分たったときだけ。公開ページの
+  入口の出し分け（adminHref）は期限を見て切れた行を消すが、書き直さない——
+  クッキーは Path=/ でどの公開ページにも付くので、公開ページを見るたびに数えると、
+  共用の端末に残ったクッキーは誰かがサイトを見ている限り放置にならない
 */
-export async function getSessionUser(db: Db, token: string) {
+export async function getSessionUser(db: Db, token: string, { touch }: { touch: boolean }) {
   const id = await sessionKey(token)
   const rows = await db
     .select({
@@ -113,7 +118,7 @@ export async function getSessionUser(db: Db, token: string) {
     await db.delete(schema.sessions).where(eq(schema.sessions.id, id))
     return null
   }
-  if (now - seenAt >= SESSION_SEEN_EVERY_MS) {
+  if (touch && now - seenAt >= SESSION_SEEN_EVERY_MS) {
     await db
       .update(schema.sessions)
       .set({ lastSeenAt: new Date(now).toISOString() })

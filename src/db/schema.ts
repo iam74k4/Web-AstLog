@@ -545,7 +545,8 @@ export const oauthStates = sqliteTable(
   平文で持っていたころの行は 0007 で消した（全員ログインし直し）。
 
   期限は2つ（src/lib/auth.ts の getSessionUser）。expires_at は発行から14日の上限、
-  last_seen_at は最後に使った時刻で、触らずに12時間たったセッションは上限の前でも切れる。
+  last_seen_at は最後に管理画面を開いた時刻で、開かずに12時間たったセッションは上限の
+  前でも切れる（公開ページを見ても書き直さない）。
   last_seen_at は null を許す——列を足す前の行は null のままで、created_at から数える。
 */
 export const sessions = sqliteTable(

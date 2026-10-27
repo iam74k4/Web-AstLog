@@ -640,6 +640,62 @@ describe('セッション', () => {
     expect(await sessionRows()).toHaveLength(0)
   })
 
+  /*
+    クッキーは Path=/ なので、公開ページにも付いてくる。公開ページを見たことを「使った」に
+    数えると、共用の端末に閉じ忘れたクッキーは、誰かがサイトを見ている限り放置で切れない
+    （src/routes/public/page.tsx の adminHref は touch: false）
+  */
+  // 上の帯の管理画面への入口（AdminLink）
+  const ADMIN_ENTRY = 'class="top__admin"'
+
+  it('公開ページを見ても、最後に使った時刻は書き直さない（入口は出す）', async () => {
+    const signed = await signedSession()
+    const before = ago(SESSION_SEEN_EVERY_MS + 60_000)
+    await db().update(schema.sessions).set({ lastSeenAt: before })
+    for (let i = 0; i < 2; i += 1) {
+      const response = await signed('/')
+      expect(response.status).toBe(200)
+      // まだ切れていないので、ログインしている人の姿のまま
+      expect(response.headers.get('cache-control')).toBe('private, no-store')
+      expect(await response.text()).toContain(ADMIN_ENTRY)
+    }
+    expect(await seenAt()).toBe(before)
+
+    // 管理画面を開けば書き直す
+    expect((await signed('/admin/members')).status).toBe(200)
+    expect(await seenAt()).not.toBe(before)
+  })
+
+  it('公開ページを見ていても、管理画面を12時間開かなければ切れる', async () => {
+    const signed = await signedSession()
+    await db()
+      .update(schema.sessions)
+      .set({ lastSeenAt: ago(SESSION_IDLE_MS - 3_600_000) })
+    // 管理画面を最後に開いてから11時間: 公開ページにはまだ入口が出る
+    expect(await (await signed('/')).text()).toContain(ADMIN_ENTRY)
+
+    // そこから2時間たつ（記録を2時間前へずらす）。公開ページを見たことを数えていれば
+    // 記録はいまの時刻で、ずらしても2時間前——数えていないので13時間前になる
+    const seen = Date.parse((await seenAt()) ?? '')
+    await db()
+      .update(schema.sessions)
+      .set({ lastSeenAt: new Date(seen - 2 * 3_600_000).toISOString() })
+    expect((await signed('/admin/members')).status).toBe(303)
+    expect(await sessionRows()).toHaveLength(0)
+  })
+
+  it('切れたセッションで公開ページを開くと、訪問者の姿で返し、そのセッションを消す', async () => {
+    const signed = await signedSession()
+    await db()
+      .update(schema.sessions)
+      .set({ lastSeenAt: ago(SESSION_IDLE_MS + 60_000) })
+    const response = await signed('/')
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).not.toBe('private, no-store')
+    expect(await response.text()).not.toContain(ADMIN_ENTRY)
+    expect(await sessionRows()).toHaveLength(0)
+  })
+
   it('D1 にはクッキーの値ではなく、その SHA-256 だけを置く', async () => {
     const response = await signInWith('github', github().handlers)
     const token = sessionCookie(response)?.split(';')[0]?.split('=')[1] ?? ''
@@ -1104,8 +1160,9 @@ describe('移行', () => {
     const kept = await d1().prepare('SELECT last_seen_at FROM sessions').all()
     expect(kept.results).toEqual([{ last_seen_at: null }, { last_seen_at: null }])
     const migrated = drizzle(d1(), { schema })
-    expect((await getSessionUser(migrated, 'used'))?.id).toBe(3)
-    expect(await getSessionUser(migrated, 'left')).toBeNull()
+    // 管理画面の壁と同じ呼び方（touch: true。入れたら last_seen_at を書く）
+    expect((await getSessionUser(migrated, 'used', { touch: true }))?.id).toBe(3)
+    expect(await getSessionUser(migrated, 'left', { touch: true })).toBeNull()
     const left = await d1()
       .prepare('SELECT id, last_seen_at FROM sessions')
       .all<{ id: string; last_seen_at: string | null }>()
