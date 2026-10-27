@@ -255,6 +255,10 @@ describe('応答のヘッダ', () => {
     )
     // RFC 9116 は1年より先にしないことを勧める
     expect(expires - Date.now()).toBeLessThan(366 * day)
+    // 配るときは charset=utf-8 を名乗る（RFC 9116。public/_headers）
+    expect(headerRules().get('/.well-known/security.txt')?.['content-type']).toBe(
+      'text/plain; charset=utf-8',
+    )
   })
 
   it('静的なファイルのヘッダは public/_headers が持つ', () => {

@@ -668,7 +668,8 @@ public/
                      公開ページは読まない（:root は持たず、app.css の段を読む）
   preview.css        管理プレビューの案内。公開の部品は app.css を使う
   .well-known/security.txt  脆弱性を見つけた人の連絡先（RFC 9116）。Expires を毎年1年先へ
-                     書き換える（切れる30日前から test/headers.test.ts が落ちて知らせる）
+                     書き換える（切れる30日前から test/headers.test.ts が落ちて知らせる）。
+                     charset=utf-8 は _headers が付ける
   BingSiteAuth.xml   Bing Webmaster Tools の所有の確認（Bing が決めた名前と形。中の値は
                      Bing の管理画面が出したもの。消すと Bing の確認が外れる）
   _headers           静的なファイルに付けるヘッダ（Worker を通らないので、ここで付ける）。

@@ -20,6 +20,11 @@
   Cross-Origin-Opener-Policy: same-origin
   Permissions-Policy: accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()
 
+# security.txt は字の符号を名乗って配る（RFC 9116 は text/plain; charset=utf-8 を求める。
+# 拡張子からの既定は charset を持たない）。
+/.well-known/security.txt
+  Content-Type: text/plain; charset=utf-8
+
 # スタイルシートは1年・immutable。HTML が中身から作った版つきの URL（/app.css?v=…）で
 # 読むので、CSS を変えてデプロイすれば URL が変わり、古い写しは二度と引かれない
 # （src/ui/components.tsx の Stylesheets）。既定の「max-age=0, must-revalidate」の
