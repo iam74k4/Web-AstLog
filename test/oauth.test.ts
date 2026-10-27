@@ -1,9 +1,11 @@
-import { env } from 'cloudflare:test'
+import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test'
 import { drizzle } from 'drizzle-orm/d1'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as schema from '../src/db/schema'
+import app from '../src/index'
 import { createSession, HOST_SESSION_COOKIE, sessionKey, userForIdentity } from '../src/lib/auth'
 import { base64url } from '../src/lib/oauth'
+import { limitKey } from '../src/routes/admin/auth'
 import { db, ensureOwner, form, get, okText, resetDb, withCookie } from './helpers'
 
 /*
@@ -429,7 +431,11 @@ describe('state は1回きり', () => {
     expect(calls).toHaveLength(0)
   })
 
-  it('期限切れの札は start のたびに掃除する', async () => {
+  /*
+    掃除は応答のあと（waitUntil）。提供元へ送るのを待たせない。新しい札は応答の前に
+    書き終えている——callback がすぐ来ても札が無い、にならない
+  */
+  it('期限切れの札は start の応答のあとで掃除する。新しい札は応答の前に書く', async () => {
     await db()
       .insert(schema.oauthStates)
       .values({
@@ -439,8 +445,21 @@ describe('state は1回きり', () => {
         nonce: 'n',
         expiresAt: new Date(Date.now() - 60_000).toISOString(),
       })
-    await start('github')
-    expect((await states()).map((row) => row.state)).not.toContain('old')
+    const ctx = createExecutionContext()
+    const later: Promise<unknown>[] = []
+    const waitUntil = ctx.waitUntil.bind(ctx)
+    ctx.waitUntil = (promise) => {
+      later.push(promise)
+      waitUntil(promise)
+    }
+    const response = await app.fetch(new Request(`${ORIGIN}/admin/auth/github/start`), env, ctx)
+    expect(response.status).toBe(302)
+    const state = new URL(response.headers.get('location') ?? '').searchParams.get('state')
+    expect((await states()).map((row) => row.state)).toContain(state)
+    expect(later).toHaveLength(1)
+
+    await waitOnExecutionContext(ctx)
+    expect((await states()).map((row) => row.state)).toEqual([state])
   })
 
   it('提供元で断ったら、ログイン画面に知らせて戻す。札は使い切る', async () => {
@@ -776,13 +795,14 @@ describe('owner は1人', () => {
 })
 
 /*
-  SEC-N3。ログインの入口は開くたびに D1 へ書くので、IP ごとに回数の上限を持つ
-  （Workers の Rate Limiting。wrangler.toml の [[ratelimits]]: 60 秒で 10 回）。
+  SEC-N3。ログインの入口は開くたびに D1 へ書くので、IP ごと（IPv6 は /64 ごと）に回数の
+  上限を持つ（Workers の Rate Limiting。wrangler.toml の [[ratelimits]]: 60 秒で 10 回）。
   止めた要求は D1 に書かない。ほかの IP（持ち主）は止まらない。
 */
 describe('ログインの入口の回数', () => {
+  const from = (ip: string) => ({ headers: { 'cf-connecting-ip': ip } })
+
   it('同じ IP から続けて開くと 429 で止め、D1 に書かない。ほかの IP は入れる', async () => {
-    const from = (ip: string) => ({ headers: { 'cf-connecting-ip': ip } })
     const statuses: number[] = []
     // 窓（60 秒）の境をまたいでも必ず上限を超える数（上限 10 の2倍 + 1）
     for (let i = 0; i < 21; i += 1) {
@@ -800,6 +820,37 @@ describe('ログインの入口の回数', () => {
 
     // 叩いている IP だけが止まる。持ち主の IP からは入口が開く
     expect((await get('/admin/auth/github/start', from('198.51.100.1'))).status).toBe(302)
+  })
+
+  /*
+    IPv6 は回線1本に /64 が丸ごと配られるので、アドレスごとに数えると、下の 64 ビットを
+    替えるだけで上限が無いのと同じになる
+  */
+  it('IPv6 は /64 ごとに数える。下の 64 ビットを替えても同じ上限に当たり、隣の /64 は入れる', async () => {
+    const statuses: number[] = []
+    for (let i = 0; i < 21; i += 1) {
+      const ip = `2001:db8:abcd:12::${(i + 1).toString(16)}`
+      statuses.push((await get('/admin/auth/github/start', from(ip))).status)
+    }
+    expect(statuses).toContain(429)
+    // 書き方（0 の省略・大小）が違っても同じ /64
+    const spelled = from('2001:0DB8:ABCD:0012:FFFF:FFFF:FFFF:FFFF')
+    expect((await get('/admin/auth/github/start', spelled)).status).toBe(429)
+    expect((await get('/admin/auth/github/start', from('2001:db8:abcd:13::1'))).status).toBe(302)
+  })
+
+  it('数える鍵: IPv4 はそのまま、IPv6 は頭の 64 ビット。読めない値はそのままの字', () => {
+    expect(limitKey('203.0.113.7')).toBe('203.0.113.7')
+    expect(limitKey('2001:db8:abcd:12::1')).toBe('2001:db8:abcd:12::/64')
+    expect(limitKey('2001:0DB8:ABCD:0012:0000:0000:0000:0001')).toBe('2001:db8:abcd:12::/64')
+    expect(limitKey('2001:db8:abcd:12:ffff:ffff:ffff:ffff')).toBe('2001:db8:abcd:12::/64')
+    expect(limitKey('2001:db8::1')).toBe('2001:db8:0:0::/64')
+    expect(limitKey('::1')).toBe('0:0:0:0::/64')
+    // IPv4 を写した形は IPv4 として数える
+    expect(limitKey('::ffff:203.0.113.7')).toBe('203.0.113.7')
+    for (const odd of ['fe80::1%eth0', '1::2::3', '1:2:3:4:5:6:7:8:9', '1:2:3', 'g::1']) {
+      expect(limitKey(odd), odd).toBe(odd)
+    }
   })
 })
 

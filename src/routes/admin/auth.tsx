@@ -158,17 +158,21 @@ authRoutes.get('/login', (c) =>
 /*
   ログインの入口の回数の上限。
 
-  入口は開くたびに D1 へ書く（期限切れの掃除と state の1行）。ログインしていない
-  GET なので、上限が無いとボットが提供元に何も送らずに叩き続けられ、D1 の書き込みの
-  枠（無料のプランは1日 10 万行）を使い切られる——そうなると管理画面の保存も
-  持ち主のログインも UTC 0 時まで止まる。
+  入口は開くたびに D1 へ書く（state の1行と、応答のあとの期限切れの掃除）。ログイン
+  していない GET なので、ボットが提供元に何も送らずに叩き続けられる。D1 の書き込みの
+  枠（無料のプランは1日 10 万行）を使い切られると、管理画面の保存も持ち主のログインも
+  UTC 0 時まで止まる。
 
-  数えるのは Workers の Rate Limiting（wrangler.toml の [[ratelimits]]。IP ごとに
-  60 秒で 10 回）で、D1 に書く前に止める。IP ごとにしたのは、持ち主を締め出す道を
-  作らないため。全体の上限（有効な state の行数など）にすると、叩く側がその数を
-  埋め続けるだけで、別の場所から入ろうとする持ち主まで 429 になる。IP ごとなら、
-  止まるのは叩いている IP だけ。多くの IP から叩かれる場合は Cloudflare の WAF の
-  レート制限（/admin/auth/ の下の start）で外から止める（CLAUDE.md「ログイン」）。
+  ここで数えるのは Workers の Rate Limiting（wrangler.toml の [[ratelimits]]。IP ごと
+  ——IPv6 は /64 ごと（limitKey）——に 60 秒で 10 回）で、D1 に書く前に止める。
+  止まるのは1つの送り元だけで、これだけでは枠を守り切れない——1つの IP でも1日に
+  約 1.4 万回は通るので、IP を数個そろえれば枠に届く。多くの IP から叩かれるのを
+  止めるのは、Cloudflare のダッシュボードで置く WAF のレート制限（/admin/auth/ の下の
+  start。README「管理画面に入る」）のほう。
+
+  それでも IP ごとに数えるのは、持ち主を締め出す道を作らないため。全体の上限（有効な
+  state の行数など）にすると、叩く側がその数を埋め続けるだけで、別の場所から入ろうと
+  する持ち主まで 429 になる。IP ごとなら、止まるのは叩いている送り元だけ。
 
   IP（cf-connecting-ip）は Cloudflare が付けるもので、訪問者には書き換えられない。
   付いていない要求（テストの中）と、binding が無い環境は数えない。
@@ -177,8 +181,35 @@ async function tooManyStarts(c: Context<AppEnv>): Promise<boolean> {
   const limiter = c.env.LOGIN_RATE_LIMIT
   const ip = c.req.header('cf-connecting-ip')
   if (!limiter || !ip) return false
-  const { success } = await limiter.limit({ key: `login-start:${ip}` })
+  const { success } = await limiter.limit({ key: `login-start:${limitKey(ip)}` })
   return !success
+}
+
+/*
+  回数を数える単位。IPv4 はアドレスそのもの、IPv6 は頭の 64 ビット（/64）。
+  IPv6 は回線1本に /64 が丸ごと配られるのが普通で、アドレスごとに数えると、
+  1台が下の 64 ビットを替えるだけで上限が無いのと同じになる。
+
+  同じ /64 は書き方（0 の省略・::・大小）が違っても同じ鍵にする。IPv4 を写した
+  形（::ffff:203.0.113.7）は IPv4 として数える。読めない値はそのままの字で数える
+  （例外にすると、ログインの入口ごと落ちる）
+*/
+export function limitKey(ip: string): string {
+  const address = ip.trim().toLowerCase()
+  if (!address.includes(':')) return address
+  const mapped = address.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/)?.[1]
+  if (mapped) return mapped
+  const halves = address.split('::')
+  if (halves.length > 2) return address
+  const groups = (part: string | undefined) => (part ? part.split(':') : [])
+  const head = groups(halves[0])
+  const tail = groups(halves[1])
+  const gap = 8 - head.length - tail.length
+  if (halves.length === 1 ? gap !== 0 : gap < 1) return address
+  const full = [...head, ...Array<string>(halves.length === 2 ? gap : 0).fill('0'), ...tail]
+  if (!full.every((group) => /^[0-9a-f]{1,4}$/.test(group))) return address
+  const prefix = full.slice(0, 4).map((group) => Number.parseInt(group, 16).toString(16))
+  return `${prefix.join(':')}::/64`
 }
 
 authRoutes.get('/auth/:provider/start', async (c) => {
@@ -202,20 +233,30 @@ authRoutes.get('/auth/:provider/start', async (c) => {
   const { verifier, challenge } = await pkcePair()
   const now = Date.now()
   const database = db(c)
-  // 期限切れの札はここで掃除する。セッションと同じく、掃除だけの定期実行を持たない
-  await database.batch([
+  await database.insert(schema.oauthStates).values({
+    state,
+    provider,
+    codeVerifier: verifier,
+    nonce,
+    next: safeNext(c.req.query('next')),
+    expiresAt: new Date(now + STATE_MINUTES * 60_000).toISOString(),
+  })
+  /*
+    期限切れの札はここで掃除する（セッションと同じく、掃除だけの定期実行を持たない）。
+    掃除は応答のあと（waitUntil）で、提供元へ送るのを待たせない。後ろへ回しても
+    1回きりの約束は変わらない——札を使えるかは callback が自分で消して（DELETE …
+    RETURNING）期限を見て決めるので、まだ掃除されていない期限切れの行も通らない。
+    掃除が落ちても、次の start がまた消す
+  */
+  c.executionCtx.waitUntil(
     database
       .delete(schema.oauthStates)
-      .where(lt(schema.oauthStates.expiresAt, new Date(now).toISOString())),
-    database.insert(schema.oauthStates).values({
-      state,
-      provider,
-      codeVerifier: verifier,
-      nonce,
-      next: safeNext(c.req.query('next')),
-      expiresAt: new Date(now + STATE_MINUTES * 60_000).toISOString(),
-    }),
-  ])
+      .where(lt(schema.oauthStates.expiresAt, new Date(now).toISOString()))
+      .then(
+        () => undefined,
+        (error: unknown) => console.error('期限切れの state を掃除できませんでした', error),
+      ),
+  )
 
   /*
     SameSite=Lax でなければならない。提供元からのコールバックは別のサイトからの

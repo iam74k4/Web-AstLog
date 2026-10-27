@@ -517,7 +517,7 @@ export const ownerClaims = sqliteTable(
 
   /admin/auth/:provider/start が1行作り、同じ state をクッキーにも置く。
   callback は両方が一致したときだけ進み、行は成否にかかわらず必ず消す
-  （同じ state を2度通さない）。期限は10分で、切れた行は start のたびに掃除する。
+  （同じ state を2度通さない）。期限は10分で、切れた行は start の応答のあとで掃除する。
   code_verifier（PKCE）と nonce（Google の id_token）もここに持つ——クッキーに
   置くと、ブラウザ側の値だけで往復が完結してしまう。
 */

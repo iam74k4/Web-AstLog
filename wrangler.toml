@@ -51,10 +51,11 @@ migrations_dir = "drizzle"
 binding = "MEDIA"
 id = "a5a250ad632b47b68574541ace272378"
 
-# ログインの入口（/admin/auth/:provider/start）の回数の上限。IP ごとに 60 秒で 10 回。
-# 入口は開くたびに D1 へ1行書く（OAuth の state）ので、上限が無いと未認証の GET だけで
-# D1 の書き込みの枠を使い切られ、管理画面の保存も持ち主のログインも止まる。IP ごとに
-# 数えるのは、別の IP から叩かれても持ち主が締め出されないようにするため
+# ログインの入口（/admin/auth/:provider/start）の回数の上限。IP ごと（IPv6 は /64 ごと）に
+# 60 秒で 10 回。入口は開くたびに D1 へ1行書く（OAuth の state）ので、未認証の GET だけで
+# D1 の書き込みの枠を削られる。止まるのは1つの送り元だけで、多くの IP からの分は
+# ダッシュボードの WAF で止める（README）。IP ごとに数えるのは、別の IP から叩かれても
+# 持ち主が締め出されないようにするため
 # （src/routes/admin/auth.tsx の tooManyStarts）。namespace_id はこのアカウントの中で
 # 上限を分ける番号で、秘密でも、事前に作るものでもない。
 [[ratelimits]]

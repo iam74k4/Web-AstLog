@@ -351,7 +351,7 @@ flowchart TD
     Check -->|"はい"| Admin
     Check -->|"いいえ → 303 ?next=開いた画面"| Login
     Login -->|"GitHub でログイン / Google でログイン"| Start
-    Start -->|"同じ IP から 60 秒に 10 回を超えた<br>（D1 に書かない）"| Busy
+    Start -->|"同じ IP（IPv6 は /64）から 60 秒に 10 回を超えた<br>（D1 に書かない）"| Busy
     Start -->|"302（PKCE・state。Google は nonce も）"| Provider
     Provider -->|"断った → ?error=denied"| Login
     Provider -->|"?code&state"| Callback
@@ -370,8 +370,8 @@ flowchart TD
 
 - 本人は提供元の ID で照合する（GitHub は数値の id、Google は sub）。ログイン名や
   メールアドレスを見るのは、最初の紐づけのときだけ
-- ログインの入口は、同じ IP から 60 秒に 10 回まで（Workers の Rate Limiting）。
-  超えたぶんは D1 に書かずに 429
+- ログインの入口は、同じ IP（IPv6 は /64）から 60 秒に 10 回まで（Workers の Rate
+  Limiting）。超えたぶんは D1 に書かずに 429。多くの IP からの分はダッシュボードの WAF で止める
 - state は D1 で1回きり。成功しても弾いても、差し出された札（クッキーの側と
   query の側）はその場で消える。同じ URL をもう一度開いてもやり直しになる
 - Google の id_token は iss・aud・exp・nonce を確かめ、合わなければ 400。署名は、
