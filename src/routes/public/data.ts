@@ -7,6 +7,7 @@ import {
   type ItemKind,
   type ItemView,
   type KindCounts,
+  type PublicMember,
   totalOf,
 } from '../../domain'
 import type { AppEnv } from '../../env'
@@ -24,7 +25,7 @@ import { hasContact, SITE, type SiteSettings } from '../../site'
   手を出すかどうかと同じ数え方なので、2人目を公開した日に自動で器へ戻る
   （文言は管理画面のサイト設定で調整する）。
 */
-export const soloMember = (members: schema.Member[]) =>
+export const soloMember = (members: PublicMember[]) =>
   members.length === 1 ? members[0] : undefined
 
 /*
@@ -37,7 +38,7 @@ export const soloMember = (members: schema.Member[]) =>
   置いていない1人のサイトでは undefined——個人ページは一覧の行の担当者名から入る
   並びの外のページ。
 */
-export const profileOf = (blocks: schema.Block[], members: schema.Member[]) =>
+export const profileOf = (blocks: schema.Block[], members: PublicMember[]) =>
   blocks.some((block) => block.type === 'team') ? soloMember(members) : undefined
 
 /*
@@ -48,7 +49,7 @@ export const profileOf = (blocks: schema.Block[], members: schema.Member[]) =>
   ときは人数に関わらず出す——トップから個人ページへ行く道が、行の
   名前のほかに1本も無くなる。作品1件のページの「担当」も同じ条件。
 */
-export const showMemberOf = (blocks: schema.Block[], members: schema.Member[]) =>
+export const showMemberOf = (blocks: schema.Block[], members: PublicMember[]) =>
   members.length > 1 || !blocks.some((block) => block.type === 'team')
 
 // 区分の絞り込みに並べるもの。公開中の項目が実在する区分だけ（FilterLinks を見ること）
@@ -85,7 +86,7 @@ export type ItemListData = {
 
 export type TopData = {
   site?: SiteSettings
-  members: schema.Member[]
+  members: PublicMember[]
   // Projects（個人開発と業務を1つにした一覧）
   projects: ItemListData
   // 公開中の作品の区分ごとの件数（絞り込みを見ない、サイト全体の数）
@@ -105,7 +106,7 @@ export type TopData = {
     ページを作らず、その位置にこの人のページが並ぶ。全体ページでは Team のカードの
     代わりに、この人のプロフィールを1つの節として置く。
   */
-  profile?: schema.Member
+  profile?: PublicMember
 }
 
 // ページに出るかを決める件数（src/blocks.ts の blockShown が読む形）
@@ -143,7 +144,7 @@ export const scopeOf = (filter: ItemFilter, memberId: number | null) => ({
   並ばない（FilterLinks）ので、効かせると「All」にも名前にも印が付かない
   まま一覧だけが絞られる。
 */
-export function readFilter(c: Context<AppEnv>, kinds: ItemKind[], members: schema.Member[]) {
+export function readFilter(c: Context<AppEnv>, kinds: ItemKind[], members: PublicMember[]) {
   const asked = c.req.query('kind')
   // 区分の絞り込みは両方の区分に項目があるときだけ並ぶ（FilterLinks）
   const kind = kinds.length > 1 ? (kinds.find((one) => one === asked) ?? null) : null

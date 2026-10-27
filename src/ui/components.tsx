@@ -3,7 +3,7 @@ import type { Child } from 'hono/jsx'
 import adminCss from '../../public/admin.css'
 import appCss from '../../public/app.css'
 import previewCss from '../../public/preview.css'
-import type { Item, Member } from '../db/schema'
+import type { Item } from '../db/schema'
 import {
   ITEM_KIND_KEYS,
   type ItemDocumentKey,
@@ -15,6 +15,7 @@ import {
   KIND_NAME,
   KIND_PATH,
   type KindCounts,
+  type PublicMember,
   type StoryPart,
 } from '../domain'
 import {
@@ -1082,7 +1083,7 @@ export const Nameplate = ({
   heading,
   title,
 }: {
-  member: Member
+  member: PublicMember
   heading?: boolean
   /*
     名前をページの大きな題として出す（.nameplate--title）。1人のサイトの個人ページで、
@@ -1195,7 +1196,7 @@ export const SkillGroups = ({ groups, level }: { groups: SkillGroup[]; level: 3 
   「Profile →」は入口の押し手（Projects → / Profile →）と同じ英語の言葉（CLAUDE.md「文言」。
   公開ページの押す手は英語にそろえる）。英字だけなので lang="en"（読み上げを英語の読みに）。
 */
-export const MemberCardWide = ({ member }: { member: Member }) => (
+export const MemberCardWide = ({ member }: { member: PublicMember }) => (
   <a class="member member--wide" href={`/members/${member.slug}`}>
     <Avatar src={member.avatarUrl} name={member.name} size={52} />
     <span class="member__body">
@@ -1214,7 +1215,7 @@ export const MemberCardWide = ({ member }: { member: Member }) => (
   </a>
 )
 
-export const MemberCardCompact = ({ member }: { member: Member }) => (
+export const MemberCardCompact = ({ member }: { member: PublicMember }) => (
   <a class="member member--compact" href={`/members/${member.slug}`}>
     <Avatar src={member.avatarUrl} name={member.name} size={44} />
     <strong class="member__name">{member.name}</strong>
@@ -1728,7 +1729,7 @@ export const ProfileWhole = ({
   career,
   children,
 }: {
-  member: Member
+  member: PublicMember
   about: StoryPart[]
   skills: SkillGroup[]
   career: CareerGroup[]
@@ -1858,7 +1859,13 @@ export const Socials = ({
   ほうを外さないのは、足元がどのページでも同じサイトの足元だから（個人ページ専用の
   ものに入れ替えない。CLAUDE.md「個人ページは1ページで、サイトの並びの一部」）。
 */
-export const OwnSocials = ({ member, site = SITE }: { member: Member; site?: SiteSettings }) => {
+export const OwnSocials = ({
+  member,
+  site = SITE,
+}: {
+  member: PublicMember
+  site?: SiteSettings
+}) => {
   const github = isHttpsUrl(member.github) && member.github !== site.github ? member.github : null
   const email = member.email && member.email !== site.email ? member.email : null
   return github || email ? <Socials github={github} email={email} owner={member.name} /> : null

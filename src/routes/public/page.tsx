@@ -3,6 +3,7 @@ import type { Context } from 'hono'
 import { getCookie } from 'hono/cookie'
 import type { Child } from 'hono/jsx'
 import * as schema from '../../db/schema'
+import type { PublicMember } from '../../domain'
 import type { AppEnv } from '../../env'
 import { getSessionUser, sessionCookie } from '../../lib/auth'
 import type { NavLink, Page } from '../../lib/sequence'
@@ -68,7 +69,7 @@ export function movedTo(c: Context<AppEnv>, to: string) {
   足元の名前）はメンバー（1人のサイトならその人の編集）。Contact と入口のリード文は
   サイト設定から編集する。Contact はその設定画面へ送る。
 */
-export const blockAdminPath = (block: schema.Block, solo?: schema.Member) => {
+export const blockAdminPath = (block: schema.Block, solo?: PublicMember) => {
   switch (block.type) {
     case 'projects':
       return '/admin/items'

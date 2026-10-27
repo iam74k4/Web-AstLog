@@ -1,7 +1,15 @@
 import { env } from 'cloudflare:test'
+import { getTableColumns } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { publishedItemsQuery } from '../src/db/queries'
-import { db, resetDb, seedMember } from './helpers'
+import {
+  findPublishedItem,
+  findPublishedMember,
+  listPublishedItems,
+  listPublishedMembers,
+  publishedItemsQuery,
+} from '../src/db/queries'
+import * as schema from '../src/db/schema'
+import { db, resetDb, seedItem, seedMember } from './helpers'
 
 beforeEach(resetDb)
 
@@ -139,5 +147,137 @@ describe('索引', () => {
         'idx_items_public',
       ].sort(),
     )
+  })
+})
+
+describe('公開の問い合わせが読む列', () => {
+  /*
+    公開ページの問い合わせが返す列を、ここに字で書いて固定する。メンバーは公開する列だけ。
+    作品は items の列を全部持つ（ItemView = Item & …）ので、items に足した列はそのまま公開の
+    作品の形に乗る。行を丸ごと返すと、members に足した列（公開しない値）も公開のリクエストの
+    たびに読まれ、描く側で1回 `...member` と書くだけでページに出る。列を足すのは、ここの一覧を
+    直す判断にする（ソースや schema の一覧から期待を作ると、足した列がそのまま緑になる）。
+  */
+  const PUBLIC_MEMBER_KEYS = [
+    'avatarUrl',
+    'bio',
+    'careerText',
+    'email',
+    'github',
+    'headline',
+    'id',
+    'location',
+    'name',
+    'nameLatin',
+    'role',
+    'skillsText',
+    'slug',
+  ]
+  // 作品の形の列。items の列（schema の順）に、子と担当・プラットフォームから開いた名前と札
+  const ITEM_VIEW_KEYS = [
+    'id',
+    'type',
+    'memberId',
+    'platformKey',
+    'category',
+    'title',
+    'slug',
+    'year',
+    'yearFrom',
+    'summary',
+    'body',
+    'storyBackground',
+    'storyApproach',
+    'storyHighlights',
+    'storyResults',
+    'privacy',
+    'support',
+    'imageUrl',
+    'imageAlt',
+    'imageWidth',
+    'imageHeight',
+    'iconUrl',
+    'metricValue',
+    'metricUnit',
+    'metricNote',
+    'published',
+    'sortOrder',
+    'formKey',
+    'createdAt',
+    'updatedAt',
+    'tags',
+    'links',
+    'shots',
+    'platformLabel',
+    'memberName',
+    'memberSlug',
+  ].sort()
+  // 公開しない列に入れておく印。公開の問い合わせの返り値のどこにも出てはいけない
+  const SENTINEL = 'private-sentinel'
+
+  async function seedPrivate() {
+    const member = await seedMember({
+      formKey: `${SENTINEL}-form`,
+      celestialBody: `${SENTINEL}-body`,
+      celestialAccent: `${SENTINEL}-accent`,
+      createdAt: `${SENTINEL}-created`,
+    })
+    await seedItem({ slug: 'appmixer', memberId: member.id, platformKey: 'web' })
+    return member
+  }
+
+  it('メンバーは公開する列だけを返す', async () => {
+    const member = await seedPrivate()
+    // 公開しない列は schema に在って一覧に無いもの全部。印の入った列もその中にある
+    const hidden = Object.keys(getTableColumns(schema.members)).filter(
+      (key) => !PUBLIC_MEMBER_KEYS.includes(key),
+    )
+    expect(hidden).toEqual(
+      expect.arrayContaining(['formKey', 'celestialBody', 'createdAt', 'published', 'sortOrder']),
+    )
+
+    const listed = await listPublishedMembers(db())
+    const found = await findPublishedMember(db(), member.slug)
+    expect(listed).toHaveLength(1)
+    expect(found).toBeDefined()
+    for (const one of [...listed, found]) {
+      expect(Object.keys(one ?? {}).sort()).toEqual(PUBLIC_MEMBER_KEYS)
+    }
+    expect(JSON.stringify([listed, found])).not.toContain(SENTINEL)
+  })
+
+  it('作品は担当とプラットフォームの行を運ばず、名前と札だけを持つ', async () => {
+    await seedPrivate()
+    const listed = await listPublishedItems(db())
+    const found = await findPublishedItem(db(), 'appmixer')
+    expect(listed).toHaveLength(1)
+    expect(found).not.toBeNull()
+
+    for (const view of [...listed, found]) {
+      expect(Object.keys(view ?? {}).sort()).toEqual(ITEM_VIEW_KEYS)
+      expect(view).toMatchObject({
+        platformLabel: 'Web',
+        memberName: '岡崎 昂功',
+        memberSlug: 'okazaki',
+      })
+    }
+    expect(JSON.stringify([listed, found])).not.toContain(SENTINEL)
+  })
+
+  /*
+    作品の形（ItemView）だけを見ると、担当とプラットフォームの行を丸ごと引いても緑のまま——
+    toItemView が行を開いてから捨てるので、引いた列は形に残らない。読んだ列は問い合わせの
+    返り値で見る。一覧・作品1件・管理のプレビューは同じ itemWith を読むので、この1本で3つ
+    とも見ている。
+  */
+  it('作品の問い合わせは、担当とプラットフォームの行から名前と札に要る列だけを読む', async () => {
+    await seedPrivate()
+    const [row] = await publishedItemsQuery(db())
+    expect(row).toBeDefined()
+    expect(row?.member).not.toBeNull()
+    expect(row?.platform).not.toBeNull()
+    expect(Object.keys(row?.member ?? {}).sort()).toEqual(['name', 'published', 'slug'])
+    expect(Object.keys(row?.platform ?? {})).toEqual(['label'])
+    expect(JSON.stringify(row)).not.toContain(SENTINEL)
   })
 })

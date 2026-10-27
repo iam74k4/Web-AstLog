@@ -1,7 +1,7 @@
-import type { Item } from './db/schema'
+import type { Item, Member } from './db/schema'
 
 /*
-  UI と DB の両方が読む、作品の形。どちらの層にも属さないので、ここに置く
+  UI と DB の両方が読む、作品と公開するメンバーの形。どちらの層にも属さないので、ここに置く
   （DB の層 src/db/queries.ts が UI の層 src/ui/components.tsx から型を借りない）。
 */
 
@@ -57,6 +57,30 @@ export type KindCounts = Record<ItemKind, number>
 
 export const totalOf = (counts: KindCounts) =>
   ITEM_KIND_KEYS.reduce((sum, kind) => sum + counts[kind], 0)
+
+/*
+  公開ページが読むメンバーの列（src/db/queries.ts の listPublishedMembers /
+  findPublishedMember がこの列だけを引く）。members に列を足しても、ここに足すまでは公開の
+  リクエストで読まれない——行を丸ごと読むと、描く側で1回 `...member` と書くだけで、
+  公開しない値がページに出る。form_key・日時・使わない天体の列は持たない。
+*/
+export const PUBLIC_MEMBER_COLUMNS = {
+  id: true,
+  slug: true,
+  name: true,
+  nameLatin: true,
+  role: true,
+  location: true,
+  headline: true,
+  bio: true,
+  skillsText: true,
+  careerText: true,
+  avatarUrl: true,
+  github: true,
+  email: true,
+} as const satisfies { [K in keyof Member]?: true }
+
+export type PublicMember = Pick<Member, keyof typeof PUBLIC_MEMBER_COLUMNS>
 
 // 作品の画像1枚（メインの画像か、ほかの画像の1枚）。寸法は読めたときだけ
 export type ItemImage = {
