@@ -28,7 +28,9 @@ Worker を通らない `public/` のファイル（`/app.css`・`/admin.css`・`
 持つ応答（ログイン中の `private, no-store`）。行き先がデータで変わる 301（前の slug・
 前の区分・1人のサイトの `/team` と `/profile`・個人ページの Contact・前の個人ページの続き・
 前の本文の画面）は `Cache-Control: no-cache` で、
-ブラウザに覚えさせない（写しから返すときも付け直す）。応答の `x-astlog-cache` が `hit` / `miss` / `stale`。
+ブラウザに覚えさせない（写しから返すときも付け直す）。写しから返すほかの応答（200・302・404）は
+`Last-Modified` を外し、ルートが付けていなければ `Cache-Control: no-cache`（ブラウザに推測で
+使い回させない。素の 301 はそのまま）。応答の `x-astlog-cache` が `hit` / `miss` / `stale`。
 
 ## 公開側
 

@@ -3830,10 +3830,13 @@ describe('転送をブラウザに覚えさせるか', () => {
     await noCache('/members/okazaki', '/members/okazaki-k')
   })
 
-  it('行き先が動かない転送（/apps → /projects）は素の 301 のまま', async () => {
-    const response = await get('/apps')
-    expect(response.status).toBe(301)
-    expect(response.headers.get('cache-control')).toBeNull()
+  it('行き先が動かない転送（/apps → /projects）は素の 301 のまま（写しから返すときも）', async () => {
+    for (const round of ['miss', 'hit']) {
+      const response = await get('/apps')
+      expect(response.status, round).toBe(301)
+      expect(response.headers.get('x-astlog-cache'), round).toBe(round)
+      expect(response.headers.get('cache-control'), round).toBeNull()
+    }
   })
 })
 

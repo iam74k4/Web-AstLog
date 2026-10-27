@@ -69,7 +69,11 @@ describe('応答のヘッダ', () => {
       const response = await get(path)
       expect(response.status, path).toBe(status)
       expectPageHeaders(response, path)
-      // 訪問者に返す公開ページは共有のキャッシュに置いてよい（no-store は管理画面だけ）
+      // 訪問者に返す公開ページは共有のキャッシュに置いてよい（no-store は管理画面だけ）。
+      // ここはどれも写しの無い1度目で、写しから返すときの no-cache は test/page-cache.test.ts
+      expect(response.headers.get('x-astlog-cache'), path).toBe(
+        path === '/robots.txt' ? null : 'miss',
+      )
       expect(response.headers.get('cache-control'), path).toBeNull()
     }
   })
