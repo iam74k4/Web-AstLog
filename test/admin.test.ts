@@ -513,7 +513,7 @@ describe('Items — 本文と画像', () => {
 
     const [row] = await db().select().from(schema.items)
     // キーの形は /images/* の検査を必ず通る形（置き場/slug-乱数.拡張子）
-    expect(row?.imageUrl).toMatch(/^\/images\/items\/appmixer-[0-9a-f]{8}\.png$/)
+    expect(row?.imageUrl).toMatch(/^\/images\/items\/appmixer-[0-9a-f]{32}\.png$/)
     const url = row?.imageUrl ?? ''
     expect(await itemKeys()).toEqual([url.replace('/images/', '')])
 
@@ -1006,7 +1006,7 @@ describe('Items — アイコンとほかの画像', () => {
 
     const [row] = await db().select().from(schema.items)
     // アイコンのキーも /images/* の検査を通る形（置き場/slug-icon-乱数.拡張子）
-    expect(row?.iconUrl).toMatch(/^\/images\/items\/appmixer-icon-[0-9a-f]{8}\.png$/)
+    expect(row?.iconUrl).toMatch(/^\/images\/items\/appmixer-icon-[0-9a-f]{32}\.png$/)
     const shots = await shotsOf(row?.id ?? 0)
     // 寸法は中身の頭から読む（画像の縦横比と共有カードに使う）。並び順は 10 刻み
     expect(shots.map((shot) => [shot.alt, shot.sortOrder, shot.width, shot.height])).toEqual([
@@ -1014,7 +1014,7 @@ describe('Items — アイコンとほかの画像', () => {
       ['機能の一覧', 20, 1200, 630],
     ])
     for (const shot of shots)
-      expect(shot.url).toMatch(/^\/images\/items\/appmixer-[0-9a-f]{8}\.png$/)
+      expect(shot.url).toMatch(/^\/images\/items\/appmixer-[0-9a-f]{32}\.png$/)
     expect(await itemKeys()).toEqual(
       [row?.imageUrl, row?.iconUrl, ...shots.map((shot) => shot.url)]
         .map((url) => (url ?? '').replace('/images/', ''))
@@ -1203,7 +1203,7 @@ describe('Items — アイコンとほかの画像', () => {
     })
     expect(swapped.status).toBe(303)
     const [row] = await db().select().from(schema.items)
-    expect(row?.iconUrl).toMatch(/^\/images\/items\/appmixer-icon-[0-9a-f]{8}\.png$/)
+    expect(row?.iconUrl).toMatch(/^\/images\/items\/appmixer-icon-[0-9a-f]{32}\.png$/)
     expect(row?.iconUrl).not.toBe('/images/items/appmixer-icon-aaaaaaaa.png')
     expect(await itemKeys()).toEqual([(row?.iconUrl ?? '').replace('/images/', '')])
 
@@ -1487,7 +1487,7 @@ describe('画像の受け入れ', () => {
         where: eq(schema.items.slug, `shot-${index}`),
       })
       expect(row?.imageUrl, one.type).toMatch(
-        new RegExp(`^/images/items/shot-${index}-[0-9a-f]{8}\\.${one.extension}$`),
+        new RegExp(`^/images/items/shot-${index}-[0-9a-f]{32}\\.${one.extension}$`),
       )
       expect([row?.imageWidth, row?.imageHeight], one.type).toEqual(one.size)
       const stored = await env.MEDIA.getWithMetadata<{ contentType: string }>(
@@ -1503,7 +1503,7 @@ describe('画像の受け入れ', () => {
     })
     expect(member.status).toBe(303)
     const [eve] = await db().select().from(schema.members)
-    expect(eve?.avatarUrl).toMatch(/^\/images\/avatars\/eve-[0-9a-f]{8}\.webp$/)
+    expect(eve?.avatarUrl).toMatch(/^\/images\/avatars\/eve-[0-9a-f]{32}\.webp$/)
   })
 
   it('選ぶ画面でも5種類に絞る（accept）', async () => {

@@ -1,3 +1,4 @@
+import { DrizzleQueryError } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { AppEnv } from './env'
 import { yearInJapan } from './lib/format'
@@ -47,8 +48,21 @@ const app = new Hono<AppEnv>()
   POST に Origin: null を付け、sameOrigin（src/routes/admin/session.ts）がそれを
   403 で弾くので、ログインしたあとの保存がすべて止まる。
 
+  HSTS・Permissions-Policy の値は src/lib/headers.ts に置き、public/_headers と同じ値を
+  付ける（理由もそちら）。
+
   管理画面（/admin/*）は no-store。共用の端末でログアウトしたあと「戻る」で、
   下書きの中身が履歴のキャッシュから出てこないようにする。
+
+  管理画面（ログインの画面も）は Cross-Origin-Opener-Policy: same-origin。ほかのサイトが
+  window.open で開いた窓に、開いた側から手を出させない——手が届くと、窓の中の枠の数
+  （window.length）でログインしているかが分かり（ログイン後の画面にはプレビューの iframe が
+  ある）、開いた窓をあとで偽のページへ移せる。公開ページの窓から /admin へ移っても、そこで
+  つながりが切れる。同じオリジンの窓（プレビューを別タブで開く）と iframe はつながったまま、
+  OAuth は画面ごとの遷移なので止まらない。
+  公開ページと public/ のファイルには付けない。sandbox の枠（allow-popups-to-escape-sandbox を
+  持たないもの。メールの表示や埋め込みのプレビュー）から開いた窓は、COOP を持つページを
+  開けずにエラーで終わる。公開ページには、開いた側に数えられて困るものが無い。
 
   public/ の静的なファイルは Worker を通らない（[assets] が先に配る）。
   あちらのヘッダは public/_headers が持つ。
@@ -90,6 +104,7 @@ app.use(async (c, next) => {
   headers.set('permissions-policy', PERMISSIONS_POLICY)
   if (new URL(c.req.url).protocol === 'https:') headers.set('strict-transport-security', HSTS)
   if (admin) {
+    headers.set('cross-origin-opener-policy', 'same-origin')
     headers.set('cache-control', preview ? 'private, no-store' : 'no-store')
     if (preview) headers.set('x-robots-tag', 'noindex, nofollow')
   }
@@ -185,8 +200,53 @@ app.notFound((c) =>
   ),
 )
 
+/*
+  500 のログ（Workers Logs）には、要求の method と path（query は書かない）と、例外の連なり
+  （cause）の名前・文・スタックの行（at …）を書き、束縛した値はどこにも書かない。値は
+  書こうとした名前・所在地・メールで、ログに残ると D1 から消したあとも保持期間のあいだ消えない。
+  - Drizzle の失敗したクエリの例外（DrizzleQueryError）は文の中に「params:」として値を持つ。
+    クエリの文（値は ? で渡す）だけを書く
+  - D1 は受け取れない型の値を束縛されると（D1_TYPE_ERROR）、文の末尾「for value '…'」に
+    その値を書く。そこから後ろを落とす
+  - スタックは頭（名前と文。文が複数行ならその行も）を、名前と文から組んだ同じ字で切り落とし、
+    残りの「at」の行だけを書く。頭が一致しなければ行は書かない——行の形だけで見分けると、値に
+    改行と「at」を入れた文が行に紛れる。行が無いと、DB 以外の 500 がどこで落ちたか分からない
+*/
+const MAX_CAUSES = 5
+const BOUND_VALUE = / for value [\s\S]*$/
+
+function framesOf(error: Error): string {
+  const head = Error.prototype.toString.call(error)
+  const stack = typeof error.stack === 'string' ? error.stack : ''
+  if (!stack.startsWith(head)) return ''
+  return stack
+    .slice(head.length)
+    .split('\n')
+    .filter((line) => /^\s+at /.test(line))
+    .map((line) => `\n${line}`)
+    .join('')
+}
+
+function causeTrail(error: unknown): string {
+  const parts: string[] = []
+  let current = error
+  for (let depth = 0; depth < MAX_CAUSES && current !== undefined && current !== null; depth++) {
+    if (current instanceof DrizzleQueryError) {
+      parts.push(`DrizzleQueryError: Failed query: ${current.query}${framesOf(current)}`)
+    } else if (current instanceof Error) {
+      const message = current.message.replace(BOUND_VALUE, '')
+      parts.push(`${current.name}: ${message}${framesOf(current)}`)
+    } else {
+      // 例外でない値は中身を書かない（何が投げられたかは型で分かる）
+      parts.push(`thrown ${typeof current}`)
+    }
+    current = current instanceof Error ? current.cause : undefined
+  }
+  return parts.join('\n<- ')
+}
+
 app.onError((error, c) => {
-  console.error(error)
+  console.error(`500 ${c.req.method} ${new URL(c.req.url).pathname}: ${causeTrail(error)}`)
   return c.html(
     <ErrorPage
       code="500"

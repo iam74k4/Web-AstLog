@@ -3,12 +3,24 @@ import assetSums from 'virtual:asset-sha256'
 import assetFiles from 'virtual:assets'
 import securityTxt from 'virtual:repo:public/.well-known/security.txt'
 import assetHeaders from 'virtual:repo:public/_headers'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import appCss from '../public/app.css'
 import app from '../src/index'
+import { createSession, HOST_SESSION_COOKIE } from '../src/lib/auth'
 import { HSTS, PERMISSIONS_POLICY } from '../src/lib/headers'
 import { ADMIN_BEHAVIOR, ADMIN_CSP } from '../src/ui/admin-behavior'
-import { get, okText, resetDb, seedItem, seedMember, signIn, uncachedEnv } from './helpers'
+import {
+  db,
+  ensureOwner,
+  form,
+  get,
+  okText,
+  resetDb,
+  seedItem,
+  seedMember,
+  signIn,
+  uncachedEnv,
+} from './helpers'
 
 beforeEach(resetDb)
 
@@ -67,7 +79,11 @@ describe('応答のヘッダ', () => {
       const response = await get(path)
       expect(response.status, path).toBe(status)
       expectPageHeaders(response, path)
-      // 訪問者に返す公開ページは共有のキャッシュに置いてよい（no-store は管理画面だけ）
+      // 訪問者に返す公開ページは共有のキャッシュに置いてよい（no-store は管理画面だけ）。
+      // ここはどれも写しの無い1度目で、写しから返すときの no-cache は test/page-cache.test.ts
+      expect(response.headers.get('x-astlog-cache'), path).toBe(
+        path === '/robots.txt' ? null : 'miss',
+      )
       expect(response.headers.get('cache-control'), path).toBeNull()
     }
   })
@@ -146,15 +162,17 @@ describe('応答のヘッダ', () => {
   /*
     /images/* はこちらより狭い自分の CSP（default-src 'none'; sandbox）を持つ。
     ページの CSP で上書きすると、画像のふりをした文書が直に開かれたときに
-    同じオリジンの img・style を読める文書になる
+    同じオリジンの img・style を読める文書になる。ほかのサイトに埋め込ませない
+    CORP（same-site）もルートが付け、ミドルウェアは触らない
   */
-  it('/images/* の CSP は上書きしない', async () => {
+  it('/images/* の CSP と CORP は上書きしない', async () => {
     await env.MEDIA.put('items/shot-ef56.png', 'image-bytes', {
       metadata: { contentType: 'image/png' },
     })
     const response = await get('/images/items/shot-ef56.png')
     expect(response.status).toBe(200)
     expect(response.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox")
+    expect(response.headers.get('cross-origin-resource-policy')).toBe('same-site')
     expect(response.headers.get('x-content-type-options')).toBe('nosniff')
     expect(response.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
   })
@@ -187,11 +205,16 @@ describe('応答のヘッダ', () => {
   */
   it('どの応答にも HSTS と Permissions-Policy を付ける', async () => {
     await seedItem()
+    await env.MEDIA.put('items/shot-ab90.png', 'image-bytes', {
+      metadata: { contentType: 'image/png' },
+    })
     for (const [path, status] of [
       ['/', 200],
       ['/admin', 303],
+      ['/admin/login', 200],
       ['/no-such-page', 404],
       ['/robots.txt', 200],
+      ['/images/items/shot-ab90.png', 200],
     ] as const) {
       const response = await get(path)
       expect(response.status, path).toBe(status)
@@ -200,6 +223,58 @@ describe('応答のヘッダ', () => {
     }
     // 全画面（動画の操作の手）は止めない
     expect(PERMISSIONS_POLICY).not.toContain('fullscreen')
+  })
+
+  /*
+    COOP（same-origin）は管理画面だけ。ほかのサイトが開いた窓から、ログインの有無（ログイン後の
+    画面はプレビューの iframe を持つので、枠の数が変わる）を数えさせない。公開ページに付けると、
+    sandbox の枠（allow-popups-to-escape-sandbox を持たないもの）から開いた窓がページを開けずに
+    エラーで終わる（src/index.tsx）
+  */
+  it('COOP は管理画面だけに付け、公開ページと画像には付けない', async () => {
+    await seedItem({ slug: 'appmixer' })
+    await env.MEDIA.put('items/shot-ab90.png', 'image-bytes', {
+      metadata: { contentType: 'image/png' },
+    })
+    for (const [path, status] of [
+      ['/admin', 303],
+      ['/admin/login', 200],
+      ['/admin/items', 303],
+    ] as const) {
+      const response = await get(path)
+      expect(response.status, path).toBe(status)
+      expect(response.headers.get('cross-origin-opener-policy'), path).toBe('same-origin')
+    }
+    // ログイン後の画面（プレビューの iframe を持つ）とプレビューにも
+    const signed = await signIn()
+    for (const path of ['/admin/items', '/admin/members/new']) {
+      const response = await signed(path)
+      expect(response.status, path).toBe(200)
+      expect(response.headers.get('cross-origin-opener-policy'), path).toBe('same-origin')
+    }
+    const preview = await signed('/admin/preview/items', {
+      method: 'POST',
+      body: form({ type: 'app', title: '下見' }),
+    })
+    expect(preview.status).toBe(200)
+    expect(preview.headers.get('cross-origin-opener-policy')).toBe('same-origin')
+    for (const [path, status] of [
+      ['/', 200],
+      ['/projects', 200],
+      ['/apps/item/appmixer', 200],
+      ['/apps', 301],
+      ['/no-such-page', 404],
+      ['/robots.txt', 200],
+      ['/images/items/shot-ab90.png', 200],
+      // /admin に似た名前の公開の URL は管理画面ではない
+      ['/administrator', 404],
+    ] as const) {
+      const response = await get(path)
+      expect(response.status, path).toBe(status)
+      expect(response.headers.get('cross-origin-opener-policy'), path).toBeNull()
+    }
+    // ログイン中に見る公開ページも公開ページ
+    expect((await signed('/')).headers.get('cross-origin-opener-policy')).toBeNull()
   })
 
   /*
@@ -223,6 +298,10 @@ describe('応答のヘッダ', () => {
     )
     // RFC 9116 は1年より先にしないことを勧める
     expect(expires - Date.now()).toBeLessThan(366 * day)
+    // 配るときは charset=utf-8 を名乗る（RFC 9116。public/_headers）
+    expect(headerRules().get('/.well-known/security.txt')?.['content-type']).toBe(
+      'text/plain; charset=utf-8',
+    )
   })
 
   it('静的なファイルのヘッダは public/_headers が持つ', () => {
@@ -239,6 +318,10 @@ describe('応答のヘッダ', () => {
     // HSTS と Permissions-Policy は Worker の応答と同じ値（静的なファイルだけ素で出さない）
     expect(values['strict-transport-security']).toBe(HSTS)
     expect(values['permissions-policy']).toBe(PERMISSIONS_POLICY)
+    // COOP は管理画面だけ。素材にも付けない（sandbox の枠から開いた窓で開けなくなる）
+    for (const [path, rule] of rules) {
+      expect(rule['cross-origin-opener-policy'], path).toBeUndefined()
+    }
     // 規則の数には上限がある（Workers Static Assets は 100 まで）
     expect(rules.size).toBeLessThanOrEqual(100)
   })
@@ -326,6 +409,156 @@ describe('応答のヘッダ', () => {
         label,
       ).toEqual(['/app.css', '/admin.css'])
       for (const href of links) expect(href, label).toMatch(version)
+    }
+  })
+})
+
+/*
+  500 のログ（Workers Logs）。Drizzle の失敗したクエリの例外は、文に「params:」として束縛した
+  値を持つ。例外をそのまま console.error に渡していたころは、メンバーの新規作成（1文の
+  INSERT）が落ちると、書こうとした名前・所在地・メールが平文でログに残った
+*/
+describe('500 のログ', () => {
+  // 例外は文だけでなく、スタックと連なり（cause）まで開いて見る（ログに出うるものを全部）
+  const spelled = (value: unknown, depth = 0): string =>
+    value instanceof Error
+      ? [
+          value.stack ?? String(value),
+          String(value),
+          depth < 5 ? spelled(value.cause, depth + 1) : '',
+        ].join('\n')
+      : typeof value === 'object' && value !== null
+        ? JSON.stringify(value)
+        : String(value)
+
+  const marker = 'leak-marker-5e1f'
+
+  // 目印の値を束縛した文だけを、本物の D1 の失敗に差し替える
+  const failingOn = (fail: (target: D1Database, inner: D1PreparedStatement) => unknown) =>
+    new Proxy(env.DB, {
+      get(target, key) {
+        if (key === 'prepare') {
+          return (query: string) => {
+            const statement = target.prepare(query)
+            return new Proxy(statement, {
+              get(inner, name) {
+                if (name === 'bind') {
+                  return (...values: unknown[]) =>
+                    values.some((value) => typeof value === 'string' && value.includes(marker))
+                      ? fail(target, inner)
+                      : inner.bind(...values)
+                }
+                const value = Reflect.get(inner, name)
+                return typeof value === 'function' ? value.bind(inner) : value
+              },
+            })
+          }
+        }
+        const value = Reflect.get(target, key)
+        return typeof value === 'function' ? value.bind(target) : value
+      },
+    })
+
+  // ログインした管理画面へ POST し、500 と console.error に書いた行を返す
+  async function postLogged(path: string, body: FormData, database: D1Database) {
+    const owner = await ensureOwner()
+    const { token } = await createSession(db(), owner.id)
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const ctx = createExecutionContext()
+      /*
+        app.fetch を直に呼ぶので、FormData の本文には Content-Length が付かない（SELF.fetch なら
+        HTTP の層が付ける）。管理画面は長さを名乗らない POST を 411 で断るので
+        （src/routes/admin/request.ts の readAdminForm）、ブラウザと同じく長さと種類を付けて送る
+      */
+      const draft = new Request('https://astlog.test/', { method: 'POST', body })
+      const bytes = await draft.arrayBuffer()
+      const response = await app.fetch(
+        new Request(`https://astlog.test${path}?from=log-test`, {
+          method: 'POST',
+          headers: {
+            cookie: `${HOST_SESSION_COOKIE}=${token}`,
+            'content-type': draft.headers.get('content-type') ?? '',
+            'content-length': String(bytes.byteLength),
+          },
+          body: bytes,
+        }),
+        uncachedEnv({ DB: database }),
+        ctx,
+      )
+      await waitOnExecutionContext(ctx)
+      expect(response.status, path).toBe(500)
+      return errors.mock.calls.map((args) => args.map((arg) => spelled(arg)).join(' '))
+    } finally {
+      errors.mockRestore()
+    }
+  }
+
+  it('失敗したクエリの束縛値を書かない（method・path・例外の名前と文とスタックの行だけ）', async () => {
+    // 1文の INSERT が本物の D1 の失敗（無い表）で落ちる。紹介文はスタックの行に見せかけた値で、
+    // 例外の文（params:）の中に入る——行の形だけで拾うと、これがログに出る
+    const logged = await postLogged(
+      '/admin/members',
+      form({
+        name: '目印',
+        slug: 'marker',
+        location: marker,
+        bio: `目印\n    at ${marker} (index.js:1:1)`,
+      }),
+      failingOn((target) => target.prepare('select * from no_such_table_for_log_test')),
+    )
+    expect(logged.join('\n')).not.toContain(marker)
+    // 何が落ちたかは読める——method と path（query は書かない）、クエリの文（値は ? のまま）、D1 の失敗の文
+    expect(logged).toHaveLength(1)
+    expect(logged[0]).toMatch(/^500 POST \/admin\/members: /)
+    expect(logged[0]).not.toContain('log-test')
+    expect(logged[0]).toContain('DrizzleQueryError: Failed query: insert into "members"')
+    expect(logged[0]).toContain('no such table: no_such_table_for_log_test')
+    // どこで落ちたか（スタックの行）も書く
+    expect(logged[0]).toMatch(/\n\s+at /)
+  })
+
+  /*
+    D1 は受け取れない型の値（配列など）を束縛されると、D1_TYPE_ERROR の文の末尾にその値を
+    書く。1文のクエリでは DrizzleQueryError の cause に、batch では Drizzle に包まれずそのまま
+    上がってくる。どちらでも値は書かない
+  */
+  it('D1 が受け取れない値の文（D1_TYPE_ERROR）からも値を落とす。1文でも batch でも', async () => {
+    const typeError = failingOn((_, inner) => inner.bind([marker, 'x']))
+    for (const [path, body] of [
+      // 1文の INSERT
+      ['/admin/members', form({ name: '目印', slug: 'marker', location: marker })],
+      // 作品の保存は1つの batch
+      ['/admin/items', form({ type: 'work', title: '目印', summary: marker })],
+    ] as const) {
+      const logged = await postLogged(path, body, typeError)
+      expect(logged.join('\n'), path).not.toContain(marker)
+      expect(logged, path).toHaveLength(1)
+      expect(logged[0], path).toMatch(new RegExp(`^500 POST ${path}: `))
+      expect(logged[0], path).toContain("D1_TYPE_ERROR: Type 'object' not supported")
+      expect(logged[0], path).toMatch(/\n\s+at /)
+    }
+  })
+
+  // DB 以外で落ちた 500 も、どこで落ちたか（スタックの行）を書く
+  it('DB の外の例外もスタックの行を書く', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const ctx = createExecutionContext()
+      // D1 を持たない env——読み出しの手前で TypeError になる
+      const response = await app.fetch(
+        new Request('https://astlog.test/projects'),
+        uncachedEnv({ DB: undefined as unknown as D1Database }),
+        ctx,
+      )
+      await waitOnExecutionContext(ctx)
+      expect(response.status).toBe(500)
+      const logged = errors.mock.calls.map((args) => args.join(' '))
+      expect(logged).toHaveLength(1)
+      expect(logged[0]).toMatch(/^500 GET \/projects: TypeError: /)
+      expect(logged[0]).toMatch(/\n\s+at /)
+    } finally {
+      errors.mockRestore()
     }
   })
 })

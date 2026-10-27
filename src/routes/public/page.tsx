@@ -3,6 +3,7 @@ import type { Context } from 'hono'
 import { getCookie } from 'hono/cookie'
 import type { Child } from 'hono/jsx'
 import * as schema from '../../db/schema'
+import type { PublicMember } from '../../domain'
 import type { AppEnv } from '../../env'
 import { getSessionUser, sessionCookie } from '../../lib/auth'
 import type { NavLink, Page } from '../../lib/sequence'
@@ -18,11 +19,15 @@ import { Layout, type OgImage } from '../../ui/Layout'
   置かれると、次に来た訪問者に管理画面への入口が出る。公開ページの写し
   （src/lib/page-cache.ts）も、セッションのクッキーを持つ要求と private / no-store の
   応答を通さない——この約束をそちらでも守っている。
+
+  公開ページを見たことは、セッションを「使った」に数えない（touch: false）。数えると、
+  共用の端末に閉じ忘れたクッキーが、誰かがサイトを見ている限り放置で切れない。
 */
 export async function adminHref(c: Context<AppEnv>, to: string): Promise<string | undefined> {
   const sessionId = getCookie(c, sessionCookie(c.req.url))
   if (!sessionId) return undefined
-  const user = await getSessionUser(drizzle(c.env.DB, { schema }), sessionId)
+  const database = drizzle(c.env.DB, { schema })
+  const user = await getSessionUser(database, sessionId, { touch: false })
   if (!user) return undefined
   c.header('cache-control', 'private, no-store')
   return to
@@ -64,7 +69,7 @@ export function movedTo(c: Context<AppEnv>, to: string) {
   足元の名前）はメンバー（1人のサイトならその人の編集）。Contact と入口のリード文は
   サイト設定から編集する。Contact はその設定画面へ送る。
 */
-export const blockAdminPath = (block: schema.Block, solo?: schema.Member) => {
+export const blockAdminPath = (block: schema.Block, solo?: PublicMember) => {
   switch (block.type) {
     case 'projects':
       return '/admin/items'

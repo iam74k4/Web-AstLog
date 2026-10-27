@@ -9,8 +9,34 @@ import {
   sniffImage,
   sniffVideo,
 } from '../src/lib/image'
+import { stripMetadata } from '../src/lib/image-metadata'
 import { byteRange } from '../src/routes/public/images'
-import { avif, gif, heic, jpeg, mp4, png, svg, webp, webpLossless, webpLossy } from './images'
+import {
+  androidLocation,
+  appleLocation,
+  avif,
+  avifWithMetadata,
+  gif,
+  heic,
+  isoMetaLocation,
+  jpeg,
+  lociLocation,
+  mp4,
+  PLACE,
+  photoJpeg,
+  photoPng,
+  photoWebp,
+  plainMovieMeta,
+  png,
+  svg,
+  timedTrack,
+  unpaddedExifWebp,
+  webp,
+  webpLossless,
+  webpLossy,
+  xmpLocation,
+  xmpUuid,
+} from './images'
 
 /*
   受け取る画像の種類は中身の先頭のバイトで決める（SEC-2 / ADM-4）。
@@ -146,5 +172,209 @@ describe('範囲の要求', () => {
     expect(byteRange('bytes=9-2', 100)).toBeNull()
     expect(byteRange('bytes=100-', 100)).toBe('unsatisfiable')
     expect(byteRange('bytes=-0', 100)).toBe('unsatisfiable')
+  })
+})
+
+/*
+  上げた写真の付け足し（撮った場所・日時・機種）は、置く前に外す（src/lib/image-metadata.ts）。
+  JPEG・PNG・WebP は絵に要る区画だけを残し、外せない AVIF と動画は位置があれば断る。外したあとも
+  同じ種類・同じ寸法として読め、向きが 1 でなければ向きだけを残す。並びが途中で読めず付け足しが
+  残るものは断る
+*/
+describe('写真の付け足しを外す', () => {
+  const latin1 = (bytes: Uint8Array) =>
+    Array.from(bytes, (byte) => String.fromCharCode(byte)).join('')
+  const cleaned = (type: string, bytes: Uint8Array<ArrayBuffer>) => {
+    const result = stripMetadata(type, bytes)
+    if (typeof result === 'string') throw new Error(`${type} を ${result} として断った`)
+    return result
+  }
+  const join = (...parts: (Uint8Array | number[])[]) =>
+    new Uint8Array(parts.flatMap((part) => Array.from(part)))
+  const leaks = (bytes: Uint8Array) =>
+    [PLACE, 'GPSLatitude', 'MotionPhoto', 'Photoshop', 'MPF\0'].filter((mark) =>
+      latin1(bytes).includes(mark),
+    )
+
+  it('JPEG は APP1・APP13・COM・ICC でない APP2・EOI の後ろを落とし、APP0・ICC・Adobe と画像データを残す', () => {
+    for (const orientation of [undefined, 1, 6]) {
+      const photo = photoJpeg({ orientation })
+      expect(leaks(photo), String(orientation)).not.toEqual([])
+      const clean = cleaned('image/jpeg', photo)
+      expect(clean, String(orientation)).toEqual(photoJpeg({ orientation, clean: true }))
+      expect(leaks(clean), String(orientation)).toEqual([])
+      expect(sniffImage(clean), String(orientation)).toEqual(sniffImage(photo))
+    }
+    // 向きが 6 なら、向きだけの EXIF を残す（表示の寸法は縦横が入れ替わったまま）
+    expect(sniffImage(cleaned('image/jpeg', photoJpeg({ orientation: 6 })))).toMatchObject({
+      width: 600,
+      height: 800,
+    })
+    expect(latin1(cleaned('image/jpeg', photoJpeg({ orientation: 1 })))).not.toContain('Exif')
+  })
+
+  /*
+    区画の間の余計なバイト（FF でない字・FF 00）は libjpeg が読み飛ばし、ブラウザは何事もなく
+    描く。そこで読むのをやめると、後ろの EXIF の位置がそのまま出る
+  */
+  it('JPEG の区画の間の余計なバイトは読み飛ばして落とし、後ろの EXIF も外す', () => {
+    const photo = photoJpeg({ orientation: 6 })
+    // APP0（SOI の 2 バイトのあと 18 バイト）と EXIF の APP1 のあいだ
+    for (const stray of [[0x00], [0x12, 0x34], [0x12, 0xff, 0x00]]) {
+      const label = stray.join(',')
+      const broken = join(photo.subarray(0, 20), stray, photo.subarray(20))
+      expect(sniffImage(broken), label).toMatchObject({ type: 'image/jpeg' })
+      const clean = cleaned('image/jpeg', broken)
+      expect(clean, label).toEqual(photoJpeg({ orientation: 6, clean: true }))
+      expect(leaks(clean), label).toEqual([])
+    }
+  })
+
+  it('PNG は絵に要るチャンクだけを残し、eXIf・tEXt・iTXt・zTXt・tIME・知らないチャンク（exIf・caBX）と IEND の後ろを落とす', () => {
+    for (const orientation of [undefined, 1, 8]) {
+      const photo = photoPng({ orientation })
+      expect(leaks(photo), String(orientation)).not.toEqual([])
+      const clean = cleaned('image/png', photo)
+      expect(clean, String(orientation)).toEqual(photoPng({ orientation, clean: true }))
+      expect(leaks(clean), String(orientation)).toEqual([])
+      expect(sniffImage(clean), String(orientation)).toEqual(sniffImage(photo))
+    }
+  })
+
+  it('WebP は絵に要るチャンクだけを残し、EXIF・XMP・知らないチャンク（C2PA）を落とし、VP8X の印と RIFF の長さを合わせる', () => {
+    for (const orientation of [undefined, 1, 6]) {
+      const photo = photoWebp({ orientation })
+      expect(leaks(photo), String(orientation)).not.toEqual([])
+      const clean = cleaned('image/webp', photo)
+      expect(clean, String(orientation)).toEqual(photoWebp({ orientation, clean: true }))
+      expect(leaks(clean), String(orientation)).toEqual([])
+      expect(sniffImage(clean), String(orientation)).toEqual(sniffImage(photo))
+    }
+  })
+
+  it('WebP の最後の EXIF が奇数の長さで詰め物を欠いていても、落とす', () => {
+    const photo = unpaddedExifWebp()
+    expect(leaks(photo)).toEqual([PLACE])
+    const clean = cleaned('image/webp', photo)
+    expect(clean).toEqual(unpaddedExifWebp({ clean: true }))
+    expect(leaks(clean)).toEqual([])
+    expect(sniffImage(clean)).toEqual(sniffImage(photo))
+  })
+
+  it('付け足しの無いもの・GIF・途中で切れたものは、同じバイトのまま返す', () => {
+    const cases: [string, Uint8Array<ArrayBuffer>][] = [
+      ['image/png', png()],
+      ['image/jpeg', jpeg()],
+      ['image/webp', webp()],
+      ['image/webp', webpLossless()],
+      ['image/webp', webpLossy()],
+      ['image/gif', gif()],
+      ['image/avif', avif()],
+      ['video/mp4', mp4()],
+      ['video/mp4', mp4({ brand: 'qt  ', extra: [plainMovieMeta()] })],
+      ['video/mp4', mp4({ extra: [timedTrack('mebx', 'com.apple.quicktime.video-orientation')] })],
+      // 絵の頭や中身の途中で切れたもの（後ろに付け足しは無い）
+      ['image/jpeg', jpeg().slice(0, 25)],
+      ['image/png', photoPng().slice(0, 40)],
+      ['image/webp', photoWebp().slice(0, 40)],
+    ]
+    for (const [type, bytes] of cases) expect(stripMetadata(type, bytes), type).toBe(bytes)
+  })
+
+  /*
+    並びが途中で読めないと、そこから後ろは区画に分けられず外せない。そこが落とす区画か、後ろに
+    付け足しの目印があれば、黙って写さずに断る
+  */
+  it('途中で読めなくなり、その後ろに付け足しが残るものは断る', () => {
+    const photo = photoPng()
+    const exifAt = latin1(photo).indexOf('eXIf') - 4
+    const webpPhoto = photoWebp()
+    const webpExifAt = latin1(webpPhoto).indexOf('EXIF')
+    const cases: [string, string, Uint8Array<ArrayBuffer>][] = [
+      // 落とす区画（EXIF の APP1・eXIf・EXIF）の途中で切れた
+      ['JPEG の EXIF の途中', 'image/jpeg', photoJpeg().slice(0, 30)],
+      ['PNG の eXIf の途中', 'image/png', photo.slice(0, exifAt + 20)],
+      ['WebP の EXIF の途中', 'image/webp', webpPhoto.slice(0, webpExifAt + 20)],
+      // 残す区画の長さがファイルの外を指し、その後ろに EXIF が続く
+      [
+        'JPEG の長さの合わない DQT のあとの EXIF',
+        'image/jpeg',
+        join([0xff, 0xd8, 0xff, 0xdb, 0xff, 0xff], photoJpeg().subarray(2)),
+      ],
+    ]
+    for (const [label, type, bytes] of cases) {
+      expect(stripMetadata(type, bytes), label).toBe('unreadable')
+    }
+  })
+
+  it('AVIF は EXIF か XMP に位置があれば断る（mdat に置いても idat に置いても、iloc の版と欄の幅を問わず）', () => {
+    const layouts = [
+      { version: 0, inIdat: false },
+      { version: 1, inIdat: false },
+      { version: 1, inIdat: true },
+      { version: 2, inIdat: false },
+      { version: 2, inIdat: true },
+    ] as const
+    for (const xmp of [false, true]) {
+      for (const layout of layouts) {
+        for (const wide of [false, true]) {
+          const label = `xmp: ${xmp}, iloc: v${layout.version}, idat: ${layout.inIdat}, wide: ${wide}`
+          const photo = avifWithMetadata({ xmp, wide, ...layout })
+          expect(sniffImage(photo), label).toMatchObject({ type: 'image/avif', width: 1600 })
+          expect(stripMetadata('image/avif', photo), label).toBe('location')
+          const plain = avifWithMetadata({ gps: false, xmp, wide, ...layout })
+          expect(stripMetadata('image/avif', plain), label).toBe(plain)
+        }
+      }
+    }
+  })
+
+  it('AVIF が EXIF・XMP の品目を名乗るのに中身を引けなければ、位置が無いとは言わずに断る', () => {
+    // offset と長さの幅が 2 バイト（0・4・8 のどれでもない）の iloc は読まない
+    for (const gps of [true, false]) {
+      expect(stripMetadata('image/avif', avifWithMetadata({ gps, sizes: 0x22 })), String(gps)).toBe(
+        'unreadable',
+      )
+    }
+  })
+
+  it('MP4・MOV は付け足しの箱の位置（Apple の ISO6709・©xyz・loci・XMP）があれば、置き場を問わず断る', () => {
+    const movies: Record<string, Parameters<typeof mp4>[0]> = {
+      'moov > meta > keys（QuickTime の形）': { extra: [appleLocation()] },
+      'moov > udta > ©xyz': { extra: [androidLocation()] },
+      'moov > udta > XMP_': { extra: [xmpLocation()] },
+      'moov > udta > loci': { extra: [lociLocation()] },
+      'moov > udta > meta（ISO の形）> ilst > ©xyz': { extra: [isoMetaLocation()] },
+      'moov > uuid（XMP）': { extra: [xmpUuid()] },
+      '最上段の uuid（XMP）': { trailing: [xmpUuid()] },
+      'trak > udta > ©xyz': { inTrack: [androidLocation()] },
+    }
+    for (const [label, options] of Object.entries(movies)) {
+      for (const brand of ['isom', 'qt  ']) {
+        const movie = mp4({ brand, ...options })
+        expect(sniffVideo(movie), `${label} ${brand}`).toMatchObject({
+          video: { type: 'video/mp4' },
+        })
+        expect(stripMetadata('video/mp4', movie), `${label} ${brand}`).toBe('location')
+      }
+    }
+  })
+
+  /*
+    アクションカメラ・ドローン・iPhone は、位置を時刻ごとの記録のトラックに書く。記録の中身は
+    mdat にあって読まないので、トラックの見本の種類で断る
+  */
+  it('MP4・MOV は位置を記録するトラック（gpmd・camm・djmd・位置の mebx）があれば断る', () => {
+    const tracks = [
+      timedTrack('gpmd'),
+      timedTrack('camm'),
+      timedTrack('djmd'),
+      timedTrack('mebx', 'com.apple.quicktime.location.ISO6709'),
+    ]
+    for (const track of tracks) {
+      const movie = mp4({ extra: [track] })
+      expect(sniffVideo(movie)).toMatchObject({ video: { type: 'video/mp4' } })
+      expect(stripMetadata('video/mp4', movie)).toBe('location')
+    }
   })
 })

@@ -291,7 +291,7 @@ flowchart TD
 長さではなく**値そのもの**が受け取れないものは、下書きの保存でも 400 で止める——
 画像（中身が PNG・JPEG・WebP・AVIF・GIF のどれでもない、1MB（GIF は 3MB）を超える。作品の
 ほかの画像の欄では H.264 の動画（MP4・MOV。MOV も MP4 として置く）も受け、HEVC は理由を言って止め、10MB まで。全体の
-容量 300MB を超える）と、URL
+容量 300MB を超える。撮った場所を持つ AVIF・動画と、並びが途中で読めず付け足しを外せない写真。JPEG・PNG・WebP の場所などの付け足しは止めずに外して置く）と、URL
 （作品のリンクの `javascript:`・頭を省いた相対 URL・ラベルか URL の片方だけの行、
 メンバーの GitHub の `https://` 以外、リンク集の落ちる行）と、書くブロックの空の中身と、
 数として読めない並び順（全角の数字は読む）と、消えた担当メンバー・プラットフォーム。
@@ -351,7 +351,7 @@ flowchart TD
     Check -->|"はい"| Admin
     Check -->|"いいえ → 303 ?next=開いた画面"| Login
     Login -->|"GitHub でログイン / Google でログイン"| Start
-    Start -->|"同じ IP から 60 秒に 10 回を超えた<br>（D1 に書かない）"| Busy
+    Start -->|"同じ IP（IPv6 は /64）から 60 秒に 10 回を超えた<br>（D1 に書かない）"| Busy
     Start -->|"302（PKCE・state。Google は nonce も）"| Provider
     Provider -->|"断った → ?error=denied"| Login
     Provider -->|"?code&state"| Callback
@@ -370,8 +370,11 @@ flowchart TD
 
 - 本人は提供元の ID で照合する（GitHub は数値の id、Google は sub）。ログイン名や
   メールアドレスを見るのは、最初の紐づけのときだけ
-- ログインの入口は、同じ IP から 60 秒に 10 回まで（Workers の Rate Limiting）。
-  超えたぶんは D1 に書かずに 429
+- ログインの入口は、同じ IP（IPv6 は /64）から 60 秒に 10 回まで（Workers の Rate
+  Limiting）。超えたぶんは D1 に書かずに 429。多くの IP からの分はこれでは止まらない
+  （止めるならダッシュボードで WAF のカスタムルールを置く。README「管理画面に入る」）
+- セッションは発行から14日で切れ、管理画面を12時間使わなければその前に切れる（最後に
+  使った時刻は5分に1度だけ書き直す。公開ページを見ても書き直さない）
 - state は D1 で1回きり。成功しても弾いても、差し出された札（クッキーの側と
   query の側）はその場で消える。同じ URL をもう一度開いてもやり直しになる
 - Google の id_token は iss・aud・exp・nonce を確かめ、合わなければ 400。署名は、
