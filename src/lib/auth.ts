@@ -12,6 +12,16 @@ import type { Identity } from './oauth'
   一緒に外した——当てられるパスワードが無ければ、数える相手も居ない。
 */
 const SESSION_DAYS = 14
+/*
+  触らずに置いたセッションが切れるまでの時間。使われないまま残ったクッキー（共用の
+  端末での閉じ忘れ・抜き取られた写し）を、14日の上限まで生かさない。
+*/
+export const SESSION_IDLE_MS = 12 * 3_600_000
+/*
+  last_seen_at を書き直す間隔。毎回書くと、管理画面を1回開くたびに D1 へ1行書く。
+  そのぶん放置の期限は最大でこの間隔だけ早く来る（12時間に対して誤差の範囲）
+*/
+export const SESSION_SEEN_EVERY_MS = 5 * 60_000
 
 const hex = (bytes: Uint8Array) => [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
 
@@ -40,19 +50,50 @@ export function timingSafeEqual(a: string, b: string): boolean {
 // 返す token がクッキーに入る値。D1 にはそのハッシュしか置かない
 export async function createSession(db: Db, userId: number) {
   const token = newToken()
-  const expiresAt = new Date(Date.now() + SESSION_DAYS * 86_400_000)
-  await db
-    .insert(schema.sessions)
-    .values({ id: await sessionKey(token), userId, expiresAt: expiresAt.toISOString() })
-  // 期限切れはここで掃除する。掃除だけの定期実行を持たないための割り切り
+  const now = Date.now()
+  const expiresAt = new Date(now + SESSION_DAYS * 86_400_000)
+  await db.insert(schema.sessions).values({
+    id: await sessionKey(token),
+    userId,
+    expiresAt: expiresAt.toISOString(),
+    lastSeenAt: new Date(now).toISOString(),
+  })
+  /*
+    上限の切れた行はここで掃除する。掃除だけの定期実行を持たないための割り切り。
+    放置で切れた行は、差し出されたとき（getSessionUser）か上限が来たときに消える
+  */
   await db.delete(schema.sessions).where(lt(schema.sessions.expiresAt, new Date().toISOString()))
   return { token, expiresAt }
 }
 
+/*
+  セッションの時刻を数にする。expires_at と last_seen_at はアプリが書く ISO 8601、
+  created_at は D1 の datetime('now')（UTC の「YYYY-MM-DD HH:MM:SS」）——印の無い
+  この形は、そのまま new Date に渡すとローカル時刻として読まれうるので UTC と明示する。
+  読めなければ NaN
+*/
+function sessionTime(value: string): number {
+  const d1 = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)
+  return new Date(d1 ? `${value.replace(' ', 'T')}Z` : value).getTime()
+}
+
+/*
+  クッキーからいまの user を引く。通さないなら null で、切れた行はその場で消す。
+
+  切れるのは、発行から14日（expires_at）か、最後に使ってから12時間（last_seen_at。
+  列を足す前の行は null なので created_at から数える）。読めない時刻も切れたとして
+  扱う——Invalid Date の比較は false になり、無期限で通ってしまう。
+  last_seen_at を書き直すのは前の記録から5分たったときだけ
+*/
 export async function getSessionUser(db: Db, token: string) {
   const id = await sessionKey(token)
   const rows = await db
-    .select({ user: schema.users, expiresAt: schema.sessions.expiresAt })
+    .select({
+      user: schema.users,
+      expiresAt: schema.sessions.expiresAt,
+      createdAt: schema.sessions.createdAt,
+      lastSeenAt: schema.sessions.lastSeenAt,
+    })
     .from(schema.sessions)
     .innerJoin(schema.users, eq(schema.users.id, schema.sessions.userId))
     .where(eq(schema.sessions.id, id))
@@ -60,11 +101,23 @@ export async function getSessionUser(db: Db, token: string) {
 
   const row = rows[0]
   if (!row) return null
-  const expiresAt = new Date(row.expiresAt).getTime()
-  // 読めない期限も失効として扱う。Invalid Date の比較は false になり、無期限で通る
-  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+  const now = Date.now()
+  const expiresAt = sessionTime(row.expiresAt)
+  const seenAt = sessionTime(row.lastSeenAt ?? row.createdAt)
+  if (
+    !Number.isFinite(expiresAt) ||
+    expiresAt <= now ||
+    !Number.isFinite(seenAt) ||
+    now - seenAt >= SESSION_IDLE_MS
+  ) {
     await db.delete(schema.sessions).where(eq(schema.sessions.id, id))
     return null
+  }
+  if (now - seenAt >= SESSION_SEEN_EVERY_MS) {
+    await db
+      .update(schema.sessions)
+      .set({ lastSeenAt: new Date(now).toISOString() })
+      .where(eq(schema.sessions.id, id))
   }
   return row.user
 }

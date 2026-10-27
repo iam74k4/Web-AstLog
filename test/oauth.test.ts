@@ -3,7 +3,15 @@ import { drizzle } from 'drizzle-orm/d1'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as schema from '../src/db/schema'
 import app from '../src/index'
-import { createSession, HOST_SESSION_COOKIE, sessionKey, userForIdentity } from '../src/lib/auth'
+import {
+  createSession,
+  getSessionUser,
+  HOST_SESSION_COOKIE,
+  SESSION_IDLE_MS,
+  SESSION_SEEN_EVERY_MS,
+  sessionKey,
+  userForIdentity,
+} from '../src/lib/auth'
 import { base64url } from '../src/lib/oauth'
 import { limitKey } from '../src/routes/admin/auth'
 import { db, ensureOwner, form, get, okText, resetDb, withCookie } from './helpers'
@@ -546,6 +554,92 @@ describe('セッション', () => {
     expect(await db().select().from(schema.sessions)).toHaveLength(0)
   })
 
+  /*
+    セッションは発行から14日（expires_at）と、最後に使ってから12時間（last_seen_at）の
+    早いほうで切れる。last_seen_at を書き直すのは前の記録から5分たったときだけ
+    （毎回書くと、管理画面を1回開くたびに D1 へ1行書く）
+  */
+  const ago = (ms: number) => new Date(Date.now() - ms).toISOString()
+  // D1 の datetime('now') と同じ形（UTC の「YYYY-MM-DD HH:MM:SS」）。created_at の値
+  const d1Ago = (ms: number) => ago(ms).slice(0, 19).replace('T', ' ')
+  const sessionRows = () => db().select().from(schema.sessions)
+  const seenAt = async () => (await sessionRows())[0]?.lastSeenAt ?? null
+  const signedSession = async () => {
+    const owner = await ensureOwner()
+    const { token } = await createSession(db(), owner.id)
+    return withCookie(`${HOST_SESSION_COOKIE}=${token}`)
+  }
+
+  it('12時間使わなかったセッションでは入れず、そのセッションを消す', async () => {
+    const signed = await signedSession()
+    await db()
+      .update(schema.sessions)
+      .set({ lastSeenAt: ago(SESSION_IDLE_MS + 60_000) })
+
+    const response = await signed('/admin/members')
+    expect(response.status).toBe(303)
+    expect(response.headers.get('location')).toBe('/admin/login?next=%2Fadmin%2Fmembers')
+    expect(await sessionRows()).toHaveLength(0)
+  })
+
+  it('使っていても、発行から14日の上限で切れる', async () => {
+    const signed = await signedSession()
+    await db()
+      .update(schema.sessions)
+      .set({ lastSeenAt: ago(0), expiresAt: ago(1000) })
+    expect((await signed('/admin/members')).status).toBe(303)
+    expect(await sessionRows()).toHaveLength(0)
+  })
+
+  it('使っているセッションは続き、最後に使った時刻を書き直すのは5分に1度まで', async () => {
+    const signed = await signedSession()
+    // 発行のときに書く
+    expect(Date.now() - Date.parse((await seenAt()) ?? '')).toBeLessThan(SESSION_SEEN_EVERY_MS)
+
+    // 前の記録から5分たっていなければ、何度開いても書かない
+    const recent = ago(SESSION_SEEN_EVERY_MS - 60_000)
+    await db().update(schema.sessions).set({ lastSeenAt: recent })
+    for (const path of ['/admin/members', '/admin/items', '/admin/members']) {
+      expect((await signed(path)).status, path).toBe(200)
+    }
+    expect(await seenAt()).toBe(recent)
+
+    // 11時間前の記録: 入れて、いまの時刻に書き直す（放置の期限がそこから数え直しになる）
+    await db()
+      .update(schema.sessions)
+      .set({ lastSeenAt: ago(SESSION_IDLE_MS - 3_600_000) })
+    expect((await signed('/admin/members')).status).toBe(200)
+    const refreshed = await seenAt()
+    expect(Date.now() - Date.parse(refreshed ?? '')).toBeLessThan(SESSION_SEEN_EVERY_MS)
+
+    // 書き直した直後は、また5分のあいだ書かない
+    expect((await signed('/admin/items')).status).toBe(200)
+    expect(await seenAt()).toBe(refreshed)
+  })
+
+  it('last_seen_at が空の行（列を足す前のセッション）は created_at から数える', async () => {
+    const signed = await signedSession()
+    await db()
+      .update(schema.sessions)
+      .set({ lastSeenAt: null, createdAt: d1Ago(3_600_000) })
+    expect((await signed('/admin/members')).status).toBe(200)
+    // 入れたので、いまの時刻を書く。以後は last_seen_at で数える
+    expect(Date.now() - Date.parse((await seenAt()) ?? '')).toBeLessThan(SESSION_SEEN_EVERY_MS)
+
+    await db()
+      .update(schema.sessions)
+      .set({ lastSeenAt: null, createdAt: d1Ago(SESSION_IDLE_MS + 60_000) })
+    expect((await signed('/admin/members')).status).toBe(303)
+    expect(await sessionRows()).toHaveLength(0)
+  })
+
+  it('最後に使った時刻を読めないセッションでは入れず、そのセッションを消す', async () => {
+    const signed = await signedSession()
+    await db().update(schema.sessions).set({ lastSeenAt: 'not-a-date' })
+    expect((await signed('/admin/members')).status).toBe(303)
+    expect(await sessionRows()).toHaveLength(0)
+  })
+
   it('D1 にはクッキーの値ではなく、その SHA-256 だけを置く', async () => {
     const response = await signInWith('github', github().handlers)
     const token = sessionCookie(response)?.split(';')[0]?.split('=')[1] ?? ''
@@ -978,6 +1072,52 @@ describe('移行', () => {
         { provider: 'github', subject: '1001', label: '@owner' },
       ),
     ).toBeNull()
+  })
+
+  /*
+    0023: sessions に last_seen_at（放置の期限）を足す。足す前のセッションは null のまま
+    残り、created_at から数えて入れる（12時間たっていれば切れる）。列を足すだけで表を
+    作り直さない——作り直すと、D1 では DROP の時点で子の行が cascade で消える（0006 と同じ）
+  */
+  it('0023: 足す前のセッションは last_seen_at が空のまま残り、created_at から数える', async () => {
+    await clear()
+    await run((name) => name < '0023')
+    const d1Ago = (ms: number) =>
+      new Date(Date.now() - ms).toISOString().slice(0, 19).replace('T', ' ')
+    const insert = 'INSERT INTO sessions (id, user_id, expires_at, created_at) VALUES (?, 3, ?, ?)'
+    await d1().batch([
+      d1().prepare("INSERT INTO users (id, role) VALUES (3, 'owner')"),
+      d1()
+        .prepare(insert)
+        .bind(await sessionKey('used'), '2099-01-01T00:00:00.000Z', d1Ago(3_600_000)),
+      d1()
+        .prepare(insert)
+        .bind(
+          await sessionKey('left'),
+          '2099-01-01T00:00:00.000Z',
+          d1Ago(SESSION_IDLE_MS + 60_000),
+        ),
+    ])
+
+    await run((name) => name >= '0023')
+
+    const kept = await d1().prepare('SELECT last_seen_at FROM sessions').all()
+    expect(kept.results).toEqual([{ last_seen_at: null }, { last_seen_at: null }])
+    const migrated = drizzle(d1(), { schema })
+    expect((await getSessionUser(migrated, 'used'))?.id).toBe(3)
+    expect(await getSessionUser(migrated, 'left')).toBeNull()
+    const left = await d1()
+      .prepare('SELECT id, last_seen_at FROM sessions')
+      .all<{ id: string; last_seen_at: string | null }>()
+    expect(left.results.map((row) => row.id)).toEqual([await sessionKey('used')])
+    expect(left.results[0]?.last_seen_at).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+
+    const sql =
+      env.TEST_MIGRATIONS.find((one) => one.name.includes('session_last_seen'))?.queries.join(
+        '\n',
+      ) ?? ''
+    expect(sql).toContain('ALTER TABLE `sessions` ADD `last_seen_at` text')
+    expect(sql).not.toMatch(/__new_sessions|DROP TABLE|PRAGMA foreign_keys/)
   })
 
   it('0006 は表を作り直さない（D1 では PRAGMA foreign_keys=OFF が効かない）', () => {
