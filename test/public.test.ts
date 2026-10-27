@@ -2784,9 +2784,10 @@ describe('/images', () => {
   /*
     SEC-2 / ADM-4。/images/* はサイトと同じオリジンで配る。画像のふりをした
     文書（SVG の <script>）が直に開かれても走らないよう、嗅ぎ分けを止め、
-    スクリプトも読み込みも持たない sandbox の文書として返す
+    スクリプトも読み込みも持たない sandbox の文書として返す。ほかのサイトのページには
+    埋め込ませない（Cross-Origin-Resource-Policy: same-site）
   */
-  it('nosniff と sandbox の CSP を付けて返す', async () => {
+  it('nosniff と sandbox の CSP と same-site の CORP を付けて返す', async () => {
     await env.MEDIA.put('items/shot-cd34.png', 'image-bytes', {
       metadata: { contentType: 'image/png' },
     })
@@ -2795,6 +2796,7 @@ describe('/images', () => {
     expect(response.headers.get('content-type')).toBe('image/png')
     expect(response.headers.get('x-content-type-options')).toBe('nosniff')
     expect(response.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox")
+    expect(response.headers.get('cross-origin-resource-policy')).toBe('same-site')
     expect(response.headers.get('content-disposition')).toBeNull()
   })
 
@@ -2817,6 +2819,7 @@ describe('/images', () => {
       expect(response.headers.get('content-security-policy'), key).toBe(
         "default-src 'none'; sandbox",
       )
+      expect(response.headers.get('cross-origin-resource-policy'), key).toBe('same-site')
     }
   })
 })
@@ -3827,10 +3830,13 @@ describe('転送をブラウザに覚えさせるか', () => {
     await noCache('/members/okazaki', '/members/okazaki-k')
   })
 
-  it('行き先が動かない転送（/apps → /projects）は素の 301 のまま', async () => {
-    const response = await get('/apps')
-    expect(response.status).toBe(301)
-    expect(response.headers.get('cache-control')).toBeNull()
+  it('行き先が動かない転送（/apps → /projects）は素の 301 のまま（写しから返すときも）', async () => {
+    for (const round of ['miss', 'hit']) {
+      const response = await get('/apps')
+      expect(response.status, round).toBe(301)
+      expect(response.headers.get('x-astlog-cache'), round).toBe(round)
+      expect(response.headers.get('cache-control'), round).toBeNull()
+    }
   })
 })
 

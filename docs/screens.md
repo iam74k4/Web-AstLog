@@ -11,7 +11,9 @@ form-action 'self'; frame-ancestors 'none'; img-src 'self';
 style-src 'self' 'unsafe-inline'`）・`X-Content-Type-Options: nosniff`・
 `Referrer-Policy: strict-origin-when-cross-origin` を付ける。公開 HTML の `script-src` は `'none'`
 （実行する script を1本も持たない）。管理画面は編集補助の `ADMIN_CSP` だけを許す。保存前プレビューは script 無しで、`frame-ancestors` を同一オリジンに限って許す。自分の CSP を持つ
-`/images/*` はそのまま（上書きしない）。`/admin/*` はさらに `Cache-Control: no-store`。
+`/images/*` はそのまま（上書きしない）。`/admin/*` はさらに `Cache-Control: no-store` と
+`Cross-Origin-Opener-Policy: same-origin`（ほかのサイトが開いた窓に手を出させない。公開ページに
+付けると、sandbox の枠から開いた窓がページを開けない）。
 Worker を通らない `public/` のファイル（`/app.css`・`/admin.css`・`/preview.css`・`/assets/…`）には
 `public/_headers` が nosniff・Referrer-Policy・`default-src 'none'; sandbox` を付ける。
 3枚の CSS にはさらに `Cache-Control: public, max-age=31536000, immutable`（HTML が
@@ -27,7 +29,9 @@ Worker を通らない `public/` のファイル（`/app.css`・`/admin.css`・`
 持つ応答（ログイン中の `private, no-store`）。行き先がデータで変わる 301（前の slug・
 前の区分・1人のサイトの `/team` と `/profile`・個人ページの Contact・前の個人ページの続き・
 前の本文の画面）は `Cache-Control: no-cache` で、
-ブラウザに覚えさせない（写しから返すときも付け直す）。応答の `x-astlog-cache` が `hit` / `miss` / `stale`。
+ブラウザに覚えさせない（写しから返すときも付け直す）。写しから返すほかの応答（200・302・404）は
+`Last-Modified` を外し、ルートが付けていなければ `Cache-Control: no-cache`（ブラウザに推測で
+使い回させない。素の 301 はそのまま）。応答の `x-astlog-cache` が `hit` / `miss` / `stale`。
 
 ## 公開側
 
@@ -77,7 +81,7 @@ Instagram → X → Discord → メール。サイト設定にあるものだけ
 | 以前の一覧 | `GET /apps` `/apps/:page` `/works` `/works/:page` | 同じ区分で絞った `/projects` へ 301（`?member=` は引き継ぐ） | — |
 | クローラへの指示 | `GET /robots.txt` | `text/plain`。`/admin/` だけ外す | — |
 | URL の一覧 | `GET /sitemap.xml` | `application/xml`。公開中のページを数え上げる | — |
-| 画像 | `GET /images/avatars/…`<br>`GET /images/items/…` | KV に入れたアバターと作品の画像。キーの形（置き場 / 英数字で始まり英数字と `. _ -` だけの名前）に合わないものは読みに行かない（KV のキーを外に開く口なので、置き場の外は読ませない）。どの応答にも `X-Content-Type-Options: nosniff` と `Content-Security-Policy: default-src 'none'; sandbox`（同じオリジンで配るので、画像のふりをした文書が直に開かれても走らせない）。content-type は KV に入れた型が5種類（PNG・JPEG・WebP・AVIF・GIF）か動画（MP4）ならそのまま、それ以外（以前の SVG・HEIC）は `application/octet-stream` の添付（`Content-Disposition: attachment`）。範囲の要求（`Range: bytes=…`）には 206（`Accept-Ranges: bytes`。iPhone の Safari は範囲で取れない動画を再生しない）、中身の外は 416 | 該当なし・形が合わないものは 404 |
+| 画像 | `GET /images/avatars/…`<br>`GET /images/items/…` | KV に入れたアバターと作品の画像。キーの形（置き場 / 英数字で始まり英数字と `. _ -` だけの名前）に合わないものは読みに行かない（KV のキーを外に開く口なので、置き場の外は読ませない）。どの応答にも `X-Content-Type-Options: nosniff` と `Content-Security-Policy: default-src 'none'; sandbox`（同じオリジンで配るので、画像のふりをした文書が直に開かれても走らせない）と `Cross-Origin-Resource-Policy: same-site`（ほかのサイトのページに埋め込ませない）。content-type は KV に入れた型が5種類（PNG・JPEG・WebP・AVIF・GIF）か動画（MP4）ならそのまま、それ以外（以前の SVG・HEIC）は `application/octet-stream` の添付（`Content-Disposition: attachment`）。範囲の要求（`Range: bytes=…`）には 206（`Accept-Ranges: bytes`。iPhone の Safari は範囲で取れない動画を再生しない）、中身の外は 416 | 該当なし・形が合わないものは 404 |
 | ページ | `GET /:screen` | そのブロックのページ（`/projects` `/team` …）。中身は全件で、割らない。1人のサイトの `/team` はプロフィールへ 301 | 無いページ名は 404。ページの名前の形（`hero` `projects` `team` `contact` か `block-<id>`）でなければ D1 に聞かずに 404 |
 | 割っていたころの続き | `GET /:screen/:page` | 同じページ（`/projects/2` → `/projects`）へ素の 301。query（絞り込み）は付けたまま | 名前の形か番号の形（1始まりの数）が合わなければ 404 |
 
@@ -90,7 +94,9 @@ slug が数字の作品を作れなかった。一覧を Projects の1つにま�
 区分ごとに文書ごとの1本を登録する（`src/domain.ts` の `ITEM_DOCUMENTS` から作る）。
 
 404（未定義の URL）と 500（例外）は、ルートではなく `src/index.tsx` の
-`notFound` / `onError` が受ける。マークと戻り導線だけを出す。説明は訪問者の
+`notFound` / `onError` が受ける。マークと戻り導線だけを出す。500 のログには method・path
+（query は書かない）と例外の連なりの名前・文・スタックの行を書き、束縛した値は書かない（Drizzle の
+params も、D1 が受け取れない型の値を文に添えたものも落とす）。説明は訪問者の
 言葉で書く（404 は「URL が変わったか、打ち間違えているかもしれません。」）——
 `slug` のような管理画面の言葉は、ここに着いた人には読めない。
 

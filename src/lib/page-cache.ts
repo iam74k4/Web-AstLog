@@ -51,8 +51,9 @@ import { sessionCookie } from './auth'
     引かない URL の読み替え、500 は失敗）
 
   応答が自分の cache-control を持っていれば（行き先がデータで変わる転送の no-cache。
-  src/routes/public/page.tsx の movedTo）、写しから返すときもそれを付け直す。
-  写しの側の cache-control（Cache API に置いておく長さ）は訪問者に渡さない。
+  src/routes/public/page.tsx の movedTo）、写しから返すときもそれを付け直す。持って
+  いなければ no-cache を付ける（素の 301 を除く。served の注記）。写しの側の
+  cache-control（Cache API に置いておく長さ）と Last-Modified は訪問者に渡さない。
 
   404 も持つのは、形の合う名前（/members/<slug> など）を探し回る要求が、
   写しがあれば D1 を引かずに済むから。形の合わない名前は、写しより前に
@@ -108,6 +109,13 @@ export async function touchSite(kv: KVNamespace): Promise<void> {
   }
 }
 
+/*
+  写しを訪問者に返す形に戻す。Cache API から出した写しは Last-Modified を持って出てくることが
+  あり、cache-control の無い応答だとブラウザはそれを手がかりに推測で写しを使い回す（D1 の障害中に
+  出した古い写しなら半日以上）。だから Last-Modified を外し、ルートが cache-control を付けて
+  いなければ no-cache（毎回確かめる）を付ける。素の 301（行き先が動かない転送）だけはそのまま
+  ——覚えさせてよい転送で、行き先がデータで変わる転送は movedTo が自分の no-cache を持つ
+*/
 const served = (copy: Response, state: 'hit' | 'stale') => {
   const response = new Response(copy.body, copy)
   const own = copy.headers.get(ORIGINAL_CACHE_CONTROL)
@@ -116,12 +124,14 @@ const served = (copy: Response, state: 'hit' | 'stale') => {
     STORED_HEADER,
     ORIGINAL_CACHE_CONTROL,
     'cache-control',
+    'last-modified',
     'age',
     'cf-cache-status',
   ]) {
     response.headers.delete(name)
   }
   if (own) response.headers.set('cache-control', own)
+  else if (copy.status !== 301) response.headers.set('cache-control', 'no-cache')
   response.headers.set(CACHE_STATE_HEADER, state)
   return response
 }

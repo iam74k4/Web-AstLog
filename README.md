@@ -41,7 +41,8 @@ HTML は約 4.5KB。天体の飾り（夜明けの窓のすばると星・経歴
 絞り込みとページの移動は URL とサーバー、管理画面は HTML フォームと 303 で動く。
 全部の応答に CSP（管理画面の HTML は補助1本の exact SHA-256 だけ、それ以外は `script-src 'none'`）と
 `X-Content-Type-Options: nosniff`・`Referrer-Policy: strict-origin-when-cross-origin`
-を付ける。任意の script は許さない。管理画面は `Cache-Control: no-store`。
+を付ける。任意の script は許さない。管理画面は `Cache-Control: no-store` と
+`Cross-Origin-Opener-Policy: same-origin`（公開ページには付けない。理由は `src/index.tsx`）。
 付けているのは `src/index.tsx` のミドルウェアと、Worker を通らない `public/` の
 ファイルには `public/_headers`（決まりは `CLAUDE.md` の「応答のヘッダ」）。
 
@@ -668,7 +669,8 @@ public/
                      公開ページは読まない（:root は持たず、app.css の段を読む）
   preview.css        管理プレビューの案内。公開の部品は app.css を使う
   .well-known/security.txt  脆弱性を見つけた人の連絡先（RFC 9116）。Expires を毎年1年先へ
-                     書き換える（切れる30日前から test/headers.test.ts が落ちて知らせる）
+                     書き換える（切れる30日前から test/headers.test.ts が落ちて知らせる）。
+                     charset=utf-8 は _headers が付ける
   BingSiteAuth.xml   Bing Webmaster Tools の所有の確認（Bing が決めた名前と形。中の値は
                      Bing の管理画面が出したもの。消すと Bing の確認が外れる）
   _headers           静的なファイルに付けるヘッダ（Worker を通らないので、ここで付ける）。

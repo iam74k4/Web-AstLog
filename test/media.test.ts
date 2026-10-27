@@ -318,6 +318,8 @@ describe('動画を配る', () => {
     expect(head.headers.get('content-range')).toBe(`bytes 0-7/${bytes.length}`)
     expect(head.headers.get('content-type')).toBe('video/mp4')
     expect(head.headers.get('x-content-type-options')).toBe('nosniff')
+    // 範囲の応答も、ほかのサイトに埋め込ませない（全体の応答と同じヘッダ）
+    expect(head.headers.get('cross-origin-resource-policy')).toBe('same-site')
     expect(new Uint8Array(await head.arrayBuffer())).toEqual(bytes.subarray(0, 8))
 
     const tail = await get(`/images/${key}`, { headers: { range: 'bytes=-4' } })
@@ -327,6 +329,7 @@ describe('動画を配る', () => {
     const outside = await get(`/images/${key}`, { headers: { range: `bytes=${bytes.length}-` } })
     expect(outside.status).toBe(416)
     expect(outside.headers.get('content-range')).toBe(`bytes */${bytes.length}`)
+    expect(outside.headers.get('cross-origin-resource-policy')).toBe('same-site')
   })
 
   it('管理画面のほかの画像の行は、動画の見本を最初の絵で出す', async () => {
