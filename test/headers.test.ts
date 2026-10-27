@@ -148,15 +148,17 @@ describe('応答のヘッダ', () => {
   /*
     /images/* はこちらより狭い自分の CSP（default-src 'none'; sandbox）を持つ。
     ページの CSP で上書きすると、画像のふりをした文書が直に開かれたときに
-    同じオリジンの img・style を読める文書になる
+    同じオリジンの img・style を読める文書になる。ほかのサイトに埋め込ませない
+    CORP（same-site）もルートが付け、ミドルウェアは触らない
   */
-  it('/images/* の CSP は上書きしない', async () => {
+  it('/images/* の CSP と CORP は上書きしない', async () => {
     await env.MEDIA.put('items/shot-ef56.png', 'image-bytes', {
       metadata: { contentType: 'image/png' },
     })
     const response = await get('/images/items/shot-ef56.png')
     expect(response.status).toBe(200)
     expect(response.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox")
+    expect(response.headers.get('cross-origin-resource-policy')).toBe('same-site')
     expect(response.headers.get('x-content-type-options')).toBe('nosniff')
     expect(response.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
   })

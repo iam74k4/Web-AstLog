@@ -2784,9 +2784,10 @@ describe('/images', () => {
   /*
     SEC-2 / ADM-4。/images/* はサイトと同じオリジンで配る。画像のふりをした
     文書（SVG の <script>）が直に開かれても走らないよう、嗅ぎ分けを止め、
-    スクリプトも読み込みも持たない sandbox の文書として返す
+    スクリプトも読み込みも持たない sandbox の文書として返す。ほかのサイトのページには
+    埋め込ませない（Cross-Origin-Resource-Policy: same-site）
   */
-  it('nosniff と sandbox の CSP を付けて返す', async () => {
+  it('nosniff と sandbox の CSP と same-site の CORP を付けて返す', async () => {
     await env.MEDIA.put('items/shot-cd34.png', 'image-bytes', {
       metadata: { contentType: 'image/png' },
     })
@@ -2795,6 +2796,7 @@ describe('/images', () => {
     expect(response.headers.get('content-type')).toBe('image/png')
     expect(response.headers.get('x-content-type-options')).toBe('nosniff')
     expect(response.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox")
+    expect(response.headers.get('cross-origin-resource-policy')).toBe('same-site')
     expect(response.headers.get('content-disposition')).toBeNull()
   })
 
@@ -2817,6 +2819,7 @@ describe('/images', () => {
       expect(response.headers.get('content-security-policy'), key).toBe(
         "default-src 'none'; sandbox",
       )
+      expect(response.headers.get('cross-origin-resource-policy'), key).toBe('same-site')
     }
   })
 })

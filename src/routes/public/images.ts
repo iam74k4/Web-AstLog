@@ -27,6 +27,9 @@ import { isMediaType } from '../../lib/image'
   - Content-Security-Policy: default-src 'none'; sandbox——直に開かれても
     スクリプトも読み込みも走らない（<img> で埋め込む分には効かず、邪魔もしない）。
     src/index.tsx のヘッダの1本は、ルートが付けた CSP を上書きしない
+  - Cross-Origin-Resource-Policy: same-site——ほかのサイトのページには埋め込ませない（使うのは
+    このサイトのページだけ）。共有カードを取りに来る SNS のサーバーはブラウザではないので止まらない。
+    ヘッダの1本はこれを付けも上書きもしない
   - 画像の5種類と動画（MP4）に無い content-type（以前の image/svg+xml や image/heic）は
     application/octet-stream の添付として返す。画像としては描かせない
 
@@ -59,6 +62,7 @@ export async function serveImage(c: Context<AppEnv>) {
       : { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment' }),
     'x-content-type-options': 'nosniff',
     'content-security-policy': "default-src 'none'; sandbox",
+    'cross-origin-resource-policy': 'same-site',
     'cache-control': 'public, max-age=31536000, immutable',
     'accept-ranges': 'bytes',
   }
