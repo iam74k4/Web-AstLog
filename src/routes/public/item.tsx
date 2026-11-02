@@ -214,7 +214,7 @@ export function itemDocumentPage(
   1つだけ。
 
   中身は一覧の行を開いたもの（ItemDetail。画像の無い作品は文の列だけ）と、画像が
-  2枚以上の作品の小節「Screenshots」（#screenshots。縦ギャラリー。ItemShots）と、本文の
+  2枚以上の作品の小節「Screenshots」（#screenshots。ショーケース。ItemShots）と、本文の
   小節「Story」（#story。本文を書いた作品にだけ。ItemStory）。以前は本文を次の画面
   （…/story）に分け、作品同士を画面の底の左右の手でめくっていた。1ページにまとめたので、
   前の本文の URL は #story へ 301（rest が story）。文書のページ（…/privacy・…/support。

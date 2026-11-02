@@ -8,6 +8,7 @@ import appCss from '../public/app.css'
 import app from '../src/index'
 import { HSTS, PERMISSIONS_POLICY } from '../src/lib/headers'
 import { ADMIN_BEHAVIOR, ADMIN_CSP } from '../src/ui/admin-behavior'
+import { GALLERY_BEHAVIOR, GALLERY_CSP, isGalleryPage } from '../src/ui/gallery-behavior'
 import { get, okText, resetDb, seedItem, seedMember, signIn, uncachedEnv } from './helpers'
 
 beforeEach(resetDb)
@@ -31,8 +32,10 @@ const directives = (csp: string | null) =>
 
 function expectPageHeaders(response: Response, label: string, admin = false) {
   const csp = directives(response.headers.get('content-security-policy'))
-  // 公開ページはスクリプトを1本も許さない。管理画面だけが補助1本のハッシュを許す
-  expect(csp['script-src'], label).toBe(admin ? `'${ADMIN_CSP}'` : "'none'")
+  // 作品ページと管理画面だけ、それぞれの補助のハッシュを許す
+  expect(csp['script-src'], label).toBe(
+    admin ? `'${ADMIN_CSP}'` : isGalleryPage(label) ? `'${GALLERY_CSP}'` : "'none'",
+  )
   expect(csp['default-src'], label).toBe("'self'")
   expect(csp['object-src'], label).toBe("'none'")
   expect(csp['base-uri'], label).toBe("'none'")
@@ -86,16 +89,24 @@ describe('応答のヘッダ', () => {
     expectPageHeaders(response, '500')
   })
 
-  it('公開ページは実行するスクリプトを持たない。script 要素は JSON-LD（データ）だけ', async () => {
+  it('作品ページだけショーケース補助を持ち、その全文のハッシュだけを許す', async () => {
     await seedMember()
     await seedItem({ slug: 'appmixer' })
     for (const path of ['/', '/apps/item/appmixer', '/all', '/members/okazaki']) {
       const html = await okText(path)
       const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)]
+      const executable = scripts.filter((script) => script[1] !== ' type="application/ld+json"')
       expect(
-        scripts.filter((script) => script[1] !== ' type="application/ld+json"'),
+        executable.map((script) => script[2]),
         path,
-      ).toEqual([])
+      ).toEqual(isGalleryPage(path) ? [GALLERY_BEHAVIOR] : [])
+      if (isGalleryPage(path)) {
+        const digest = await crypto.subtle.digest(
+          'SHA-256',
+          new TextEncoder().encode(executable[0]?.[2]),
+        )
+        expect(GALLERY_CSP).toBe(`sha256-${btoa(String.fromCharCode(...new Uint8Array(digest)))}`)
+      }
     }
   })
 

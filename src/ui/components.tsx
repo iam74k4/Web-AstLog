@@ -915,28 +915,19 @@ export const ItemDetail = ({
 }
 
 /*
-  作品の画像のギャラリー（作品のページの小節「Screenshots」。#screenshots）。画像が
-  2枚以上の作品だけ。メインの画像を大きく置き、残りは大小の列に並べる。狭い画面では
-  1列になるので、スクリーンショットが小さく潰れず、ページと同じ向きに読み進められる。
-  順は itemImages のまま（管理画面で決めた順を、CSS の配置で変えない）。
-
-  枠の比と高さの上限は CSS が先に決め、絵は切らずに収める。原寸は画像のリンクで
-  別タブに開ける。操作は HTML のリンクだけなので、JavaScript 無効でも拡大できる。
-  各画像の説明は代替テキストをそのまま見せる。リンクの名前が説明と操作を含むため、
-  キャプションは読み上げから外し、同じ文を2度読ませない。先頭だけすぐ読み、続きは遅延。
-
-  動画（Clip）はリンクで包まない——面いっぱいのリンクの覆いが再生の手を塞ぐ。原寸の手
-  「Full size ↗」も無い（動画は自分の操作で全画面にできる）。名前は「動画N「説明」」。
-  プレビューでまだ保存していない動画は src が空で、枠だけを出す（応答に中身を埋めない）
+  画像が2枚以上の作品の共通ギャラリー。公開時は gallery-behavior.ts が
+  大きな1枚とサムネイルへ拡張する。JSなし・管理プレビュー・印刷は全画像を縦に読む。
+  並び順・代替テキスト・原寸へのリンク・動画の標準操作を同じHTMLで保つ。
 */
 export const ItemShots = ({ images }: { images: ItemImage[] }) =>
   images.length > 1 ? (
-    <div class="shots" id="screenshots">
+    <div class="shots" id="screenshots" data-showcase="">
       <SectionHead title="Screenshots" sub={2} />
       <section class="gallery" aria-label="Screenshots">
         {images.map((image, index) => (
           <figure
             class={index === 0 ? 'gallery__item gallery__item--lead' : 'gallery__item'}
+            id={`screenshot-${index + 1}`}
             key={image.url || `pending-${index}`}
           >
             {isVideoUrl(image.url) || !image.url ? (
@@ -982,6 +973,52 @@ export const ItemShots = ({ images }: { images: ItemImage[] }) =>
           </figure>
         ))}
       </section>
+      <div class="gallery__controls" hidden>
+        <div class="gallery__toolbar">
+          <span class="gallery__count" data-gallery-count="" aria-hidden="true" />
+          <div class="gallery__arrows">
+            <button type="button" class="gallery__arrow" data-gallery-prev="" aria-label="前の画像">
+              ←
+            </button>
+            <button type="button" class="gallery__arrow" data-gallery-next="" aria-label="次の画像">
+              →
+            </button>
+          </div>
+        </div>
+        <fieldset class="gallery__thumbs">
+          <legend class="sr-only">表示する画像を選択</legend>
+          {images.map((image, index) => (
+            <button
+              type="button"
+              class="gallery__thumb"
+              aria-label={`${isVideoUrl(image.url) || !image.url ? '動画' : '画像'}${index + 1}「${image.alt}」を表示`}
+              aria-controls={`screenshot-${index + 1}`}
+              aria-pressed={index === 0 ? 'true' : 'false'}
+              key={image.url || `thumb-${index}`}
+            >
+              <span class="gallery__mini">
+                {isVideoUrl(image.url) || !image.url ? (
+                  <span class="gallery__video" aria-hidden="true">
+                    ▷
+                  </span>
+                ) : (
+                  <img src={image.url} alt="" loading="lazy" decoding="async" />
+                )}
+              </span>
+              <span class="gallery__index" aria-hidden="true">
+                {twoDigits(index + 1)}
+              </span>
+            </button>
+          ))}
+        </fieldset>
+        <span
+          class="sr-only"
+          data-gallery-status=""
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        />
+      </div>
     </div>
   ) : null
 

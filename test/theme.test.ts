@@ -1035,15 +1035,12 @@ describe('部品の作法', () => {
     )
   })
 
-  it('広いギャラリーは先頭を全幅、続きは大小の列。読み順はDOMのまま', () => {
-    const wide = blockAt(sheet, '@media (min-width: 900px)')
-    expect(bodyOf(wide, '.gallery {')).toContain(
-      'grid-template-columns: repeat(12, minmax(0, 1fr))',
+  it('ショーケースは同じセルに全画像を重ね、長い説明でも操作部を動かさない', () => {
+    expect(bodyOf(sheet, '.shots--showcase .gallery__item {')).toContain('grid-area: 1 / 1')
+    expect(bodyOf(sheet, '.shots--showcase .gallery__item {')).toContain('visibility: hidden')
+    expect(bodyOf(sheet, ".shots--showcase .gallery__item[data-active='true'] {")).toContain(
+      'visibility: visible',
     )
-    expect(bodyOf(wide, '.gallery__item {')).toContain('grid-column: span 7')
-    expect(bodyOf(wide, '.gallery__item:nth-child(4n + 3),')).toContain('grid-column: span 5')
-    expect(bodyOf(wide, '.gallery__item--lead,')).toContain('grid-column: 1 / -1')
-    expect(wide).not.toContain('grid-auto-flow: dense')
     // フォーカスの輪郭は画像とキャプションをまとめて囲む
     const focus = bodyOf(sheet, '.gallery__image:focus-visible::after {')
     expect(focus).toContain('outline: var(--focus-ring) solid var(--accent)')

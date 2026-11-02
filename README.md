@@ -34,12 +34,12 @@ workers.dev とプレビュー URL は無効。公開はデプロイ後で、購
 ランタイム依存は Hono と Drizzle だけ。
 開発ツールの間接依存（undici・sharp・旧 esbuild loader）は、セキュリティ修正版へ
 `package.json` の overrides で固定し、型・テスト・ビルドと Drizzle の schema export を確認する。**内容と導線は JavaScript なしで成立する**。
-公開ページは実行する script を1本も持たない（JSON-LD はデータ）。動き（入口の幕開け・夜明けの
+作品ページだけ固定ハッシュのショーケース補助を持つ（JS無効時は全画像を表示）。動き（入口の幕開け・夜明けの
 窓・画面に入るときの現れ方・ページの切り替え）は CSS だけで付け、HTML は字だけで組む——入口の
 HTML は約 4.5KB。天体の飾り（夜明けの窓のすばると星・経歴の星座・顔の軌道）は CSS の背景と
 疑似要素が描く（`CLAUDE.md` の「動き」「天体の飾り」）。
 絞り込みとページの移動は URL とサーバー、管理画面は HTML フォームと 303 で動く。
-全部の応答に CSP（管理画面の HTML は補助1本の exact SHA-256 だけ、それ以外は `script-src 'none'`）と
+全部の応答に CSP（作品ページと管理画面の HTML は各補助の exact SHA-256 だけ、それ以外は `script-src 'none'`）と
 `X-Content-Type-Options: nosniff`・`Referrer-Policy: strict-origin-when-cross-origin`
 を付ける。任意の script は許さない。管理画面は `Cache-Control: no-store`。
 付けているのは `src/index.tsx` のミドルウェアと、Worker を通らない `public/` の
@@ -512,8 +512,10 @@ deploy が残した栞（その移行を流す**前**に取ったもの）まで
 1枚ずつ）は `0017_item_shots` で入る。どちらも足すだけの移行で、既にある作品はアイコンも
 ほかの画像も無いまま（作品のページは今までどおり）。前の版の Worker へ戻しても、前の版は
 この列と表を読まないので壊れない。画像がメインの画像と合わせて2枚以上ある作品は、作品の
-ページのギャラリー（`#screenshots`）に並べる。先頭を大きく置き、900px 以上は続きの画像を
-大小の2列に配置する。狭い画面では全幅の1列。1枚ずつ番号と説明を添え、原寸を別タブで開ける。
+ページのショーケース（`#screenshots`）で、大きな1枚とサムネイルにする。前後ボタン・
+サムネイルの左右矢印と Home / End で切り替え、番号と説明を添える。原寸は別タブで開ける。
+画像は切らず、動画を切り替えると停止する。JS無効・管理プレビュー・印刷では全画像を縦に見せる。
+`npm run check:gallery` で実ブラウザの操作・CSP・印刷・JS無効を確認する。
 
 本文のテンプレートの欄（`items.story_background` / `story_approach` / `story_highlights` /
 `story_results`。背景・取り組み・工夫・成果）は `0018_item_story` で入る。足すだけの移行で、

@@ -9,8 +9,7 @@
 CSP（`default-src 'self'; script-src 'none'; object-src 'none'; base-uri 'none';
 form-action 'self'; frame-ancestors 'none'; img-src 'self';
 style-src 'self' 'unsafe-inline'`）・`X-Content-Type-Options: nosniff`・
-`Referrer-Policy: strict-origin-when-cross-origin` を付ける。公開 HTML の `script-src` は `'none'`
-（実行する script を1本も持たない）。管理画面は編集補助の `ADMIN_CSP` だけを許す。保存前プレビューは script 無しで、`frame-ancestors` を同一オリジンに限って許す。自分の CSP を持つ
+`Referrer-Policy: strict-origin-when-cross-origin` を付ける。公開 HTML の `script-src` は原則 `'none'`。作品ページだけ `GALLERY_CSP` を許す。管理画面は編集補助の `ADMIN_CSP` だけを許す。保存前プレビューは script 無しで、`frame-ancestors` を同一オリジンに限って許す。自分の CSP を持つ
 `/images/*` はそのまま（上書きしない）。`/admin/*` はさらに `Cache-Control: no-store`。
 Worker を通らない `public/` のファイル（`/app.css`・`/admin.css`・`/preview.css`・`/assets/…`）には
 `public/_headers` が nosniff・Referrer-Policy・`default-src 'none'; sandbox` を付ける。
@@ -48,7 +47,7 @@ Instagram → X → Discord → メール。サイト設定にあるものだけ
 （ページャ）でめくっていた。持ち主が実際に触って「スクロールできず、底の左右の手でしか
 めくれないのが面倒すぎる」と判断してやめた。前の URL は新しい場所へ 301 で送る（貼られた
 リンクを殺さない）。移動は普通のフルページ遷移で、内容と導線は JavaScript なしで成立する。
-実行する script は持たない（CSP は `script-src 'none'`）。ページを移るときは CSS の view transitions
+作品ページだけショーケース補助を持つ（CSP は固定ハッシュ）。ページを移るときは CSS の view transitions
 （`@view-transition`）で短く切り替わる——上の帯は動かず、一覧の行の題は作品のページの見出しへ
 つながる。見た目は CV テンプレートの Cavani を下敷きにした白い地で、上の帯の下は2分割——
 左に夜明けの窓（上は夜の紺にすばると星、下へ行くほど明けて白へ溶ける空。読み進めるほど明け、星はまたたく。字を持たない飾り）、右に本文（地と同じ白）。900 以上は窓が
@@ -66,7 +65,7 @@ Instagram → X → Discord → メール。サイト設定にあるものだけ
 | メンバー個別 | `GET /members/:slug` | 名札（顔・名前・名前のローマ字・肩書きと所在地）と大見出し、2人以上のサイトならこの人の一覧への帯、その下に About・Skills・Career の小節（`#about` `#skills` `#career`） | 下書き・不明な slug は 404。前の slug（管理画面で変えたもの）は、いまの slug へ 301 |
 | 前の個人ページの続き | `GET /members/:slug/:rest` | `about` `skills` `career` はこのページの小節（`/members/<slug>#about` …）へ 301。小節が無くなっていればページの頭へ。`contact` はサイトの `/contact` へ 301 | 知らない名前は 404。前の slug はいまの slug の同じ続きへ 301 |
 | 割っていたころの続き | `GET /members/:slug/:rest/:page` | 同上（`/members/okazaki/career/2` → `#career`） | 番号の形（1始まりの数）でなければ 404 |
-| 作品1件（個人開発） | `GET /apps/item/:slug` | その作品のページ（一覧の行を開いたもの）と、本文（Story）は段落の中の小さな Markdown（行頭の「- 」の箇条書き・**太字**・[リンク](URL)。紹介文とメモも同じ。`src/lib/markdown.ts`）を要素にする。画像が2枚以上なら縦ギャラリーの小節「Screenshots」（`#screenshots`。動画は押して再生し、共有カードと構造化データの画像には使わない）、本文があればその下に小節「Story」（`#story`）。頭に「← Projects」（一覧のその作品の行 `/projects#item-<slug>` へ） | 下書き・不明な slug は 404。前の slug（管理画面で変えたもの。`item_slug_redirects`）は、いまの URL へ 301 |
+| 作品1件（個人開発） | `GET /apps/item/:slug` | その作品のページ（一覧の行を開いたもの）と、本文（Story）は段落の中の小さな Markdown（行頭の「- 」の箇条書き・**太字**・[リンク](URL)。紹介文とメモも同じ。`src/lib/markdown.ts`）を要素にする。画像が2枚以上ならショーケースの小節「Screenshots」（`#screenshots`。動画は押して再生し、共有カードと構造化データの画像には使わない）、本文があればその下に小節「Story」（`#story`）。頭に「← Projects」（一覧のその作品の行 `/projects#item-<slug>` へ） | 下書き・不明な slug は 404。前の slug（管理画面で変えたもの。`item_slug_redirects`）は、いまの URL へ 301 |
 | 前の本文の画面（個人開発） | `GET /apps/item/:slug/story` | 作品のページの `#story` へ 301（本文が無くなっていればページの頭へ） | 下書き・不明な slug は 404。前の slug はいまの URL の `…/story` へ（そこで `#story` へ） |
 | プライバシーポリシー（個人開発） | `GET /apps/item/:slug/privacy` | 作品の文書のページ（下の「作品の文書のページ」）。h1「Privacy Policy」に作品名の添え、管理画面で書いた本文（`##` が h2・`###` が h3）。「## 日本語」「## English」で分けた文書は言語の切り替え（`?lang=en`） | 欄が空・下書き・不明な slug は 404。前の slug はいまの URL の `…/privacy` へ 301（`no-cache`。そこで空なら 404） |
 | サポート（個人開発） | `GET /apps/item/:slug/support` | 同上（h1「Support」）。本文の下に、サイト設定の連絡先の表（Contact と同じ。メールは必ず） | 同上 |
@@ -365,11 +364,15 @@ Team のページは作らず、その位置にこの人のページが並ぶ。
   は文の列を左・画像を右に並べ（`.detail--shot`）、枠は文の列と同じ高さまで伸びる
 - 画像が2枚以上の作品は、説明の組に絵を置かず、その下の小節「Screenshots」（`ItemShots`。
   `id="screenshots"`、見出しは `h2`）にギャラリーで並べる（メインの画像が先、ほかの画像が
-  並び順で続く。同じ画像を2度出さない）。先頭は全幅、900 以上は続きの画像が大小の2列。
-  狭い画面では全幅の1列。枠は `--thumb-ratio` で先に決まり、先頭の高さの上限は
-  `--gallery-lead-h`、続きは `--gallery-shot-h`。画像は切らずに収め、番号と説明を添える。
-  画像と説明の面がリンクになり、原寸を別タブで開ける。Tab で1枚ずつ選び、Enter で開く。
-  先頭だけすぐ読み、続きは遅延読み込み。紙でも並びのまま全部を刷る
+  並び順で続く）。公開時は大きな1枚とサムネイルに拡張する。白地・墨色・細い罫線と既存の文字の段を使い、
+  選択中のサムネイルは墨の枠と番号で示す。サムネイルは狭い画面で折り返す。
+  前後ボタン・サムネイルで切り替え、サムネイルでは左右矢印・Home / End も使える。
+  自動送りはしない。切り替えると動画は停止する。動きを減らす設定ではフェードしない。
+  枠は `--thumb-ratio` で先に決まり、高さの上限は `--gallery-lead-h`。説明が最長の図も
+  同じグリッドセルを占めるので、切り替えても操作部は動かない。画像と説明は原寸へのリンク。
+  JS無効・管理プレビュー・印刷では全画像を縦に並べる（続きの高さ上限は `--gallery-shot-h`）。
+  初期化できたときだけ操作を表示し、選択していない図はフォーカスと読み上げから外す。
+  先頭だけ優先読み込み、続きは遅延読み込み。サムネイルの画像は空の代替テキストで、ボタンに説明を付ける。
 - 画像は作品のページにだけ出る（一覧の行には絵を置かない）。無ければ `figure` を出さず、
   代わりの絵も置かない（文の列だけ。前は星図を置いていて、持ち主が「なんか違う」と外した）
 - 構造化データは `CreativeWork`（name / url / description、画像があれば image を
@@ -590,5 +593,6 @@ Worker より先に配られる（`public/`）。
 公開ページと同じ式から組み立てていて、`public/` に同じ名前のファイルを置いた瞬間に
 静的なほうが勝ち、数え上げが静かに死ぬ。
 
-公開ページが読み込む `<script src>` は0本で、inline の script も持たない（`script-src 'none'`）。
+公開ページが読み込む `<script src>` は0本。作品ページだけ固定ハッシュのショーケース補助を持ち、
+ほかは inline の script も持たない（`script-src 'none'`）。
 内容・絞り込み・ページの移動はサーバーと URL だけで成立する。

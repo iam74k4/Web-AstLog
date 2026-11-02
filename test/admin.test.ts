@@ -1028,7 +1028,7 @@ describe('Items — アイコンとほかの画像', () => {
     // 2枚以上なので、説明の組には絵を置かず、ギャラリーに全部を並べる（メインの画像が先）
     expect(html).not.toContain('<figure class="shot">')
     expect(html).toContain(
-      '<section class="gallery" aria-label="Screenshots"><figure class="gallery__item gallery__item--lead">',
+      '<section class="gallery" aria-label="Screenshots"><figure class="gallery__item gallery__item--lead" id="screenshot-1">',
     )
     expect(galleryOf(html)).toEqual([
       [row?.imageUrl, 'メインの画面'],
