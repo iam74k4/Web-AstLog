@@ -1,12 +1,14 @@
 /*
   作品ページだけのショーケース。HTML は全画像の縦ギャラリーとして完結させ、
-  初期化できたときだけ1枚表示にする。プレビューの sandbox と印刷では全画像を見せる。
+  初期化できたときだけ1枚表示にする。管理の親画面も同じ初期化処理を使う。
+  プレビュー内ではスクリプトを実行せず、親からDOMを操作する（sandboxは維持）。
   ユーザーの入力をコードへ埋め込まない。CSP は下の全文の SHA-256 だけを許す。
 */
 export const isGalleryPage = (path: string) => /\/(?:apps|works)\/item\/[^/]+$/.test(path)
 
-export const GALLERY_BEHAVIOR = `(() => {
+export const GALLERY_INIT = `(document) => {
   document.querySelectorAll('[data-showcase]').forEach(root => {
+    if (root.classList.contains('shots--showcase')) return;
     const slides = [...root.querySelectorAll('.gallery__item')];
     const thumbs = [...root.querySelectorAll('.gallery__thumb')];
     const controls = root.querySelector('.gallery__controls');
@@ -44,9 +46,11 @@ export const GALLERY_BEHAVIOR = `(() => {
     root.classList.add('shots--showcase');
     controls.hidden = false;
     // 印刷では隠していた画像・動画の説明も支援技術から読めるようにする。
-    addEventListener('beforeprint', () => slides.forEach(slide => { slide.inert = false; }));
-    addEventListener('afterprint', () => select(current, false));
+    document.defaultView.addEventListener('beforeprint', () => slides.forEach(slide => { slide.inert = false; }));
+    document.defaultView.addEventListener('afterprint', () => select(current, false));
   });
-})();`
+}`
 
-export const GALLERY_CSP = 'sha256-QmGghep38jR04g1mC/T9K1x/Uqh7N2pDD1OCuFXZpSY='
+export const GALLERY_BEHAVIOR = `(${GALLERY_INIT})(document);`
+
+export const GALLERY_CSP = 'sha256-g15va/lsOnhIMZ3PXwWIi3vWfTRpl9kch1VtdL5jskM='

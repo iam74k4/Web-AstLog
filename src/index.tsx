@@ -29,7 +29,7 @@ const app = new Hono<AppEnv>()
   CSP は、注入口（受け入れる前に上がった SVG・javascript: の href・本文の抜け）が
   1つ見つかってもスクリプトを走らせない最後の壁。
   - 公開は原則 script-src 'none'。作品ページだけ GALLERY_BEHAVIOR の SHA-256 を許す。
-    JSなしでも全画像を読める。プレビューは sandbox 内で縦ギャラリーになる。
+    JSなしでも全画像を読める。管理内のプレビューは親のコードが初期化する（sandbox 内の script は禁止）。
     管理画面は ADMIN_BEHAVIOR の SHA-256 だけを許す。JSON-LD（type="application/ld+json"）は
     実行されないデータなので、none でも止まらない
   - style-src に 'unsafe-inline'——ページの切り替えの名前（view-transition-name）と

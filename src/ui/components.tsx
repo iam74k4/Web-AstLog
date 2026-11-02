@@ -916,7 +916,7 @@ export const ItemDetail = ({
 
 /*
   画像が2枚以上の作品の共通ギャラリー。公開時は gallery-behavior.ts が
-  大きな1枚とサムネイルへ拡張する。JSなし・管理プレビュー・印刷は全画像を縦に読む。
+  大きな1枚とサムネイルへ拡張する。JSなし・単独プレビュー・印刷は全画像を縦に読む。
   並び順・代替テキスト・原寸へのリンク・動画の標準操作を同じHTMLで保つ。
 */
 export const ItemShots = ({ images }: { images: ItemImage[] }) =>

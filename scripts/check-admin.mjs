@@ -130,6 +130,80 @@ try {
     )
     await go(page, '/admin/members/1/edit')
     assert.notEqual(await page.locator('[name=name]').inputValue(), 'プレビューだけの名前')
+    // 保存済み・保存前・横の完成形を、公開と同じショーケースで操作できる。
+    await go(page, '/admin/items')
+    const savedLink = page.locator('[data-item-preview]').first()
+    await savedLink.click()
+    const modal = page.frameLocator('#editor-preview iframe')
+    await modal.locator('.shots--showcase').waitFor()
+    assert.equal(context.pages().length, 1)
+    await modal.locator('.gallery__thumb').nth(1).click()
+    assert.equal(await modal.locator('[data-gallery-count]').textContent(), '02 / 05')
+    assert.equal(
+      await page.locator('#editor-preview [role=status]').textContent(),
+      '保存済みの内容',
+    )
+    await page.keyboard.press('Escape')
+    await page.locator('#editor-preview[open]').waitFor({ state: 'hidden' })
+    assert.ok(await savedLink.evaluate((node) => node === document.activeElement))
+    await go(page, '/admin/items/1/edit')
+    const itemVersion = await page.locator('[name=_version]').inputValue()
+    const live = page.frameLocator('iframe[name=live-preview]')
+    if (width === 1440) {
+      await live.locator('.shots--showcase').waitFor()
+      await live.locator('.gallery__thumb').nth(2).click()
+      await page.locator('[name=summary]').fill('ショーケースの保存前検査。')
+      await live.getByText('ショーケースの保存前検査。', { exact: true }).waitFor()
+      assert.equal(await live.locator('[data-gallery-count]').textContent(), '03 / 05')
+    }
+    await page
+      .locator('details')
+      .filter({ has: page.locator('[name^="shotAlt-"]') })
+      .locator('summary')
+      .click()
+    await page.locator('[name^="shotAlt-"]').nth(1).fill('保存前に変えた画像の説明')
+    await page.locator('[name^="shotOrder-"]').nth(1).fill('1')
+    await page.locator('[name^="shotRemove-"]').first().check()
+    await page.locator('[name=newShotAlt]').first().fill('保存前に追加した画像')
+    await page
+      .locator('[name=newShot]')
+      .first()
+      .setInputFiles(join(ROOT, 'scripts/fixtures/media/appmixer-icon.png'))
+    await page.locator('button[formaction]').click()
+    await modal.locator('.shots--showcase').waitFor()
+    await modal.locator('.gallery__thumb').nth(1).click()
+    assert.equal(
+      await modal.locator('.gallery__item[data-active=true] .gallery__description').textContent(),
+      '保存前に変えた画像の説明',
+    )
+    await modal.locator('.gallery__thumb').last().click()
+    assert.equal(
+      await modal.locator('.gallery__item[data-active=true] .gallery__description').textContent(),
+      '保存前に追加した画像',
+    )
+    assert.match(
+      await modal.locator('.gallery__item[data-active=true] img').getAttribute('src'),
+      /^data:image\/png;base64,/,
+    )
+    // iframe内へ実行scriptを加えず、親の許可済みコードからDOMを初期化する。
+    assert.equal(await modal.locator('script').count(), 0)
+    assert.ok(
+      !(await page.locator('#editor-preview iframe').getAttribute('sandbox')).includes(
+        'allow-scripts',
+      ),
+    )
+    assert.equal(await page.locator('[name=_version]').inputValue(), itemVersion)
+    await page.keyboard.press('Escape')
+    await page.locator('#editor-preview[open]').waitFor({ state: 'hidden' })
+    assert.ok(
+      await page.locator('button[formaction]').evaluate((node) => node === document.activeElement),
+    )
+    await go(page, '/admin/items/1/edit')
+    assert.equal(await page.locator('[name=_version]').inputValue(), itemVersion)
+    assert.notEqual(
+      await page.locator('[name^="shotAlt-"]').nth(1).inputValue(),
+      '保存前に変えた画像の説明',
+    )
     await context.close()
   }
   const forced = await contextFor(390)
