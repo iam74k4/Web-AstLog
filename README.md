@@ -94,6 +94,10 @@ OAuth クライアントが要る。作り方と `.dev.vars` の書き方は下�
 （403）になり、その画面にそのアカウント自身の ID が出る——設定を間違えたときは、
 それを `[vars]` に写せばよい。
 
+管理画面に入れるのは owner だけ。`users.role` は `member` も取れるが、権限の分け方が
+まだ無いので、member のセッションは管理画面のどこでも 403 になる（`src/routes/admin/session.ts`
+の `requireAuth`）。
+
 ### OAuth のクライアントを作る
 
 GitHub（OAuth App。コールバック URL を1つしか持てないので、本番用と開発用の2つを作る）
@@ -740,6 +744,7 @@ scripts/
                      fit-fixture.mjs は check:fit の上限ちょうどの中身を src/blocks.ts の
                      上限から作る。ts-import.mjs は src/ の .ts を Node からそのまま読む口
 .github/backup-recipients.txt  deploy の写しを暗号化する age の公開鍵（秘密鍵は置かない）
+.github/dependabot.yml  依存の更新（月に1度、npm と action をそれぞれ1本の PR に）。脆弱性の修正はリポジトリの設定の Dependabot が出す
 .github/workflows/
   check.yml          push と PR ごとの門。deploy からも同じものを呼ぶ（workflow_call）
   deploy.yml         本番へ出す道（main だけ・門 → 写し → 移行 → deploy）
