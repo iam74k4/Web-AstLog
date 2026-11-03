@@ -7,6 +7,7 @@ import * as schema from '../src/db/schema'
 import { STORY_SECTIONS } from '../src/domain'
 import { isOngoing, ONGOING_HINT, yearFrom } from '../src/lib/format'
 import { SITE_VERSION_KEY } from '../src/lib/page-cache'
+import { MAX_FORM_BYTES } from '../src/routes/admin/request'
 import { db, form, get, okText, resetDb, seedItem, seedMember, signIn, touch } from './helpers'
 import { avif, file, gif, heic, jpeg, padded, png, svg, webp } from './images'
 
@@ -290,6 +291,64 @@ describe('フォームの読み取り', () => {
     const image = await get(avatarUrl ?? '')
     expect(image.status).toBe(200)
     expect(image.headers.get('content-type')).toBe('image/png')
+  })
+
+  // 管理画面の POST はどれもフォーム。通すと各ルートの formData() が投げて 500 になり、版まで上がった
+  it('フォームでない本文は 400 にし、保存も公開ページの版更新もしない', async () => {
+    const signed = await signIn()
+    const version = await env.MEDIA.get(SITE_VERSION_KEY)
+    const response = await signed('/admin/members', {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain' },
+      body: 'name=Plain',
+    })
+    expect(response.status).toBe(400)
+    expect(await response.text()).toContain('フォームを読み取れませんでした')
+    expect(await db().select().from(schema.members)).toHaveLength(0)
+    expect(await env.MEDIA.get(SITE_VERSION_KEY)).toBe(version)
+  })
+
+  /*
+    Content-Length の無い送信（chunked）。読む前の検査だけだと素通りして本文を丸ごと読んだので、
+    読みながら数えて 24MB で止める。上限より小さければ、ふつうの送信と同じに保存する
+  */
+  const chunked = (text: string, padding = 0) => {
+    const encoder = new TextEncoder()
+    return new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(text))
+        for (let left = padding; left > 0; left -= 1_000_000) {
+          controller.enqueue(new Uint8Array(Math.min(left, 1_000_000)).fill(0x61))
+        }
+        controller.close()
+      },
+    })
+  }
+
+  it('Content-Length の無い送信も、24MB を超えたら読みながら止める', async () => {
+    const signed = await signIn()
+    const response = await signed('/admin/members', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: chunked('name=Big&slug=big&bio=', MAX_FORM_BYTES),
+      duplex: 'half',
+    } as RequestInit)
+    expect(response.status).toBe(413)
+    expect(await response.text()).toContain('合計 24MB まで')
+    expect(await db().select().from(schema.members)).toHaveLength(0)
+  })
+
+  it('Content-Length の無い小さな送信は、そのまま保存できる', async () => {
+    const signed = await signIn()
+    const response = await signed('/admin/members', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: chunked('name=Stream&slug=stream'),
+      duplex: 'half',
+    } as RequestInit)
+    expect(response.status).toBe(303)
+    const [member] = await db().select().from(schema.members)
+    expect(member?.slug).toBe('stream')
   })
 })
 
@@ -1028,7 +1087,7 @@ describe('Items — アイコンとほかの画像', () => {
     // 2枚以上なので、説明の組には絵を置かず、ギャラリーに全部を並べる（メインの画像が先）
     expect(html).not.toContain('<figure class="shot">')
     expect(html).toContain(
-      '<section class="gallery" aria-label="Screenshots"><figure class="gallery__item gallery__item--lead">',
+      '<section class="gallery" aria-label="Screenshots"><figure class="gallery__item gallery__item--lead" id="screenshot-1">',
     )
     expect(galleryOf(html)).toEqual([
       [row?.imageUrl, 'メインの画面'],

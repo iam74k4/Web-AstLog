@@ -196,6 +196,7 @@ itemRoutes.get('/items', async (c) => {
                   <a
                     class="icon-btn"
                     href={`/admin/preview/items/${item.id}`}
+                    data-item-preview=""
                     target="_blank"
                     rel="noreferrer"
                     aria-label={`${item.title} の保存済み内容をプレビュー`}
@@ -396,7 +397,7 @@ const LINK_ROWS = 3
 
 /*
   ほかの画像（スクリーンショット）の上限と、1度の保存で足せる空いた欄の数。上限は
-  作品のページの縦ギャラリーに並べる枚数として（大きさの上限は src/routes/admin/images.ts）。JavaScript が無いので
+  作品のページのショーケースに並べる枚数として（大きさの上限は src/routes/admin/images.ts）。JavaScript が無いので
   欄を足す手が無く、もっと足すなら保存して開き直す（リンクの欄と同じ）
 */
 const MAX_SHOTS = 8
@@ -510,7 +511,7 @@ const DocumentFields = ({
   欄の名前に画像の id を入れる（readShotEdits）——送った欄だけを読み、欄の無い画像は
   いまのまま残す。
 
-  作品のページでは、メインの画像のあとに並び順で縦ギャラリーに並べる（components.tsx の
+  作品のページでは、メインの画像のあとに並び順でショーケースに並べる（components.tsx の
   ItemShots）。代替テキストは公開するときに1枚ずつ要る（publishErrors）。
 */
 const ShotFields = ({
@@ -611,7 +612,8 @@ const ShotFields = ({
       </span>
     ) : null}
     <span class="field__hint">
-      作品のページでは、Screenshots の縦ギャラリーに並びます。並び順は小さいほど先 · 1枚ずつ{' '}
+      作品のページでは、Screenshots のショーケースで表示します。メインの画像が先頭で、
+      ほかの画像は並び順の小さい順に続きます。保存前にプレビューで切り替えを確認できます。1枚ずつ{' '}
       {SHOT_LIMIT_NOTE}（動画は押して再生。1回の保存で合計 24MB まで） ·
       公開するときは1枚ずつ代替テキストが必須 ·{' '}
       {slots
@@ -661,10 +663,11 @@ const ItemForm = (props: ItemFormData) => {
             <a
               class="btn btn--ghost"
               href={`/admin/preview/items/${item.id}`}
+              data-item-preview=""
               target="_blank"
               rel="noreferrer"
             >
-              保存済み内容をプレビュー ↗
+              保存済み内容をプレビュー
             </a>
             {item.published && itemHref(item) ? (
               <a
@@ -749,7 +752,7 @@ const ItemForm = (props: ItemFormData) => {
             <span class="field__hint">
               {item?.imageUrl
                 ? `選ぶと差し替わる。空なら今のまま · ${IMAGE_LIMIT_NOTE}`
-                : `スクリーンショット。${IMAGE_LIMIT_NOTE} · 作品のページと、一覧の行のサムネイルに出る。横長なら共有カードも大きく出る`}
+                : `メインの画像。${IMAGE_LIMIT_NOTE} · ショーケースの先頭と共有カードに使います`}
             </span>
           </label>
           {/*
@@ -767,10 +770,10 @@ const ItemForm = (props: ItemFormData) => {
           {item?.imageUrl ? (
             <div class="field field--wide">
               {/*
-                見本は説明の組の絵と同じ枠。ほかの画像があると作品のページでは縦ギャラリーの
+                見本は説明の組の絵と同じ枠。ほかの画像があると作品のページではショーケースの
                 先頭に出るので、どこに出るかは枠ではなく役目（作品の顔）で言う
               */}
-              <span class="field__label">いまのメインの画像（一覧のサムネイル・共有カード）</span>
+              <span class="field__label">いまのメインの画像（ショーケースの先頭・共有カード）</span>
               {/* 見本。何が写っているかは上の欄が言うので、ここでは名前を持たせない */}
               <Shot src={item.imageUrl} alt="" />
               <label class="check">

@@ -19,6 +19,7 @@ import {
   Phrases,
   Stylesheets,
 } from './ui/components'
+import { GALLERY_CSP, isGalleryPage } from './ui/gallery-behavior'
 
 const app = new Hono<AppEnv>()
 
@@ -28,8 +29,8 @@ const app = new Hono<AppEnv>()
 
   CSP は、注入口（受け入れる前に上がった SVG・javascript: の href・本文の抜け）が
   1つ見つかってもスクリプトを走らせない最後の壁。
-  - 公開ページは script-src 'none'。内容・導線・見た目のどれも JavaScript を要らない
-    （装飾の動きを始める inline helper を持っていたころは、その SHA-256 だけを許していた）。
+  - 公開は原則 script-src 'none'。作品ページだけ GALLERY_BEHAVIOR の SHA-256 を許す。
+    JSなしでも全画像を読める。管理内のプレビューは親のコードが初期化する（sandbox 内の script は禁止）。
     管理画面は ADMIN_BEHAVIOR の SHA-256 だけを許す。JSON-LD（type="application/ld+json"）は
     実行されないデータなので、none でも止まらない
   - style-src に 'unsafe-inline'——ページの切り替えの名前（view-transition-name）と
@@ -96,7 +97,11 @@ app.use(async (c, next) => {
             c.req.path !== '/admin/login' &&
             /^text\/html/.test(headers.get('content-type') ?? '')
           ? PAGE_CSP.replace("script-src 'none'", `script-src '${ADMIN_CSP}'`)
-          : PAGE_CSP,
+          : !admin &&
+              isGalleryPage(c.req.path) &&
+              /^text\/html/.test(headers.get('content-type') ?? '')
+            ? PAGE_CSP.replace("script-src 'none'", `script-src '${GALLERY_CSP}'`)
+            : PAGE_CSP,
     )
   }
   headers.set('x-content-type-options', 'nosniff')

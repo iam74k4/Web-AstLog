@@ -10,6 +10,7 @@ import {
   langOf,
   Stylesheets,
 } from './components'
+import { GALLERY_BEHAVIOR, isGalleryPage } from './gallery-behavior'
 
 export type NavItem = { href: string; label: string; active?: boolean }
 
@@ -88,8 +89,8 @@ const ShareImage = ({ image }: { image: OgImage }) => (
   サイトの行き先）。色も書体も選ばせない——見た目は1つ（白と墨、見出しの欧文は
   Poppins、左の夜明けの窓）。
 
-  内容・絞り込み・ページの移動はサーバーが決め、公開ページは script を1本も持たない
-  （CSP も script-src 'none'。src/index.tsx）。ページを移るときの切り替え（app.css の
+  内容・絞り込み・ページの移動はサーバーが決める。作品ページだけ固定ハッシュの
+  ショーケース補助を持つ（src/ui/gallery-behavior.ts）。ページを移るときの切り替え（app.css の
   @view-transition）も CSS だけで、知らないブラウザではふつうに移るだけ。
 */
 export const Layout = (props: {
@@ -245,6 +246,9 @@ export const Layout = (props: {
         </p>
         {props.footer}
       </footer>
+      {!props.preview && isGalleryPage(props.canonical) ? (
+        <script dangerouslySetInnerHTML={{ __html: GALLERY_BEHAVIOR }} />
+      ) : null}
     </body>
   </HtmlDocument>
 )

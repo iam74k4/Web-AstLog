@@ -96,10 +96,10 @@ CSS の版は `Stylesheets` が Worker に同梱した文字列から作る（`w
 
 ### JavaScript とリンク
 
-**公開ページは実行する script を1本も持たない**（CSP も `script-src 'none'`。`src/index.tsx`）。
-内容と導線は SSR、絞り込みはリンクと query（`?kind=` `?member=`）、管理は HTML フォームと 303。
-JSON API も SPA も無い（動きは CSS だけ。「動き」）。
-管理は `src/ui/admin-behavior.ts` の固定ハッシュだけを許す。プレビューダイアログ・エラー導線の補助で、保存は標準フォーム。JSON-LD はデータ。ログイン・公開のエラー・プレビューは実行script無し。
+**内容と導線は JS なしでも成立する。** SSR・リンク・query・HTMLフォームと303を使う。
+JSON API / SPA は無い。作品ページは `src/ui/gallery-behavior.ts`、管理画面は
+`src/ui/admin-behavior.ts` の固定ハッシュだけを許す。ほかは `script-src 'none'`。
+JSON-LD はデータ。プレビューは実行script無し。
 
 **畳んだ欄はエラー時に開く**（`FormDetails`）。URL・メールは `inputmode` とサーバー検証を使う
 （閉じた欄ではブラウザが修正先へフォーカスできない）。必須欄は畳まず `required` も使う。
@@ -124,9 +124,10 @@ JSON API も SPA も無い（動きは CSS だけ。「動き」）。
 **作品のページは一覧の行を開いたもの。** 頭は行と同じ部品（`Note`・`Metric`・`Tags`・
 `LinkRow`）を並べ、足すのは絵だけ（`ItemDetail`。画像の `Shot`。**画像の無い作品に代わりの絵を
 置かない**——星図は外した）。900 以上は文の列の右に絵。画像が2枚以上なら、絵は
-小節「Screenshots」（`ItemShots`）の縦ギャラリーへ全部。先頭を大きく、900 以上では
-続きの画像を大小の2列に配置し、狭い画面は全幅の1列（順は `itemImages`、先頭が共有カード）。
-各画像の説明と番号を添え、原寸を別タブで開ける。アイコン（`icon_url`）は題の左の飾り。その下に本文の小節「Story」（`ItemStory`。`id="story"`・`h2`）。
+小節「Screenshots」（`ItemShots`）へ全部。公開時は大きな1枚とサムネイルのショーケース。
+前後ボタン・サムネイル・左右矢印と Home / End で切り替える（順は `itemImages`、先頭が共有カード）。
+管理内も親から共通処理で切り替える。JS無効・単独プレビュー・印刷は全画像表示。自動送り無し。
+画像は説明・番号・原寸リンク付き。アイコン（`icon_url`）は題の左。その下に「Story」（`ItemStory`。`id="story"`・`h2`）。
 **本文は個人開発も業務も同じテンプレート**（`STORY_SECTIONS`）。開く式は `src/blocks.ts` の
 `itemStory` 1本（ページ・全体ページ・転送が読む）。本文の無い作品は小節を出さない。
 - 作品同士をめくる手は置かない（前の `…/<slug>/story` は下の「前の URL は殺さない」）
@@ -137,7 +138,8 @@ JSON API も SPA も無い（動きは CSS だけ。「動き」）。
 **画像の枠は絵に合わせない。** 枠の形は CSS が先に決める（絵に合わせると、読み込んだ瞬間に
 下の字が押し下げられ、縦長の絵1枚でページの頭が埋まる）。作品のページは高さ `--shot-h`（900 以上は文の列の
 高さまで伸びる）で、絵は `contain`（切らない）。ギャラリーの枠は `--thumb-ratio`（16:10）で
-先に決め、先頭は `--gallery-lead-h`、続きは `--gallery-shot-h` を高さの上限にする。
+先に決め、ショーケースは全画像が `--gallery-lead-h`。縦ギャラリーは先頭が同じ上限で、
+続きは `--gallery-shot-h` を上限にする。
 - **一覧の行には絵を置かない**（番号もサムネイルも。画像の無い作品と行の高さがそろわなかった）
 
 **一覧の行は書いたぶんを全部出す。** 説明を行数で切らず、タグと行き先も畳まない（一覧は
@@ -556,7 +558,7 @@ URL を動かすなら前の URL は転送で残す（貼られたリンクを�
   **commit の SHA で固定**し、行末にタグ名を残す（`test/deploy.test.ts` が形を見る）
 - **本番の写しは定義と中身の2本で取る**（`--no-data` と `--no-schema`）。1本の export は、子の表の
   行が親の CREATE TABLE より前に来て空の D1 に戻せない。戻せることは `npm run check:restore` が
-  毎回確かめる。画像も `scripts/media-backup.mjs` で控えを取り、取得済み D1 の参照とSHA-256を照合する。復元は `check:media-restore`、管理の実操作は `check:admin`。artifact は90日保持
+  毎回確かめる。画像も `scripts/media-backup.mjs` で控えを取り、取得済み D1 の参照とSHA-256を照合する。復元は `check:media-restore`、管理の実操作は `check:admin`。artifact は age で暗号化し90日保持
 
 ## 気をつける場所
 
@@ -572,8 +574,8 @@ URL を動かすなら前の URL は転送で残す（貼られたリンクを�
 
 **応答のヘッダ**は `src/index.tsx` のミドルウェア1本が、全部の応答（公開・管理・404・500・
 リダイレクト・robots・sitemap）に掛ける。ルートごとに書くと、足したルートだけが素で出る。
-- CSP（中身は `src/index.tsx`）は公開ページで script を1本も許さず、管理画面は固定 helper の
-  exact hash だけを許す。プレビューは同一オリジン内の埋め込みを許すが script は許さない。style の
+- CSP（中身は `src/index.tsx`）は作品ページと管理画面で、それぞれの固定 helper の
+  exact hash だけを許す。ほかの公開ページは script を許さない。プレビューは同一オリジン内の埋め込みを許すが script は許さない。style の
   `'unsafe-inline'` は `style` 属性で渡す値（ページの切り替えの名前・アバターの寸法）のため。外のサイトの画像・書体・スクリプトを読むなら、
   ここを一緒に直す。CSP を変えたら、全公開 URL と管理画面の主な画面を Chromium で開いて違反が
   出ないことを確かめる（`npm test` はブラウザの CSP を持たない）

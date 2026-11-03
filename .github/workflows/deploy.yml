@@ -5,9 +5,10 @@ name: deploy
 # 自動デプロイに切り替えるなら on: push: branches: [main] を足す（門と順序はこのまま）。
 #
 # 本番へ出す道はこれ1本で、順序はこう決めてある。
-#   1. main か・id が入っているか（guard）——どちらも満たさなければ何もせず止まる
+#   1. main か・id が入っているか・写しを暗号化する公開鍵があるか（guard）——
+#      どれかを満たさなければ何もせず止まる
 #   2. check.yml と同じ門（型・lint・テスト・写しの戻し・ビルド・fit・admin）
-#   3. 本番 D1 の写し（定義と中身の2本）と Time Travel の栞を artifact に残す
+#   3. 本番 D1 の写し（定義と中身の2本）と Time Travel の栞を、暗号化して artifact に残す
 #   4. マイグレーションを流す（いつも。未適用のものだけが当たる）
 #   5. Worker を出す
 #
@@ -56,6 +57,11 @@ jobs:
       # 何を直せばいいかを言って止まる（check の dry-run は id を見ないので緑のまま）
       - name: wrangler.toml の id が入っているか
         run: node scripts/check-ids.mjs
+
+      # 写しは公開鍵で暗号化してから artifact に置く（deploy の job）。鍵が無いまま
+      # 本番の写しを取り始めない
+      - name: 写しを暗号化する公開鍵があるか
+        run: node scripts/check-backup-recipients.mjs
 
   check:
     needs: guard
@@ -116,15 +122,26 @@ jobs:
           node scripts/media-backup.mjs export --directory backup/media
           node scripts/media-backup.mjs verify --directory backup/media --schema "backup/schema-${GITHUB_SHA}.sql" --data "backup/data-${GITHUB_SHA}.sql"
 
-      # 中身はメンバーの連絡先・ログインの紐づけ（セッションは D1 にもハッシュでしか無い）を
-      # 含み、リポジトリを読める人は誰でも落とせる。それでも Time Travel より長く置く——
-      # 栞の期限（30日・無料なら7日）を過ぎてから壊れに気づいたときの、最後の控えなので。
-      # 90日は公開リポジトリの上限（私的リポジトリなら Settings で 400日まで延ばせる。
-      # 上限を超えた値は上限に丸められる）
+      # このリポジトリは公開で、artifact は GitHub に入れる人なら誰でも落とせる。写しには
+      # 下書き・削除した画像の控え（archive/）・メンバーの連絡先・ログインの紐づけが入るので、
+      # age の公開鍵（.github/backup-recipients.txt）で暗号化した1つのファイルだけを置き、
+      # 平文の backup/ は置かない。開けるのは秘密鍵を持つ持ち主の手元だけ（README の「戻す」）。
+      # 秘密鍵は Actions に渡さない——ここで開く場面は無い
+      - name: 写しを暗号化する
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq age
+          tar -C backup -cf backup.tar .
+          age --encrypt -R .github/backup-recipients.txt -o "site-backup-${GITHUB_SHA}.tar.age" backup.tar
+          rm -rf backup backup.tar
+
+      # Time Travel より長く置く——栞の期限（30日・無料なら7日）を過ぎてから壊れに気づいた
+      # ときの、最後の控えなので。90日は公開リポジトリの上限（私的リポジトリなら Settings で
+      # 400日まで延ばせる。上限を超えた値は上限に丸められる）
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: site-backup-${{ github.run_id }}
-          path: backup/
+          path: site-backup-${{ github.sha }}.tar.age
           retention-days: 90
           if-no-files-found: error
 

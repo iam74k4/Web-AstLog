@@ -97,6 +97,15 @@ export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
     const next = c.req.method === 'GET' ? safeNext(url.pathname + url.search) : null
     return c.redirect(next ? `/admin/login?next=${encodeURIComponent(next)}` : '/admin/login', 303)
   }
+  /*
+    管理画面に入れるのは owner だけ。users の role は member も取れるが（src/db/schema.ts）、
+    「本人が自分のページだけを直す」権限の分け方はまだ無い。分けないまま通すと、member の
+    セッションで全部を消せ、「すべての端末からログアウト」も押せる。分けるときは、ここと
+    各ルートの書き込みを一緒に決める
+  */
+  if (user.role !== 'owner') {
+    return c.text('この管理画面に入れるのは持ち主だけです', 403)
+  }
   c.set('user', user)
   c.set('account', (await accountLabel(db(c), user.id)) ?? 'アカウント')
   await next()

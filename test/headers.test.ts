@@ -9,6 +9,7 @@ import app from '../src/index'
 import { createSession, HOST_SESSION_COOKIE } from '../src/lib/auth'
 import { HSTS, PERMISSIONS_POLICY } from '../src/lib/headers'
 import { ADMIN_BEHAVIOR, ADMIN_CSP } from '../src/ui/admin-behavior'
+import { GALLERY_BEHAVIOR, GALLERY_CSP, isGalleryPage } from '../src/ui/gallery-behavior'
 import {
   db,
   ensureOwner,
@@ -43,8 +44,10 @@ const directives = (csp: string | null) =>
 
 function expectPageHeaders(response: Response, label: string, admin = false) {
   const csp = directives(response.headers.get('content-security-policy'))
-  // 公開ページはスクリプトを1本も許さない。管理画面だけが補助1本のハッシュを許す
-  expect(csp['script-src'], label).toBe(admin ? `'${ADMIN_CSP}'` : "'none'")
+  // 作品ページと管理画面だけ、それぞれの補助のハッシュを許す
+  expect(csp['script-src'], label).toBe(
+    admin ? `'${ADMIN_CSP}'` : isGalleryPage(label) ? `'${GALLERY_CSP}'` : "'none'",
+  )
   expect(csp['default-src'], label).toBe("'self'")
   expect(csp['object-src'], label).toBe("'none'")
   expect(csp['base-uri'], label).toBe("'none'")
@@ -102,16 +105,24 @@ describe('応答のヘッダ', () => {
     expectPageHeaders(response, '500')
   })
 
-  it('公開ページは実行するスクリプトを持たない。script 要素は JSON-LD（データ）だけ', async () => {
+  it('作品ページだけショーケース補助を持ち、その全文のハッシュだけを許す', async () => {
     await seedMember()
     await seedItem({ slug: 'appmixer' })
     for (const path of ['/', '/apps/item/appmixer', '/all', '/members/okazaki']) {
       const html = await okText(path)
       const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)]
+      const executable = scripts.filter((script) => script[1] !== ' type="application/ld+json"')
       expect(
-        scripts.filter((script) => script[1] !== ' type="application/ld+json"'),
+        executable.map((script) => script[2]),
         path,
-      ).toEqual([])
+      ).toEqual(isGalleryPage(path) ? [GALLERY_BEHAVIOR] : [])
+      if (isGalleryPage(path)) {
+        const digest = await crypto.subtle.digest(
+          'SHA-256',
+          new TextEncoder().encode(executable[0]?.[2]),
+        )
+        expect(GALLERY_CSP).toBe(`sha256-${btoa(String.fromCharCode(...new Uint8Array(digest)))}`)
+      }
     }
   })
 
@@ -466,22 +477,11 @@ describe('500 のログ', () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
       const ctx = createExecutionContext()
-      /*
-        app.fetch を直に呼ぶので、FormData の本文には Content-Length が付かない（SELF.fetch なら
-        HTTP の層が付ける）。管理画面は長さを名乗らない POST を 411 で断るので
-        （src/routes/admin/request.ts の readAdminForm）、ブラウザと同じく長さと種類を付けて送る
-      */
-      const draft = new Request('https://astlog.test/', { method: 'POST', body })
-      const bytes = await draft.arrayBuffer()
       const response = await app.fetch(
         new Request(`https://astlog.test${path}?from=log-test`, {
           method: 'POST',
-          headers: {
-            cookie: `${HOST_SESSION_COOKIE}=${token}`,
-            'content-type': draft.headers.get('content-type') ?? '',
-            'content-length': String(bytes.byteLength),
-          },
-          body: bytes,
+          headers: { cookie: `${HOST_SESSION_COOKIE}=${token}` },
+          body,
         }),
         uncachedEnv({ DB: database }),
         ctx,

@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import * as schema from '../src/db/schema'
-import { db, form, resetDb, signIn } from './helpers'
+import { isContactEmail } from '../src/site'
+import { itemTransition } from '../src/ui/components'
+import { isGalleryPage } from '../src/ui/gallery-behavior'
+import { db, form, okText, resetDb, seedItem, signIn, touch } from './helpers'
 
 beforeEach(resetDb)
 
@@ -60,5 +63,65 @@ describe('絶対 URL の形を保存側で検査する', () => {
     })
     expect(response.status).toBe(303)
     expect((await db().select().from(schema.itemLinks)).map((row) => row.url)).toEqual(urls)
+  })
+})
+
+/*
+  保存の口を通らずに入った値（D1 を手で直した行）でも、描く側が形を見る。どれも
+  保存の検査では受け取らない値なので、ここでは D1 に直に書いて確かめる。
+*/
+describe('描く側でも形を見る', () => {
+  it('原寸へのリンクは、画像の URL の形が通るときだけ行き先を持つ', async () => {
+    const item = await seedItem({ title: '画像の作品', slug: 'shots', published: 1 })
+    await db()
+      .insert(schema.itemShots)
+      .values([
+        { itemId: item.id, url: '/images/items/shots-0000aaaa.png', alt: '正しい', sortOrder: 0 },
+        { itemId: item.id, url: 'javascript:alert(1)', alt: '手で直した', sortOrder: 1 },
+      ])
+    await touch()
+    const html = await okText('/apps/item/shots')
+    expect(html).toContain('href="/images/items/shots-0000aaaa.png"')
+    expect(html).not.toContain('href="javascript:')
+  })
+
+  it('slug は style 属性に入れる前に字の形を見る', () => {
+    expect(itemTransition({ slug: 'astlog-app' })).toBe('view-transition-name:item-astlog-app')
+    expect(itemTransition({ slug: 'x;background:red' })).toBeUndefined()
+  })
+
+  it('ショーケースのスクリプトを許すのは、作品のページの URL だけ', () => {
+    expect(isGalleryPage('/apps/item/astlog')).toBe(true)
+    expect(isGalleryPage('https://astlog.dev/works/item/astlog')).toBe(true)
+    expect(isGalleryPage('/members/apps/item/astlog')).toBe(false)
+    expect(isGalleryPage('/apps/item/astlog/privacy')).toBe(false)
+  })
+})
+
+describe('連絡先のメールアドレス', () => {
+  it('ふつうのアドレスは通す', () => {
+    for (const email of ['me@example.com', 'a.b+tag@mail.example.co.jp']) {
+      expect(isContactEmail(email), email).toBe(true)
+    }
+  })
+
+  it('宛先やヘッダを足せる形は、% で書いたものも通さない', () => {
+    for (const email of [
+      'me,other@example.com',
+      'me%2Cother@example.com',
+      'a%3Fcc%3Dx@example.com',
+      'me@example.com?cc=x',
+      'me@example..com',
+      'me@.example.com',
+    ]) {
+      expect(isContactEmail(email), email).toBe(false)
+    }
+  })
+
+  it('長い入力でも、読むのに時間がかからない', () => {
+    const started = performance.now()
+    expect(isContactEmail(`a@${'.a'.repeat(20_000)}!`)).toBe(false)
+    expect(isContactEmail(`a@${'a.'.repeat(20_000)}`)).toBe(false)
+    expect(performance.now() - started).toBeLessThan(200)
   })
 })

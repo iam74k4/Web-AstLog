@@ -740,8 +740,8 @@ describe('セッション', () => {
 
     expect((await phone('/admin/members')).status).toBe(303)
     expect((await laptop('/admin/members')).status).toBe(303)
-    // ほかの人のセッションには触らない
-    expect((await someoneElse('/admin/members')).status).toBe(200)
+    // ほかの人のセッションには触らない（member は管理画面に入れないので、ログインへ戻されず 403）
+    expect((await someoneElse('/admin/members')).status).toBe(403)
     expect(await okText('/admin/login?out=all')).toContain('すべての端末からログアウトしました')
   })
 
@@ -932,6 +932,22 @@ describe('owner は1人', () => {
     expect(ids).toHaveLength(1)
     expect([a?.id, b?.id]).toEqual([ids[0], ids[0]])
     expect(await identities()).toHaveLength(1)
+  })
+
+  // member の行は表の形だけで、権限の分け方はまだ無い。分けないまま通すと全部を消せる
+  it('member のセッションでは管理画面に入れない（読むのも書くのも 403）', async () => {
+    const [member] = await db().insert(schema.users).values({ role: 'member' }).returning()
+    const { token } = await createSession(db(), member?.id ?? 0)
+    const asMember = withCookie(`${HOST_SESSION_COOKIE}=${token}`)
+    for (const path of ['/admin', '/admin/members', '/admin/account']) {
+      expect((await asMember(path)).status, path).toBe(403)
+    }
+    const deleted = await asMember('/admin/account/logout-all', {
+      method: 'POST',
+      body: form({}),
+    })
+    expect(deleted.status).toBe(403)
+    expect(await db().select().from(schema.sessions)).toHaveLength(1)
   })
 
   it('2人目の owner の行は DB が受け付けない（users_one_owner）', async () => {

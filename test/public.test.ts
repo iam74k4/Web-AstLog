@@ -1863,7 +1863,7 @@ describe('作品の画像の見せ方', () => {
     await touch()
     const html = await okText('/apps/item/many')
     expect(html).toContain(
-      '<div class="shots" id="screenshots"><div class="head head--sub"><h2>Screenshots</h2></div>',
+      '<div class="shots" id="screenshots" data-showcase=""><div class="head head--sub"><h2>Screenshots</h2></div>',
     )
     // 先頭は作品の顔として大きく、残りはページを読んで近づくまで遅延読み込み
     expect(html).toContain('class="gallery__item gallery__item--lead"')
@@ -1883,7 +1883,9 @@ describe('作品の画像の見せ方', () => {
     )
     expect(html).toContain('<figcaption class="gallery__caption" aria-hidden="true">')
     const shown = [...mainOf(html).matchAll(/<img src="([^"]+)" alt="([^"]*)"/g)]
-    expect(shown.map((one) => one[2])).toEqual(['メイン', '二', '三'])
+    expect(shown.filter((one) => one[2]).map((one) => one[2])).toEqual(['メイン', '二', '三'])
+    expect(html).toContain('class="gallery__controls" hidden')
+    expect(html).toContain('aria-controls="screenshot-3"')
     expect(ldOf(html).image).toEqual(
       ['many-aaaaaaaa', 'many-bbbbbbbb', 'many-cccccccc'].map(
         (name) => `${SITE.origin}/images/items/${name}.png`,

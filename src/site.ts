@@ -85,12 +85,16 @@ export const heroRoleWords = (site: Pick<SiteSettings, 'heroRoles'>) =>
     .map((word) => word.trim())
     .filter(Boolean)
 
-// mailto にヘッダや複数の宛先を混ぜさせない。空は連絡先を掲載しない指定。
+/*
+  mailto にヘッダや複数の宛先を混ぜさせない。空は連絡先を掲載しない指定。
+  % も通さない——%2C（,）や %3F（?）は、宛先を分けたあとで読む決まり（RFC 6068）でも、
+  先に読んで宛先を2つにするメールソフトがある。ドメインは「.」で区切った空でない語の
+  並びとして読む（同じ字を2つの部分で取り合う書き方にすると、長い入力で読むのが遅くなる）
+*/
 export const isContactEmail = (email: string) =>
-  /^[^\s@?&#,;]+@[^\s@?&#,;]+\.[^\s@?&#,;]+$/.test(email) &&
+  /^[^\s@?&#,;%]+@[^\s@?&#,;%.]+(?:\.[^\s@?&#,;%.]+)+$/.test(email) &&
   !CONTROL.test(email) &&
-  !/[<>"\\]/.test(email) &&
-  !/%(?:0[0-9a-f]|1[0-9a-f]|7f)/i.test(email)
+  !/[<>"\\]/.test(email)
 
 /*
   Discord のユーザー名（2〜32 字の英数字・_・.）。@ と旧来の #0000 は付けない。名前から開ける

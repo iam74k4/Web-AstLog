@@ -16,59 +16,70 @@ export const db = (c: { env: { DB: D1Database } }) => drizzle(c.env.DB, { schema
 /*
   認証のあとでフォームを先に読む。壊れた multipart の境界などは入力の 400 で返し、
   サーバー障害の 500 にしない。Hono が formData を要求ごとにキャッシュするので、
-  各保存ルートは同じ内容を再利用できる。本文の無い POST と長さ 0 の本文は、フォームの種類で
-  なくてもルートへ通す（読むものが無い）。
+  各保存ルートは同じ内容を再利用できる。
 
-  1回の送信は合計 24MB まで（読む前に Content-Length で止める）。Worker のメモリは 128MB で、
-  フォームを読むと中身が何重かに写される——動画（1本 10MB まで）を8本まとめて送ると収まらない。
-  24MB なら動画2本と画像を何枚か足せる。止めたときはフォームを描き直せない（読んでいない）ので、
-  戻って減らすように言う（ブラウザの「戻る」は書いた欄を残す）
+  管理画面の POST はどれもフォームなので、本文を持つのにフォームでない送信（text/plain など）は
+  ここで 400 にする。通すと各ルートの formData() が例外を投げて 500 になり、書いていないのに
+  写しの版まで上がる（touchSiteOnWrite）。本文の無い POST はブラウザの空のフォームと同じに
+  読み、そのまま通す。
 
-  本文のある POST は、種類を問わずここで止める。長さを名乗らない送信（chunked）と数でない長さは
-  411、フォームの2種類でない本文は 415 で、どちらも読まずに断る。この上限は名乗った長さしか
-  見ないうえ、保存のルートは種類を見ずに formData を呼び、workerd は種類を断る前に本文を全部
-  読む——text/plain や、重ねて送られて畳まれた「multipart/form-data, text/plain」でも上限を
-  素通りして全部を読んでしまう。ブラウザのフォームは送る前に長さが決まっていて、いつも
-  Content-Length とフォームの種類を付ける
+  1回の送信は合計 24MB まで。Worker のメモリは 128MB で、フォームを読むと中身が何重かに
+  写される——動画（1本 10MB まで）を8本まとめて送ると収まらない。24MB なら動画2本と画像を
+  何枚か足せる。Content-Length があれば読む前に止め、無ければ（chunked）読みながら数えて
+  止める——読む前の検査だけだと、Content-Length を付けない送信が素通りして本文を丸ごと読む。
+  止めたときはフォームを描き直せない（読んでいない）ので、戻って減らすように言う
+  （ブラウザの「戻る」は書いた欄を残す）
 */
 export const MAX_FORM_BYTES = 24_000_000
 
-const FORM_TYPES = new Set(['multipart/form-data', 'application/x-www-form-urlencoded'])
+const TOO_LARGE =
+  '1回の保存で送れるのは合計 24MB までです。前の画面に戻り、動画や画像を分けて保存してください。'
+const UNREADABLE = 'フォームを読み取れませんでした。前の画面に戻り、もう一度送信してください。'
+
+// 本文を limit バイトまで読む。超えたら読むのをやめて null
+async function readUpTo(body: ReadableStream<Uint8Array>, limit: number) {
+  const reader = body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.byteLength
+    if (size > limit) {
+      await reader.cancel()
+      return null
+    }
+    chunks.push(value)
+  }
+  const bytes = new Uint8Array(size)
+  let at = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, at)
+    at += chunk.byteLength
+  }
+  return bytes
+}
 
 export const readAdminForm = createMiddleware<AppEnv>(async (c, next) => {
-  if (c.req.method === 'POST') {
-    const type = c.req.header('content-type')?.split(';', 1)[0]?.trim().toLowerCase() ?? ''
-    if (c.req.raw.body) {
-      const length = c.req.header('content-length')?.trim()
-      if (!length || !/^[0-9]+$/.test(length)) {
-        return c.text(
-          '送信の長さ（Content-Length）が分からないため受け取れません。ブラウザのフォームから送り直してください。',
-          411,
-        )
-      }
-      if (Number(length) > MAX_FORM_BYTES) {
-        return c.text(
-          '1回の保存で送れるのは合計 24MB までです。前の画面に戻り、動画や画像を分けて保存してください。',
-          413,
-        )
-      }
-      if (Number(length) > 0 && !FORM_TYPES.has(type)) {
-        return c.text(
-          'フォームの送信（multipart/form-data か application/x-www-form-urlencoded）しか受け取れません。ブラウザのフォームから送り直してください。',
-          415,
-        )
-      }
-    }
-    if (FORM_TYPES.has(type)) {
-      try {
-        await c.req.formData()
-      } catch {
-        return c.text(
-          'フォームを読み取れませんでした。前の画面に戻り、もう一度送信してください。',
-          400,
-        )
-      }
-    }
+  if (c.req.method !== 'POST') return next()
+  const raw = c.req.raw
+  const type = c.req.header('content-type')?.split(';', 1)[0]?.trim().toLowerCase()
+  if (type !== 'multipart/form-data' && type !== 'application/x-www-form-urlencoded') {
+    if (raw.body !== null) return c.text(UNREADABLE, 400)
+    const headers = new Headers(raw.headers)
+    headers.set('content-type', 'application/x-www-form-urlencoded')
+    c.req.raw = new Request(raw.url, { method: 'POST', headers, body: '' })
+  } else if (c.req.header('content-length') === undefined && raw.body !== null) {
+    const bytes = await readUpTo(raw.body, MAX_FORM_BYTES)
+    if (!bytes) return c.text(TOO_LARGE, 413)
+    c.req.raw = new Request(raw.url, { method: 'POST', headers: raw.headers, body: bytes })
+  } else if (Number(c.req.header('content-length')) > MAX_FORM_BYTES) {
+    return c.text(TOO_LARGE, 413)
+  }
+  try {
+    await c.req.formData()
+  } catch {
+    return c.text(UNREADABLE, 400)
   }
   await next()
 })

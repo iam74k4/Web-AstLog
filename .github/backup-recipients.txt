@@ -1,0 +1,5 @@
+# 本番の写し（deploy.yml が artifact に残す D1 と画像の控え）を暗号化する age の公開鍵。
+# 1行に1本、age1… の形だけ。並べたどれか1本の秘密鍵で開ける（README の「本番に出す」「戻す」）。
+# 公開鍵は秘密ではないのでコミットする。秘密鍵（AGE-SECRET-KEY-1…）はここに書かない。
+# 1本も無ければ、deploy は本番の写しを取る前に止まる（scripts/check-backup-recipients.mjs）。
+age1cwp8lrxcqehjdaeqcnsjxg7dzmm6h7wlyp0fgy9rg73w70ptvczsh8mpqt

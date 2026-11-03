@@ -260,42 +260,10 @@ describe('1枚の上限は種類ごと', () => {
   })
 
   /*
-    上限は名乗った長さ（Content-Length）で見るので、名乗らない送信（chunked）は読まずに断る。
-    ブラウザのフォーム（ここのほかのテストの FormData も）は長さを名乗るので、そちらは通る
-  */
-  it('長さを名乗らないフォームの送信は、読まずに 411 で断る', async () => {
-    const signed = await signIn()
-    const encoder = new TextEncoder()
-    for (const type of ['multipart/form-data; boundary=x', 'application/x-www-form-urlencoded']) {
-      const body = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(encoder.encode('--x--\r\n'))
-          controller.close()
-        },
-      })
-      const response = await signed('/admin/items', {
-        method: 'POST',
-        headers: { 'content-type': type },
-        body,
-      })
-      expect(response.status, type).toBe(411)
-      expect(await response.text(), type).toContain('Content-Length')
-    }
-    expect(await db().select().from(schema.items)).toHaveLength(0)
-
-    // 名乗る送信はこれまでどおり読む（作品が1件できる）
-    const ok = await signed('/admin/items', {
-      method: 'POST',
-      body: form({ type: 'app', title: 'Demo', slug: 'demo' }),
-    })
-    expect(ok.status).toBe(303)
-    expect(await db().select().from(schema.items)).toHaveLength(1)
-  })
-
-  /*
     保存のルートは種類を見ずに formData を呼び、workerd は種類を断る前に本文を全部読む。
-    フォームの種類でない本文（text/plain・重ねて送られて畳まれた種類）も、長さを名乗らなければ
-    411、名乗れば 415 で、上限を越える本文を読み切る前に断る
+    フォームの種類でない本文（text/plain・重ねて送られて畳まれた種類）は、長さを名乗っても
+    名乗らなくても 400 で、上限を越える本文を読み切る前に断る（src/routes/admin/request.ts の
+    readAdminForm。長さを名乗らないフォームの送信は test/admin.test.ts）
   */
   it('フォームでない種類の本文も、上限を素通りさせずに読まずに断る', async () => {
     const signed = await signIn()
@@ -316,7 +284,7 @@ describe('1枚の上限は種類ごと', () => {
         headers: { 'content-type': type },
         body,
       })
-      expect(chunked.status, type).toBe(411)
+      expect(chunked.status, type).toBe(400)
       expect(pulled, type).toBeLessThan(MAX_FORM_BYTES)
 
       const sized = await signed('/admin/items', {
@@ -324,8 +292,8 @@ describe('1枚の上限は種類ごと', () => {
         headers: { 'content-type': type },
         body: 'type=app&title=Demo&slug=demo',
       })
-      expect(sized.status, type).toBe(415)
-      expect(await sized.text(), type).toContain('フォームの送信')
+      expect(sized.status, type).toBe(400)
+      expect(await sized.text(), type).toContain('フォームを読み取れませんでした')
     }
     expect(await db().select().from(schema.items)).toHaveLength(0)
   })
