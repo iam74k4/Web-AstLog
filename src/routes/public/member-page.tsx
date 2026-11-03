@@ -1,6 +1,6 @@
 import type { Child } from 'hono/jsx'
 import { memberUnits } from '../../blocks'
-import type * as schema from '../../db/schema'
+import type { PublicMember } from '../../domain'
 import { plainText } from '../../lib/markdown'
 import { SITE, type SiteSettings } from '../../site'
 import {
@@ -52,7 +52,7 @@ export type MemberSection = (typeof MEMBER_SECTIONS)[number]
   前の続きの URL の行き先。小節があれば #about など、無くなっていれば（技術を
   消した人の /skills）ページの頭。どちらもそのページの中にある。
 */
-export function memberSectionHref(member: schema.Member, section: MemberSection) {
+export function memberSectionHref(member: PublicMember, section: MemberSection) {
   const { skills, career } = memberUnits(member)
   const present = section === 'about' || (section === 'skills' ? skills.length : career.length) > 0
   return `${memberHref(member.slug)}${present ? `#${section}` : ''}`
@@ -65,7 +65,7 @@ export function memberSectionHref(member: schema.Member, section: MemberSection)
   個人ページの h1 が同じ一文になり、2つのページが同じ頭を持った
 */
 export function memberPage(
-  member: schema.Member,
+  member: PublicMember,
   band: Child,
   site: SiteSettings = SITE,
   titled = false,

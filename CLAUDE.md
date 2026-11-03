@@ -147,7 +147,7 @@ JSON-LD はデータ。プレビューは実行script無し。
 
 **公開画像は KV の2区画**（`avatars/`・`items/`）。削除時は `archive/<元キー>` へ90日控えを置く。
 控えと `site:version` は `/images/*` から読めない。キーは
-`<置き場>/<slug>-<乱数8桁>.<拡張子>` で、付けるのは `src/routes/admin/images.ts` の `putImage`
+`<置き場>/<slug>-<乱数>.<拡張子>` で、付けるのは `src/routes/admin/images.ts` の `putImage`
 だけ。取り込みの検査は `pickImage` の1本。**画像があるのに代替テキストが空なら、公開として
 保存させない**（`publishErrors`。ほかの画像も1枚ずつ）。
 

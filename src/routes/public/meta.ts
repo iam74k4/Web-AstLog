@@ -1,6 +1,6 @@
 import { type BlockKey, blockVisibleParts } from '../../blocks'
 import type * as schema from '../../db/schema'
-import type { ItemView } from '../../domain'
+import type { ItemView, PublicMember } from '../../domain'
 import { isHttpsUrl } from '../../lib/format'
 import { SITE, type SiteSettings } from '../../site'
 import { soloMember } from './data'
@@ -52,10 +52,10 @@ export const excerpt = (text: string) => {
   スニペットにも、誰のサイトなのかが出るように。画面に出ている名乗りと同じ
   ものを head にも置く。
 */
-export const siteTitle = (solo?: schema.Member) =>
+export const siteTitle = (solo?: PublicMember) =>
   solo ? pageTitle(nameWithRole(solo)) : `${SITE.name} — Projects`
 
-export const siteDescription = (solo?: schema.Member, site: SiteSettings = SITE) =>
+export const siteDescription = (solo?: PublicMember, site: SiteSettings = SITE) =>
   solo ? `${nameWithRole(solo)}のポートフォリオ。${site.heroLead}` : site.heroLead
 
 /*
@@ -142,7 +142,7 @@ export const personJsonLd = (
   採る側は「誰を採るのか」を探しに来ているので、実体が1人のあいだはその人として
   名乗る（Organization では人の名前も職種も構造化データに1つも出ない）。
 */
-export const siteJsonLd = (members: schema.Member[], site: SiteSettings = SITE) => {
+export const siteJsonLd = (members: PublicMember[], site: SiteSettings = SITE) => {
   const solo = soloMember(members)
   // 足元に出すサイトの Instagram と X も、同じ名乗りの別の口として並べる（通らない URL は名乗らない）
   const elsewhere = [site.instagram, site.x].filter((url) => isHttpsUrl(url))

@@ -68,8 +68,9 @@ describe('公開ページの写し', () => {
     expect(html).not.toContain('改名した題')
     // 写しから出しても、公開ページはスクリプトを持たない（JSON-LD はデータ）
     expect(html).not.toMatch(/<script>/)
-    // 写しの印（版・置いた時刻・Cache API の期限）は訪問者に出さない
-    expect(second.headers.get('cache-control')).toBeNull()
+    // 写しの印（版・置いた時刻・Cache API の期限）は訪問者に出さない。cache-control は
+    // ルートが付けていないので no-cache（served の注記。下の「Last-Modified」）
+    expect(second.headers.get('cache-control')).toBe('no-cache')
     expect(second.headers.get('x-astlog-version')).toBeNull()
     expect(second.headers.get('x-astlog-stored')).toBeNull()
     // ヘッダの1本（src/index.tsx）は写しにも同じものを付ける
@@ -80,6 +81,42 @@ describe('公開ページの写し', () => {
     const third = await get('/projects')
     expect(state(third)).toBe('miss')
     expect(await third.text()).toContain('改名した題')
+  })
+
+  /*
+    Cache API から出した写しが Last-Modified を持っていても、訪問者には渡さない。cache-control の
+    無い応答に Last-Modified が付くと、ブラウザが推測で写しを使い回す（D1 の障害中に出した古い
+    写しなら半日以上）。ルートが cache-control を付けていない応答には no-cache を付ける
+  */
+  it('写しから返す応答は Last-Modified を持たず、no-cache（hit も stale も）', async () => {
+    await seedItem({ title: 'AppMixer', slug: 'appmixer' })
+    expect(state(await get('/projects'))).toBe('miss')
+
+    const cache = caches.default
+    const match = cache.match.bind(cache)
+    const dated = vi.spyOn(cache, 'match').mockImplementation(async (request, options) => {
+      const copy = await match(request, options)
+      if (!copy) return copy
+      const withDate = new Response(copy.body, copy)
+      withDate.headers.set('last-modified', new Date(Date.now() - 86_400_000).toUTCString())
+      return withDate
+    })
+    try {
+      const hit = await run('/projects', {})
+      expect(state(hit)).toBe('hit')
+      // 写しは本当に Last-Modified 付きで出てきている（差し替えが効いていなければ空振りする）
+      expect(dated).toHaveBeenCalled()
+      expect(hit.headers.get('last-modified')).toBeNull()
+      expect(hit.headers.get('cache-control')).toBe('no-cache')
+
+      vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 2 * 60 * 60 * 1000 })
+      const stale = await run('/projects', { DB: undefined as unknown as D1Database })
+      expect(state(stale)).toBe('stale')
+      expect(stale.headers.get('last-modified')).toBeNull()
+      expect(stale.headers.get('cache-control')).toBe('no-cache')
+    } finally {
+      dated.mockRestore()
+    }
   })
 
   it('query は鍵に入る（絞り込みは別の写し）', async () => {

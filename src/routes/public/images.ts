@@ -12,7 +12,9 @@ import { isMediaType } from '../../lib/image'
 
   通すのは、こちらが付けた名前の2つの置き場だけ——avatars/（メンバーの顔）と
   items/（作品のスクリーンショット）。名前は src/routes/admin/images.ts の
-  putImage が付ける形（英数字で始まり、英数字と . _ - だけ）。
+  putImage が付ける形（英数字で始まり、英数字と . _ - だけ）。乱数の長さは見ない——
+  いまの 32 字のキーも、それより前に置いた 8 字のキーも同じ形で通る（貼られた URL を
+  殺さない）。名前の上限 121 字は、slug（64 字）・乱数・拡張子が収まる長さ。
 
   置き場を足すときは、ここの ( | ) に1語足すだけにすること。形の検査
   （名前の文字の種類と、/ を1つしか含まないこと）を緩めて通すと、
@@ -27,6 +29,9 @@ import { isMediaType } from '../../lib/image'
   - Content-Security-Policy: default-src 'none'; sandbox——直に開かれても
     スクリプトも読み込みも走らない（<img> で埋め込む分には効かず、邪魔もしない）。
     src/index.tsx のヘッダの1本は、ルートが付けた CSP を上書きしない
+  - Cross-Origin-Resource-Policy: same-site——ほかのサイトのページには埋め込ませない（使うのは
+    このサイトのページだけ）。共有カードを取りに来る SNS のサーバーはブラウザではないので止まらない。
+    ヘッダの1本はこれを付けも上書きもしない
   - 画像の5種類と動画（MP4）に無い content-type（以前の image/svg+xml や image/heic）は
     application/octet-stream の添付として返す。画像としては描かせない
 
@@ -59,6 +64,7 @@ export async function serveImage(c: Context<AppEnv>) {
       : { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment' }),
     'x-content-type-options': 'nosniff',
     'content-security-policy': "default-src 'none'; sandbox",
+    'cross-origin-resource-policy': 'same-site',
     'cache-control': 'public, max-age=31536000, immutable',
     'accept-ranges': 'bytes',
   }

@@ -162,6 +162,13 @@
       "when": 1792422679815,
       "tag": "0022_item_documents",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1793109763962,
+      "tag": "0023_session_last_seen",
+      "breakpoints": true
     }
   ]
 }

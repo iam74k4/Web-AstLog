@@ -94,7 +94,8 @@ export function sniffImage(bytes: Uint8Array): SniffedImage | null {
   return size ? { ...format, ...size } : { ...format }
 }
 
-const ascii = (bytes: Uint8Array, at: number, length: number) =>
+// 区画を読む手。src/lib/image-metadata.ts も同じ手で区画を歩く（読み方を2通りにしない）
+export const ascii = (bytes: Uint8Array, at: number, length: number) =>
   String.fromCharCode(...bytes.subarray(at, at + length))
 
 const startsWith = (bytes: Uint8Array, signature: number[], at = 0) =>
@@ -186,11 +187,13 @@ function formatOf(bytes: Uint8Array): ImageFormat | undefined {
 
 /* ------------------------------------------------------------ 寸法 */
 
-const readU16 = (bytes: Uint8Array, at: number) => ((bytes[at] ?? 0) << 8) | (bytes[at + 1] ?? 0)
-const readU16le = (bytes: Uint8Array, at: number) => (bytes[at] ?? 0) | ((bytes[at + 1] ?? 0) << 8)
+export const readU16 = (bytes: Uint8Array, at: number) =>
+  ((bytes[at] ?? 0) << 8) | (bytes[at + 1] ?? 0)
+export const readU16le = (bytes: Uint8Array, at: number) =>
+  (bytes[at] ?? 0) | ((bytes[at + 1] ?? 0) << 8)
 const readU24le = (bytes: Uint8Array, at: number) =>
   (bytes[at] ?? 0) | ((bytes[at + 1] ?? 0) << 8) | ((bytes[at + 2] ?? 0) << 16)
-const readU32 = (bytes: Uint8Array, at: number) =>
+export const readU32 = (bytes: Uint8Array, at: number) =>
   readU16(bytes, at) * 0x10000 + readU16(bytes, at + 2)
 
 type Size = { width: number; height: number }
@@ -254,7 +257,7 @@ function jpegSize(bytes: Uint8Array): Size | null {
     const length = readU16(bytes, at + 2)
     if (length < 2) return null
     if (marker === 0xe1 && ascii(bytes, at + 4, 6) === 'Exif\0\0') {
-      turned = exifTurned(bytes, at + 10, at + 2 + length)
+      turned = exifOrientation(bytes, at + 10, at + 2 + length) >= 5
     }
     if (SOF.has(marker)) {
       const height = readU16(bytes, at + 5)
@@ -268,22 +271,37 @@ function jpegSize(bytes: Uint8Array): Size | null {
   return null
 }
 
-// EXIF（TIFF）の IFD0 から Orientation（0x0112）を読み、縦横が入れ替わるか
-function exifTurned(bytes: Uint8Array, tiff: number, end: number): boolean {
+/*
+  EXIF（TIFF）の項目を引く。tiff は頭（II か MM）の位置、end は読んでよい終わり。entry は
+  IFD（TIFF の頭からの offset）の中で tag の項目の位置を返す（無い・読めないなら null）。
+  向き（下の exifOrientation）と、位置の有無（src/lib/image-metadata.ts）が読む
+*/
+export function readTiff(bytes: Uint8Array, tiff: number, end: number) {
   const order = ascii(bytes, tiff, 2)
-  if (order !== 'II' && order !== 'MM') return false
+  if (order !== 'II' && order !== 'MM') return null
   const little = order === 'II'
   const u16 = (at: number) => (little ? readU16le(bytes, at) : readU16(bytes, at))
   const u32 = (at: number) => (little ? u16(at) + u16(at + 2) * 0x10000 : readU32(bytes, at))
-  const ifd = tiff + u32(tiff + 4)
-  if (ifd + 2 > end) return false
-  const count = u16(ifd)
-  for (let entry = 0; entry < count; entry += 1) {
-    const at = ifd + 2 + entry * 12
-    if (at + 12 > end) return false
-    if (u16(at) === 0x0112) return u16(at + 8) >= 5 && u16(at + 8) <= 8
+  const entry = (offset: number, tag: number): number | null => {
+    const ifd = tiff + offset
+    if (ifd + 2 > end) return null
+    const count = u16(ifd)
+    for (let index = 0; index < count; index += 1) {
+      const at = ifd + 2 + index * 12
+      if (at + 12 > end) return null
+      if (u16(at) === tag) return at
+    }
+    return null
   }
-  return false
+  return { u16, u32, ifd0: u32(tiff + 4), entry }
+}
+
+// IFD0 の Orientation（0x0112）。1〜8 のどれでもなければ、向きの指定が無い（1）として読む
+export function exifOrientation(bytes: Uint8Array, tiff: number, end: number): number {
+  const reader = readTiff(bytes, tiff, end)
+  const at = reader?.entry(reader.ifd0, 0x0112)
+  const value = reader && at != null ? reader.u16(at + 8) : 1
+  return value >= 1 && value <= 8 ? value : 1
 }
 
 /*
@@ -312,9 +330,9 @@ function avifSize(bytes: Uint8Array): Size | null {
   return best && turned ? { width: best.height, height: best.width } : best
 }
 
-type Box = { type: string; body: number; end: number }
+export type Box = { type: string; body: number; end: number }
 
-function* boxes(bytes: Uint8Array, start: number, end: number): Generator<Box> {
+export function* boxes(bytes: Uint8Array, start: number, end: number): Generator<Box> {
   let at = start
   while (at + 8 <= end) {
     let size = readU32(bytes, at)
@@ -334,7 +352,7 @@ function* boxes(bytes: Uint8Array, start: number, end: number): Generator<Box> {
   }
 }
 
-function findBox(bytes: Uint8Array, start: number, end: number, type: string): Box | null {
+export function findBox(bytes: Uint8Array, start: number, end: number, type: string): Box | null {
   for (const box of boxes(bytes, start, end)) if (box.type === type) return box
   return null
 }

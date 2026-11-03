@@ -1,7 +1,14 @@
 import { and, asc, count, eq, sql } from 'drizzle-orm'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import { blockType, DEFAULT_BLOCKS, LEGACY_BLOCK_KEYS } from '../blocks'
-import { ITEM_KIND_KEYS, type ItemKind, type ItemView, type KindCounts } from '../domain'
+import {
+  ITEM_KIND_KEYS,
+  type ItemKind,
+  type ItemView,
+  type KindCounts,
+  PUBLIC_MEMBER_COLUMNS,
+  type PublicMember,
+} from '../domain'
 import { normalizeSiteSettings, SITE_SETTING_KEYS, type SiteSettings } from '../site'
 import { guardEdit, settingsSnapshot } from './edit'
 import * as schema from './schema'
@@ -36,15 +43,18 @@ export const itemOrder = [
   asc(schema.items.id),
 ]
 
-export function listPublishedMembers(db: Db) {
+// 公開ページのメンバーは、公開する列だけを引く（src/domain.ts の PUBLIC_MEMBER_COLUMNS）
+export function listPublishedMembers(db: Db): Promise<PublicMember[]> {
   return db.query.members.findMany({
+    columns: PUBLIC_MEMBER_COLUMNS,
     where: eq(schema.members.published, 1),
     orderBy: [asc(schema.members.sortOrder), asc(schema.members.id)],
   })
 }
 
-export function findPublishedMember(db: Db, slug: string) {
+export function findPublishedMember(db: Db, slug: string): Promise<PublicMember | undefined> {
   return db.query.members.findFirst({
+    columns: PUBLIC_MEMBER_COLUMNS,
     where: and(eq(schema.members.slug, slug), eq(schema.members.published, 1)),
   })
 }
@@ -66,16 +76,20 @@ const itemsWhere = (scope: ItemScope) =>
     scope.memberId ? eq(schema.items.memberId, scope.memberId) : undefined,
   )
 
-// 一覧の行1つぶんに要る子（タグ・リンク・ほかの画像・担当・プラットフォーム）を一緒に引く形。
-// タグとリンクとほかの画像は idx_item_tags_item / idx_item_links_item / idx_item_shots_item を
-// 作品ごとに並びのまま読む（ほかの画像の同じ並び順は id の順。索引の末尾の rowid が受ける）
+/*
+  一覧の行1つぶんに要る子（タグ・リンク・ほかの画像・担当・プラットフォーム）を一緒に引く形。
+  タグとリンクとほかの画像は idx_item_tags_item / idx_item_links_item / idx_item_shots_item を
+  作品ごとに並びのまま読む（ほかの画像の同じ並び順は id の順。索引の末尾の rowid が受ける）。
+  担当とプラットフォームは、行に出す名前と札に要る列だけを引く——メンバーの行を丸ごと引くと、
+  members に足した公開しない列まで、公開のリクエストのたびに作品の行に乗ってくる。
+*/
 const itemWith = {
   tags: { orderBy: [asc(schema.itemTags.sortOrder)] },
   links: { orderBy: [asc(schema.itemLinks.sortOrder)] },
   shots: { orderBy: [asc(schema.itemShots.sortOrder), asc(schema.itemShots.id)] },
-  // true をそのまま書くと boolean に広がって、drizzle の with が受け取らない
-  member: true as const,
-  platform: true as const,
+  // as const で true のまま渡す。boolean に広がると、drizzle が返り値の列を絞って型にしない
+  member: { columns: { name: true, slug: true, published: true } as const },
+  platform: { columns: { label: true } as const },
 }
 
 /*
@@ -87,27 +101,31 @@ type ItemRow = schema.Item & {
   tags: { tag: string }[]
   links: { label: string; url: string }[]
   shots: schema.ItemShot[]
-  member: schema.Member | null
-  platform: schema.Platform | null
+  member: Pick<schema.Member, 'name' | 'slug' | 'published'> | null
+  platform: Pick<schema.Platform, 'label'> | null
 }
 
-function toItemView(row: ItemRow): ItemView {
+/*
+  担当とプラットフォームの行は、名前と札に開いてから捨てる。行のまま広げると
+  （`...row`）、型の上で見えないだけで中身は ItemView に乗り、描く側で広げた先へ出る。
+*/
+function toItemView({ tags, links, shots, member, platform, ...item }: ItemRow): ItemView {
   // 下書きのメンバーは名前も出さない。出すと、まだ公開していない人の名前が
   // 一覧の行に載り、404 になるプロフィールへ導いてしまう
-  const member = row.member?.published === 1 ? row.member : null
+  const shown = member?.published === 1 ? member : null
   return {
-    ...row,
-    tags: row.tags.map((tag) => tag.tag),
-    links: row.links.map((link) => ({ label: link.label, url: link.url })),
-    shots: row.shots.map((shot) => ({
+    ...item,
+    tags: tags.map((tag) => tag.tag),
+    links: links.map((link) => ({ label: link.label, url: link.url })),
+    shots: shots.map((shot) => ({
       url: shot.url,
       alt: shot.alt,
       width: shot.width,
       height: shot.height,
     })),
-    platformLabel: row.platform?.label ?? null,
-    memberName: member?.name ?? null,
-    memberSlug: member?.slug ?? null,
+    platformLabel: platform?.label ?? null,
+    memberName: shown?.name ?? null,
+    memberSlug: shown?.slug ?? null,
   }
 }
 

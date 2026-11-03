@@ -1,6 +1,6 @@
 import { countPublishedByKind, type Db, listPublishedItems } from '../../db/queries'
 import type * as schema from '../../db/schema'
-import { type ItemFilter, type KindCounts, totalOf } from '../../domain'
+import { type ItemFilter, type KindCounts, type PublicMember, totalOf } from '../../domain'
 import type { Page } from '../../lib/sequence'
 import type { SiteSettings } from '../../site'
 import { filterQuery } from '../../ui/components'
@@ -51,7 +51,7 @@ export type BlockPage = {
 */
 export type ProfilePage = {
   kind: 'profile'
-  member: schema.Member
+  member: PublicMember
 }
 
 export type SitePage = BlockPage | ProfilePage
@@ -118,7 +118,7 @@ export async function pageRows(
 export async function sitePages(
   db: Db,
   blocks: schema.Block[],
-  members: schema.Member[],
+  members: PublicMember[],
   filter: ItemFilter,
   // 区分ごとの件数。呼ぶ側が絞り込みを読むのに先に引いていれば渡す（二度引かない）
   byKind: KindCounts | undefined,
@@ -161,11 +161,7 @@ export async function sitePages(
   する。先頭に来ても / には寄せない——そのページを描くのは個人ページの経路で、
   / は renderScreen がそこへ送る。
 */
-export const sitePageLinks = (
-  pages: SitePage[],
-  filter: ItemFilter,
-  solo?: schema.Member,
-): Page[] =>
+export const sitePageLinks = (pages: SitePage[], filter: ItemFilter, solo?: PublicMember): Page[] =>
   pages.map((page, position) => {
     if (page.kind === 'profile') {
       const href = memberHref(page.member.slug)

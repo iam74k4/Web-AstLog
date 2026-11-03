@@ -1,6 +1,7 @@
 import { newToken } from '../../lib/auth'
 import { toSlug } from '../../lib/format'
 import { IMAGE_LABELS, type SniffedImage, sniffImage, sniffVideo } from '../../lib/image'
+import { stripMetadata } from '../../lib/image-metadata'
 import { archiveImage } from '../../lib/media-retention'
 import { MEDIA_QUOTA_BYTES, mediaUsage, megabytes } from '../../lib/media-usage'
 
@@ -16,12 +17,15 @@ export const VIDEO_MAX_BYTES = 10_000_000
 
 // 欄の案内に添える上限（フォームの field__hint）
 export const IMAGE_LIMIT_NOTE = `${IMAGE_LABELS}（1MB まで。GIF は 3MB まで）`
-export const SHOT_LIMIT_NOTE = `${IMAGE_LIMIT_NOTE}・動画は H.264 の MP4 か MOV で 10MB まで`
+export const SHOT_LIMIT_NOTE = `${IMAGE_LIMIT_NOTE}・動画は位置情報を外した H.264 の MP4 か MOV で 10MB まで`
 
 /*
   画像は KV に置く。R2 が未有効なのと、画像は読むばかりで書き換えが稀なため。
   置き場は2つ——メンバーの顔（avatars/）と作品のスクリーンショット（items/）。
-  取り込みの経路と検査（種類と大きさ）は1本で、置き場の名前だけが違う。
+  取り込みの経路と検査（種類と大きさ）は1本で、置き場の名前だけが違う。種類を決めたら、
+  撮った場所などの付け足しを外してから置く（src/lib/image-metadata.ts の stripMetadata。
+  外せない AVIF と動画は、位置があれば断る。並びが途中で読めず付け足しが残るものも断る）。
+  大きさの上限は外す前の大きさで見る。
 
   種類は中身の先頭のバイトで決める（src/lib/image.ts の sniffImage）。ブラウザが
   名乗る file.type は見ない——image/png を名乗った SVG を名乗りのまま保存して
@@ -41,12 +45,23 @@ type ImageFolder = 'avatars' | 'items'
 export type PickedImage = SniffedImage & { bytes: ArrayBuffer }
 type Picked = { image: PickedImage | null; error?: string }
 
-const IMAGE_TYPE_ERROR = `${IMAGE_LABELS} の画像を選んでください（SVG と HEIC は受け付けません。iPhone の写真は JPEG で書き出してください）`
+const IMAGE_TYPE_ERROR = `${IMAGE_LABELS} の画像を選んでください（SVG と HEIC は受け付けません。iPhone の写真は JPEG で書き出してください。位置情報は保存のときに外します）`
 const SHOT_TYPE_ERROR = `${IMAGE_LABELS} の画像か、H.264 の動画（MP4・MOV）を選んでください（SVG と HEIC は受け付けません）`
 const IMAGE_SIZE_ERROR = '画像は 1MB まで（GIF は 3MB まで）です。小さくしてから選び直してください'
 // ほかの画像の欄で、中身を読む前に止めるとき（画像か動画かはまだ分からない）
 const SHOT_SIZE_ERROR =
   '画像は 1MB まで（GIF は 3MB まで）、動画は 10MB までです。小さくしてから選び直してください'
+/*
+  外せずに置かないとき（src/lib/image-metadata.ts の stripMetadata）。AVIF と動画は付け足しを
+  外せないので、位置があれば外し方まで言う。並びが途中で読めず、その後ろに付け足しが残るものは
+  書き出し直してもらう
+*/
+const STRIP_ERRORS = {
+  location:
+    '撮った場所（位置情報）が入っているので受け付けません。位置情報を外して書き出してから選び直してください（iPhone は写真アプリの共有で「オプション」を開き、「位置情報」を切って「ファイルに保存」）',
+  unreadable:
+    'ファイルの並びが途中で読めないため、撮った場所などの付け足しを外せません。書き出し直してから選び直してください',
+} as const
 const VIDEO_ERRORS = {
   hevc: 'HEVC（H.265）の動画は Chrome などで再生できません。H.264 で書き出してください（iPhone はカメラのフォーマットを「互換性優先」に、Mac の QuickTime Player は書き出しで HEVC を外す）',
   codec: 'この動画の形式は受け付けません。H.264 の MP4 か MOV で書き出してください',
@@ -63,13 +78,22 @@ async function pickFile(file: File | string | null, video = false): Promise<Pick
   if (sniffed) {
     const limit = sniffed.type === 'image/gif' ? GIF_MAX_BYTES : IMAGE_MAX_BYTES
     if (bytes.byteLength > limit) return { image: null, error: IMAGE_SIZE_ERROR }
-    return { image: { ...sniffed, bytes } }
+    return cleaned(sniffed, view)
   }
   if (!video) return { image: null, error: IMAGE_TYPE_ERROR }
   const clip = sniffVideo(view)
   if (!clip) return { image: null, error: SHOT_TYPE_ERROR }
   if ('problem' in clip) return { image: null, error: VIDEO_ERRORS[clip.problem] }
-  return { image: { ...clip.video, bytes } }
+  return cleaned(clip.video, view)
+}
+
+// 付け足しを外した中身で渡す（KV にも、プレビューの埋め込みにも、外したあとのバイトだけが行く）
+function cleaned(format: SniffedImage, view: Uint8Array<ArrayBuffer>): Picked {
+  const clean = stripMetadata(format.type, view)
+  if (typeof clean === 'string') return { image: null, error: STRIP_ERRORS[clean] }
+  // 外すものが無ければ受け取った中身そのもの（写さない。動画は 10MB ある）
+  const bytes = clean.byteLength === clean.buffer.byteLength ? clean.buffer : clean.slice().buffer
+  return { image: { ...format, bytes } }
 }
 
 // アバター・作品のメインの画像とアイコン。画像だけ（動画は作品のほかの画像の欄だけ）
@@ -89,6 +113,10 @@ export const pickImages = (form: FormData, field: string): Promise<Picked[]> =>
   名前 / 英数字で始まり英数字と . _ - だけ）を必ず通る形にする。name は
   slug から作るので toSlug を通す（空なら置き場ごとの控えの名前）。
   拡張子と content-type は判定の結果から付ける（名乗りを KV に入れない）。
+
+  乱数は 16 バイト（16進 32 字）。/images/* はログインも公開かどうかも見ずに返すので、
+  下書きの画像を隠しているのは URL を知られていないことだけ——当てられない長さにする。
+  前の 8 字のキーも IMAGE_KEY は通す（貼られた画像の URL を殺さない）。
 */
 export async function putImage(
   kv: KVNamespace,
@@ -97,7 +125,7 @@ export async function putImage(
   name: string,
 ) {
   const fallback = folder === 'avatars' ? 'member' : 'item'
-  const key = `${folder}/${toSlug(name) || fallback}-${newToken(4)}.${image.extension}`
+  const key = `${folder}/${toSlug(name) || fallback}-${newToken(16)}.${image.extension}`
   // 大きさも添える（容量を数えるとき、中身を読まずに一覧の metadata だけで足せる。src/lib/media-usage.ts）
   await kv.put(key, image.bytes, {
     metadata: { contentType: image.type, size: image.bytes.byteLength },
