@@ -51,7 +51,7 @@ jobs:
           echo "::error::本番へ出せるのは main だけです（いまは ${GITHUB_REF}）"
           exit 1
 
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # TO_BE_CREATED のままでは、移行も deploy も API に拒まれる。そうなる前に、
       # 何を直せばいいかを言って止まる（check の dry-run は id を見ないので緑のまま）
@@ -77,9 +77,9 @@ jobs:
     # トークンは job の env に置かない。wrangler を呼ぶ step にだけ渡す——job に置くと、
     # npm ci（依存の install スクリプト）も action も読める
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -138,7 +138,7 @@ jobs:
       # Time Travel より長く置く——栞の期限（30日・無料なら7日）を過ぎてから壊れに気づいた
       # ときの、最後の控えなので。90日は公開リポジトリの上限（私的リポジトリなら Settings で
       # 400日まで延ばせる。上限を超えた値は上限に丸められる）
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: site-backup-${{ github.run_id }}
           path: site-backup-${{ github.sha }}.tar.age
