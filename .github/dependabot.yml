@@ -1,0 +1,23 @@
+# 依存の更新（Dependabot）。
+# 脆弱性の修正は、リポジトリの設定の Dependabot alerts と security updates が、見つけたときに
+# その都度 PR を出す。ここは版の更新で、月に1度、npm と action をそれぞれ1本の PR にまとめる
+# （1つずつ出すと PR が並び、どれも同じ門 check.yml を通すだけになる）。
+# action は commit の SHA で固定している（deploy.yml の頭）。Dependabot は SHA と行末のタグ名を
+# 一緒に上げるので、test/deploy.test.ts の形のまま通る。
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      npm:
+        patterns: ['*']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ['*']

@@ -4,7 +4,9 @@
   プレビュー内ではスクリプトを実行せず、親からDOMを操作する（sandboxは維持）。
   ユーザーの入力をコードへ埋め込まない。CSP は下の全文の SHA-256 だけを許す。
 */
-export const isGalleryPage = (path: string) => /\/(?:apps|works)\/item\/[^/]+$/.test(path)
+// 作品のページの URL（パスか、origin つきの canonical）。頭を縛らないと /x/apps/item/y にも当たる
+export const isGalleryPage = (path: string) =>
+  /^(?:https?:\/\/[^/]+)?\/(?:apps|works)\/item\/[^/]+$/.test(path)
 
 export const GALLERY_INIT = `(document) => {
   document.querySelectorAll('[data-showcase]').forEach(root => {

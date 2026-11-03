@@ -657,9 +657,11 @@ export const itemCardId = (item: { slug: string | null }) =>
   ページの切り替えごと捨てられる）。slug は作品ごとにただ1つで、字は a-z0-9 と
   - だけ（format.ts の toSlug）なので、そのまま CSS の名前になる。付けるのは一覧の
   行の題と作品のページの h1 だけ（全体ページの本文の小節には付けない）。
+  style 属性に入る値なので、描く側でも字の形を見る——D1 を手で直した slug が、
+  その要素に任意の CSS を足せないように
 */
 export const itemTransition = (item: { slug: string | null }) =>
-  item.slug ? `view-transition-name:item-${item.slug}` : undefined
+  item.slug && /^[a-z0-9-]+$/.test(item.slug) ? `view-transition-name:item-${item.slug}` : undefined
 
 /*
   一覧（Projects）の1行。札（区分・プラットフォームか業界・年・担当）・題と説明・
@@ -942,7 +944,13 @@ export const ItemShots = ({ images }: { images: ItemImage[] }) =>
             ) : (
               <a
                 class="gallery__image"
-                href={image.url}
+                // 原寸への行き先。画像の URL は putImage が付けたもの（プレビューでは検査済みの
+                // data:image/…）だけだが、リンクにするので描く側でも形を見る
+                href={
+                  image.url.startsWith('data:image/') || isSafeUrl(image.url)
+                    ? image.url
+                    : undefined
+                }
                 target="_blank"
                 rel="noreferrer"
                 aria-label={`Full size: 画像${index + 1}「${image.alt}」（別タブ）`}
