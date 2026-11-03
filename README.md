@@ -314,6 +314,24 @@ npx wrangler kv namespace create MEDIA   # 出力の id を wrangler.toml へ
 
 OAuth のクライアントの secret も入れる（上の「管理画面に入る」）。
 
+本番の写しを暗号化する鍵も作る。deploy は本番の D1 と画像の写しを artifact に残すが
+（下の「出す」）、このリポジトリは公開で、artifact は GitHub に入れる人なら誰でも落とせる。
+写しには下書き・削除した画像の控え・メンバーの連絡先が入るので、[age](https://age-encryption.org)
+の公開鍵で暗号化した1つのファイルだけを置く。
+
+```bash
+brew install age
+age-keygen -o astlog-backup.key   # 秘密鍵。パスワードマネージャーへ移し、手元のファイルは消す
+age-keygen -y astlog-backup.key   # 公開鍵（age1…）。.github/backup-recipients.txt に書いてコミットする
+```
+
+公開鍵は秘密ではない。秘密鍵（`AGE-SECRET-KEY-1…`）はリポジトリにも GitHub の secret にも
+置かない——Actions の中で写しを開く場面は無く、開くのは戻すときの手元だけ（下の「戻す」）。
+秘密鍵を失うと artifact の写しは誰にも開けない（Time Travel では戻せる）ので、別の場所に
+しまった2本目の鍵の公開鍵も並べておくとよい（1行に1本。どちらの秘密鍵でも開ける）。
+公開鍵が1本も無ければ、deploy は本番の写しを取る前に `scripts/check-backup-recipients.mjs`
+で止まる。
+
 本番にはスキーマと選択肢だけを入れる。
 
 ```bash
@@ -330,13 +348,15 @@ Worker を出して `/admin` にログインしたら、サイト設定・プロ
 ふだんは Actions の **deploy** ワークフロー（手動実行）から出す。やることは決まっていて、
 選ぶものは無い。
 
-1. main から実行しているか、`wrangler.toml` の id が入っているかを見る（違えば止まる。
-   ただし main だけを通す守りは、下の environment の設定のほう）
+1. main から実行しているか、`wrangler.toml` の id が入っているか、写しを暗号化する公開鍵
+   （`.github/backup-recipients.txt`）があるかを見る（違えば止まる。ただし main だけを
+   通す守りは、下の environment の設定のほう）
 2. check と同じ門を通す（型・lint・テスト・`check:restore`・`check:media-restore`・ビルド・
    `check:fit`・`check:admin`。`check.yml` をそのまま呼ぶ）
 3. 本番 D1 の写し（`wrangler d1 export` の定義 `schema-<sha>.sql` と中身
    `data-<sha>.sql` の2本）と Time Travel の栞（`bookmark.json`）を取り、
-   画像の実体・メタデータ・SHA-256を含む `media/` とともに、artifact `site-backup-<run id>` に残す（90日）。取得済み D1 の全画像参照と控えの一致を確かめ、欠落があれば移行前に止める
+   画像の実体・メタデータ・SHA-256を含む `media/` とともに、artifact `site-backup-<run id>` に残す（90日）。取得済み D1 の全画像参照と控えの一致を確かめ、欠落があれば移行前に止める。
+   置くのは、全部を age の公開鍵で暗号化した1つのファイル（`site-backup-<sha>.tar.age`）だけ
 4. **マイグレーションを流す**（`wrangler d1 migrations apply --remote`。当てた移行は D1 に
    記録されていて、未適用のものだけが当たる。何も無ければ何もしない）
 5. `wrangler deploy`
@@ -417,8 +437,17 @@ https://github.com/actions/<名前>` で引き直し、行末のタグ名も直�
 注意」）。D1 を戻したら、下記の画像復元を済ませてから `npm run site:touch`（公開ページの写しの版を上げる。上の
 「公開ページの写し」）。
 
-Time Travel で戻すのがふつう。deploy が残した artifact の `bookmark.json` の
-`"bookmark"` を使う。
+deploy が残した artifact は暗号化してある。落としてから、手元で秘密鍵（上の「本番に出す」）で
+開く。
+
+```bash
+gh run download <run id> -n site-backup-<run id>   # site-backup-<sha>.tar.age が落ちる
+mkdir backup
+age --decrypt -i astlog-backup.key site-backup-<sha>.tar.age | tar -xf - -C backup
+# backup/ に bookmark.json・schema-<sha>.sql・data-<sha>.sql・media/ が出る
+```
+
+Time Travel で戻すのがふつう。開いた `backup/bookmark.json` の `"bookmark"` を使う。
 
 ```bash
 npx wrangler d1 time-travel restore astlog --bookmark=<bookmark>
@@ -433,8 +462,8 @@ artifact の写し（90日残る）を**新しい空の D1 に、定義 → 中�
 
 ```bash
 npx wrangler d1 create astlog-restore
-npx wrangler d1 execute astlog-restore --remote --file=schema-<sha>.sql   # 表と索引・移行の記録の表
-npx wrangler d1 execute astlog-restore --remote --file=data-<sha>.sql     # 行（d1_migrations の行も）
+npx wrangler d1 execute astlog-restore --remote --file=backup/schema-<sha>.sql   # 表と索引・移行の記録の表
+npx wrangler d1 execute astlog-restore --remote --file=backup/data-<sha>.sql     # 行（d1_migrations の行も）
 # 中身を確かめてから、wrangler.toml の database_id をこちらへ差し替えて出す
 ```
 
@@ -699,6 +728,7 @@ scripts/
   setup-production.mjs production環境とmain保護の設定内容・適用
   check-restore.mjs  npm run check:restore の中身。deploy の写し（定義と中身の2本）を空の D1 に戻して突き合わせる
   check-ids.mjs      本番に触れる前の番兵。wrangler.toml の id がプレースホルダなら止める
+  check-backup-recipients.mjs  deploy の番兵。写しを暗号化する公開鍵が無ければ止める
   seed-local.mjs     ローカルにだけ検査用のデータと画像を入れる
   fixtures/media/    検査用の作品画像とプロフィール素材。本番には配らない
   touch-site.mjs     公開ページの写しの版を上げる（npm run site:touch / db:seed:local の最後）
@@ -709,6 +739,7 @@ scripts/
                      wrangler.toml の id の読み方（wrangler-ids.mjs）も
                      fit-fixture.mjs は check:fit の上限ちょうどの中身を src/blocks.ts の
                      上限から作る。ts-import.mjs は src/ の .ts を Node からそのまま読む口
+.github/backup-recipients.txt  deploy の写しを暗号化する age の公開鍵（秘密鍵は置かない）
 .github/workflows/
   check.yml          push と PR ごとの門。deploy からも同じものを呼ぶ（workflow_call）
   deploy.yml         本番へ出す道（main だけ・門 → 写し → 移行 → deploy）

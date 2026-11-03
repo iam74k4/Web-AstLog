@@ -1,4 +1,5 @@
 import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test'
+import backupRecipients from 'virtual:repo:.github/backup-recipients.txt'
 import checkYml from 'virtual:repo:.github/workflows/check.yml'
 import deployYml from 'virtual:repo:.github/workflows/deploy.yml'
 import packageJson from 'virtual:repo:package.json'
@@ -257,6 +258,9 @@ describe('本番へ出す道', () => {
     expect(Math.max(exported, bookmark)).toBeLessThan(uploaded)
     expect(deploy.indexOf('media-backup.mjs export')).toBeGreaterThan(exported)
     expect(deploy.indexOf('media-backup.mjs verify')).toBeLessThan(uploaded)
+    const encrypted = deploy.indexOf('age --encrypt -R .github/backup-recipients.txt')
+    expect(encrypted).toBeGreaterThan(deploy.indexOf('media-backup.mjs verify'))
+    expect(encrypted).toBeLessThan(uploaded)
     expect(deploy).toContain('--schema')
     expect(deploy).toContain('--data')
     expect(uploaded).toBeLessThan(migrated)
@@ -274,6 +278,26 @@ describe('本番へ出す道', () => {
     // 戻せることは check の門が毎回確かめる
     expect(uncommented(checkYml)).toContain('npm run check:restore')
     expect(scripts['check:restore']).toBe('node scripts/check-restore.mjs')
+  })
+
+  /*
+    このリポジトリは公開で、artifact は GitHub に入れる人なら誰でも落とせる。写しには
+    下書き・削除した画像の控え・連絡先が入るので、age の公開鍵で暗号化した1ファイルだけを置く。
+    公開鍵が無ければ、本番の写しを取る前（guard）に止まる。
+  */
+  it('artifact には暗号化した写しだけを置く', () => {
+    const upload = deploy.slice(deploy.indexOf('actions/upload-artifact')).split(/\n(?= {6}- )/)[0]
+    expect(upload).toMatch(/^\s*path: site-backup-\$\{\{ github\.sha \}\}\.tar\.age\s*$/m)
+    expect(upload).not.toMatch(/path:\s*backup/)
+    const guarded = deploy.indexOf('node scripts/check-backup-recipients.mjs')
+    expect(guarded).toBeGreaterThan(-1)
+    expect(guarded).toBeLessThan(deploy.search(/^ {2}deploy:/m))
+    // 書くのは公開鍵（age1…）だけ。秘密鍵（AGE-SECRET-KEY-1…）の行はこの形に当たらず落ちる
+    const keys = backupRecipients
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('#'))
+    for (const key of keys) expect(key).toMatch(/^age1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{58}$/)
   })
 
   /*

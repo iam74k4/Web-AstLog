@@ -100,6 +100,7 @@ const assetPlugin = (): Plugin => ({
 */
 const REPO = 'virtual:repo:'
 const REPO_FILES = new Set([
+  '.github/backup-recipients.txt',
   '.github/workflows/check.yml',
   '.github/workflows/deploy.yml',
   'package.json',
