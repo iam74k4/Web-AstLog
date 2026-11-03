@@ -146,7 +146,7 @@ export const AdminLayout = (props: {
             <p role="status">入力中の内容・まだ保存されていません</p>
           </div>
           <button type="button" class="btn btn--ghost" data-close-preview>
-            編集に戻る
+            プレビューを閉じる
           </button>
         </div>
         <iframe

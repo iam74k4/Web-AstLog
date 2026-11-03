@@ -96,3 +96,6 @@ jobs:
       # check:admin も使い捨ての D1 と KV を自分で作って測る（手元の D1 には触らない）
       - name: 管理画面の入力・競合・プレビュー・スマホ表示
         run: npm run check:admin
+
+      - name: ショーケースの操作・CSP・印刷・JS無効
+        run: npm run check:gallery

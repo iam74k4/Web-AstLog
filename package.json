@@ -16,6 +16,7 @@
     "site:touch": "node scripts/touch-site.mjs --remote",
     "test": "vitest run",
     "test:watch": "vitest",
+    "check:gallery": "node scripts/check-gallery.mjs",
     "check:fit": "node scripts/check-fit.mjs",
     "check:restore": "node scripts/check-restore.mjs",
     "check:ids": "node scripts/check-ids.mjs",
