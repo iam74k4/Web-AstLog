@@ -259,8 +259,8 @@
     35% のころは Electra と Celaeno が縁で切れ、星空の巡り（orbit。上端で左右に約 36px）で
     外へ出た。--window-sky-at-band は 600〜899 の横に長い帯（素材より広いので、右へ寄せると
     左の4割が空だけになる）。--window-sky-at-tall は 900 以上の縦に長い窓での置き場所
-    （縦の窓は素材を窓の上端から敷くので、すばるは左上の札の行より下に来る）。
-    --track-caption は窓の左上の札の字間。
+    （縦の窓は素材を窓の上端から敷く）。
+    --track-caption は英大文字の札の字間。
 
     --spark は四芒星（経歴のいまの行）の大きさ、--sparkle は
     その形。--satellite は軌道の上の衛星（個人ページの顔）、--orbit-cut は輪を
@@ -424,7 +424,7 @@
   /*
     夜明けの窓（骨格の .window と「天体の飾り」）。空の写真のように、上は夜の紺、下へ
     行くほど明けて、底で地の白（--dawn-day）に溶ける——窓の縁が白いページの中で浮かない。
-    星と札は白（明けた空では白い星は見えなくなる。夜明けの空そのもの）。
+    星は白（明けた空では白い星は見えなくなる。夜明けの空そのもの）。
     すばるは窓の右上、まだ暗いところ（--window-sky-at）
   */
   --dawn-night: #0c1122;
@@ -433,7 +433,6 @@
   --dawn-mist: #b9c0cf;
   --dawn-day: var(--bg);
   --dawn-star: #ffffff;
-  --dawn-faint: rgba(255, 255, 255, 0.6);
 
   /* 公開する / しない のスイッチ。つまみは押すと潰れて横に伸びる */
   --switch-w: 44px;
@@ -2808,9 +2807,8 @@ body[data-site] > .frame {
 */
 
 /*
-  夜明けの窓。3枚を重ねる——夜から明ける空（--dawn）、すばるとまばらな星（::before）、
-  左上の札「M45 — PLEIADES」（::after。すばるの天体の番号。札は字を持たない窓の飾り
-  なので、CSS の content で描く）。どのページでも同じ窓。
+  夜明けの窓。2枚を重ねる——夜から明ける空（--dawn）と、すばるとまばらな星（::before）。
+  字は置かない（左上にすばるの番号の札を置いていたが、持ち主が外した）。どのページでも同じ窓。
   900 以上は「ページの外枠」が窓を画面に貼り付ける（position: sticky がこの relative を上書き）
 */
 .window {
@@ -2840,17 +2838,6 @@ body[data-site] > .frame {
   animation:
     twinkle var(--twinkle) ease-in-out infinite alternate,
     orbit var(--orbit) ease-in-out infinite alternate;
-}
-
-.window::after {
-  content: 'M45 — PLEIADES';
-  position: absolute;
-  top: var(--sp-5);
-  left: var(--sp-6);
-  color: var(--dawn-faint);
-  font-family: var(--font-latin);
-  font-size: var(--fs-label);
-  letter-spacing: var(--track-caption);
 }
 
 /*

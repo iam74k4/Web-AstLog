@@ -1241,7 +1241,6 @@ describe('天体の飾り', () => {
     expect([...colors].sort()).toEqual([
       '--dawn-day',
       '--dawn-dusk',
-      '--dawn-faint',
       '--dawn-haze',
       '--dawn-mist',
       '--dawn-night',
@@ -1397,8 +1396,6 @@ describe('文字の段', () => {
         '.side-head:lang(en)',
         // 公開ページの数字だけの札（見出しの件数）
         '.head__count',
-        // 夜明けの窓の英字だけの札（M45 — PLEIADES）
-        '.window::after',
       ].sort(),
     )
   })
