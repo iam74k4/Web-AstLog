@@ -136,6 +136,10 @@ INSERT INTO item_links (item_id, label, url, sort_order) VALUES
   (7, 'Repository', 'https://github.com/iam74k4/Tool-EventPlayback', 0),
   (8, 'Repository', 'https://github.com/iam74k4/Device-AgentDeck', 0);
 
+-- AppMixer（1）の1本目（App Store）は押し手にする（items.lead_link）。手に入る所は
+-- 一覧の行から押せる大きさで見せる。リポジトリの行き先は押し手にしない
+UPDATE items SET lead_link = 1 WHERE id = 1;
+
 -- AppMixer（1）の文書のページ（/apps/item/appmixer/privacy・…/support）。アプリのバイナリと
 -- App Store Connect に登録している URL。本番は管理画面の「プライバシーポリシーとサポートを書く」で
 -- 同じ文面を書いている（ここはローカルの見本）。

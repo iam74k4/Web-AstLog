@@ -804,8 +804,9 @@ describe('部品の作法', () => {
     const lit = bodyOf(hover, ':is(.entry:has(.entry__link)):hover .entry__link {')
     expect(lit).toContain('background-size: 100% 1px')
     expect(lit).not.toContain('text-decoration: underline')
-    expect(bodyOf(sheet, '.links a {')).toContain('text-decoration-color: transparent')
-    expect(bodyOf(hover, '.links a:hover {')).toContain('text-decoration-color: currentColor')
+    // 行き先は押し手の形。下線ではなく、.cta と同じく左から色が満ちて応える
+    expect(bodyOf(sheet, '.links a {')).toContain('/ 0% 100% no-repeat')
+    expect(bodyOf(hover, '.links a:hover {')).toContain('background-size: 100% 100%')
   })
 
   it('ホバーで応えるのは、題にリンクを持つ行だけ', () => {
@@ -976,11 +977,15 @@ describe('部品の作法', () => {
     expect(bodyOf(sheet, '.career li + li {')).toContain('border-top: 1px solid var(--line)')
   })
 
-  it('行き先の列は折り返した行のあいだを空けない。札の的の高さが行の間隔', () => {
-    // --sp-4 を足していたころ、2行に折れた行き先の行の間が 52px 開いていた
+  it('行き先は押し手の四角。折り返した行のあいだも横と同じだけ空け、的は --tap 以上', () => {
+    // 四角どうしが上下で接すると、2行に折れた行き先が1枚の板に見える
     const links = bodyOf(sheet, '.links {')
-    expect(links).toContain('gap: 0 var(--sp-5)')
-    expect(bodyOf(sheet, '.links a {')).toContain('min-height: var(--tap)')
+    expect(links).toContain('gap: var(--sp-3)')
+    const link = bodyOf(sheet, '.links a {')
+    expect(link).toContain('min-height: var(--tap)')
+    // 入口の押し手の2本目（.cta--quiet）と同じ、墨の線だけの四角
+    expect(link).toContain('box-shadow: inset 0 0 0 1px var(--accent)')
+    expect(link).toContain('font-family: var(--font-display)')
   })
 
   it('一覧の行に絵を置かない。番号もサムネイルも、その区画も持たない', () => {
@@ -1081,6 +1086,22 @@ describe('部品の作法', () => {
     // components.tsx の LinkRow が同じ条件（URL の頭の /）で target と rel を決めている
     expect(bodyOf(sheet, ".links a[href^='/']::after {")).toContain("content: '→'")
     expect(bodyOf(sheet, '.links a::after {')).toContain("content: '↗'")
+  })
+
+  it('作品の押し手は1本目だけを墨で塗る。紙では面と線を外して字を墨に戻す', () => {
+    // components.tsx の LinkRow の lead（作品の items.lead_link）。入口の押し手（.cta）と同じ面
+    const lead = bodyOf(sheet, '.links .links__lead {')
+    expect(lead).toContain('no-repeat var(--accent)')
+    expect(lead).toContain('color: var(--accent-ink)')
+    // 作品のページでは、どの行き先も押し手の大きさ
+    const detail = bodyOf(sheet, '.detail .links a {')
+    expect(detail).toContain('min-height: var(--cta-h)')
+    expect(detail).toContain('font-size: var(--fs-md)')
+    // 紙は背景を刷らないことがある。白い字のまま残すと、行き先が白い紙に消える
+    const print = bodyOf(blockAt(sheet, '@media print'), '.links a {')
+    expect(print).toContain('background: none')
+    expect(print).toContain('box-shadow: none')
+    expect(print).toContain('color: var(--ink)')
   })
 
   it('節に tabindex のための規則を持たない。ページがスクロールするので節は止まる先ではない', () => {

@@ -1,0 +1,1 @@
+ALTER TABLE `items` ADD `lead_link` integer DEFAULT 0 NOT NULL;

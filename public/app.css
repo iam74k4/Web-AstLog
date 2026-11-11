@@ -2021,27 +2021,28 @@ body[data-site] > .frame {
 }
 
 /*
-  行き先の列。折り返した行のあいだは空けない（row-gap 0）。どの札も的の高さ
-  （--tap。40px、指では 44px）を持っていて、それがそのまま行の間隔になる。
-  --sp-4 を足していたころは、行き先5本が2行に折れた作品で行の間が 52px 開き、
-  2行目の札が次の段の頭に見えた。
+  行き先の列。作品の行き先はどれも押し手の形（角の立った四角）で並べ、折り返した行の
+  あいだも同じだけ空ける（四角どうしが接して1枚の板に見えないように）。
 */
 .links {
   display: flex;
   flex-wrap: wrap;
-  gap: 0 var(--sp-5);
+  gap: var(--sp-3);
 }
 
 /*
-  作品の外に出るリンクは --accent。このサイトの仕事は、初めて来た人を
-  GitHub なり公開ページなりの実物へ送り出すことで、その操作子が本文と同じ色
-  （--ink-mid）だと、行の中でいちばん目立たないものになる。区別が
-  @media (hover: hover) の :hover にしか無いと、タッチ端末では最後まで
-  気づかれない。
+  作品の行き先（components.tsx の LinkRow）。入口の押し手（.cta）の2本目と同じ形——
+  墨の線だけの四角に墨の字。字のリンクの列だった頃は、塗りの押し手（.links__lead）の
+  隣で Privacy Policy や Repository だけが別の部品に見えた。行き先は押し手の1族で、
+  強さの差は塗りか線かだけ（同じ強さを2本並べない）。
 
-  同じ「外に出る」動作は .linklist__go / .band__go / .member__go も --accent
-  なので、これで流儀が1つに揃う。↗ に opacity は掛けない。掛けると実効 3.97:1
-  で AA を割るうえ、:root の段に無い生の値を1か所に書くことになる。
+  色は --accent。このサイトの仕事は初めて来た人を実物へ送り出すことで、その操作子が
+  本文と同じ色（--ink-mid）だと行の中でいちばん目立たない。同じ「外に出る」動作の
+  .linklist__go / .band__go / .member__go も --accent で、流儀が1つに揃う。↗ に
+  opacity は掛けない（掛けると実効 3.97:1 で AA を割る）。
+
+  行の中では的の高さ（--tap）と行き先の字の大きさ、作品のページ（.detail）では押し手の
+  大きさ（--cta-h・--fs-md）。色の満ち方と押したときの縮みは .cta と同じ（手触りの括り）
 */
 .links a {
   /* 題のリンクの覆い（.entry__link::after）より上に出す。.entry__member を見ること */
@@ -2049,17 +2050,20 @@ body[data-site] > .frame {
   z-index: 1;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--sp-2);
   min-height: var(--tap);
+  padding-inline: var(--sp-4);
+  background: linear-gradient(var(--accent), var(--accent)) 0 0 / 0% 100% no-repeat transparent;
+  box-shadow: inset 0 0 0 1px var(--accent);
   color: var(--accent);
+  font-family: var(--font-display);
   font-size: var(--fs-sm);
-  /* 下線は題と同じく、透明の線に色を入れて溶かすように出す（手触りの括り） */
-  text-decoration-line: underline;
-  text-decoration-color: transparent;
-  text-underline-offset: var(--sp-1);
+  font-weight: 500;
   transition:
-    color var(--dur-fast) var(--ease),
-    text-decoration-color var(--dur) var(--ease);
+    background-size var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
 }
 
 .links a::after {
@@ -2068,12 +2072,27 @@ body[data-site] > .frame {
 }
 
 /*
-  サイトの中へ行くもの（/ で始まる URL。作品のページの「担当」）は →。
+  サイトの中へ行くもの（/ で始まる URL。作品のページの「担当」と文書）は →。
   ↗ は「外へ出る・別タブで開く」の印で、同じタブで開くサイトの中の続きには
   付けない（components.tsx の LinkRow が target も同じ条件で決めている）
 */
 .links a[href^='/']::after {
   content: '→';
+}
+
+/*
+  作品の押し手（LinkRow の lead。作品の items.lead_link）。購入・ダウンロード・
+  インストールの入口だけを墨で塗る（.cta の1本目）。1つの作品に1本だけ
+*/
+.links .links__lead {
+  background: linear-gradient(var(--bg), var(--bg)) 0 0 / 0% 100% no-repeat var(--accent);
+  color: var(--accent-ink);
+}
+
+.detail .links a {
+  min-height: var(--cta-h);
+  padding-inline: var(--sp-6);
+  font-size: var(--fs-md);
 }
 
 /*
@@ -3110,6 +3129,7 @@ body[data-site] > .frame {
   transform ではなく scale を使うのは、ホバーで浮かせる translate とぶつけないため
 */
 .cta:active,
+.links a:active,
 .filters a:active,
 .socials a:active,
 .toc a:active,
@@ -3184,6 +3204,19 @@ body[data-site] > .frame {
     color: var(--accent-ink);
   }
 
+  /*
+    作品の行き先も .cta と同じ——線だけの四角は墨が満ちて字が白に、墨で塗った押し手は
+    白が満ちて字が墨に
+  */
+  .links a:hover {
+    background-size: 100% 100%;
+    color: var(--accent-ink);
+  }
+
+  .links .links__lead:hover {
+    color: var(--ink);
+  }
+
   .toc a:hover,
   .socials a:hover {
     color: var(--ink);
@@ -3201,14 +3234,9 @@ body[data-site] > .frame {
   }
 
   /*
-    素の色がもう --accent なので、ホバーで色は動かせない。下線（素の .links a が引いてある
-    透明の線）に色を入れる。色だけに頼らない合図なので、タッチ端末で落ちても失うものが無い。
+    文の中のリンク（.bio a）は、素の規則が引いた灰色の下線に字の色を入れる。色だけに
+    頼らない合図なので、タッチ端末で落ちても失うものが無い
   */
-  .links a:hover {
-    text-decoration-color: currentColor;
-  }
-
-  /* 文の中のリンク（.bio a）も同じ合図。灰色の下線に字の色を入れる */
   .bio a:hover {
     text-decoration-color: currentColor;
   }
@@ -3884,6 +3912,17 @@ body[data-opening]::after {
   .band,
   .cta {
     display: none;
+  }
+
+  /*
+    作品の行き先は字として刷る（どこで手に入るかは紙でも読む）。紙は背景を刷らない
+    ことがあり、塗りの押し手の白い字が白い紙に消えるので、面と線を外して字を墨に戻す
+  */
+  .links a {
+    padding-inline: 0;
+    background: none;
+    box-shadow: none;
+    color: var(--ink);
   }
 
   .entry {

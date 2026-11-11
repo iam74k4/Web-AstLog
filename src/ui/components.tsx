@@ -747,7 +747,7 @@ export const ItemRow = ({
         {item.summary ? <p>{item.summary}</p> : null}
         <Metric item={item} />
         <Tags tags={item.tags} />
-        <LinkRow links={item.links} />
+        <LinkRow links={item.links} lead={item.leadLink === 1} />
       </div>
       {href ? (
         <span class="entry__go" aria-hidden="true">
@@ -783,6 +783,8 @@ export const Metric = ({
 
 /*
   行き先を1行に並べる（.links）。一覧の行の本文の下と、作品のページの行き先。
+  どれも押し手の形（墨の線だけの四角。入口の押し手 .cta の2本目と同じ）で、lead の
+  1本目だけを墨で塗る。
 
   矢印は CSS が付ける——外へ出る行き先は ↗、サイトの中（/ で始まる URL。
   作品のページの「担当」）は →（app.css の .links a）。別タブで開くか（target）
@@ -793,9 +795,21 @@ export const Metric = ({
   弾いている（src/routes/admin/items.tsx の readLinks）が、その検査より前に入った行を呼ぶ側の
   検査に頼らずに落とす。javascript: が同じオリジンの href に載るのを、
   target="_blank" の副作用で止まっているだけにしない。
+
+  lead は1本目を塗りの押し手（.links__lead）にするか（作品の items.lead_link）。
+  購入・ダウンロード・インストールの入口を、ほかの行き先より一段強く見せる。塗るのは
+  書いた1本目だけ——1本目が検査で落ちたら、2本目を繰り上げない（別の行き先を
+  押し手にしない）。.cta の類は使わない（紙では押し手を落とすが、行き先の字は刷る）
 */
-export const LinkRow = ({ links }: { links: { label: string; url: string }[] }) => {
+export const LinkRow = ({
+  links,
+  lead,
+}: {
+  links: { label: string; url: string }[]
+  lead?: boolean
+}) => {
   const safe = links.filter((link) => link.label && isSafeUrl(link.url))
+  const first = lead && safe[0] === links[0] ? safe[0] : undefined
   return safe.length ? (
     <div class="links">
       {safe.map((link) => {
@@ -803,7 +817,9 @@ export const LinkRow = ({ links }: { links: { label: string; url: string }[] }) 
         return (
           <a
             key={link.url}
+            class={link === first ? 'links__lead' : undefined}
             href={link.url}
+            lang={link === first ? langOf(link.label) : undefined}
             rel={inside ? undefined : 'noreferrer'}
             target={inside ? undefined : '_blank'}
           >
@@ -911,7 +927,8 @@ export const ItemDetail = ({
         {item.summary ? <Note paragraphs={[item.summary]} /> : null}
         <Metric item={item} />
         <Tags tags={item.tags} />
-        <LinkRow links={links} />
+        {/* 押し手は作品のリンクの1本目だけ（作品のリンクが無ければ、文書や担当を押し手にしない） */}
+        <LinkRow links={links} lead={item.leadLink === 1 && item.links.length > 0} />
       </div>
     </div>
   )
