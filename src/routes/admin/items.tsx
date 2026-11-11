@@ -316,6 +316,7 @@ function itemDraft(item?: ItemFormData['item'], submitted?: Record<string, strin
       metricUnit: submitted.metricUnit ?? '',
       metricNote: submitted.metricNote ?? '',
       links: submitted.links ? JSON.parse(submitted.links) : [],
+      leadLink: submitted.leadLink === '1',
     }
   }
   return {
@@ -341,6 +342,7 @@ function itemDraft(item?: ItemFormData['item'], submitted?: Record<string, strin
     metricUnit: item?.metricUnit ?? '',
     metricNote: item?.metricNote ?? '',
     links: item?.links ?? [],
+    leadLink: item?.leadLink === 1,
   }
 }
 
@@ -372,6 +374,7 @@ type ItemDraft = {
   metricUnit: string
   metricNote: string
   links: { label: string; url: string }[]
+  leadLink: boolean
 }
 
 /*
@@ -881,6 +884,18 @@ const ItemForm = (props: ItemFormData) => {
               ラベルと URL は両方入れる。URL は https:// か mailto: か / から ·
               もっと足すときは、保存してから開き直すと空いた行が出る
             </span>
+            {/*
+              押し手にするのは1本目だけ（並びで選ぶ。作品に1本。schema の items.lead_link）。
+              一覧の行と作品のページで墨の四角になる（components.tsx の LinkRow）
+            */}
+            <label class="check">
+              <input type="checkbox" name="leadLink" value="1" checked={d.leadLink} />
+              1本目を押し手にする
+            </label>
+            <span class="field__hint">
+              購入・ダウンロード・インストールの入口を、一覧の行と作品のページで墨の四角のボタンにします。ラベルは英語の短い動詞で（例:
+              Buy・Download・Install・App Store）
+            </span>
           </fieldset>
         </FormDetails>
         <FormDetails
@@ -1176,6 +1191,7 @@ export function readItemForm(
       metricValue: str(form.get('metricValue')) || null,
       metricUnit: str(form.get('metricUnit')) || null,
       metricNote: str(form.get('metricNote')) || null,
+      leadLink: bool(form.get('leadLink')),
       sortOrder: sortOrder.value,
       published: bool(form.get('published')),
       updatedAt: existing ? nextUpdatedAt(existing.updatedAt) : new Date().toISOString(),
@@ -1254,6 +1270,7 @@ function submittedItem(form: FormData): Record<string, string> {
     metricUnit: str(form.get('metricUnit')),
     metricNote: str(form.get('metricNote')),
     links: JSON.stringify(labels.map((label, index) => ({ label, url: urls[index] ?? '' }))),
+    leadLink: bool(form.get('leadLink')) ? '1' : '',
   }
 }
 

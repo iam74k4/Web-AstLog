@@ -747,7 +747,7 @@ export const ItemRow = ({
         {item.summary ? <p>{item.summary}</p> : null}
         <Metric item={item} />
         <Tags tags={item.tags} />
-        <LinkRow links={item.links} />
+        <LinkRow links={item.links} lead={item.leadLink === 1} />
       </div>
       {href ? (
         <span class="entry__go" aria-hidden="true">
@@ -793,9 +793,21 @@ export const Metric = ({
   弾いている（src/routes/admin/items.tsx の readLinks）が、その検査より前に入った行を呼ぶ側の
   検査に頼らずに落とす。javascript: が同じオリジンの href に載るのを、
   target="_blank" の副作用で止まっているだけにしない。
+
+  lead は1本目を押し手（墨の四角。.links__lead）にするか（作品の items.lead_link）。
+  購入・ダウンロード・インストールの入口を、行を開かずに押せる大きさで見せる。押し手に
+  するのは書いた1本目だけ——1本目が検査で落ちたら、2本目を繰り上げない（別の行き先を
+  押し手にしない）。.cta の類は使わない（紙では押し手を落とすが、行き先の字は刷る）
 */
-export const LinkRow = ({ links }: { links: { label: string; url: string }[] }) => {
+export const LinkRow = ({
+  links,
+  lead,
+}: {
+  links: { label: string; url: string }[]
+  lead?: boolean
+}) => {
   const safe = links.filter((link) => link.label && isSafeUrl(link.url))
+  const first = lead && safe[0] === links[0] ? safe[0] : undefined
   return safe.length ? (
     <div class="links">
       {safe.map((link) => {
@@ -803,7 +815,9 @@ export const LinkRow = ({ links }: { links: { label: string; url: string }[] }) 
         return (
           <a
             key={link.url}
+            class={link === first ? 'links__lead' : undefined}
             href={link.url}
+            lang={link === first ? langOf(link.label) : undefined}
             rel={inside ? undefined : 'noreferrer'}
             target={inside ? undefined : '_blank'}
           >
@@ -911,7 +925,8 @@ export const ItemDetail = ({
         {item.summary ? <Note paragraphs={[item.summary]} /> : null}
         <Metric item={item} />
         <Tags tags={item.tags} />
-        <LinkRow links={links} />
+        {/* 押し手は作品のリンクの1本目だけ（作品のリンクが無ければ、文書や担当を押し手にしない） */}
+        <LinkRow links={links} lead={item.leadLink === 1 && item.links.length > 0} />
       </div>
     </div>
   )

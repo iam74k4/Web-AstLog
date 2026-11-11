@@ -2077,6 +2077,35 @@ body[data-site] > .frame {
 }
 
 /*
+  作品の押し手（components.tsx の LinkRow の lead。作品の items.lead_link）。購入・
+  ダウンロード・インストールの入口を、入口の押し手（.cta）と同じ墨の四角にする——字の
+  行き先の列の中では、そこで手に入ることが分からなかった。下線は引かない（面が押せる印）。
+  行の中では的の高さ（--tap）と行き先の字の大きさのまま、作品のページ（.detail）では
+  押し手の大きさ（--cta-h・--fs-md）。1つの作品に1本だけ（押し手を2本並べない）。
+  色の満ち方と押したときの縮みは .cta と同じ（手触りの括り）
+*/
+.links .links__lead {
+  justify-content: center;
+  padding-inline: var(--sp-4);
+  background: linear-gradient(var(--bg), var(--bg)) 0 0 / 0% 100% no-repeat var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--font-display);
+  font-weight: 500;
+  text-decoration-line: none;
+  transition:
+    background-size var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
+}
+
+.detail .links__lead {
+  min-height: var(--cta-h);
+  padding-inline: var(--sp-6);
+  font-size: var(--fs-md);
+}
+
+/*
   実績値（components.tsx の Metric と、「数字」ブロックの Numbers）。値・単位・添えの1行で、
   値は本文の書体の数字（幅をそろえる）。等幅の書体にしていたころは、和文の単位と添えの
   隣で数字だけが別の書体に見えた。
@@ -3110,6 +3139,7 @@ body[data-site] > .frame {
   transform ではなく scale を使うのは、ホバーで浮かせる translate とぶつけないため
 */
 .cta:active,
+.links__lead:active,
 .filters a:active,
 .socials a:active,
 .toc a:active,
@@ -3182,6 +3212,12 @@ body[data-site] > .frame {
 
   .cta--quiet:hover {
     color: var(--accent-ink);
+  }
+
+  /* 作品の押し手も .cta の1本目と同じ——白が満ちて字が墨に */
+  .links .links__lead:hover {
+    background-size: 100% 100%;
+    color: var(--ink);
   }
 
   .toc a:hover,
@@ -3884,6 +3920,17 @@ body[data-opening]::after {
   .band,
   .cta {
     display: none;
+  }
+
+  /*
+    作品の押し手は行き先の字として刷る（どこで手に入るかは紙でも読む）。紙は背景を
+    刷らないことがあり、白い字が白い紙に消えるので、面を外して字を墨に戻す
+  */
+  .links .links__lead {
+    padding-inline: 0;
+    background: none;
+    box-shadow: none;
+    color: var(--ink);
   }
 
   .entry {

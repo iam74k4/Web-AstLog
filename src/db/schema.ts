@@ -220,6 +220,13 @@ export const items = sqliteTable(
     metricValue: text('metric_value'),
     metricUnit: text('metric_unit'),
     metricNote: text('metric_note'),
+    /*
+      1本目のリンク（item_links の sort_order が最小の行）を押し手にするか（1 / 0）。
+      購入・ダウンロード・インストールの入口を、一覧の行と作品のページで墨の四角にする
+      （components.tsx の LinkRow の lead）。リンクの行ではなく作品に持つのは、押し手は
+      1つの作品に1本だけだから。どれを押し手にするかはリンクの並びが決める
+    */
+    leadLink: integer('lead_link').notNull().default(0),
     published: integer('published').notNull().default(0),
     /*
       同じ年の中の並び（小さいほど先）。個人開発と業務で1つの数の並びとして

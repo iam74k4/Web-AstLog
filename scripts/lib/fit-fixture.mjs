@@ -307,6 +307,8 @@ function itemRows() {
     metric_value: '20',
     metric_unit: '人日',
     metric_note: '見込み 40人日から半減',
+    // 1本目のリンクを押し手にする（墨の四角。行の中でいちばん幅を取る行き先）
+    lead_link: 1,
     published: 1,
     ...row,
   })
@@ -381,6 +383,8 @@ function itemRows() {
       metric_unit: null,
       metric_note: null,
       summary: text(42, 5),
+      // 押し手の無い行（行き先が字だけの姿）
+      lead_link: 0,
       member_id: 4,
       sort_order: 50,
     }),

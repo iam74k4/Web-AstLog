@@ -1083,6 +1083,22 @@ describe('部品の作法', () => {
     expect(bodyOf(sheet, '.links a::after {')).toContain("content: '↗'")
   })
 
+  it('作品の押し手は墨の四角。下線を引かず、紙では面を外して字を墨に戻す', () => {
+    // components.tsx の LinkRow の lead（作品の items.lead_link）。入口の押し手（.cta）と同じ面
+    const lead = bodyOf(sheet, '.links .links__lead {')
+    expect(lead).toContain('var(--accent)')
+    expect(lead).toContain('color: var(--accent-ink)')
+    expect(lead).toContain('text-decoration-line: none')
+    // 作品のページでは押し手の大きさ
+    const detail = bodyOf(sheet, '.detail .links__lead {')
+    expect(detail).toContain('min-height: var(--cta-h)')
+    expect(detail).toContain('font-size: var(--fs-md)')
+    // 紙は背景を刷らないことがある。白い字のまま残すと、行き先が白い紙に消える
+    const print = bodyOf(blockAt(sheet, '@media print'), '.links .links__lead {')
+    expect(print).toContain('background: none')
+    expect(print).toContain('color: var(--ink)')
+  })
+
   it('節に tabindex のための規則を持たない。ページがスクロールするので節は止まる先ではない', () => {
     /*
       節が溢れの弁（overflow: auto）だったころは、WebKit で弁にフォーカスできない

@@ -935,6 +935,40 @@ describe('Items — 本文のテンプレート', () => {
     expect(await okText('/projects')).toContain(metric)
     expect(await okText('/apps/item/appmixer')).toContain(metric)
   })
+
+  /*
+    作品の押し手（items.lead_link）。1本目のリンクを墨の四角にする印。弾いたあとの
+    描き直しでも外れない（打った内容を消さない。submittedItem）
+  */
+  it('「1本目を押し手にする」は保存され、弾いたあとの描き直しでも残る', async () => {
+    const signed = await signIn()
+    const fields = {
+      type: 'app',
+      title: 'Nonet',
+      slug: 'nonet',
+      summary: '説明。',
+      linkLabel: ['Buy', 'Guide'],
+      linkUrl: ['https://example.test/buy', 'https://example.test/guide'],
+      leadLink: '1',
+      published: '1',
+    }
+    const refused = await signed('/admin/items', {
+      method: 'POST',
+      body: form({ ...fields, linkUrl: ['https://example.test/buy', 'guide'] }),
+    })
+    expect(refused.status).toBe(400)
+    expect(await refused.text()).toContain('name="leadLink" value="1" checked=""')
+
+    expect((await signed('/admin/items', { method: 'POST', body: form(fields) })).status).toBe(303)
+    const [row] = await db().select().from(schema.items)
+    expect(row?.leadLink).toBe(1)
+    expect(await (await signed(`/admin/items/${row?.id}/edit`)).text()).toContain(
+      'name="leadLink" value="1" checked=""',
+    )
+    expect(await okText('/projects')).toContain(
+      '<a class="links__lead" href="https://example.test/buy" lang="en"',
+    )
+  })
 })
 
 /*
