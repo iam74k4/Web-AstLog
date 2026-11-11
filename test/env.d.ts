@@ -10,7 +10,7 @@
 
   `cloudflare:test` の `env` の型は、グローバルの `Cloudflare.Env` で決まる
   （@cloudflare/vitest-pool-workers 0.22 でここへ移った。前に書いてあった
-  `ProvidedEnv` はもう存在しない）。
+  `ProvidedEnv` はもう存在しない。その部品は @cloudflare/vitest-plugin に改名された）。
 
   ここが間違っていても `npm test` は通る。vitest は型を見ずに落とすだけで、
   `tsconfig.json` の `skipLibCheck` はこの .d.ts 自身の誤りも黙らせるため。
@@ -24,7 +24,7 @@ type Bindings = import('../src/env').Env
 declare namespace Cloudflare {
   interface Env extends Bindings {
     // drizzle-kit が生成した SQL。vitest.config.ts が bindings で渡す
-    TEST_MIGRATIONS: import('@cloudflare/vitest-pool-workers').D1Migration[]
+    TEST_MIGRATIONS: import('@cloudflare/vitest-plugin').D1Migration[]
     // 移行を途中から当て直すための空の D1（vitest.config.ts の d1Databases）
     MIGRATION_DB: D1Database
   }
