@@ -118,6 +118,8 @@ try {
     await page
       .frameLocator('#editor-preview iframe')
       .getByText('プレビューだけの名前', { exact: true })
+      // 名前は2か所にある（本文の名札と、900 以上でだけ見える左の柱の名札）。見えているほうを待つ
+      .filter({ visible: true })
       .first()
       .waitFor()
     assert.equal(context.pages().length, 1)
@@ -271,7 +273,12 @@ try {
   const popup = await popupEvent
   await popup.waitForLoadState('networkidle')
   assert.equal(
-    await popup.getByText('JSなしのプレビュー', { exact: true }).first().isVisible(),
+    // 名前は本文の名札と左の柱の名札（900 以上でだけ見える）にある。見えているほうを確かめる
+    await popup
+      .getByText('JSなしのプレビュー', { exact: true })
+      .filter({ visible: true })
+      .first()
+      .isVisible(),
     true,
   )
   assert.equal(await nativePage.locator('[name=name]').inputValue(), 'JSなしのプレビュー')

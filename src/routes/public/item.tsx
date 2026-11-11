@@ -313,6 +313,7 @@ export async function renderItem(
       node: page.node,
       description: page.description,
       footer: <SiteSocials site={site} contact={page.contact} />,
+      owner: solo,
       adminPath: `/admin/items/${item.id}/edit`,
       image: itemOgImage(item),
     })
@@ -365,6 +366,7 @@ export async function renderItem(
           : {}),
     },
     footer: <SiteSocials site={site} />,
+    owner: solo,
     adminPath: `/admin/items/${item.id}/edit`,
     // 貼られたときの札は、この作品の画像（あれば）
     image: itemOgImage(item),

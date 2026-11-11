@@ -1138,11 +1138,15 @@ export const ItemStories = ({
   そこでは見出しは節の h2 なので、名前は添えのまま。
 
   顔のまわりの軌道の輪と衛星は app.css の「天体の飾り」が描く（顔の箱の疑似要素）。
+
+  pillar は左の柱に立てる名札（src/ui/Layout.tsx の Pillar。1人のサイトの持ち主）。顔を上、
+  名前を下に積み、顔は大きめ。見出しにはしない（どのページにも出るので、ページの題ではない）。
 */
 export const Nameplate = ({
   member,
   heading,
   title,
+  pillar,
 }: {
   member: PublicMember
   heading?: boolean
@@ -1151,9 +1155,14 @@ export const Nameplate = ({
     その人の大見出しを入口がもう出しているとき——同じ一文を2つのページの h1 に並べない
   */
   title?: boolean
+  pillar?: boolean
 }) => (
-  <div class={title ? 'nameplate nameplate--title' : 'nameplate'}>
-    <Avatar src={member.avatarUrl} name={member.name} size={56} />
+  <div
+    class={
+      pillar ? 'nameplate nameplate--pillar' : title ? 'nameplate nameplate--title' : 'nameplate'
+    }
+  >
+    <Avatar src={member.avatarUrl} name={member.name} size={pillar ? 80 : 56} />
     <div class="nameplate__body">
       {heading ? (
         <h1 class="nameplate__name">{member.name}</h1>

@@ -152,6 +152,13 @@
   --frame-x: max(var(--gutter), (100% - var(--w-page)) / 2);
 
   /*
+    左の柱（「骨格」の .pillar。900 以上で本文の左に立てる名札・目次・行き先）。--pillar-w は
+    柱の幅、--pillar-gap は柱の罫線と本文のあいだ
+  */
+  --pillar-w: clamp(190px, 19vw, 250px);
+  --pillar-gap: clamp(32px, 5vw, 72px);
+
+  /*
     角は丸めない。公開ページの押し手（Cavani の角の立った墨の四角）に合わせて、管理画面の
     面・欄・押し手も四角にする——前は管理画面だけ角の丸い面とボタンで、2つの画面が別の
     道具に見えた。丸いのは顔・状態の点・天体と、公開のスイッチ（つまみが滑る形そのもの）だけ
@@ -628,6 +635,47 @@ body[data-site] > .frame {
   gap: var(--section-gap);
   min-width: 0;
   padding: var(--page-pad) var(--frame-x);
+}
+
+/*
+  左の柱（src/ui/Layout.tsx の Pillar）。名札・目次・サイトの行き先を縦に積む。左の夜明けの窓を
+  外して余った横幅を、飾りではなく名乗りと行き先に使う（持ち主が選んだ形）。900 未満では
+  出さない（目次は上の帯、行き先は足元が受ける）。900 以上の並べ方と貼り付けは「ページの外枠」
+*/
+.pillar {
+  display: none;
+}
+
+/*
+  柱の目次。縦に積み、字の頭を名札の左の軸にそろえる（面の左右の余白ぶんだけ外へ出す）。
+  いまのページは上の帯の目次と同じ墨の四角で、移った先で左から満ちる（.toc a[aria-current='page']）
+*/
+.pillar__nav {
+  display: grid;
+  justify-items: start;
+  gap: var(--sp-1);
+}
+
+.pillar__nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  margin-inline-start: calc(var(--sp-4) * -1);
+  padding-inline: var(--sp-4);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  font-weight: 500;
+  transition:
+    color var(--dur-fast) var(--ease),
+    scale var(--dur-spring) var(--ease-spring);
+}
+
+.pillar__nav a[aria-current='page'] {
+  color: var(--accent-ink);
+  background:
+    linear-gradient(var(--accent), var(--accent)) left center / 100% var(--toc-chip-h) no-repeat;
+  animation: chip-fill var(--dur-chip) var(--ease) both;
 }
 
 /* --- 上の帯 --- */
@@ -1129,6 +1177,22 @@ body[data-site] > .frame {
   font-feature-settings: 'palt';
   line-height: 1.2;
   letter-spacing: -0.02em;
+}
+
+/*
+  柱の名札（components.tsx の Nameplate の pillar）。顔を上、名前を下に積む。名前は見出しの書体で、
+  一覧の行の題と同じ段
+*/
+.nameplate--pillar {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-5);
+}
+
+.nameplate.nameplate--pillar .nameplate__name {
+  font-family: var(--font-display);
+  font-size: var(--fs-display-xs);
+  line-height: 1.3;
 }
 
 /*
@@ -3033,6 +3097,7 @@ body[data-site] > .frame {
 .filters a:active,
 .socials a:active,
 .toc a:active,
+.pillar__nav a:active,
 .top__admin:active,
 .band:active,
 .member:active,
@@ -3207,8 +3272,13 @@ body[data-site] > .frame {
   navigation: auto;
 }
 
+/* 上の帯と左の柱は、ページを移っても同じ場所に居る。本文の入れ替わりに巻き込まない */
 .top {
   view-transition-name: top;
+}
+
+.pillar {
+  view-transition-name: pillar;
 }
 
 ::view-transition-group(*),
@@ -3687,6 +3757,74 @@ body[data-opening] {
   }
 
   /*
+    900 以上は、左の柱と本文を左右に並べ、柱を上の帯の下に貼り付ける（本文だけが流れる）。
+    柱の高さは画面から帯を引いたぶん——右の罫線が、読み進めても画面の上から下まで通る。背の低い
+    窓で中身が入りきらなければ、柱の中だけを縦に送る（送れる箱は目次の面のはみ出しも切るので、
+    面が左へ出るぶん柱の箱を左へ広げておく）。
+
+    柱があるあいだ、同じ中身の上の帯の目次と足元の行き先は出さない（Layout.tsx の Pillar。同じ
+    行き先を2つ見せない）。名札が立っているあいだは、同じ名乗り（入口の札と、個人ページの頭の
+    名札）も本文に重ねない——個人ページの名前は h1 なので、見えなくするだけで読み上げには残す
+    （.sr-only と同じ畳み方。頭の箱ごと畳むと、空の箱が節のあいだの空きを作らない）
+  */
+  @media (min-width: 900px) {
+    body[data-pillar] > .frame {
+      flex-direction: row;
+      align-items: flex-start;
+      padding-inline: var(--frame-x);
+    }
+
+    body[data-pillar] > .frame > main {
+      flex: 1 1 auto;
+      align-self: stretch;
+      padding-inline: var(--pillar-gap) 0;
+    }
+
+    .pillar {
+      position: sticky;
+      top: var(--top-h);
+      display: flex;
+      flex: 0 0 var(--pillar-w);
+      flex-direction: column;
+      gap: var(--sp-6);
+      height: calc(var(--screen-h) - var(--top-h));
+      margin-inline-start: calc(var(--sp-4) * -1);
+      padding-block: var(--page-pad);
+      padding-inline: var(--sp-4) var(--sp-5);
+      border-inline-end: 1px solid var(--line);
+      overflow-y: auto;
+    }
+
+    /* 行き先は柱の底に置く */
+    .pillar > .socials {
+      margin-top: auto;
+    }
+
+    body[data-pillar] :is(.top .toc, .foot .socials) {
+      display: none;
+    }
+
+    /* 目次が無くなったぶん、管理画面への入口は帯の右端へ */
+    body[data-pillar] .top__admin {
+      margin-inline-start: auto;
+    }
+
+    body[data-pillar='owner'] .hero--cover > .eyebrow {
+      display: none;
+    }
+
+    body[data-pillar='owner'] .hero:has(> .nameplate--title) {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+
+  /*
     上の帯を貼り付ける。重なりは z-index: 2——作品の行の中のリンク（覆いの上に出す
     z-index: 1）より上。地（--bg）は素の
     .top が敷いている。全体ページでは貼り付けない（節を縦に積んだ1本の文書で、
@@ -3715,6 +3853,16 @@ body[data-opening] {
     /* biome-ignore lint/correctness/noUnknownProperty: CSS Scroll Snap 2 の性質で、Biome の一覧にまだ無い（Chromium 133 から）。知らないブラウザは捨てる */
     scroll-initial-target: nearest;
     scroll-margin-inline: var(--fade-w);
+  }
+
+  /*
+    左の柱の目次も同じ。行き先が多くて柱の中だけを縦に送るとき（目次の長いサイト・背の低い窓）、
+    いまのページの印が見える位置で開く（印が柱の下に隠れたまま開かない）。上下は柱の余白ぶん空ける
+  */
+  .pillar__nav a[aria-current='page'] {
+    /* biome-ignore lint/correctness/noUnknownProperty: CSS Scroll Snap 2 の性質で、Biome の一覧にまだ無い（Chromium 133 から）。知らないブラウザは捨てる */
+    scroll-initial-target: nearest;
+    scroll-margin-block: var(--page-pad);
   }
 
   /*
@@ -3832,7 +3980,7 @@ body[data-opening] {
     display: none;
   }
 
-  .toc a[aria-current='page'] {
+  :is(.toc, .pillar__nav) a[aria-current='page'] {
     text-decoration: underline;
     text-underline-offset: var(--sp-3);
   }

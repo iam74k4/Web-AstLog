@@ -242,5 +242,6 @@ export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
     adminPath: blockAdminPath(current.block, solo),
     // 幕は外から入口へ来たときだけ（サイトの中から戻るたびには待たせない。page-cache.ts の fromInside）
     opening: current.block.type === 'hero' && !fromInside((name) => c.req.header(name)),
+    owner: solo,
   })
 }
