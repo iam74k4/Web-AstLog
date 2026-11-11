@@ -24,6 +24,41 @@ export const Wordmark = ({ class: className }: { class: string }) => (
   </svg>
 )
 
+/*
+  読み込みの幕のロゴ（Layout の Opening）。Wordmark と同じ形で、O（輪と衛星）だけを1つの組に
+  分けてある——幕のあいだ O が輪の中心のまわりを回り、ロゴと同じ向き（衛星が右上 45°）で止まる
+  （app.css の .opening__o）。回す中心は組を輪の中心へ運んで原点にする（SVG の transform-origin の
+  解釈に頼らない）
+*/
+export const OpeningMark = () => {
+  const { x, y } = WORDMARK.center
+  return (
+    <svg
+      class="opening__mark"
+      viewBox={WORDMARK.viewBox}
+      fill="currentColor"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d={WORDMARK.lambda} />
+      <path d={WORDMARK.letters} fill="none" stroke="currentColor" stroke-width={WORDMARK.stroke} />
+      <g transform={`translate(${x} ${y})`}>
+        <g class="opening__o">
+          <g transform={`translate(${-x} ${-y})`}>
+            <path
+              d={WORDMARK.orbit}
+              fill="none"
+              stroke="currentColor"
+              stroke-width={WORDMARK.stroke}
+            />
+            <path d={WORDMARK.satellite} />
+          </g>
+        </g>
+      </g>
+    </svg>
+  )
+}
+
 const stroke = {
   fill: 'none',
   stroke: 'currentColor',

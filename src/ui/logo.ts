@@ -76,6 +76,13 @@ export const WORDMARK = {
   viewBox: `0 ${BOX.top} ${BOX.width} ${round(BOX.bottom - BOX.top)}`,
   lambda: lambdaPath(),
   strokes: `${STL}${ORBIT}${G}`,
+  /*
+    O だけを回すための分け方（読み込みの幕。src/ui/icons.tsx の OpeningMark）。letters は O を
+    除いた線、orbit は O の輪、center は輪の中心。合わせた形は strokes と同じ
+  */
+  letters: `${STL}${G}`,
+  orbit: ORBIT,
+  center: { x: O.cx, y: O.cy },
   // 衛星は塗りの形（Λ と同じく字の色で塗る）
   satellite: circlePath(onRing(SATELLITE.angle), SATELLITE.r),
   stroke: 2.6,

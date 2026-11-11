@@ -1,7 +1,6 @@
 import { env } from 'cloudflare:test'
 import wordmarkFile from 'virtual:asset:astlog-wordmark.svg'
 import faviconFile from 'virtual:asset:favicon.svg'
-import skyFile from 'virtual:asset:sky.svg'
 import appleTouchIcon from 'virtual:asset-base64:apple-touch-icon.png'
 import favicon96 from 'virtual:asset-base64:favicon-96.png'
 import assetFiles from 'virtual:assets'
@@ -14,7 +13,6 @@ import * as schema from '../src/db/schema'
 import { ITEM_DOCUMENTS, ITEM_KINDS } from '../src/domain'
 import { sniffImage } from '../src/lib/image'
 import { publicRoutes } from '../src/routes/public/routes'
-import { skySvg } from '../src/ui/astra'
 import { itemDocumentHref, itemHref, LinkList, LinkRow, splitPhrases } from '../src/ui/components'
 import { cardSvg, ICON, iconSvg, WORDMARK, wordmarkSvg } from '../src/ui/logo'
 import {
@@ -348,21 +346,6 @@ describe('名乗り', () => {
     expect(await cornerAlpha(appleTouchIcon)).toBe(255)
   })
 
-  it('夜明けの窓の素材（空）は astra.ts が正。点だけで色相を持たない', () => {
-    /*
-      ロゴと同じく、ファイルは scripts/logo/export.mjs が src/ui/astra.ts から書く。
-      app.css が夜明けの窓の星の形（mask）として読む（HTML には置かない）。ファイルの色は
-      窓の星と同じ白（LOGO_COLORS.ink）を不透明度で薄めるだけ——前に試した橙の星は、
-      モノクロの中で1つだけ色を持ち、目がそこへ寄り道した
-    */
-    expect(skyFile).toBe(skySvg())
-    expect(skyFile).not.toMatch(/<image|data:|href=|<filter|Gradient/)
-    const colors = new Set(
-      [...skyFile.matchAll(/(?:fill|stroke)="(#[0-9a-f]+)"/g)].map((m) => m[1]),
-    )
-    expect([...colors]).toEqual(['#ffffff'])
-  })
-
   it('ページと CSS が読む素材は、どれも public/assets にある', async () => {
     /*
       favicon と apple-touch-icon（scripts/logo/export.mjs）は素材のファイル。名前を
@@ -396,7 +379,6 @@ describe('名乗り', () => {
       'favicon-96.png',
       'apple-touch-icon.png',
       'astlog-card.png',
-      'sky.svg',
     ]) {
       expect(read, file).toContain(file)
     }
@@ -3470,17 +3452,54 @@ it('知らない URL は 404 ページを返す', async () => {
   書けないので、書かないまま誰も気づかない種類の抜けで、外枠を1つ足せば
   また起きる。だから本文の先頭を見る。500 は 404 と同じ ErrorPage から出る。
 */
-describe('読み込んだときの幕', () => {
+describe('読み込みの幕', () => {
+  // 幕の要素（src/ui/Layout.tsx の Opening）。飾りなので読み上げには出さない
+  const CURTAIN = '<div class="opening" aria-hidden="true">'
+
   it('入口のページだけに立てる。ほかのページ・404・プレビューには立てない', async () => {
     await seedMember()
     await seedItem({ slug: 'appmixer' })
-    expect(await okText('/')).toContain('<body data-site="" data-opening="">')
+    const top = await okText('/')
+    expect(top).toContain('<body data-site="" data-opening="">')
+    expect(top).toContain(CURTAIN)
     for (const path of ['/projects', '/members/okazaki', '/apps/item/appmixer', '/all']) {
-      expect(await okText(path), path).not.toContain('data-opening')
+      const html = await okText(path)
+      expect(html, path).not.toContain('data-opening')
+      expect(html, path).not.toContain('class="opening"')
     }
-    expect(await (await get('/no-such-page')).text()).not.toContain('data-opening')
+    const missing = await (await get('/no-such-page')).text()
+    expect(missing).not.toContain('data-opening')
+    expect(missing).not.toContain('class="opening"')
     const signed = await signIn()
-    expect(await (await signed('/admin/preview?screen=hero')).text()).not.toContain('data-opening')
+    const preview = await (await signed('/admin/preview?screen=hero')).text()
+    expect(preview).not.toContain('data-opening')
+    expect(preview).not.toContain('class="opening"')
+  })
+
+  it('幕のロゴはワードマークと同じ形。O（輪と衛星）だけを、輪の中心で回す組に分ける', async () => {
+    /*
+      幕のあいだ O が回り、ロゴと同じ向きで止まる（app.css の .opening__o）。形を写しで持つと、
+      ロゴを直した日に幕だけが前の形で残る——logo.ts の同じ線から描く
+    */
+    await seedMember()
+    const top = await okText('/')
+    const mark = top.slice(top.indexOf('<svg class="opening__mark"'))
+    const svg = mark.slice(0, mark.indexOf('</svg>'))
+    expect(svg).toContain(`viewBox="${WORDMARK.viewBox}"`)
+    expect(svg).toContain(`d="${WORDMARK.lambda}"`)
+    expect(svg).toContain(`d="${WORDMARK.letters}"`)
+    const { x, y } = WORDMARK.center
+    const turning = svg.slice(svg.indexOf('<g class="opening__o">'))
+    expect(svg).toContain(`<g transform="translate(${x} ${y})"><g class="opening__o">`)
+    expect(turning).toContain(`<g transform="translate(${-x} ${-y})">`)
+    expect(turning).toContain(`d="${WORDMARK.orbit}"`)
+    expect(turning).toContain(`d="${WORDMARK.satellite}"`)
+    // 分けた線を合わせると、ワードマークの線と同じ（O の輪は S・T・L と G のあいだ）
+    expect(WORDMARK.strokes).toContain(WORDMARK.orbit)
+    expect(WORDMARK.strokes.replace(WORDMARK.orbit, '')).toBe(WORDMARK.letters)
+    // 幕は飾り。押す手も字も持たない
+    const curtain = top.slice(top.indexOf(CURTAIN), top.indexOf('</svg>', top.indexOf(CURTAIN)))
+    expect(curtain).not.toMatch(/<a\b|<button\b|<script\b/)
   })
 
   it('サイトの中から入口へ戻るときは幕を出さない。写しも外から来たときと分ける', async () => {
