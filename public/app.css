@@ -844,8 +844,8 @@ body[data-site] > .frame {
 /*
   入口（.hero--cover。components.tsx の Hero の cover）。札・大見出し・リード文・押し手を
   左の軸に縦に積み、本文の面の縦の真ん中に置く（Cavani の入口。上下の auto の余白）。
-  HTML に絵も件数の帯も置かない（components.tsx の Hero の注記）——星空は左の窓が描く
-  （「天体の飾り」）。Hero は見出しの錨（「ページの外枠」）を持たない。
+  HTML に絵も件数の帯も置かない（components.tsx の Hero の注記）。
+  Hero は見出しの錨（「ページの外枠」）を持たない。
 */
 .hero--cover {
   gap: var(--sp-6);
