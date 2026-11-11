@@ -334,7 +334,9 @@
     届いていて、待たせているのは見せるための間だけなので、伸ばすなら入口に着くたびの待ちと引き換え）、
     --opening-open は幕が上下に開く長さ。入口の字は幕が開き始めると同時に現れ始める
     （--reveal-from。幕の無いページでは 0）。--opening-mark-h は幕のロゴの高さ、--opening-gap は
-    ロゴと線のあいだ、--opening-track は満ちる前の線の色（幕の墨の上の、薄い白）、
+    ロゴと線のあいだ、--opening-ground は幕の色（真っ黒。持ち主の指定——字や押し手の墨 --mono
+    ではなく黒。墨の幕は、開く前の一瞬が灰色がかって見えた）、--opening-track は満ちる前の線の色
+    （黒い幕の上の、薄い白）、
     --opening-turn は O が回る量（1回転と4分の3。ロゴと同じ向きで止まる）。
     --ease-curtain は幕の開き、--ease-loader は O が回り出して静かに止まる曲線
   */
@@ -342,6 +344,7 @@
   --opening-open: 440ms;
   --opening-mark-h: 20px;
   --opening-gap: 22px;
+  --opening-ground: #000000;
   --opening-track: rgba(255, 255, 255, 0.24);
   --opening-turn: -630deg;
   --ease-curtain: cubic-bezier(0.7, 0, 0.2, 1);
@@ -360,7 +363,7 @@
     配色は白い地の1つ（Cavani を下敷きにした明るい配色）。字とボタンは墨色で、
     塗りのボタンの字は白——アクセントの既定は墨（--mono。管理画面の「見た目」でほかの
     色も選べる）。OS が暗い配色を選んでいても黒い地には切り替えない。暗い面を持つのは、
-    入口の読み込みの幕（墨の面。開けば消える）だけ。紙にもこのまま刷る。
+    入口の読み込みの幕（真っ黒の面。開けば消える）だけ。紙にもこのまま刷る。
 
     color-scheme は、フォームの部品やスクロールバーのようなブラウザが描くものも
     明るい側にそろえるため（<meta name="color-scheme"> と同じ値。components.tsx の
@@ -3227,7 +3230,7 @@ body[data-site] > .frame {
   サイトの動き。どれも CSS だけで（公開ページは script を持たない）、動きを減らす設定では
   上の @media (prefers-reduced-motion: reduce) が全部止め、止まった姿は動きの終わりの姿と
   同じになる。持ち主が動画で見て選んだ組:
-    - 読み込みの幕（外から入口へ来たときだけ）: 墨の幕の真ん中でロゴの O が回り、線が読み込みの
+    - 読み込みの幕（外から入口へ来たときだけ）: 真っ黒の幕の真ん中でロゴの O が回り、線が読み込みの
       ように満ちてから、幕が上下に開く
     - 終わらない動きは、経歴のいまの行の星と、入口の打ち替える言葉だけ
     - 入口の幕開け: 札・大見出し・線・打ち替える言葉・リード文・押し手が順に1回だけ現れる
@@ -3430,7 +3433,7 @@ body[data-site] > .frame {
 
 /*
   読み込みの幕（入口だけ。src/ui/Layout.tsx の Opening。外から入口へ来たときだけ、body に
-  data-opening が立ち、幕の要素 .opening が出る）。墨の幕の真ん中でロゴの O が回り、下の線が
+  data-opening が立ち、幕の要素 .opening が出る）。真っ黒の幕の真ん中でロゴの O が回り、下の線が
   読み込みのように満ちる——一定の速さではなく、進んでは少し止まる。満ちきると幕が上下に開く
   （持ち主の「幕の動きをローディングみたいに」。Cavani の読み込みの幕を下敷きにした形）。
 
@@ -3468,7 +3471,7 @@ body[data-opening] {
   right: 0;
   left: 0;
   height: 50%;
-  background: var(--accent);
+  background: var(--opening-ground);
   animation: opening-up var(--opening-open) var(--ease-curtain) var(--opening-load) both;
 }
 

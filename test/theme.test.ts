@@ -1543,12 +1543,15 @@ describe('配色（白い地と墨）', () => {
   it('暗い面は入口の読み込みの幕だけ。開けば消え、ページに夜の板を残さない', () => {
     /*
       左の窓を平らな夜の黒で塗ったら、白いページの中で1枚の板が浮いた（その窓は、空ごと外した）。
-      墨の面を持つのは、押し手・目次のいまのページの印と、開き終えたら隠れる幕だけ
+      暗い面を持つのは、押し手・目次のいまのページの印（墨）と、開き終えたら隠れる幕だけ。
+      幕は墨ではなく真っ黒（持ち主の指定）。黒を読むのは幕の1か所だけで、字や押し手には使わない
     */
     expect(sheet).not.toContain('--night')
     expect(sheet).not.toContain('--starmap')
     const curtain = bodyOf(sheet, '.opening::before,')
-    expect(curtain).toContain('background: var(--accent)')
+    expect(curtain).toContain('background: var(--opening-ground)')
+    expect(bodyOf(sheet, ':root {')).toContain('--opening-ground: #000000;')
+    expect(sheets.match(/var\(--opening-ground\)/g)).toHaveLength(1)
     const frames = sheet.slice(sheet.indexOf('@keyframes opening-up {'))
     expect(frames.slice(0, frames.indexOf('}\n}'))).toContain('visibility: hidden')
   })
