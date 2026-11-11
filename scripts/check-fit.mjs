@@ -215,9 +215,28 @@ const measure = ([, cfg]) => {
   const top = document.querySelector('.top')
   const main = document.querySelector('main')
   const foot = document.querySelector('.foot')
-  const toc = top?.querySelector('.toc')
+  /*
+    目次は2組ある——上の帯の目次（.toc）と、900 以上で本文の左に立つ柱の目次（.pillar__nav。
+    src/ui/Layout.tsx の Pillar）。同時に見えるのは片方だけなので、見えているほうを測る。
+    両方見えていたら同じ行き先が2組並んでいて、両方消えていたら移る手が無い
+  */
+  const pillar = document.querySelector('.pillar')
+  const shown = (el) => Boolean(el?.getClientRects().length)
+  const navs = [top?.querySelector('.toc'), pillar?.querySelector('.pillar__nav')].filter(shown)
+  const toc = navs[0]
   if (!top || !main || !foot || !toc) {
-    return { problems: ['.top / main / .foot / .toc のどれかが無い'], anchor: null, tall: 0 }
+    return {
+      problems: ['.top / main / .foot / 見えている目次（.toc か .pillar__nav）のどれかが無い'],
+      anchor: null,
+      tall: 0,
+    }
+  }
+  if (navs.length > 1) problems.push('目次が2組とも見えている（上の帯と左の柱）')
+  // 柱が見えているなら、足元の行き先は柱が受ける（どちらにも無い・両方にある、を止める）。
+  // 本文の中の、その人の行き先（個人ページの OwnSocials）は数えない
+  const socials = [...document.querySelectorAll('.pillar > .socials, .foot .socials')]
+  if (socials.length && socials.filter(shown).length !== 1) {
+    problems.push(`サイトの行き先が ${socials.filter(shown).length} 組見えている（1組のはず）`)
   }
 
   // (4) h1 はちょうど1つ
@@ -268,6 +287,7 @@ const measure = ([, cfg]) => {
   const cut = []
   for (const el of [
     ...top.querySelectorAll('*'),
+    ...(pillar && shown(pillar) ? [pillar, ...pillar.querySelectorAll('*')] : []),
     ...main.querySelectorAll('*'),
     ...foot.querySelectorAll('*'),
   ]) {
@@ -338,7 +358,7 @@ const measure = ([, cfg]) => {
 
   // (8) 押す的。目次の行き先と管理画面への入口は --tap（指の姿では 44px）
   const tap = parseFloat(getComputedStyle(root).getPropertyValue('--tap'))
-  for (const hand of top.querySelectorAll('.toc a, .top__admin')) {
+  for (const hand of document.querySelectorAll('.toc a, .pillar__nav a, .top__admin')) {
     const tall = hand.getBoundingClientRect().height
     if (tall > 0 && tall < tap - slack) {
       problems.push(
@@ -400,7 +420,7 @@ const measure = ([, cfg]) => {
     const probe = mark ?? toc
     const at = probe.getBoundingClientRect()
     const hit = document.elementFromPoint((at.left + at.right) / 2, (at.top + at.bottom) / 2)
-    if (hit && !top.contains(hit)) {
+    if (hit && !top.contains(hit) && !pillar?.contains(hit)) {
       problems.push(`送ると帯の上に本文が描かれる（${nameOf(hit)} が目次の上）`)
     }
     const paint = topStyle.backgroundColor
@@ -436,12 +456,17 @@ const measure = ([, cfg]) => {
   決まるので、ページごとに開き直して測る。
 */
 const tocMark = ([slack]) => {
-  const toc = document.querySelector('.toc')
+  // 見えているほうの目次（上の帯か、900 以上の左の柱）
+  const toc = [...document.querySelectorAll('.toc, .pillar__nav')].find(
+    (el) => el.getClientRects().length,
+  )
   const mark = toc?.querySelector("a[aria-current='page']")
   if (!toc || !mark) return null
-  const box = toc.getBoundingClientRect()
-  const left = box.left + toc.clientLeft
-  const right = left + toc.clientWidth
+  // 柱の目次は、印の面が字の左へ出る（字の頭を名札の軸にそろえるため）。見えている幅は柱の箱で測る
+  const frame = toc.closest('.pillar') ?? toc
+  const box = frame.getBoundingClientRect()
+  const left = box.left + frame.clientLeft
+  const right = left + frame.clientWidth
   const at = mark.getBoundingClientRect()
   return {
     inside: at.left >= left - slack && at.right <= right + slack,

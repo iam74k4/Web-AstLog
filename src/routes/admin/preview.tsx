@@ -182,6 +182,7 @@ function renderSnapshot(
         label="全体"
         nav={nav}
         footer={footer(saved)}
+        owner={soloMember(saved.members)}
         publicHref="/all"
         whole
         {...options}
@@ -217,6 +218,7 @@ function renderSnapshot(
       // 未保存の値はこの応答だけにある。移動で値が消えることを避け、目次を出さない。
       nav={options.unsaved ? [] : previewNav(saved)}
       footer={footer(saved)}
+      owner={soloMember(saved.members)}
       publicHref={screen === 'hero' ? '/' : `/${screen}`}
       {...options}
     >
@@ -298,6 +300,8 @@ function memberResponse(
       draft={member.published !== 1}
       nav={options.unsaved ? [] : previewNav(saved)}
       footer={footer(memberContext)}
+      // 柱の名札も、書いている途中の内容で描く（保存済みの名前を混ぜない）
+      owner={soloMember(members)}
       {...options}
     >
       {page.node}
@@ -335,6 +339,7 @@ function itemResponse(
       draft={item.published !== 1}
       nav={options.unsaved ? [] : previewNav(saved)}
       footer={footer(saved)}
+      owner={soloMember(saved.members)}
       {...options}
     >
       {page.node}
@@ -391,6 +396,7 @@ for (const doc of ITEM_DOCUMENTS) {
         draft={item.published !== 1}
         nav={previewNav(saved)}
         footer={<SiteSocials site={saved.site} contact={page.contact} />}
+        owner={soloMember(saved.members)}
         editHref={`/admin/items/${id}/edit`}
       >
         {page.node}
@@ -425,6 +431,7 @@ export async function validationFailure(
       still={livePreview(c)}
       nav={[]}
       footer={footer(saved)}
+      owner={soloMember(saved.members)}
     >
       <Screen id="preview-errors" label="入力の確認">
         <SectionHead title="入力を確認してください" h1 />
@@ -615,6 +622,7 @@ export async function renderBlockPreview(
       draft={options.draft ?? block.published !== 1}
       nav={options.unsaved ? [] : previewNav(saved)}
       footer={footer(saved)}
+      owner={soloMember(saved.members)}
     >
       {page.node}
     </PreviewLayout>,

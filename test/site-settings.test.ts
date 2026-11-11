@@ -115,7 +115,8 @@ describe('サイト設定', () => {
     expect(plain(contact)).toContain(configured.contactLead)
     expect(contact).toContain(`name="description" content="${configured.contactLead}"`)
     expect((contact.match(/href="mailto:/g) ?? []).length).toBe(1)
-    expect((await okText(`/members/${member.slug}`)).match(/href="mailto:/g)).toHaveLength(1)
+    // 足元と、左の柱（900 以上で足元の代わりに見える。src/ui/Layout.tsx の Pillar）に1つずつ
+    expect((await okText(`/members/${member.slug}`)).match(/href="mailto:/g)).toHaveLength(2)
     expect((await okText('/all')).match(/href="mailto:/g)).toHaveLength(2)
   })
 

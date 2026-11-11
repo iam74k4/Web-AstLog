@@ -466,8 +466,9 @@ describe('ページの外枠', () => {
     */
     const frame = blockAt(sheet, '@media screen')
     expect(ruleWith(frame, 'min-height: var(--screen-h)').selector).toBe('body[data-site]')
-    // 読むのは body の min-height の1か所だけ（画面に貼り付けていた夜明けの窓は外した）
-    expect(sheet.match(/var\(--screen-h\)/g)).toHaveLength(1)
+    // 読むのは body の min-height と、900 以上で画面に貼り付ける左の柱の高さの2か所だけ
+    expect(sheet.match(/var\(--screen-h\)/g)).toHaveLength(2)
+    expect(ruleWith(frame, 'height: calc(var(--screen-h)').selector).toBe('.pillar')
     /*
       表紙（1画面ぶんの高さを下限に持つ入口と締め）は持たない。入口の字の下が空いたまま
       足元が次の画面へ押し出されていた。足元は body の min-height が画面の底に置く
@@ -951,20 +952,33 @@ describe('部品の作法', () => {
     expect(bodyOf(adminSheet, '.fieldset--story {')).toContain('gap: var(--sp-4)')
   })
 
-  it('連絡先は足元に置き、どの幅でも畳まない', () => {
+  it('幅で畳むのは、同じ中身が左の柱に立っているものだけ。どの幅でも、どこかには出ている', () => {
     /*
-      柱のころは 899 以下で肩書き・一言・GitHub / メールを畳み、畳んだぶんが
-      「どこにも無くなる」ものを入れないよう見張っていた（素の .socials を隠して、
-      GitHub のプロフィールが電話から辿れなくなったことがある。WCAG 1.4.10）。
-      いまは上の帯にロゴと目次しか置かず、連絡先は足元が受ける——
-      幅で畳む規則を1本も持たない
+      前の柱のころは 899 以下で肩書き・一言・GitHub / メールを畳み、畳んだぶんが
+      「どこにも無くなる」ことがあった（素の .socials を隠して、GitHub のプロフィールが
+      電話から辿れなくなった。WCAG 1.4.10）。いまの左の柱（900 以上）は、上の帯の目次・足元の
+      行き先・入口の札と同じ中身をもう1組持ち、柱があるページ（body[data-pillar]）でだけ、
+      柱が見える幅でだけ、元のほうを畳む。柱そのものは素で畳んであり、900 以上でだけ出す
+      ——どの幅でも片方は必ず見える。2組あることは test/public.test.ts の「左の柱」が見る
     */
     const folds = rulesOf(sheet).filter(
       (rule) =>
         rule.context.some((one) => /width/.test(one)) &&
         rule.decls.some(([name, value]) => name === 'display' && value === 'none'),
     )
-    expect(folds.map((rule) => rule.selectors.join(', '))).toEqual([])
+    expect(folds.map((rule) => rule.selectors.join(', '))).toEqual([
+      'body[data-pillar] :is(.top .toc, .foot .socials)',
+      "body[data-pillar='owner'] .hero--cover > .eyebrow",
+    ])
+    for (const rule of folds) expect(rule.context.join(' ')).toContain('min-width: 900px')
+    // 柱は素で畳み、出すのは 900 以上だけ（畳む相手と同じ括り）
+    expect(bodyOf(sheet, '.pillar {')).toContain('display: none')
+    const wide = blockAt(blockAt(sheet, '@media screen'), '@media (min-width: 900px)')
+    expect(bodyOf(wide, '.pillar {')).toContain('display: flex')
+    // 個人ページの頭の名札は h1 を持つ。見えなくするだけで、読み上げには残す（display: none にしない）
+    const hidden = bodyOf(wide, "body[data-pillar='owner'] .hero:has(> .nameplate--title) {")
+    expect(hidden).toContain('clip-path: inset(50%)')
+    expect(hidden).not.toContain('display')
     // ロゴはワードマーク1つ。幅で畳まず、大きさは :root の段
     const word = bodyOf(sheet, '.brand__word {')
     expect(word).toContain('height: var(--brand-h)')
@@ -1136,7 +1150,14 @@ describe('部品の作法', () => {
     )
     // 右端のぼかしの下に座らせない
     expect(marker.body).toContain('scroll-margin-inline: var(--fade-w)')
-    expect(sheet.split('scroll-initial-target').length).toBe(2)
+    /*
+      左の柱の目次も同じ（目次の長いサイトや背の低い窓では、柱の中だけを縦に送る。印が柱の下に
+      隠れたまま開かない）。使うのは帯の目次と柱の目次の2か所だけ
+    */
+    const pillar = bodyOf(frame, ".pillar__nav a[aria-current='page'] {")
+    expect(pillar).toContain('scroll-initial-target: nearest')
+    expect(pillar).toContain('scroll-margin-block: var(--page-pad)')
+    expect(sheet.split('scroll-initial-target').length).toBe(3)
   })
 
   it('読まれない値を :root に置かない', () => {

@@ -40,6 +40,15 @@ const mainOf = (html: string) => (html.split(/<main[^>]*>/)[1] ?? '').split('</m
 // 目次（上の帯の中）だけを見る。同じ文字列は見出しにも本文のリンクにも出る
 const tocOf = (html: string) => html.split('<nav class="toc"')[1]?.split('</nav>')[0] ?? ''
 
+/*
+  左の柱（src/ui/Layout.tsx の Pillar。900 以上で見える）。柱の目次は上の帯の目次と同じ中身の
+  もう1組で、同時に見えるのは片方だけ（app.css が幅で切り替える）
+*/
+const pillarOf = (html: string) =>
+  html.split('<div class="pillar">')[1]?.split('<main id="main"')[0] ?? ''
+const pillarNavOf = (html: string) =>
+  html.split('<nav class="pillar__nav"')[1]?.split('</nav>')[0] ?? ''
+
 // 上の帯だけを見る（ロゴと目次）。最初の </header> は上の帯のもの（入口の Hero はその後ろ）
 const topOf = (html: string) =>
   html.slice(html.indexOf('<header class="top"'), html.indexOf('</header>'))
@@ -1266,8 +1275,11 @@ describe('ページの URL', () => {
     // 1人のサイトなので、Team の位置はプロフィール（目次の名前は Profile）
     // 英字だけの行き先には lang="en"（等幅の小さな大文字の札にする印）
     expect(tocOf(html)).toContain('<a href="/members/okazaki" lang="en">Profile</a>')
-    // 2つ付くと、どちらが「いま」なのか読み上げでも見た目でも決まらない
-    expect(html.match(/aria-current="page"/g)).toHaveLength(1)
+    // 1つの目次に2つ付くと、どちらが「いま」なのか読み上げでも見た目でも決まらない。上の帯の
+    // 目次と柱の目次に1つずつ（同時に見えるのは片方だけ）
+    expect(tocOf(html).match(/aria-current="page"/g)).toHaveLength(1)
+    expect(pillarNavOf(html).match(/aria-current="page"/g)).toHaveLength(1)
+    expect(html.match(/aria-current="page"/g)).toHaveLength(2)
   })
 
   it('公開ページの HTML は装飾の絵を持たない。本文の画像は作品とアバターだけ', async () => {
@@ -2394,7 +2406,8 @@ describe('個人ページは1ページ', () => {
     const toc = tocOf(html)
     expect(toc).toContain('<a href="/team" aria-current="page" lang="en">Team</a>')
     expect(toc).not.toContain('/members/okazaki')
-    expect(html.match(/aria-current="page"/g)).toHaveLength(1)
+    expect(toc.match(/aria-current="page"/g)).toHaveLength(1)
+    expect(pillarNavOf(html)).toContain('<a href="/team" aria-current="page" lang="en">Team</a>')
     expect(topOf(html)).toContain('<a class="brand" href="/">')
     // 顔は本文の名札にだけ（足元はサイトのもの）
     expect(footOf(html)).not.toContain('avatar')
@@ -2574,7 +2587,10 @@ describe('1人のサイトのプロフィール', () => {
     expect(tocOf(html)).toContain(
       '<a href="/members/okazaki" aria-current="page" lang="en">Profile</a>',
     )
-    expect(html.match(/aria-current="page"/g)).toHaveLength(1)
+    expect(tocOf(html).match(/aria-current="page"/g)).toHaveLength(1)
+    expect(pillarNavOf(html)).toContain(
+      '<a href="/members/okazaki" aria-current="page" lang="en">Profile</a>',
+    )
     // Team の行は無い（ページが無いので、指す先も無い）。About などの小節も目次には並ばない
     for (const name of ['Team', 'About', 'Skills', 'Career']) {
       expect(tocOf(html), name).not.toContain(name)
@@ -3445,6 +3461,64 @@ it('知らない URL は 404 ページを返す', async () => {
 })
 
 /*
+  左の柱（src/ui/Layout.tsx の Pillar）。左の夜明けの窓を外して余った横幅に、名札・目次・サイトの
+  行き先を立てる（持ち主が選んだ形）。見えるのは 900 以上だけで、そのあいだ上の帯の目次と足元の
+  行き先は畳む（app.css）。HTML は幅によらず同じなので、ここでは2組の中身が食い違わないことを見る
+  ——食い違うと、幅を変えただけで行き先が増えたり減ったりする
+*/
+describe('左の柱', () => {
+  const links = (html: string) => [...html.matchAll(/<a [^>]*href="([^"]+)"/g)].map((m) => m[1])
+
+  it('1人のサイトでは、持ち主の名札・目次・サイトの行き先を立てる', async () => {
+    await seedMember({ nameLatin: 'Okazaki Takanari', location: 'Kanagawa, Japan' })
+    await seedItem({ slug: 'appmixer' })
+    for (const path of ['/', '/projects', '/members/okazaki', '/apps/item/appmixer']) {
+      const html = await okText(path)
+      expect(html, path).toContain('data-pillar="owner"')
+      const pillar = pillarOf(html)
+      // 名札は見出しにしない（どのページにも出るので、ページの題ではない）。h1 はページに1つのまま
+      expect(pillar, path).toContain('<div class="nameplate nameplate--pillar">')
+      expect(pillar, path).toContain('<strong class="nameplate__name">岡崎 昂功</strong>')
+      expect(pillar, path).toContain('Okazaki Takanari')
+      expect(pillar, path).toContain('System Engineer · Kanagawa, Japan')
+      expect(pillar, path).not.toMatch(/<h[1-6]\b/)
+      expect(html.match(/<h1\b/g), path).toHaveLength(1)
+      // 目次は上の帯と同じ行き先・同じ印
+      expect(links(pillarNavOf(html)), path).toEqual(links(tocOf(html)))
+      expect(pillarNavOf(html), path).toContain('aria-label="ページの移動"')
+      // 行き先は足元と同じ
+      expect(links(pillar.split('</nav>')[1] ?? ''), path).toEqual(links(footOf(html)))
+      expect(links(footOf(html)).length, path).toBeGreaterThan(0)
+    }
+  })
+
+  it('Contact のページでは、足元と同じく柱にも行き先を出さない（本文の表と同じ行き先）', async () => {
+    await seedMember()
+    const html = await okText('/contact')
+    expect(pillarOf(html)).toContain('nameplate--pillar')
+    expect(pillarOf(html)).not.toContain('class="socials"')
+    expect(footOf(html)).not.toContain('class="socials"')
+  })
+
+  it('2人以上のサイトでは名札を立てない。目次と行き先だけの柱になる', async () => {
+    await seedMember()
+    await seedMember({ slug: 'hoshino', name: '星野', sortOrder: 20 })
+    const html = await okText('/')
+    expect(html).toContain('data-pillar="nav"')
+    expect(pillarOf(html)).not.toContain('nameplate')
+    expect(pillarOf(html)).not.toContain('avatar')
+    expect(links(pillarNavOf(html))).toEqual(links(tocOf(html)))
+  })
+
+  it('全体ページと 404 には立てない', async () => {
+    await seedMember()
+    // 全体ページは節を縦に積んだ1本の文書（紙にも刷る）。404 は D1 に聞かないので、名札も目次も無い
+    expect(await okText('/all')).not.toMatch(/data-pillar|class="pillar"/)
+    expect(await (await get('/no-such-page')).text()).not.toMatch(/data-pillar|class="pillar"/)
+  })
+})
+
+/*
   文書の外枠。DOCTYPE・404 の説明・足元の年。
 
   4つの外枠（公開ページ・管理画面の壁の中と外・404 と 500）は、どれも
@@ -3460,7 +3534,7 @@ describe('読み込みの幕', () => {
     await seedMember()
     await seedItem({ slug: 'appmixer' })
     const top = await okText('/')
-    expect(top).toContain('<body data-site="" data-opening="">')
+    expect(top).toContain('<body data-site="" data-opening="" data-pillar="owner">')
     expect(top).toContain(CURTAIN)
     for (const path of ['/projects', '/members/okazaki', '/apps/item/appmixer', '/all']) {
       const html = await okText(path)

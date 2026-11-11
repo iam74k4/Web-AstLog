@@ -1,4 +1,5 @@
 import type { Child } from 'hono/jsx'
+import type { PublicMember } from '../domain'
 import { yearInJapan } from '../lib/format'
 import { SITE } from '../site'
 import {
@@ -8,6 +9,7 @@ import {
   FaviconLinks,
   HtmlDocument,
   langOf,
+  Nameplate,
   Stylesheets,
 } from './components'
 import { GALLERY_BEHAVIOR, isGalleryPage } from './gallery-behavior'
@@ -110,6 +112,45 @@ const Opening = () => (
   </div>
 )
 
+/*
+  左の柱（900 以上で、本文の左に貼り付く。app.css の .pillar）。名札（1人のサイトの持ち主の顔・
+  名前・肩書き）、目次、サイトの行き先を縦に積む——左の夜明けの窓を外して余った横幅を、飾りでは
+  なく名乗りと行き先に使う（持ち主が選んだ形）。
+
+  目次と行き先は、上の帯と足元にあるものと同じ中身をもう1組置く。同時に見えるのは片方だけ
+  （900 以上は柱、900 未満は上の帯と足元。app.css が display: none で切り替えるので、読み上げにも
+  片方しか出ない）。HTML を1組にして CSS で置き場所だけ動かすと、帯の貼り付け・横に送る目次・
+  ページの切り替えの名前が全部絡むので、2組にした
+*/
+const Pillar = ({
+  owner,
+  nav,
+  socials,
+}: {
+  owner?: PublicMember
+  nav: NavItem[]
+  socials: Child
+}) => (
+  <div class="pillar">
+    {owner ? <Nameplate member={owner} pillar /> : null}
+    {nav.length ? (
+      <nav class="pillar__nav" aria-label="ページの移動">
+        {nav.map((item) => (
+          <a
+            key={item.href}
+            href={item.href}
+            aria-current={item.active ? 'page' : undefined}
+            lang={langOf(item.label)}
+          >
+            {item.label}
+          </a>
+        ))}
+      </nav>
+    ) : null}
+    {socials}
+  </div>
+)
+
 export const Layout = (props: {
   title: string
   description: string
@@ -134,6 +175,12 @@ export const Layout = (props: {
   // 共有カードの画像。渡さなければサイトの1枚（SITE_IMAGE）
   image?: OgImage
   /*
+    1人のサイトの持ち主（公開中のメンバーがちょうど1人のとき。src/routes/public/data.ts の
+    soloMember）。左の柱（下の Pillar）の名札になる。2人以上のサイトと、D1 に聞かないページ
+    （404 / 500）では渡さない——柱は目次と行き先だけになる
+  */
+  owner?: PublicMember
+  /*
     読み込みの幕（下の Opening。app.css の「動き」の .opening）。外から入口（Hero のページ）へ
     来たときだけに立てる（呼ぶ側が src/lib/page-cache.ts の fromInside で決める）——どのページにも、
     サイトの中から入口へ戻るたびにも出すと、移るたびに幕を待たされる
@@ -147,63 +194,71 @@ export const Layout = (props: {
   */
   still?: boolean
   children?: Child
-}) => (
-  <HtmlDocument>
-    <head>
-      <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-      <ColorSchemeMeta />
-      <title>{props.title}</title>
-      <meta name="description" content={props.description} />
-      {props.preview ? (
-        <meta name="robots" content="noindex, nofollow, noarchive" />
-      ) : (
-        <>
-          <link rel="canonical" href={props.canonical} />
-          <meta property="og:type" content="website" />
-          <meta property="og:site_name" content={SITE.name} />
-          <meta property="og:title" content={props.title} />
-          <meta property="og:description" content={props.description} />
-          <meta property="og:url" content={props.canonical} />
-          <meta property="og:locale" content="ja_JP" />
-          <ShareImage image={props.image ?? SITE_IMAGE} />
-        </>
-      )}
+}) => {
+  /*
+    左の柱を立てるか。全体ページ（/all）には立てない（節を縦に積んだ1本の文書で、紙にも刷る）。
+    名札も目次も無いページ（まだ何も置いていないサイト）にも立てない——空の柱になる
+  */
+  const pillar = !props.whole && Boolean(props.owner || props.nav.length)
+  return (
+    <HtmlDocument>
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+        <ColorSchemeMeta />
+        <title>{props.title}</title>
+        <meta name="description" content={props.description} />
+        {props.preview ? (
+          <meta name="robots" content="noindex, nofollow, noarchive" />
+        ) : (
+          <>
+            <link rel="canonical" href={props.canonical} />
+            <meta property="og:type" content="website" />
+            <meta property="og:site_name" content={SITE.name} />
+            <meta property="og:title" content={props.title} />
+            <meta property="og:description" content={props.description} />
+            <meta property="og:url" content={props.canonical} />
+            <meta property="og:locale" content="ja_JP" />
+            <ShareImage image={props.image ?? SITE_IMAGE} />
+          </>
+        )}
 
-      <FaviconLinks />
-      <Stylesheets preview={Boolean(props.preview)} />
-      {props.jsonLd && !props.preview ? (
-        <script
-          type="application/ld+json"
-          // JSON の中の < を潰しておく。</script> で早期に閉じられるのを防ぐため
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify(props.jsonLd).replace(/</g, '\\u003c'),
-          }}
-        />
-      ) : null}
-    </head>
-    {/*
+        <FaviconLinks />
+        <Stylesheets preview={Boolean(props.preview)} />
+        {props.jsonLd && !props.preview ? (
+          <script
+            type="application/ld+json"
+            // JSON の中の < を潰しておく。</script> で早期に閉じられるのを防ぐため
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify(props.jsonLd).replace(/</g, '\\u003c'),
+            }}
+          />
+        ) : null}
+      </head>
+      {/*
       data-site は公開ページの印。app.css はこれで公開ページだけに外枠（貼り付く帯・
       表紙の高さ・なめらかな送り）を当てる——管理画面と 404 の body には付かない
     */}
-    <body
-      data-site=""
-      data-whole={props.whole ? '' : undefined}
-      data-opening={props.opening && !props.preview ? '' : undefined}
-      data-preview={props.preview ? '' : undefined}
-      data-still={props.still && props.preview ? '' : undefined}
-    >
-      <a class="skip" href="#main" lang="en">
-        Skip to content
-      </a>
-      {props.preview}
-      {/*
-        上の帯。ロゴ（入口へ）と目次と、ログイン中だけ管理画面への入口。ページの上に
-        貼り付き（全体ページを除く）、ページを移っても同じ場所に居る。
-      */}
-      <header class="top">
-        <Brand href={props.preview ? '/admin/preview' : '/'} />
+      <body
+        data-site=""
+        data-whole={props.whole ? '' : undefined}
+        data-opening={props.opening && !props.preview ? '' : undefined}
+        data-pillar={pillar ? (props.owner ? 'owner' : 'nav') : undefined}
+        data-preview={props.preview ? '' : undefined}
+        data-still={props.still && props.preview ? '' : undefined}
+      >
+        <a class="skip" href="#main" lang="en">
+          Skip to content
+        </a>
+        {props.preview}
         {/*
+        上の帯。ロゴ（入口へ）と目次と、ログイン中だけ管理画面への入口。ページの上に
+        貼り付き（全体ページを除く）、ページを移っても同じ場所に居る。目次は、左の柱が
+        見えている幅（900 以上）では柱が受け、ここでは畳む（Pillar）。
+      */}
+        <header class="top">
+          <Brand href={props.preview ? '/admin/preview' : '/'} />
+          {/*
           いま見ているページには aria-current="page"。'true' ではなく 'page' な
           のは、目次の行き先が別の URL（/projects）だから。'true' は「この一覧の
           中のいま」で、ページそのものは指さない。作品のページは載っている一覧
@@ -221,50 +276,52 @@ export const Layout = (props: {
           作品の行・「← Projects」）だけ。画面の底の左右の手（ページャ）は置かない
           （CLAUDE.md の「公開ページは縦に読む」）。
         */}
-        <nav class="toc" aria-label={props.whole ? 'ページ内の移動' : 'ページの移動'}>
-          {props.nav.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              aria-current={item.active ? 'page' : undefined}
-              lang={langOf(item.label)}
-            >
-              {item.label}
-            </a>
-          ))}
-        </nav>
-        {props.admin ? <AdminLink href={props.admin} /> : null}
-      </header>
-      {/*
+          <nav class="toc" aria-label={props.whole ? 'ページ内の移動' : 'ページの移動'}>
+            {props.nav.map((item) => (
+              <a
+                key={item.href}
+                href={item.href}
+                aria-current={item.active ? 'page' : undefined}
+                lang={langOf(item.label)}
+              >
+                {item.label}
+              </a>
+            ))}
+          </nav>
+          {props.admin ? <AdminLink href={props.admin} /> : null}
+        </header>
+        {/*
         tabindex={-1} は「Skip to content」のため。Safari（と iOS の全ブラウザ）は
         フラグメントで移った先が素でフォーカスを受けない要素だと、見た目だけ動いて
         キーボードの位置は帯に残る。このサイトに迂回路はこの1本しか無いので、
         外すと目次を毎回たどる以外の手が消える。-1 なので Tab の順番には入らない。
       */}
-      {/*
-        本文の枠。中身は本文（main）だけ——左に夜明けの窓を並べていたが、持ち主が外した。
+        {/*
+        本文の枠。左の柱（Pillar。900 以上でだけ見える）と本文（main）。
         main の直接の子は今までどおり Screen / Hero だけ。
       */}
-      <div class="frame">
-        <main id="main" tabindex={-1}>
-          {props.children}
-        </main>
-      </div>
-      {/*
+        <div class="frame">
+          {pillar ? <Pillar owner={props.owner} nav={props.nav} socials={props.footer} /> : null}
+          <main id="main" tabindex={-1}>
+            {props.children}
+          </main>
+        </div>
+        {/*
         足元。著作権表示とサイトの行き先（GitHub・Instagram・X・Discord・Mail）だけ——持ち主の
-        「シンプルに」。どの幅でも畳まない（上の帯にはロゴと目次しか置かないので、
-        連絡先はここが受ける）。全体ページ（/all）への1本は置かない（sitemap.xml が載せる）。
+        「シンプルに」。行き先は、左の柱が見えている幅（900 以上）では柱が受け、ここでは畳む
+        （Pillar。どの幅でも片方には出ている）。全体ページ（/all）への1本は置かない（sitemap.xml が載せる）。
       */}
-      <footer class="foot">
-        <p class="foot__meta">
-          © {yearInJapan()} {SITE.name}
-        </p>
-        {props.footer}
-      </footer>
-      {props.opening && !props.preview ? <Opening /> : null}
-      {!props.preview && isGalleryPage(props.canonical) ? (
-        <script dangerouslySetInnerHTML={{ __html: GALLERY_BEHAVIOR }} />
-      ) : null}
-    </body>
-  </HtmlDocument>
-)
+        <footer class="foot">
+          <p class="foot__meta">
+            © {yearInJapan()} {SITE.name}
+          </p>
+          {props.footer}
+        </footer>
+        {props.opening && !props.preview ? <Opening /> : null}
+        {!props.preview && isGalleryPage(props.canonical) ? (
+          <script dangerouslySetInnerHTML={{ __html: GALLERY_BEHAVIOR }} />
+        ) : null}
+      </body>
+    </HtmlDocument>
+  )
+}

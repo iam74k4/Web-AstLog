@@ -114,6 +114,8 @@ export async function screenPage(
     image?: OgImage
     // 入口（Hero のページ）だけ。読み込んだときの幕を出す（src/ui/Layout.tsx の opening）
     opening?: boolean
+    // 1人のサイトの持ち主。左の柱の名札になる（src/ui/Layout.tsx の owner）
+    owner?: PublicMember
   },
 ) {
   return c.html(
@@ -127,6 +129,7 @@ export async function screenPage(
       admin={await adminHref(c, page.adminPath)}
       image={page.image}
       opening={page.opening}
+      owner={page.owner}
     >
       {page.node}
     </Layout>,
