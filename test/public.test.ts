@@ -1960,6 +1960,69 @@ describe('作品1件のページの行き来', () => {
 })
 
 /*
+  作品の押し手（items.lead_link）。1本目のリンクを墨の四角にして、購入・ダウンロード・
+  インストールの入口を一覧の行からも作品のページからも押せる大きさで見せる。
+  押し手にするのは書いた1本目だけで、ほかの行き先は字のまま
+*/
+describe('作品の押し手', () => {
+  async function seedLinks(leadLink: number) {
+    const item = await seedItem({ title: 'Nonet', slug: 'nonet', leadLink })
+    await db()
+      .insert(schema.itemLinks)
+      .values([
+        { itemId: item.id, label: 'Buy', url: 'https://example.test/buy', sortOrder: 0 },
+        { itemId: item.id, label: 'Guide', url: 'https://example.test/guide', sortOrder: 1 },
+      ])
+    return item
+  }
+
+  it('一覧の行と作品のページで、1本目だけが押し手になる', async () => {
+    await seedLinks(1)
+    for (const path of ['/projects', '/apps/item/nonet', '/all']) {
+      const main = mainOf(await okText(path))
+      expect(main, path).toContain(
+        '<a class="links__lead" href="https://example.test/buy" lang="en" rel="noreferrer" target="_blank">Buy</a>',
+      )
+      // 2本目は字の行き先のまま。押し手は1つの作品に1本
+      expect(main, path).toContain(
+        '<a href="https://example.test/guide" rel="noreferrer" target="_blank">Guide</a>',
+      )
+      expect(main.match(/class="links__lead"/g), path).toHaveLength(1)
+    }
+  })
+
+  it('印を付けていない作品は、どの行き先も字のまま', async () => {
+    await seedLinks(0)
+    for (const path of ['/projects', '/apps/item/nonet']) {
+      expect(mainOf(await okText(path)), path).not.toContain('links__lead')
+    }
+  })
+
+  it('作品のリンクが無ければ、文書や担当を押し手にしない', async () => {
+    const member = await seedMember()
+    await seedMember({ slug: 'futari', name: 'もう一人', sortOrder: 20 })
+    await seedItem({ title: 'Nonet', slug: 'nonet', leadLink: 1, memberId: member.id })
+    const main = mainOf(await okText('/apps/item/nonet'))
+    expect(main).toContain('<a href="/members/okazaki">担当 岡崎 昂功</a>')
+    expect(main).not.toContain('links__lead')
+  })
+
+  it('1本目が検査で落ちたら、2本目を繰り上げない', () => {
+    const row = String(
+      LinkRow({
+        links: [
+          { label: 'XSS', url: 'javascript:alert(1)' },
+          { label: 'Guide', url: 'https://example.test/guide' },
+        ],
+        lead: true,
+      }),
+    )
+    expect(row).toContain('href="https://example.test/guide"')
+    expect(row).not.toContain('links__lead')
+  })
+})
+
+/*
   作品の本文（Story）。以前は1枚目の次の画面（…/story）に分けていた——1枚目に
   置くと、説明・画像・実績値・行き先と同じ1画面に収めるために 60 字・1段落しか
   書けなかったから。ページが縦に読めるようになったので、作品のページの説明の下の
