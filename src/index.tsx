@@ -128,7 +128,7 @@ app.route('/', publicRoutes)
   404 と 500。公開ページと同じ骨格（上の帯・本文の枠・足元）と入口と同じ型（札・大見出し・
   リード文・押し手）で組む——前は帯も足元も無い中央寄せの1枚で、作り替えたサイトの中で
   ここだけが前の姿のままだった。D1 には聞かない（障害の 500 もここから出る）ので、目次と
-  足元の行き先は置かず、ロゴと著作権表示だけ。左の夜明けの窓は入口と同じに出る
+  足元の行き先は置かず、ロゴと著作権表示だけ
 */
 const ErrorPage = ({
   code,
@@ -160,7 +160,6 @@ const ErrorPage = ({
         <Brand />
       </header>
       <div class="frame">
-        <div class="window" aria-hidden="true" />
         <main id="main" tabindex={-1}>
           <Hero cover>
             <Eyebrow parts={[code, label]} />

@@ -34,9 +34,9 @@ workers.dev とプレビュー URL は無効。公開はデプロイ後で、購
 ランタイム依存は Hono と Drizzle だけ。
 開発ツールの間接依存（undici・sharp・旧 esbuild loader）は、セキュリティ修正版へ
 `package.json` の overrides で固定し、型・テスト・ビルドと Drizzle の schema export を確認する。**内容と導線は JavaScript なしで成立する**。
-作品ページだけ固定ハッシュのショーケース補助を持つ（JS無効時は全画像を表示）。動き（入口の幕開け・夜明けの
-窓・画面に入るときの現れ方・ページの切り替え）は CSS だけで付け、HTML は字だけで組む——入口の
-HTML は約 4.5KB。天体の飾り（夜明けの窓のすばると星・経歴の星座・顔の軌道）は CSS の背景と
+作品ページだけ固定ハッシュのショーケース補助を持つ（JS無効時は全画像を表示）。動き（入口の読み込みの幕と
+幕開け・画面に入るときの現れ方・ページの切り替え）は CSS だけで付け、HTML は字だけで組む（外から入口へ
+来たときだけ、読み込みの幕のロゴを足す）。天体の飾り（経歴の星座・顔の軌道）は CSS の
 疑似要素が描く（`CLAUDE.md` の「動き」「天体の飾り」）。
 絞り込みとページの移動は URL とサーバー、管理画面は HTML フォームと 303 で動く。
 全部の応答に CSP（作品ページと管理画面の HTML は各補助の exact SHA-256 だけ、それ以外は `script-src 'none'`）と
@@ -699,15 +699,13 @@ src/
     admin-behavior.ts 保存前プレビューとエラー導線の最小補助・CSPの固定ハッシュ
     components.tsx   画面を組む部品。main の直接の子は Screen / Hero だけが作る
                      外枠はどれも HtmlDocument で <html> を開く（DOCTYPE を出す）
-    icons.tsx        インライン SVG（ロゴの Wordmark / Mark もここで描く）
+    icons.tsx        インライン SVG（ロゴの Wordmark / Mark と、読み込みの幕の OpeningMark もここで描く）
     logo.ts          ロゴの形と素材に焼く色の正（字で組む ΛSTLOG。印は Λ。JSX を持たない）
-    astra.ts         天体の飾りの素材（夜明けの窓の星とすばる）の形の正。JSX を持たない
 public/
   app.css            全画面のスタイル。値は :root のトークンだけで決める
-                     末尾の「ページの外枠」が足元の位置と貼り付く上の帯、900 以上の
-                     2分割（左の夜明けの窓・右の本文）を作る。
-                     「天体の飾り」の節が、夜明けの窓と線と点の飾りを背景と疑似要素で描く。
-                     「動き」の節と、ページを移るときの切り替え（@view-transition）もここ
+                     末尾の「ページの外枠」が足元の位置と貼り付く上の帯を作る。
+                     「天体の飾り」の節が、線と点の飾りを疑似要素で描く。
+                     「動き」の節（入口の読み込みの幕も）と、ページを移るときの切り替え（@view-transition）もここ
   admin.css          管理画面だけの規則。管理画面は app.css のあとにこれを読み、
                      公開ページは読まない（:root は持たず、app.css の段を読む）
   preview.css        管理プレビューの案内。公開の部品は app.css を使う
@@ -721,10 +719,10 @@ public/
                      Workers Static Assets が読む規則で、ファイルとしては配られない
                      3枚の CSS は 1年・immutable（中身の版つきの URL
                      /app.css?v=… などで読むので、変えてデプロイすれば URL が変わる）
-  assets/            ロゴと天体の飾りの素材と、見出しの書体だけ。favicon（favicon.svg・favicon-32.png・
+  assets/            ロゴの素材と、見出しの書体だけ。favicon（favicon.svg・favicon-32.png・
                      検索結果の印の favicon-96.png・apple-touch-icon.png）・ページの外で使うワードマーク（astlog-wordmark.svg）・共有カード
-                     （astlog-card.png。1200×630）・夜明けの窓の空（sky.svg）——ここまでは
-                     scripts/logo/export.mjs が src/ui/logo.ts と src/ui/astra.ts から書く。
+                     （astlog-card.png。1200×630）——ここまでは
+                     scripts/logo/export.mjs が src/ui/logo.ts から書く。
                      見出しの欧文の Poppins（poppins-400/500/600/700.<版>.woff2。欧文だけに
                      絞ったもの）とそのライセンス（poppins-OFL.txt）は手で置いたもの。
                      書体は名前に中身の版（SHA-256 の頭8桁）を持ち、1年・immutable。
@@ -744,8 +742,8 @@ scripts/
   seed-local.mjs     ローカルにだけ検査用のデータと画像を入れる
   fixtures/media/    検査用の作品画像とプロフィール素材。本番には配らない
   touch-site.mjs     公開ページの写しの版を上げる（npm run site:touch / db:seed:local の最後）
-  logo/              export.mjs。ロゴと天体の飾りの素材（SVG と favicon・iPhone のホーム画面・共有カードの PNG）を
-                     src/ui/logo.ts と src/ui/astra.ts から書く（node scripts/logo/export.mjs。PNG は Playwright の Chromium で撮る）
+  logo/              export.mjs。ロゴの素材（SVG と favicon・iPhone のホーム画面・共有カードの PNG）を
+                     src/ui/logo.ts から書く（node scripts/logo/export.mjs。PNG は Playwright の Chromium で撮る）
   lib/               check-fit と check-admin の共通部分。dev サーバの立て方と使い捨ての D1（dev-server.mjs）、
                      設計サイズ（viewports.mjs）。写しを2本持たない
                      wrangler.toml の id の読み方（wrangler-ids.mjs）も

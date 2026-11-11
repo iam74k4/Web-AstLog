@@ -11,6 +11,7 @@ import {
   Stylesheets,
 } from './components'
 import { GALLERY_BEHAVIOR, isGalleryPage } from './gallery-behavior'
+import { OpeningMark } from './icons'
 
 export type NavItem = { href: string; label: string; active?: boolean }
 
@@ -87,12 +88,28 @@ const ShareImage = ({ image }: { image: OgImage }) => (
 
   骨格は1つ——上に帯（ロゴと目次。貼り付く）、その下に本文、底に足元（著作権表示と
   サイトの行き先）。色も書体も選ばせない——見た目は1つ（白と墨、見出しの欧文は
-  Poppins、左の夜明けの窓）。
+  Poppins）。
 
   内容・絞り込み・ページの移動はサーバーが決める。作品ページだけ固定ハッシュの
   ショーケース補助を持つ（src/ui/gallery-behavior.ts）。ページを移るときの切り替え（app.css の
   @view-transition）も CSS だけで、知らないブラウザではふつうに移るだけ。
 */
+/*
+  読み込みの幕（外から入口へ来たときだけ。Layout の opening）。墨の幕の真ん中でロゴの O が回り、
+  下の線が読み込みのように満ちてから、幕が上下に開く（持ち主の「幕の動きをローディングみたいに」）。
+  ページはもう届いているので、待っているのは見せるための間（app.css の --opening-load）だけ。
+  飾りなので読み上げには出さず、押す手は幕を通り抜ける。JavaScript は使わない——動きは CSS だけで、
+  動きを減らす設定・紙・強制色では幕ごと出さない（app.css の .opening）
+*/
+const Opening = () => (
+  <div class="opening" aria-hidden="true">
+    <div class="opening__load">
+      <OpeningMark />
+      <span class="opening__bar" />
+    </div>
+  </div>
+)
+
 export const Layout = (props: {
   title: string
   description: string
@@ -117,9 +134,9 @@ export const Layout = (props: {
   // 共有カードの画像。渡さなければサイトの1枚（SITE_IMAGE）
   image?: OgImage
   /*
-    読み込んだときの幕（app.css の「動き」の .opening）。外から入口（Hero のページ）へ来たときだけに
-    立てる（呼ぶ側が src/lib/page-cache.ts の fromInside で決める）——どのページにも、サイトの中から
-    入口へ戻るたびにも出すと、移るたびに幕を待たされる
+    読み込みの幕（下の Opening。app.css の「動き」の .opening）。外から入口（Hero のページ）へ
+    来たときだけに立てる（呼ぶ側が src/lib/page-cache.ts の fromInside で決める）——どのページにも、
+    サイトの中から入口へ戻るたびにも出すと、移るたびに幕を待たされる
   */
   opening?: boolean
   // 認証済みプレビューの案内。検索・共有用のメタ情報は出さない。
@@ -225,12 +242,10 @@ export const Layout = (props: {
         外すと目次を毎回たどる以外の手が消える。-1 なので Tab の順番には入らない。
       */}
       {/*
-        本文の枠（Cavani を下敷きにした2分割）。左に夜明けの窓、右に本文の面。窓は字を
-        持たない飾りで、絵は app.css の「天体の飾り」が背景として描く（読み上げには出さない）。
+        本文の枠。中身は本文（main）だけ——左に夜明けの窓を並べていたが、持ち主が外した。
         main の直接の子は今までどおり Screen / Hero だけ。
       */}
       <div class="frame">
-        <div class="window" aria-hidden="true" />
         <main id="main" tabindex={-1}>
           {props.children}
         </main>
@@ -246,6 +261,7 @@ export const Layout = (props: {
         </p>
         {props.footer}
       </footer>
+      {props.opening && !props.preview ? <Opening /> : null}
       {!props.preview && isGalleryPage(props.canonical) ? (
         <script dangerouslySetInnerHTML={{ __html: GALLERY_BEHAVIOR }} />
       ) : null}

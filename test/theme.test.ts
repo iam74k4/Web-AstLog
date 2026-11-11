@@ -10,7 +10,7 @@ beforeEach(resetDb)
 
 /*
   見た目は1つ。前は管理画面の「見た目」でアクセント色（7色）と見出しの書体（3つ）を
-  選べたが、Cavani を下敷きにした白と墨・Poppins・夜明けの窓に決めたあとは、色の付いた
+  選べたが、Cavani を下敷きにした白と墨・Poppins に決めたあとは、色の付いた
   押し手や明朝・等幅の名札がその芯を崩した。選ぶ口ごと外し、前に保存した行は読まない。
 */
 describe('見た目は1つ', () => {
@@ -466,9 +466,8 @@ describe('ページの外枠', () => {
     */
     const frame = blockAt(sheet, '@media screen')
     expect(ruleWith(frame, 'min-height: var(--screen-h)').selector).toBe('body[data-site]')
-    // 読むのは body の min-height と、900 以上で画面に貼り付ける夜明けの窓の高さの2か所だけ
-    expect(sheet.match(/var\(--screen-h\)/g)).toHaveLength(2)
-    expect(ruleWith(frame, 'height: calc(var(--screen-h)').selector).toBe('.frame > .window')
+    // 読むのは body の min-height の1か所だけ（画面に貼り付けていた夜明けの窓は外した）
+    expect(sheet.match(/var\(--screen-h\)/g)).toHaveLength(1)
     /*
       表紙（1画面ぶんの高さを下限に持つ入口と締め）は持たない。入口の字の下が空いたまま
       足元が次の画面へ押し出されていた。足元は body の min-height が画面の底に置く
@@ -530,7 +529,11 @@ describe('ページの外枠', () => {
     expect(bodyOf(frame, ':where(body[data-site]) main > :is(.hero, section) {')).toContain(
       'align-content: safe start',
     )
-    expect(ruleWith(sheet, 'padding: var(--page-pad) var(--gutter)').selector).toBe('.frame > main')
+    // 左右は上の帯・足元と同じ --frame-x（本文の左の軸が、どの幅でもロゴの左端にそろう）
+    expect(ruleWith(sheet, 'padding: var(--page-pad) var(--frame-x)').selector).toBe(
+      '.frame > main',
+    )
+    expect(bodyOf(sheet, ':is(.top, .foot) {')).toContain('padding-inline: var(--frame-x)')
 
     // 外枠のどの寄せ方にも safe を付ける。素の center / end は、中身が容器を超えた
     // 瞬間に上端を容器の外へ押し出す
@@ -623,15 +626,11 @@ describe('ページの外枠', () => {
       骨格のプリセットは無くなったので、外枠が部品の規則に勝つための強さは要らない。
       目印（body[data-site]）は全部 :where() の中に置き、外枠の規則の強さは部品の
       セレクタだけで決まるようにする（body と本文の枠の名指しの2本だけは例外——
-      骨格そのもので、部品が上書きする相手が居ない。900 以上の枠の並べ方も同じ1本）
+      骨格そのもので、部品が上書きする相手が居ない）
     */
     const frame = blockAt(sheet, '@media screen')
     const bare = (frame.match(/^\s*body\[data-site\][^\n]*\{/gm) ?? []).map((line) => line.trim())
-    expect(bare).toEqual([
-      'body[data-site] {',
-      'body[data-site] > .frame {',
-      'body[data-site] > .frame {',
-    ])
+    expect(bare).toEqual(['body[data-site] {', 'body[data-site] > .frame {'])
   })
 })
 
@@ -1195,9 +1194,9 @@ describe('一覧の行', () => {
   天体の飾り（app.css の同名の節）。サイトの名の天体を添える。
 
   前に置いた天体の絵・星空・軌道図は、最初の画面の6割を占めて動き続け、持ち主の
-  「シンプル・モダンに」で外した。いまの飾りは、Cavani の左の写真の位置に置いた夜明けの
-  窓と、その外の線と点だけで、どれも動かない。試作のレビューで落ちた2つ——地の色を
-  塗って線を切ると強制色で黒い円が浮く／紙と強制色で外せない——をここで止める。
+  「シンプル・モダンに」で外した。左に置いた夜明けの窓（夜から明ける空とすばる）も、持ち主が
+  外した。いまの飾りは線と点だけ（経歴の星座と、個人ページの顔の軌道の輪）。試作のレビューで
+  落ちた2つ——地の色を塗って線を切ると強制色で黒い円が浮く／強制色で外せない——をここで止める。
   効いているか（字と重ならないか）は npm run check:fit。
 */
 describe('天体の飾り', () => {
@@ -1206,55 +1205,31 @@ describe('天体の飾り', () => {
   const section = bare(css.slice(from, css.lastIndexOf('/*', css.indexOf('= 600px 以上 */'))))
 
   it('節を読めている（読めていないと、以下の検査が素通りする）', () => {
-    expect(section).toContain('.window {')
-    expect(section).toContain("url('/assets/sky.svg')")
     expect(section).toContain('.career__now')
+    expect(section).toContain('.nameplate .avatar::before {')
   })
 
-  it('夜明けの窓の外は線と点だけ。面・光・影・色相・動きを持たない。色は字の墨と罫線の段だけ', () => {
-    expect(section).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(/)
-    const outside = rulesOf(section).filter(
-      (rule) => !rule.selectors.some((selector) => selector.startsWith('.window')),
-    )
-    const outsideText = outside.map((rule) => rule.decls.map(([n, v]) => `${n}: ${v}`).join('; '))
-    expect(outsideText.join('\n')).not.toMatch(
-      /box-shadow|filter|text-shadow|animation|transition|opacity/,
+  it('線と点だけ。面・光・影・色相・動きを持たない。色は字の墨と罫線の段だけ', () => {
+    expect(section).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|url\(/)
+    const text = rulesOf(section).map((rule) => rule.decls.map(([n, v]) => `${n}: ${v}`).join('; '))
+    expect(text.join('\n')).not.toMatch(
+      /box-shadow|filter|text-shadow|animation|transition|opacity|gradient/,
     )
     const colors = new Set(
-      outsideText
-        .flatMap((text) => [...text.matchAll(/var\((--[\w-]+)\)/g)].map(([, name = '']) => name))
+      text
+        .flatMap((one) => [...one.matchAll(/var\((--[\w-]+)\)/g)].map(([, name = '']) => name))
         .filter((name) => /^--(ink|line|accent|mono|bg|surface|dawn)/.test(name)),
     )
     expect([...colors].sort()).toEqual(['--ink', '--ink-weak', '--line-strong'])
   })
 
-  it('夜明けの窓は窓の段（--dawn）だけで描く。字の墨や地の色を直に持ち込まない', () => {
-    const window = rulesOf(section).filter((rule) =>
-      rule.selectors.some((selector) => selector.startsWith('.window')),
-    )
-    const colors = new Set(
-      window
-        .flatMap((rule) => rule.decls.map(([, value]) => value))
-        .flatMap((value) => [...value.matchAll(/var\((--[\w-]+)\)/g)].map(([, name = '']) => name))
-        .filter((name) => /^--(ink|line|accent|mono|bg|surface|panel|dawn)/.test(name)),
-    )
-    expect([...colors].sort()).toEqual([
-      '--dawn-day',
-      '--dawn-dusk',
-      '--dawn-haze',
-      '--dawn-mist',
-      '--dawn-night',
-      '--dawn-shift',
-      '--dawn-star',
-    ])
-  })
-
-  it('星は素材を形として読み、色は段で塗る', () => {
-    // 素材に色を焼いて背景に敷くと、段を変えた日に星だけが前の色で残る
-    const stars = bodyOf(section, '.window::before {')
-    expect(stars).toContain('background: var(--dawn-star);')
-    expect(stars).toContain("mask: url('/assets/sky.svg')")
-    expect(bodyOf(section, '.window {')).not.toContain('url(')
+  it('夜明けの窓は持たない。窓の規則・空の色の段・星の素材をどこにも残さない', () => {
+    /*
+      左の夜明けの窓（夜から明ける空・すばる・読み進めると明ける動き）は持ち主が外した。
+      規則や段が残ると、使われない飾りの決まりが残り続ける
+    */
+    expect(sheets).not.toMatch(/\.window\b|--dawn-|--window-|sky\.svg|dawn-rise|star-fade/)
+    expect(sheets).not.toMatch(/--panel-pad|--orbit:|var\(--orbit\)/)
   })
 
   it('線を切るのに地の色を塗らない。切れ目は形（mask）で作る', () => {
@@ -1262,33 +1237,6 @@ describe('天体の飾り', () => {
     expect(bodyOf(sheet, '.nameplate .avatar::before {')).toContain(
       'mask-image: var(--orbit-mask);',
     )
-  })
-
-  it('すばるは窓の縁で切らない。窓が素材より細いときは素材を右へ寄せる', () => {
-    /*
-      35% に置いていたころは、電話の帯と 900 以上の縦の窓で Electra と Celaeno（右端の
-      2つ）が窓の縁で切れ、星空の巡り（上端で左右に約 36px）で外へ出た。600〜899 の帯は
-      素材より広いので、右へ寄せると左の4割が空だけになる——帯だけ別の段
-    */
-    const root = bodyOf(sheet, ':root {')
-    expect(root).toContain('--window-sky-at: 100% 0%')
-    expect(root).toContain('--window-sky-at-tall: 100% 0%')
-    expect(root).toContain('--window-sky-at-band: 35% 0%')
-    const wide = blockAt(sheet, '@media (min-width: 600px)')
-    expect(bodyOf(wide, '.window {')).toContain('--window-sky-at: var(--window-sky-at-band)')
-    /*
-      縦の窓は素材を上端から敷く。上へのはみ出し（窓の高さの -12%）のままだと、背の高い
-      画面ほど素材が上へずれ、1920x1080 ですばるの上の星が窓の上端で切れた
-    */
-    const tall = blockAt(blockAt(sheet, '@media screen'), '@media (min-width: 900px)')
-    expect(bodyOf(tall, '.frame > .window::before {')).toContain('top: 0')
-  })
-
-  it('夜明けの窓は HTML の外の飾り。紙には刷らず、強制色では枠ごと外す', () => {
-    expect(bodyOf(blockAt(sheet, '@media print'), '.window {')).toContain('display: none')
-    expect(
-      bodyOf(blockAt(sheet, '@media (forced-colors: active)'), '.frame > .window {'),
-    ).toContain('display: none')
   })
 
   it('強制色では飾りの疑似要素を全部外す', () => {
@@ -1524,11 +1472,11 @@ describe('文字の段', () => {
 
 /*
   配色は白い地の1つで、OS が暗い配色でも黒い地に切り替えない。前は黒基調だったが、
-  Cavani を下敷きにした作り替えで持ち主が明るい配色を選んだ。左の夜明けの窓も淡い地に
-  墨の星で、暗い面は置かない（窓だけ黒にしたら、白いページの中で1枚だけ浮いた）。紙にも
-  画面と同じ白い地で刷り、夜明けの窓だけを刷らない。
+  Cavani を下敷きにした作り替えで持ち主が明るい配色を選んだ。ページに暗い面は置かない
+  （左の窓だけ黒にしたら、白いページの中で1枚だけ浮いた。その窓は、空ごと外した）。暗い面は
+  入口の読み込みの幕だけで、開けば消える。紙にも画面と同じ白い地で刷る。
 */
-describe('配色（白い地と夜明けの窓）', () => {
+describe('配色（白い地と墨）', () => {
   // 帯の右端のぼかしと、軌道の輪の切れ目は不透明度の坂で、色の段ではない。
   const MASKS = new Set(['--fade-right', '--orbit-mask'])
   const colorTokens = (body: string) =>
@@ -1563,30 +1511,25 @@ describe('配色（白い地と夜明けの窓）', () => {
     expect(value('--mono')).toBe(value('--ink'))
   })
 
-  it('紙は画面と同じ白い地で刷る。色の段を差し替えず、夜明けの窓だけを刷らない', () => {
+  it('紙は画面と同じ白い地で刷る。色の段を差し替えない', () => {
     const screen = bodyOf(sheet, ':root {')
-    // 読めているか（地・面・線・字・墨と薄い地・危険・スイッチ・窓）
-    expect(colorTokens(screen).length).toBeGreaterThan(14)
+    // 読めているか（地・面・線・字・墨と薄い地・危険・スイッチ）
+    expect(colorTokens(screen).length).toBeGreaterThan(10)
     const print = blockAt(sheet, '@media print')
     expect(print).not.toContain(':root {')
-    expect(bodyOf(print, '.window {')).toContain('display: none')
   })
 
-  it('夜明けの窓の空は、底で地の白に溶ける。平らな夜の板を置かない', () => {
+  it('暗い面は入口の読み込みの幕だけ。開けば消え、ページに夜の板を残さない', () => {
     /*
-      窓を平らな夜の黒で塗ったら、白いページの中で1枚の板が浮いた。空は上から下へ
-      明けていき、最後の色は地と同じ白（--dawn-day は --bg）
+      左の窓を平らな夜の黒で塗ったら、白いページの中で1枚の板が浮いた（その窓は、空ごと外した）。
+      墨の面を持つのは、押し手・目次のいまのページの印と、開き終えたら隠れる幕だけ
     */
-    const root = bodyOf(sheet, ':root {')
-    const value = (name: string) => root.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1]
-    expect(value('--dawn-day')).toBe('var(--bg)')
-    // 窓の空は上から明けていき、最後の色は地の白（読み進めて明けても、底は動かない）
-    const sky = ruleWith(sheet, 'var(--dawn-night) 0%').body
-    expect(sky).toContain('linear-gradient(')
-    expect(sky).toContain('var(--dawn-day) 100%')
-    expect(sky).toContain('var(--dawn-night) 0%')
     expect(sheet).not.toContain('--night')
     expect(sheet).not.toContain('--starmap')
+    const curtain = bodyOf(sheet, '.opening::before,')
+    expect(curtain).toContain('background: var(--accent)')
+    const frames = sheet.slice(sheet.indexOf('@keyframes opening-up {'))
+    expect(frames.slice(0, frames.indexOf('}\n}'))).toContain('visibility: hidden')
   })
 
   it('ロゴの素材に焼く色は、塗りの押し手の :root の段と同じ', () => {
@@ -1640,11 +1583,12 @@ describe('動き', () => {
       '',
     )
     expect(outside).not.toContain('animation-timeline')
-    expect(motion).toContain('@supports (animation-timeline: scroll())')
+    // スクロールに連動していた夜明けの窓は外した。残るのは画面に入るときの動きだけ
+    expect(motion).not.toContain('animation-timeline: scroll(')
     expect(motion).toContain('@supports (animation-timeline: view())')
   })
 
-  it('終わらない動きは、窓の星と経歴のいまの行の星と、入口の打ち替える言葉だけ', () => {
+  it('終わらない動きは、経歴のいまの行の星と、入口の打ち替える言葉だけ', () => {
     /*
       打ち替える言葉（言葉を打っては消す巡りと、カーソルの点滅）は、持ち主が動画で見て選んだ
       Cavani の入口。数ごとの巡り（typed-2〜4）は animation-name だけを差し替える
@@ -1657,7 +1601,6 @@ describe('動き', () => {
     expect([...new Set(forever)].sort()).toEqual(
       [
         '.career__now .period::before',
-        '.window::before',
         ':is(.typed__words--2, .typed__words--3, .typed__words--4) > .typed__word',
         ':is(.typed__words--2, .typed__words--3, .typed__words--4)::after',
       ].sort(),
@@ -1710,30 +1653,65 @@ describe('動き', () => {
     expect(motion).not.toMatch(/(?:^|[,}])\s*\.contact-list__row\b/)
   })
 
-  it('読み込んだときの幕は入口だけ。合成だけで動き、押す手を通し、止める設定では出さない', () => {
-    // 幕は body の2つの疑似要素、光は html の ::after。HTML にも script にも足さない
-    const curtain = bodyOf(sheet, 'body[data-opening]::before,')
+  it('読み込みの幕は入口だけ。合成だけで動き、押す手を通し、止める設定では出さない', () => {
+    // 幕は .opening の2つの疑似要素（src/ui/Layout.tsx の Opening）。script は足さない
+    const curtain = bodyOf(sheet, '.opening {')
     expect(curtain).toContain('position: fixed')
     expect(curtain).toContain('pointer-events: none')
-    expect(bodyOf(sheet, ':root:has(> body[data-opening])::after {')).toContain(
-      'pointer-events: none',
-    )
-    // 動かすのは位置・倍率・透明度だけ（幅や高さを動かすと毎コマ描き直しになる）
-    for (const name of ['opening-up', 'opening-down', 'horizon', 'horizon-out']) {
-      const frames = bare(css).slice(bare(css).indexOf(`@keyframes ${name} {`))
+    // 動かすのは位置・倍率・回転・透明度だけ（幅や高さを動かすと毎コマ描き直しになる）
+    const names = [
+      'opening-up',
+      'opening-down',
+      'opening-turn',
+      'opening-fill',
+      'opening-out',
+      'opening-done',
+    ]
+    for (const name of names) {
+      const frames = sheet.slice(sheet.indexOf(`@keyframes ${name} {`))
       const body = frames.slice(0, frames.indexOf('}\n}') + 3)
+      expect(body, name).toContain(`@keyframes ${name} {`)
       expect(body, name).not.toMatch(/\b(width|height|top|left|bottom|right|inset)\s*:/)
     }
+    // 1回だけ動いて終わる（幕に終わらない動きを持たせない）
+    const opening = rulesOf(sheet).filter((rule) =>
+      rule.selectors.some((selector) => selector.startsWith('.opening')),
+    )
+    expect(opening.length).toBeGreaterThan(5)
+    for (const rule of opening) {
+      for (const [name, value] of rule.decls) {
+        if (name.startsWith('animation'))
+          expect(value, rule.selectors.join()).not.toMatch(/infinite/)
+      }
+    }
     // 字は幕が開き始めると同時に現れ始める
-    expect(bodyOf(sheet, 'body[data-opening] {')).toContain('--reveal-from: var(--opening-hold)')
-    // 素の動きを止めるだけだと幕が閉じたまま残るので、幕ごと出さない
+    expect(bodyOf(sheet, 'body[data-opening] {')).toContain('--reveal-from: var(--opening-load)')
+    // 素の動きを止めるだけだと幕が閉じたまま残るので、幕ごと出さない。入口の字も待たせない
     const off = blockAt(
       sheet,
       '@media (prefers-reduced-motion: reduce), print, (forced-colors: active)',
     )
-    expect(off).toContain('body[data-opening]::before')
-    expect(off).toContain(':root:has(> body[data-opening])::after')
-    expect(off).toContain('content: none')
+    expect(bodyOf(off, '.opening {')).toContain('display: none')
+    expect(bodyOf(off, 'body[data-opening] {')).toContain('--reveal-from: 0ms')
+  })
+
+  it('読み込みの線は一定の速さで満ちない。進んでは少し止まる（読み込みの間合い）', () => {
+    const frames = sheet.slice(sheet.indexOf('@keyframes opening-fill {'))
+    const body = frames.slice(0, frames.indexOf('}\n}') + 3)
+    const steps = [...body.matchAll(/(\d+)% \{\s*scale: ([\d.]+) 1/g)].map(([, at, to]) => [
+      Number(at),
+      Number(to),
+    ])
+    expect(steps.length).toBeGreaterThanOrEqual(5)
+    // 進みは戻らない
+    for (let i = 1; i < steps.length; i += 1) {
+      expect(steps[i]?.[1], String(steps[i]?.[0])).toBeGreaterThan(steps[i - 1]?.[1] ?? 0)
+    }
+    // 速い区間と、ほとんど止まる区間の両方がある
+    const speeds = steps
+      .slice(1)
+      .map(([at = 0, to = 0], i) => (to - (steps[i]?.[1] ?? 0)) / (at - (steps[i]?.[0] ?? 0)))
+    expect(Math.max(...speeds) / Math.min(...speeds)).toBeGreaterThan(3)
   })
 
   it('目次の印は移った先で左から満ちる。横に滑らせる名前を付けない', () => {
