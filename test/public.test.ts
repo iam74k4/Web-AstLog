@@ -3489,6 +3489,13 @@ describe('左の柱', () => {
       // 行き先は足元と同じ
       expect(links(pillar.split('</nav>')[1] ?? ''), path).toEqual(links(footOf(html)))
       expect(links(footOf(html)).length, path).toBeGreaterThan(0)
+      /*
+        著作権表示も柱の底に持つ（柱が見える幅では足元ごと畳むので、ここに無いとどこにも出ない。
+        行き先だけを移して足元に1行残していたころは、その1行のぶんだけ短いページが縦に送れた）
+      */
+      const mark = footOf(html).match(/<p class="foot__meta">[^<]*<\/p>/)?.[0]
+      expect(mark, path).toMatch(/© \d{4} AstLog/)
+      expect(pillar.split('<div class="pillar__foot">')[1], path).toContain(mark)
     }
   })
 
