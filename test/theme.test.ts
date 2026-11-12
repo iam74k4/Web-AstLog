@@ -382,6 +382,14 @@ const bodyOf = (raw: string, selector: string) => {
   return source.slice(open + 1, source.indexOf('}', open)).trim()
 }
 
+// 公開のシートの @keyframes を名前で引く（見出しの行から閉じ括弧まで。無ければ落とす）
+const keyframesOf = (name: string) => {
+  const at = sheet.indexOf(`@keyframes ${name} {`)
+  expect(at, `@keyframes ${name} が見つからない`).toBeGreaterThan(-1)
+  const frames = sheet.slice(at)
+  return frames.slice(0, frames.indexOf('}\n}') + 3)
+}
+
 describe('CSS を読む道具', () => {
   it('同じセレクタの規則が後ろで同じ性質を上書きしていたら見つける', () => {
     // 外枠の値を末尾で消す、という壊れ方の縮図。@media の中の差し替えは数えない
@@ -1576,9 +1584,10 @@ describe('配色（白い地と墨）', () => {
     const curtain = bodyOf(sheet, '.opening::before,')
     expect(curtain).toContain('background: var(--opening-ground)')
     expect(bodyOf(sheet, ':root {')).toContain('--opening-ground: #000000;')
-    expect(sheets.match(/var\(--opening-ground\)/g)).toHaveLength(1)
-    const frames = sheet.slice(sheet.indexOf('@keyframes opening-up {'))
-    expect(frames.slice(0, frames.indexOf('}\n}'))).toContain('visibility: hidden')
+    // 黒を読むのは幕と、幕のあいだだけ黒くする地（opening-ground）の2か所
+    expect(sheets.match(/var\(--opening-ground\)/g)).toHaveLength(2)
+    expect(keyframesOf('opening-ground')).toContain('background-color: var(--opening-ground)')
+    expect(keyframesOf('opening-part')).toContain('visibility: hidden')
   })
 
   it('ロゴの素材に焼く色は、塗りの押し手の :root の段と同じ', () => {
@@ -1707,20 +1716,16 @@ describe('動き', () => {
     const curtain = bodyOf(sheet, '.opening {')
     expect(curtain).toContain('position: fixed')
     expect(curtain).toContain('pointer-events: none')
-    // 動かすのは位置・倍率・回転・透明度だけ（幅や高さを動かすと毎コマ描き直しになる）
-    const names = [
-      'opening-up',
-      'opening-down',
-      'opening-turn',
-      'opening-fill',
-      'opening-out',
-      'opening-done',
-    ]
-    for (const name of names) {
-      const frames = sheet.slice(sheet.indexOf(`@keyframes ${name} {`))
-      const body = frames.slice(0, frames.indexOf('}\n}') + 3)
-      expect(body, name).toContain(`@keyframes ${name} {`)
-      expect(body, name).not.toMatch(/\b(width|height|top|left|bottom|right|inset)\s*:/)
+    // 毎コマ動かすのは倍率・回転・透明度だけ（幅や高さを動かすと毎コマ描き直しになる）
+    for (const name of ['opening-part', 'opening-turn', 'opening-fill', 'opening-out']) {
+      expect(keyframesOf(name), name).not.toMatch(
+        /\b(width|height|top|left|bottom|right|inset)\s*:/,
+      )
+    }
+    // 箱の位置を変えるのは 1ms で終わる1度きりの段だけ（描き直しは1回）
+    for (const name of ['opening-lift', 'opening-done']) {
+      expect(keyframesOf(name), name).toContain('to {')
+      expect(curtain).toMatch(new RegExp(`${name} 1ms linear `))
     }
     // 1回だけ動いて終わる（幕に終わらない動きを持たせない）
     const opening = rulesOf(sheet).filter((rule) =>
@@ -1742,15 +1747,39 @@ describe('動き', () => {
     )
     expect(bodyOf(off, '.opening {')).toContain('display: none')
     expect(bodyOf(off, 'body[data-opening] {')).toContain('--reveal-from: 0ms')
+    expect(bodyOf(off, 'body[data-opening] {')).toContain('animation: none')
+  })
+
+  it('幕は iPhone の Safari の上下の帯を黒く残さない（縁に触れず、縁を越えず、開き始めに外れる）', () => {
+    /*
+      Safari 26 は画面の縁に触れる fixed の要素の色で上下の帯を塗り、下の帯は隠しても
+      その要素がページにあるあいだ最初の色のまま残す。幕が全面の fixed だったころ、開いた
+      あとも上下が黒く、ページが黒い枠に縮んで見えた（app.css の .opening のコメント）
+    */
+    const root = bodyOf(sheet, ':root {')
+    expect(root).toMatch(/--opening-edge: [1-9]\d*px;/)
+    const curtain = bodyOf(sheet, '.opening {')
+    // 下の縁に触れない。空いた所は、幕のあいだだけ黒い地が埋める
+    expect(curtain).toContain('inset: 0 0 var(--opening-edge)')
+    expect(bodyOf(sheet, 'body[data-opening] {')).toContain(
+      'animation: opening-ground 1ms linear var(--opening-load) backwards',
+    )
+    // 半分ずつ外側の縁へ縮む。滑らせて縁を越えさせない
+    const part = keyframesOf('opening-part')
+    expect(part).toContain('scale: 1 0')
+    expect(part).not.toContain('translate')
+    expect(bodyOf(sheet, '.opening::before,')).toContain('transform-origin: top')
+    // 下の半分だけの規則（並べた規則の後ろ）
+    expect(bodyOf(sheet, '.opening::after {\n  top:')).toContain('transform-origin: bottom')
+    // 開き始め（地が白に戻るのと同じ時）に、箱の上も縁から外す
+    expect(curtain).toContain('opening-lift 1ms linear var(--opening-load) forwards')
+    expect(keyframesOf('opening-lift')).toContain('top: var(--opening-edge)')
   })
 
   it('読み込みの線は一定の速さで満ちない。進んでは少し止まる（読み込みの間合い）', () => {
-    const frames = sheet.slice(sheet.indexOf('@keyframes opening-fill {'))
-    const body = frames.slice(0, frames.indexOf('}\n}') + 3)
-    const steps = [...body.matchAll(/(\d+)% \{\s*scale: ([\d.]+) 1/g)].map(([, at, to]) => [
-      Number(at),
-      Number(to),
-    ])
+    const steps = [...keyframesOf('opening-fill').matchAll(/(\d+)% \{\s*scale: ([\d.]+) 1/g)].map(
+      ([, at, to]) => [Number(at), Number(to)],
+    )
     expect(steps.length).toBeGreaterThanOrEqual(5)
     // 進みは戻らない
     for (let i = 1; i < steps.length; i += 1) {

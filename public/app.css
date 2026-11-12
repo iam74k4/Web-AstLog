@@ -346,12 +346,15 @@
     ではなく黒。墨の幕は、開く前の一瞬が灰色がかって見えた）、--opening-track は満ちる前の線の色
     （黒い幕の上の、薄い白）、
     --opening-turn は O が回る量（1回転と4分の3。ロゴと同じ向きで止まる）。
+    --opening-edge は幕が画面の下の縁から空け、開き始めに上の縁からも外す幅（理由は「動き」の
+    節の .opening）。
     --ease-curtain は幕の開き、--ease-loader は O が回り出して静かに止まる曲線
   */
   --opening-load: 1500ms;
   --opening-open: 440ms;
   --opening-mark-h: 20px;
   --opening-gap: 22px;
+  --opening-edge: 8px;
   --opening-ground: #000000;
   --opening-track: rgba(255, 255, 255, 0.24);
   --opening-turn: -630deg;
@@ -3523,26 +3526,48 @@ body[data-site] > .frame {
   ページはもう届いているので、線が見せているのは本物の進みではなく、見せるための間
   （--opening-load）。入口の字は幕が開き始めると同時に現れ始める（--reveal-from）。
 
-  軽さのために: JavaScript は使わない。幕は .opening の2つの疑似要素で、動かすのは位置
-  （translate）・倍率（scale）・回転（rotate）・透明度だけ——描き直しの要らない合成だけで動く。
-  押す手は幕を通り抜ける（pointer-events: none）。開き終えたら隠す（visibility）。
+  軽さのために: JavaScript は使わない。幕は .opening の2つの疑似要素で、毎コマ動かすのは
+  倍率（scale）・回転（rotate）・透明度だけ——描き直しの要らない合成だけで動く。箱の位置を
+  変えるのは開き始めの1度だけ（opening-lift）。押す手は幕を通り抜ける（pointer-events: none）。
+  開き終えたら隠す（visibility）。
 
   動きを減らす設定・紙・強制色では幕ごと出さない（下の @media。素の動きを止めるだけだと、
   幕が閉じたまま残る）。
+
+  iPhone の Safari（26 から）は、画面の上と下の縁に触れる position: fixed の要素の色で上の
+  帯（時計の列）と下の帯（道具の列）を塗る。隠しても（visibility）数え、下の帯はその要素が
+  ページにあるあいだ最初の色のまま——幕が開いたあとも上下が黒く残り、ページが黒い枠に
+  縮んで見えた。fixed の箱は下の帯の奥まで届かず、そこにはページの地が見える。だから
+  - 幕は下の縁に触れない（--opening-edge だけ空ける）。空いた所と下の帯の奥は、幕のあいだ
+    だけ黒くした地（body の opening-ground）が埋める
+  - 開くときも縁を越えない。半分ずつ外側の縁へ縮む（opening-part。滑らせると、下の半分が
+    縁を越える一瞬に下の帯が黒に決まった）
+  - 開き始めたら、地を白に戻し、箱の上も縁から外す（opening-lift）。上の帯は帯の下の白い面の
+    色に、下の帯は白い地に、同じ瞬間に戻る
 */
 body[data-opening] {
   --reveal-from: var(--opening-load);
+  animation: opening-ground 1ms linear var(--opening-load) backwards;
+}
+
+@keyframes opening-ground {
+  from,
+  to {
+    background-color: var(--opening-ground);
+  }
 }
 
 .opening {
   position: fixed;
-  inset: 0;
+  inset: 0 0 var(--opening-edge);
   z-index: 10;
   display: grid;
   place-items: center;
   color: var(--accent-ink);
   pointer-events: none;
-  animation: opening-done 1ms linear calc(var(--opening-load) + var(--opening-open)) forwards;
+  animation:
+    opening-lift 1ms linear var(--opening-load) forwards,
+    opening-done 1ms linear calc(var(--opening-load) + var(--opening-open)) forwards;
 }
 
 /* 幕の上下の半分。下の半分は 1px 重ねる（端数の高さで、合わせ目から白い地が線になって覗かない） */
@@ -3555,14 +3580,15 @@ body[data-opening] {
   left: 0;
   height: 50%;
   background: var(--opening-ground);
-  animation: opening-up var(--opening-open) var(--ease-curtain) var(--opening-load) both;
+  transform-origin: top;
+  animation: opening-part var(--opening-open) var(--ease-curtain) var(--opening-load) both;
 }
 
 .opening::after {
   top: calc(50% - 1px);
   bottom: 0;
   height: auto;
-  animation-name: opening-down;
+  transform-origin: bottom;
 }
 
 /* ロゴと線。幕より手前に置き、幕が開き始めると同時に消える。線の幅はロゴの幅 */
@@ -3633,17 +3659,18 @@ body[data-opening] {
   }
 }
 
-@keyframes opening-up {
+/* 幕の半分は、外側の縁へ縮んで開く（無地なので、滑って出ていくのと同じに見える） */
+@keyframes opening-part {
   to {
-    translate: 0 -100%;
+    scale: 1 0;
     visibility: hidden;
   }
 }
 
-@keyframes opening-down {
+/* 開き始めの1度だけ、箱の上を縁から外す（上の帯が幕の黒から戻る。描き直しは1回） */
+@keyframes opening-lift {
   to {
-    translate: 0 100%;
-    visibility: hidden;
+    top: var(--opening-edge);
   }
 }
 
@@ -3658,9 +3685,10 @@ body[data-opening] {
     display: none;
   }
 
-  /* 幕が無いので、入口の字も待たせない */
+  /* 幕が無いので、入口の字も待たせず、地も黒くしない */
   body[data-opening] {
     --reveal-from: 0ms;
+    animation: none;
   }
 }
 
