@@ -1,5 +1,5 @@
 /*
-  AstLog のロゴの形（ここが正）。ページのロゴは src/ui/icons.tsx の Wordmark / Mark が
+  AstLog のロゴの形（ここが正）。ページのロゴは src/ui/icons.tsx の Wordmark / OpeningMark が
   ここから直に SVG を描く。素材のファイル（public/assets の astlog-wordmark.svg・favicon.svg と、
   favicon・iPhone のホーム画面・共有カードの PNG）は scripts/logo/export.mjs がここから書き出す。
 

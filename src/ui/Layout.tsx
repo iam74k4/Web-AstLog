@@ -259,7 +259,6 @@ export const Layout = (props: {
         data-whole={props.whole ? '' : undefined}
         data-opening={props.opening && !props.preview ? '' : undefined}
         data-pillar={pillar ? (props.owner ? 'owner' : 'nav') : undefined}
-        data-preview={props.preview ? '' : undefined}
         data-still={props.still && props.preview ? '' : undefined}
       >
         <a class="skip" href="#main" lang="en">
@@ -280,8 +279,8 @@ export const Layout = (props: {
           （Projects）の行に、個人ページは Profile か Team の行に印が付く。
 
           番号は振らない。目次の番号はブロックの並び順でしかなく、読む人に言う
-          ことが無い。行き先の名前が英字だけなら lang="en"（等幅の小さな大文字の札に
-          なる。components.tsx の langOf）。
+          ことが無い。行き先の名前が英字だけなら lang="en"（読み上げの発音の印。
+          components.tsx の langOf）。
 
           aria-label は行き先で出し分ける。全体ページの目次だけが本当に
           ページ内（#projects）を指していて、ページごとの URL では別ページへ移る。

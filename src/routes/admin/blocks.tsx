@@ -311,7 +311,7 @@ const BlocksPage = (props: {
         <section class="catalog">
           <h2 class="catalog__title">
             足す
-            <span class="presets__note">Contact の手前に入る。置いてから前後に動かす</span>
+            <span>Contact の手前に入る。置いてから前後に動かす</span>
           </h2>
           <ul class="catalog__grid">
             {available.map((type) => (

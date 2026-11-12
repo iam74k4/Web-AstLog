@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   IMAGE_ACCEPT,
   imageTypeOfPath,
-  isImageType,
   isMediaType,
   isVideoUrl,
   SHOT_ACCEPT,
@@ -84,9 +83,9 @@ describe('画像の種類は中身で決める', () => {
 
   it('選ぶ画面の accept と、配る側の許可リストは同じ5種類', () => {
     expect(IMAGE_ACCEPT).toBe('image/png,image/jpeg,image/webp,image/avif,image/gif')
-    for (const type of IMAGE_ACCEPT.split(',')) expect(isImageType(type), type).toBe(true)
+    for (const type of IMAGE_ACCEPT.split(',')) expect(isMediaType(type), type).toBe(true)
     for (const type of ['image/svg+xml', 'image/heic', 'text/html', undefined]) {
-      expect(isImageType(type), String(type)).toBe(false)
+      expect(isMediaType(type), String(type)).toBe(false)
     }
   })
 
@@ -146,7 +145,6 @@ describe('動画の種類も中身で決める', () => {
     for (const type of SHOT_ACCEPT.split(',').filter((one) => one !== 'video/quicktime')) {
       expect(isMediaType(type), type).toBe(true)
     }
-    expect(isImageType('video/mp4')).toBe(false)
     for (const type of ['video/quicktime', 'image/svg+xml', 'text/html', undefined]) {
       expect(isMediaType(type), String(type)).toBe(false)
     }

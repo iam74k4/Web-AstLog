@@ -2585,7 +2585,7 @@ body[data-site] > .frame {
   font-size: var(--fs-meta);
 }
 
-/* 数字のブロック。入口の件数の帯と同じく、上に罫線を引いたセルを並べる（箱は持たない） */
+/* 数字のブロック。上に罫線を引いたセルを並べる（箱は持たない） */
 .numbers {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
