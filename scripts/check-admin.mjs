@@ -173,7 +173,7 @@ try {
     await page
       .locator('[name=newShot]')
       .first()
-      .setInputFiles(join(ROOT, 'scripts/fixtures/media/appmixer-icon.png'))
+      .setInputFiles(join(ROOT, 'scripts/fixtures/media/sample-icon-mixer.png'))
     await page.locator('button[formaction]').click()
     await modal.locator('.shots--showcase').waitFor()
     await modal.locator('.gallery__thumb').nth(1).click()
