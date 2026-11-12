@@ -415,32 +415,45 @@ function imageDataUrl(image: PickedImage) {
   return `data:${image.type};base64,${btoa(parts.join(''))}`
 }
 
+/*
+  描けない入力のときの画面。押して開いたプレビュー（ダイアログ・JS 無効時の別タブ）は 400 で、
+  直してからもう一度押してもらう。
+
+  書きながら横に出す完成形（?live=1）は別の姿にする——あちらは入力が止まるたびに勝手に送るので、
+  何も打っていない新しいフォームでも届く（題が空）。そこで「入力を確認してください」のエラーを
+  出すと、開いた瞬間から叱られる。描けるようになるまで待っている、と言うだけにして 200 で返す
+  （失敗ではなく書きかけ。400 だとブラウザのコンソールにも読み込みの失敗が並ぶ）
+*/
 export async function validationFailure(
   c: Context<AppEnv>,
   errors: Record<string, string>,
   editHref: string,
 ) {
   const saved = await snapshot(c)
+  const live = livePreview(c)
+  const messages = Object.values(errors).join('。')
   return c.html(
     <PreviewLayout
       title={pageTitle('入力の確認')}
-      description="入力を確認してください"
+      description={live ? 'ここに完成形が出ます' : '入力を確認してください'}
       label="入力の確認"
       editHref={editHref}
       unsaved
-      still={livePreview(c)}
+      still={live}
       nav={[]}
       footer={footer(saved)}
       owner={soloMember(saved.members)}
     >
       <Screen id="preview-errors" label="入力の確認">
-        <SectionHead title="入力を確認してください" h1 />
+        <SectionHead title={live ? 'ここに完成形が出ます' : '入力を確認してください'} h1 />
         <Empty>
-          編集していたタブに戻り、入力を修正してください。{Object.values(errors).join('。')}
+          {live
+            ? `次を直すと描きます。${messages}`
+            : `入力を修正してから、もう一度プレビューしてください。${messages}`}
         </Empty>
       </Screen>
     </PreviewLayout>,
-    400,
+    live ? 200 : 400,
   )
 }
 
