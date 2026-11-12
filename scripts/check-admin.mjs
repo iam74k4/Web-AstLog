@@ -35,6 +35,9 @@ const paths = [
   '/admin/blocks/1/edit',
   '/admin/items/1/delete',
   '/admin/members/1/delete',
+  '/admin/platforms',
+  '/admin/platforms/web/delete',
+  '/admin/media',
 ]
 try {
   dev = await devServer(undefined, Number(process.env.ADMIN_PORT ?? 8816), state.dir)

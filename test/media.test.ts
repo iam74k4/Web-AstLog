@@ -530,3 +530,98 @@ describe('画像のキー', () => {
     }
   })
 })
+
+/*
+  外した画像の控え（archive/）を、管理画面から見て保存し直す（src/routes/admin/media.tsx）。
+  削除の確認は「控えは90日残る」と言うのに、取り出す口が管理画面に無かった
+*/
+describe('外した画像の控え', () => {
+  const archived = async () =>
+    (await env.MEDIA.list({ prefix: 'archive/' })).keys.map((key) => key.name)
+  beforeEach(async () => {
+    for (const key of await archived()) await env.MEDIA.delete(key)
+  })
+
+  it('作品から外した画像が一覧に出て、ログインしていれば保存できる', async () => {
+    const signed = await signIn()
+    const created = await signed('/admin/items', {
+      method: 'POST',
+      body: withFiles({ type: 'app', title: 'Demo', slug: 'demo', imageAlt: '画面' }, [
+        ['image', file(png(), 'a.png', 'image/png')],
+      ]),
+    })
+    expect(created.status).toBe(303)
+    const [item] = await db().select().from(schema.items)
+    const name = item?.imageUrl?.replace('/images/items/', '') ?? ''
+    expect(await (await signed('/admin/media')).text()).toContain('外した画像の控えはありません')
+
+    const removed = await signed(`/admin/items/${item?.id}`, {
+      method: 'POST',
+      body: form({ title: 'Demo', removeImage: '1' }),
+    })
+    expect(removed.status).toBe(303)
+    expect(await archived()).toEqual([`archive/items/${name}`])
+
+    const list = await (await signed('/admin/media')).text()
+    expect(list).toContain('<h1>外した画像</h1>')
+    expect(list).toContain(`<strong>${name}</strong>`)
+    expect(list).toContain('作品の画像')
+    expect(list).toContain(`src="/admin/media/file/items/${name}"`)
+    expect(list).toContain(`href="/admin/media/file/items/${name}?download=1"`)
+    expect(list).toMatch(/\d{4}-\d{2}-\d{2} に外した/)
+    expect(list).toMatch(/\d{4}-\d{2}-\d{2} に消える/)
+    // 概要と削除の確認から辿れる
+    expect(await (await signed('/admin')).text()).toContain('href="/admin/media"')
+    expect(await (await signed(`/admin/items/${item?.id}/delete`)).text()).not.toContain(
+      '復元用コピー',
+    )
+
+    const inline = await signed(`/admin/media/file/items/${name}`)
+    expect(inline.status).toBe(200)
+    expect(inline.headers.get('content-type')).toBe('image/png')
+    expect(inline.headers.get('content-disposition')).toBeNull()
+    expect(inline.headers.get('x-content-type-options')).toBe('nosniff')
+    expect(inline.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox")
+    expect(inline.headers.get('cache-control')).toContain('no-store')
+    expect(new Uint8Array(await inline.arrayBuffer()).byteLength).toBeGreaterThan(0)
+    const saved = await signed(`/admin/media/file/items/${name}?download=1`)
+    expect(saved.headers.get('content-disposition')).toBe(`attachment; filename="${name}"`)
+  })
+
+  it('控えは壁の内側だけ。公開の /images/* からも、ログイン無しでも読めない', async () => {
+    await env.MEDIA.put('archive/items/secret-0123abcd.png', png(), {
+      metadata: { contentType: 'image/png' },
+    })
+    expect((await get('/images/archive/items/secret-0123abcd.png')).status).toBe(404)
+    const anonymous = await get('/admin/media/file/items/secret-0123abcd.png')
+    expect(anonymous.status).toBe(303)
+    expect(anonymous.headers.get('location')).toContain('/admin/login')
+    const signed = await signIn()
+    // 置き場の外・控えでないキーは引けない（同じ KV の版の行や、公開中の画像を読む口にしない）
+    await env.MEDIA.put('items/live-0123abcd.png', png(), {
+      metadata: { contentType: 'image/png' },
+    })
+    for (const path of [
+      '/admin/media/file/items/nope.png',
+      '/admin/media/file/site/version',
+      '/admin/media/file/items/live-0123abcd.png',
+      '/admin/media/file/items/..%2F..%2Fsite:version',
+    ]) {
+      expect((await signed(path)).status, path).toBe(404)
+    }
+  })
+
+  it('許可リストに無い種類の控えは、描かせずに添付で返す', async () => {
+    await env.MEDIA.put('archive/items/old-0123abcd.svg', '<svg onload="alert(1)"/>', {
+      metadata: { contentType: 'image/svg+xml' },
+    })
+    const signed = await signIn()
+    const response = await signed('/admin/media/file/items/old-0123abcd.svg')
+    expect(response.headers.get('content-type')).toBe('application/octet-stream')
+    expect(response.headers.get('content-disposition')).toContain('attachment')
+    // 一覧は、画像として描けないものを <img> にしない
+    expect(await (await signed('/admin/media')).text()).not.toContain(
+      'src="/admin/media/file/items/old-0123abcd.svg"',
+    )
+  })
+})

@@ -221,6 +221,40 @@ export const Select = (props: {
   </label>
 )
 
+/*
+  前の URL（slug を変えたときに残る転送の行。src/db/schema.ts の item_slug_redirects /
+  member_slug_redirects）。見えるようにして、転送をやめる手を持つ——転送に使っている slug は
+  ほかの行が使えないので（貼られた URL が黙って別の行を指さないように）、打ち間違いで作った
+  前の URL を空けるには D1 を直に消すしかなかった。フォームに出すのは、いまある転送だけ
+*/
+export const SlugRedirects = (props: {
+  redirects: { slug: string; href: string }[]
+  // 弾いたあとの描き直しで、付けた印を残す
+  dropped?: readonly string[]
+  // 「ほかの作品」「ほかのメンバー」
+  others: string
+}) =>
+  props.redirects.length ? (
+    <fieldset class="field field--wide fieldset">
+      <legend class="field__label">前の URL（いまの URL へ転送中）</legend>
+      {props.redirects.map((one) => (
+        <label class="check" key={one.slug}>
+          <input
+            type="checkbox"
+            name="dropRedirect"
+            value={one.slug}
+            checked={props.dropped?.includes(one.slug)}
+          />
+          {one.href} の転送をやめる
+        </label>
+      ))}
+      <span class="field__hint">
+        印を付けて保存すると、その URL は見つからなくなり（404）、{props.others}の URL
+        に使えるようになります。貼ったリンクが残っているなら、そのままにします
+      </span>
+    </fieldset>
+  ) : null
+
 export const PublishToggle = ({ published }: { published: number }) => (
   <label class="toggle">
     <input type="checkbox" name="published" value="1" checked={published === 1} />

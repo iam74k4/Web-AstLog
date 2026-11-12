@@ -353,8 +353,8 @@ Team に戻る。人数は数えて告知しない。
 ### 作品の並びと選択肢
 
 **選択肢は表で持つ。** プラットフォームは `platforms` テーブルが正（自由入力は表記ゆれで札が
-揃わない）。行を入れるのは移行で、`seed.sql` ではない（seed にしか無いと、新しい環境の用意に
-本番の全消去が要る）。
+揃わない）。足す・直す・消すのは管理画面（`src/routes/admin/platforms.tsx` と、作品のフォームの
+「選択肢に無いとき」）。初めの5つは移行が入れる（`seed.sql` ではない）。
 
 **個人開発と業務は、公開ページでは1つの一覧（Projects）。** データの区分（`items.type`）と
 管理画面のタブは分かれたまま、公開ページでは新しい順（年 → 並び順 → 作った順。
@@ -423,9 +423,8 @@ HTML に絵・件数の帯は置かない。
 
 **Projects に項目を足す・トップの節を並べる** → 管理画面から。コードは触らない。
 
-**プラットフォームの種類を増やす** → `npx drizzle-kit generate --custom --name <名前>` で空の移行を
-作り、`INSERT OR IGNORE INTO platforms …` を1行（0011 に倣う）。本番へ `d1 execute --remote` で
-手打ちしない（リポジトリに残らない）。
+**プラットフォームの種類を増やす・外した画像を取り出す** → 管理画面から（作品 → プラットフォーム、
+概要 → 外した画像）。本番へ `d1 execute --remote` で手打ちしない（リポジトリに残らない）。
 
 **メンバーの項目（列）を増やす** → `src/db/schema.ts` → `npm run db:generate` →
 `src/routes/admin/members.tsx` のフォームと `src/routes/public/member-page.tsx`・
@@ -587,7 +586,7 @@ URL を動かすなら前の URL は転送で残す（貼られたリンクを�
   （`/images/*`）
 - `public/` の静的なファイルはミドルウェアを通らないので `public/_headers`（上限 100 本）。HSTS と
   Permissions-Policy は `src/lib/headers.ts` の値を両方に付ける
-- `public/.well-known/security.txt` の Expires は毎年更新（切れる30日前から CI が落ちる）
+- `/.well-known/security.txt` は Worker が出す（連絡先はサイト設定、期限は応答のたび。`crawl.ts`）
 
 **公開ページの「管理画面」の入口はログイン中だけ出る**（`src/routes/public/page.tsx` の
 `adminHref`。クッキーが無ければ D1 に聞かない。行き先は `blockAdminPath`）。出したページは

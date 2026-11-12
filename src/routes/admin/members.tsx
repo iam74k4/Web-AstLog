@@ -1,4 +1,4 @@
-import { and, asc, count, eq, ne, sql } from 'drizzle-orm'
+import { and, asc, count, eq, inArray, ne, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
@@ -22,6 +22,7 @@ import {
   FormSection,
   FormVersion,
   PublishToggle,
+  SlugRedirects,
 } from '../../ui/AdminForm'
 import { AdminLayout } from '../../ui/AdminLayout'
 import { Avatar, StatusPill } from '../../ui/components'
@@ -166,6 +167,8 @@ const MemberForm = (props: {
   version?: string
   errors?: Record<string, string>
   values?: Record<string, string>
+  // この人の前の slug（転送の行。memberRedirects）。編集でだけ渡す
+  redirects?: string[]
 }) => {
   const member = props.member
   const value = (key: keyof schema.Member, fallback = '') =>
@@ -324,6 +327,25 @@ const MemberForm = (props: {
                 : `${IMAGE_LIMIT_NOTE}。未設定なら頭文字を出す`}
             </span>
           </label>
+          {/*
+            いまの顔と、外す手（作品のアイコンと同じ形）。差し替えの口しか無かったころは、一度
+            上げた顔を頭文字に戻せなかった。選んだうえで外すにも印を付けたら、選んだほうを採る
+          */}
+          {member?.avatarUrl ? (
+            <div class="field">
+              <span class="field__label">いまのアバター</span>
+              <img class="icon-preview" src={member.avatarUrl} alt="" width="64" height="64" />
+              <label class="check">
+                <input
+                  type="checkbox"
+                  name="removeAvatar"
+                  value="1"
+                  checked={props.values?.removeAvatar === '1'}
+                />
+                アバターを外す（頭文字に戻す）
+              </label>
+            </div>
+          ) : null}
         </FormDetails>
         <FormDetails
           title="個人の連絡先を追加する"
@@ -386,6 +408,11 @@ const MemberForm = (props: {
             error={props.errors?.sortOrder}
             hint="小さいほど先。10刻み"
           />
+          <SlugRedirects
+            redirects={(props.redirects ?? []).map((slug) => ({ slug, href: `/members/${slug}` }))}
+            dropped={props.values?.dropRedirect ? JSON.parse(props.values.dropRedirect) : []}
+            others="ほかのメンバー"
+          />
         </FormDetails>
 
         <div class="form-foot">
@@ -424,6 +451,7 @@ memberRoutes.get('/members/:id/edit', async (c) => {
     <MemberForm
       account={c.get('account')}
       member={member}
+      redirects={await memberRedirects(db(c), member.id)}
       flash={flashFor(c)}
       solo={total === 1}
       onTop={total === 1}
@@ -522,6 +550,35 @@ export async function memberSlugTaken(
   消す（いまの slug と転送が同じ URL を指さない）。行の書き換えと同じ batch に
   入れる——別々に書くと、行は変わったのに転送が無い、が途中で止まったときに残る。
 */
+// この人の前の slug（転送の行）。新しい順
+const memberRedirects = async (database: Db, id: number) =>
+  (
+    await database.query.memberSlugRedirects.findMany({
+      where: eq(schema.memberSlugRedirects.memberId, id),
+      orderBy: (table, { desc }) => [desc(table.createdAt), asc(table.oldSlug)],
+    })
+  ).map((row) => row.oldSlug)
+
+// 「転送をやめる」に印を付けた前の slug を消す1文（作品の redirectDrops と同じ。この人の行だけ）
+function redirectDrops(database: Db, id: number, form: FormData, redirects: readonly string[]) {
+  const dropped = form
+    .getAll('dropRedirect')
+    .map((value) => str(value))
+    .filter((slug) => redirects.includes(slug))
+  return dropped.length
+    ? [
+        database
+          .delete(schema.memberSlugRedirects)
+          .where(
+            and(
+              eq(schema.memberSlugRedirects.memberId, id),
+              inArray(schema.memberSlugRedirects.oldSlug, dropped),
+            ),
+          ),
+      ]
+    : []
+}
+
 function memberSlugMoves(
   database: Db,
   id: number,
@@ -636,6 +693,7 @@ async function saveMember(
   const database = db(c)
   const { values, errors: unreadable, typed } = readMemberForm(form, member)
   const account = c.get('account')
+  const redirects = await memberRedirects(database, id)
   const back = (errors: Record<string, string>, status: 400 | 409 = 400) =>
     c.html(
       <MemberForm
@@ -643,7 +701,13 @@ async function saveMember(
         member={member}
         version={String(form.get('_version') ?? '')}
         errors={imageNotKept(form, 'avatar', errors)}
-        values={{ ...asValues(values), ...typed }}
+        values={{
+          ...asValues(values),
+          ...typed,
+          removeAvatar: bool(form.get('removeAvatar')) ? '1' : '',
+          dropRedirect: JSON.stringify(form.getAll('dropRedirect').map((value) => str(value))),
+        }}
+        redirects={redirects}
       />,
       status,
     )
@@ -665,9 +729,11 @@ async function saveMember(
   const avatarUrl = picked.image
     ? await putImage(c.env.MEDIA, picked.image, 'avatars', values.slug)
     : null
+  // 選べば差し替え、「外す」なら無し（頭文字に戻る）、どちらでもなければいまのまま
+  const removing = !avatarUrl && bool(form.get('removeAvatar')) === 1 && member.avatarUrl !== null
   const update = database
     .update(schema.members)
-    .set({ ...values, ...(avatarUrl ? { avatarUrl } : {}) })
+    .set({ ...values, ...(avatarUrl ? { avatarUrl } : removing ? { avatarUrl: null } : {}) })
     .where(eq(schema.members.id, id))
   try {
     await commitWithImage(c.env.MEDIA, avatarUrl, () =>
@@ -677,6 +743,7 @@ async function saveMember(
           sql`EXISTS (SELECT 1 FROM members WHERE id = ${id} AND updated_at = ${member.updatedAt})`,
         ),
         update,
+        ...redirectDrops(database, id, form, redirects),
         ...memberSlugMoves(database, id, member.slug, values.slug),
       ]),
     )
@@ -685,7 +752,7 @@ async function saveMember(
     if (uniqueViolation(error, 'members.slug')) return back({ slug: SLUG_TAKEN })
     throw error
   }
-  if (avatarUrl) await discardImages(c.env.MEDIA, [member.avatarUrl])
+  if (avatarUrl || removing) await discardImages(c.env.MEDIA, [member.avatarUrl])
   return c.redirect(
     memberSavedTo(id, values.published, { moved: member.slug !== values.slug, again }),
     303,
@@ -725,7 +792,7 @@ memberRoutes.get('/members/:id/delete', async (c) => {
           {member.avatarUrl ? (
             <>
               <br />
-              画像の復元用コピーは90日間保存されます。
+              画像の控えは90日間残り、概要の「外した画像」から保存し直せます。
             </>
           ) : null}
           <br />

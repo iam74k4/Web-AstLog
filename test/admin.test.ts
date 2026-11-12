@@ -1722,6 +1722,57 @@ describe('画像の受け入れ', () => {
       await signed(`/admin/members/${member.id}/delete`, { method: 'POST' })
       expect(await keys('avatars/')).toEqual([])
     })
+
+    /*
+      アバターには差し替えの口しか無く、一度上げた顔を頭文字に戻せなかった（作品のアイコンと
+      画像には「外す」があった）。外した画像は、ほかの画像と同じく控え（archive/）へ移る
+    */
+    it('「アバターを外す」で保存すると頭文字に戻り、画像は公開の置き場から控えへ移る', async () => {
+      for (const key of await keys('archive/avatars/')) await env.MEDIA.delete(key)
+      await env.MEDIA.put('avatars/okazaki-cccc.png', 'bytes')
+      const member = await seedMember({ avatarUrl: '/images/avatars/okazaki-cccc.png' })
+      const signed = await signIn()
+      const edit = await (await signed(`/admin/members/${member.id}/edit`)).text()
+      expect(edit).toContain('name="removeAvatar"')
+      expect(edit).toContain('src="/images/avatars/okazaki-cccc.png"')
+      // プレビューは外した姿を描くが、何も書かない
+      const preview = await signed(`/admin/preview/members/${member.id}`, {
+        method: 'POST',
+        body: form({ name: member.name, slug: member.slug, removeAvatar: '1' }),
+      })
+      expect(await preview.text()).not.toContain('/images/avatars/okazaki-cccc.png')
+      expect(await keys('avatars/')).toEqual(['avatars/okazaki-cccc.png'])
+      const saved = await signed(`/admin/members/${member.id}`, {
+        method: 'POST',
+        body: form({ name: member.name, slug: member.slug, removeAvatar: '1' }),
+      })
+      expect(saved.status).toBe(303)
+      const after = await db().query.members.findFirst({ where: eq(schema.members.id, member.id) })
+      expect(after?.avatarUrl).toBeNull()
+      expect(await keys('avatars/')).toEqual([])
+      expect(await keys('archive/avatars/')).toEqual(['archive/avatars/okazaki-cccc.png'])
+      // 顔の無い人のフォームには、外す手を出さない
+      expect(await (await signed(`/admin/members/${member.id}/edit`)).text()).not.toContain(
+        'name="removeAvatar"',
+      )
+    })
+
+    it('外すに印を付けても、新しい顔を選んでいればそちらを採る', async () => {
+      await env.MEDIA.put('avatars/okazaki-dddd.png', 'bytes')
+      const member = await seedMember({ avatarUrl: '/images/avatars/okazaki-dddd.png' })
+      const signed = await signIn()
+      const response = await signed(`/admin/members/${member.id}`, {
+        method: 'POST',
+        body: withAvatar(
+          { name: member.name, slug: member.slug, removeAvatar: '1' },
+          file(png(), 'new.png', 'image/png'),
+        ),
+      })
+      expect(response.status).toBe(303)
+      const after = await db().query.members.findFirst({ where: eq(schema.members.id, member.id) })
+      expect(after?.avatarUrl).toMatch(/^\/images\/avatars\/okazaki-[0-9a-f]{32}\.png$/)
+      expect(await keys('avatars/')).toHaveLength(1)
+    })
   })
 
   it('寸法の列を足しても既にある行はそのまま（前の移行まで当てた D1 に行を入れてから当てる）', async () => {
@@ -3237,6 +3288,57 @@ describe('恒久リンクの slug を変える', () => {
     expect(await db().select().from(schema.itemSlugRedirects)).toEqual([
       expect.objectContaining({ oldSlug: 'app-mixer', itemId: first.id }),
     ])
+  })
+
+  /*
+    前の URL はフォームに見え、転送をやめられる。転送に使っている slug はほかの行が使えないので、
+    打ち間違いで作った前の URL を空けるには、以前は D1 の転送表を直に消すしかなかった
+  */
+  it('前の URL はフォームに出る。「転送をやめる」で保存すると 404 に戻り、ほかの作品が使える', async () => {
+    const first = await seedItem({ title: 'AppMixer', slug: 'appmixer' })
+    const second = await seedItem({ title: 'Other', slug: 'other' })
+    const signed = await signIn()
+    const save = (id: number, values: Record<string, string>) =>
+      signed(`/admin/items/${id}`, {
+        method: 'POST',
+        body: form({ title: 'x', summary: '説明。', published: '1', ...values }),
+      })
+    await save(first.id, { slug: 'app-mixer' })
+    const edit = await (await signed(`/admin/items/${first.id}/edit`)).text()
+    expect(edit).toContain('前の URL（いまの URL へ転送中）')
+    expect(edit).toContain('<input type="checkbox" name="dropRedirect" value="appmixer"/>')
+    expect(edit).toContain('/apps/item/appmixer の転送をやめる')
+    expect((await get('/apps/item/appmixer')).status).toBe(301)
+    // 転送の無い作品のフォームには出さない
+    expect(await (await signed(`/admin/items/${second.id}/edit`)).text()).not.toContain(
+      'name="dropRedirect"',
+    )
+
+    // ほかの作品の転送は、名指ししても消せない
+    await save(second.id, { slug: 'other', dropRedirect: 'appmixer' })
+    expect(await db().select().from(schema.itemSlugRedirects)).toHaveLength(1)
+
+    expect((await save(first.id, { slug: 'app-mixer', dropRedirect: 'appmixer' })).status).toBe(303)
+    expect(await db().select().from(schema.itemSlugRedirects)).toEqual([])
+    expect((await get('/apps/item/appmixer')).status).toBe(404)
+    expect((await save(second.id, { slug: 'appmixer' })).status).toBe(303)
+  })
+
+  it('メンバーの前の URL も同じ（フォームに出て、転送をやめられる）', async () => {
+    const member = await seedMember({ name: '岡崎 昂功', slug: 'okazaki' })
+    const signed = await signIn()
+    const save = (values: Record<string, string>) =>
+      signed(`/admin/members/${member.id}`, {
+        method: 'POST',
+        body: form({ name: '岡崎 昂功', published: '1', ...values }),
+      })
+    await save({ slug: 'takanari' })
+    const edit = await (await signed(`/admin/members/${member.id}/edit`)).text()
+    expect(edit).toContain('/members/okazaki の転送をやめる')
+    expect((await get('/members/okazaki')).status).toBe(301)
+    expect((await save({ slug: 'takanari', dropRedirect: 'okazaki' })).status).toBe(303)
+    expect(await db().select().from(schema.memberSlugRedirects)).toEqual([])
+    expect((await get('/members/okazaki')).status).toBe(404)
   })
 })
 

@@ -4,7 +4,7 @@ import { FIXED_BLOCK_KEYS } from '../../blocks'
 import { ITEM_DOCUMENTS, ITEM_KINDS } from '../../domain'
 import type { AppEnv } from '../../env'
 import { filterQuery } from '../../ui/components'
-import { robotsTxt, sitemapXml } from './crawl'
+import { robotsTxt, securityTxt, sitemapXml } from './crawl'
 import { serveImage } from './images'
 import { renderItem } from './item'
 import { renderMemberScreen } from './member'
@@ -112,6 +112,8 @@ for (const kind of ITEM_KINDS) {
 }
 
 publicRoutes.get('/robots.txt', robotsTxt)
+// 2語の固定ルート。下の catch-all（/:screen/:page）より前に置く
+publicRoutes.get('/.well-known/security.txt', securityTxt)
 
 publicRoutes.get('/sitemap.xml', sitemapXml)
 
