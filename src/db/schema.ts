@@ -53,12 +53,6 @@ export const members = sqliteTable(
     careerText: text('career_text').notNull().default(''),
     // /images/<key>（KV にアップロードしたもの）か /assets/...（同梱）。null なら頭文字
     avatarUrl: text('avatar_url'),
-    /*
-      D1 にはまだ、使わなくなった天体の列（celestial_body / celestial_accent。既定値つき）が
-      ある。expand → contract の1段目として、ここ（読む・書く側）から先に外した——この版が
-      どの環境にも出たあとの次のリリースで、移行が列を落とす（CLAUDE.md「移行」）。同じ
-      リリースで落とすと、移行のあとデプロイまでのあいだ、前の版が無い列を SELECT して落ちる
-    */
     github: text('github'),
     email: text('email'),
     published: integer('published').notNull().default(0),
