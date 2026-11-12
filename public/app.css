@@ -97,8 +97,9 @@
   */
   --font-display: var(--font-latin);
 
-  /* 節の見出し（Cavani の字間の広い大文字）の字間 */
+  /* 節の見出し（Cavani の字間の広い大文字）の字間。和文の見出しは -ja（広げすぎると語に読めない） */
   --track-label: 0.42em;
+  --track-label-ja: 0.12em;
 
   /*
     文字の段（静的）。6つだけ。中間値を足さない。
@@ -1088,7 +1089,7 @@ body[data-site] > .frame {
 :is(
   .hero h1,
   .head :is(h1, h2, h3),
-  .entry__main :is(h3, p),
+  .entry__main :is(h2, h3, p),
   .statement__text,
   .bio :is(p, li),
   .doc__head,
@@ -1239,8 +1240,7 @@ body[data-site] > .frame {
 /*
   節の見出しの字。ページごとの URL（1ページ = 1ドキュメント）では h1、縦に積んだ
   全体ページ（/all）では h2。要素が変わっても字面は同じ——見出しの階層は読み上げと
-  検索のためのもので、大きさの段ではない。英字は大文字にして字間を広く取る（和文の
-  見出しは字間だけが広がる）
+  検索のためのもので、大きさの段ではない。英字は大文字にして字間を広く取る
 */
 .head :is(h1, h2) {
   font-family: var(--font-display);
@@ -1249,6 +1249,16 @@ body[data-site] > .frame {
   line-height: 1.4;
   letter-spacing: var(--track-label);
   text-transform: uppercase;
+}
+
+/*
+  和文の見出し（components.tsx の SectionHead が、英字だけでない見出しに付ける印）。名札の
+  広い字間は英大文字の組み方で、和文に掛けると1字ずつ離れて語に読めない。字間を和文の
+  見出しの広さ（--track-label-ja）に下げ、大文字化もしない（和文に混ざる英字はそのまま）
+*/
+.head--ja :is(h1, h2) {
+  letter-spacing: var(--track-label-ja);
+  text-transform: none;
 }
 
 /* 添え（作品の「業界 · 年」、区分名）。和文が入るので本文の書体で、和文の最小の段 */
@@ -1864,8 +1874,11 @@ body[data-site] > .frame {
   min-width: 0;
 }
 
-/* 行の題。節の見出し（--fs-display-xl）から2段以上離した --fs-display-xs */
-.entry__main h3 {
+/*
+  行の題。節の見出し（--fs-display-xl）から2段以上離した --fs-display-xs。要素は置かれる
+  場所の段（Projects のページでは h2、全体ページでは h3。components.tsx の ItemRow の level）
+*/
+.entry__main :is(h2, h3) {
   font-family: var(--font-display);
   font-size: var(--fs-display-xs);
   font-weight: 600;

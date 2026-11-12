@@ -45,7 +45,7 @@ export const KIND_PATH = Object.fromEntries(
   ITEM_KINDS.map((kind) => [kind.key, kind.path]),
 ) as Record<ItemKind, (typeof ITEM_KINDS)[number]['path']>
 
-const isItemKind = (value: string): value is ItemKind =>
+export const isItemKind = (value: string): value is ItemKind =>
   ITEM_KIND_KEYS.some((kind) => kind === value)
 
 // フォームと query の区分の読み方。知らない値・無い値は先頭の区分

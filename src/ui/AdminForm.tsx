@@ -255,6 +255,23 @@ export const SlugRedirects = (props: {
     </fieldset>
   ) : null
 
+/*
+  行を足す手（リンク・ブロックの行）。管理画面の補助（admin-behavior.ts）が、いちばん後ろの行を
+  空にして写す。補助が動くまで押せないので、初めは隠しておく（hidden。補助が外す）——
+  JavaScript が無ければ、今までどおり保存して開き直すと空いた行が出る（noscript の案内）。
+  rows は、同じ親の中で行を選ぶセレクタ
+*/
+export const AddRow = ({ rows }: { rows: string }) => (
+  <>
+    <button type="button" class="btn btn--ghost add-row" data-add-row={rows} hidden>
+      ＋ 行を足す
+    </button>
+    <noscript>
+      <span class="field__hint">もっと足すときは、保存してから開き直すと空いた行が出る</span>
+    </noscript>
+  </>
+)
+
 export const PublishToggle = ({ published }: { published: number }) => (
   <label class="toggle">
     <input type="checkbox" name="published" value="1" checked={published === 1} />

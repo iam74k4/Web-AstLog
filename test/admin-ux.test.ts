@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import * as schema from '../src/db/schema'
 import { ADMIN_BEHAVIOR } from '../src/ui/admin-behavior'
-import { db, form, resetDb, seedItem, seedMember, signIn } from './helpers'
+import { db, form, get, resetDb, seedItem, seedMember, signIn } from './helpers'
 
 beforeEach(resetDb)
 
@@ -93,6 +93,66 @@ describe('管理フォームの入力とプレビュー導線', () => {
       expect(formHtml).toContain(`formaction="/admin/preview/${kind}/${draft.id}"`)
       expect(formHtml).toContain('保存前にプレビューで')
     }
+  })
+
+  /*
+    同じ「保存済みの内容を見る」手が、作品はダイアログ（矢印なし）、メンバーとブロックは別タブ（↗）で、
+    文言も「保存済み内容を…」「保存済みを…」の2通りだった。どこでも同じ名前で、同じダイアログに開く
+    （admin-behavior.ts が a[data-saved-preview] を拾う。JavaScript が無ければ別タブ）
+  */
+  it('保存済みのプレビューは、作品・メンバー・ブロックのどこでも同じ名前・同じ開き方', async () => {
+    const member = await seedMember()
+    await seedMember({ slug: 'second', name: '星野', sortOrder: 20 })
+    const item = await seedItem()
+    const [block] = await db()
+      .insert(schema.blocks)
+      .values({ type: 'note', title: 'メモ', body: '本文', published: 1 })
+      .returning()
+    const signed = await signIn()
+    for (const [list, kind, id] of [
+      ['/admin/items', 'items', item.id],
+      ['/admin/members', 'members', member.id],
+      ['/admin/blocks', 'blocks', block?.id],
+    ] as const) {
+      const href = `href="/admin/preview/${kind}/${id}" data-saved-preview=""`
+      expect(await (await signed(list)).text(), list).toContain(href)
+      const edit = await (await signed(`/admin/${kind}/${id}/edit`)).text()
+      expect(edit, kind).toMatch(
+        new RegExp(`${href} target="_blank" rel="noreferrer">\\s*保存済み内容をプレビュー\\s*</a>`),
+      )
+      expect(edit, kind).not.toContain('保存済みをプレビュー')
+    }
+  })
+
+  /*
+    管理画面の中の 404。公開ページの 404 を出していたころは、消した作品の編集画面を開いただけで
+    管理画面の目次が消え、戻る手が公開サイトの「Home」しか無かった
+  */
+  it('管理画面の中で見つからないページは、管理画面の外枠のまま出す', async () => {
+    const signed = await signIn()
+    for (const path of ['/admin/items/99999/edit', '/admin/no-such-screen']) {
+      const response = await signed(path)
+      expect(response.status, path).toBe(404)
+      const html = await response.text()
+      expect(html, path).toContain('<aside class="admin-nav">')
+      expect(html, path).toContain('<h1>ページが見つかりません</h1>')
+      expect(html, path).toContain('href="/admin"')
+      expect(html.match(/<h1\b/g), path).toHaveLength(1)
+      // 目次のどの行にも「いまのページ」の印を付けない
+      expect(html, path).not.toContain('aria-current="page"')
+    }
+    // プレビューの枠の中（script を許さない）と、公開ページの 404 は今までの形
+    for (const response of [
+      await signed('/admin/preview/items/99999'),
+      await get('/no-such-page'),
+    ]) {
+      expect(response.status).toBe(404)
+      const html = await response.text()
+      expect(html).not.toContain('admin-nav')
+      expect(html).not.toContain('<script>')
+    }
+    // ログインしていなければ、今までどおりログインへ
+    expect((await get('/admin/no-such-screen')).status).toBe(303)
   })
 
   it('メンバーの名前のローマ字を保存し、編集画面に戻す', async () => {

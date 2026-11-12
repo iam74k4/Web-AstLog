@@ -40,7 +40,7 @@
 
 **見出しと本文の段。** 節の見出し（`SectionHead` の `h1`、`/all` の `h2`）と個人ページの章
 （About / Skills / Career。`chapter`）は Cavani の名札——`--fs-md` の大文字を字間を広く取り
-（`--track-label`）、右へ1本の罫線を伸ばす。ページの主役はその下の中身。入口の大見出しと
+（`--track-label`。和文は `.head--ja` で狭める）、右へ1本の罫線を伸ばす。ページの主役はその下の中身。入口の大見出しと
 作品のページの作品名（`SectionHead` の `item`。`.head--item`）は最上段の `--fs-display-xl` で、
 一覧の行の題（`--fs-display-xs`）より2段以上大きい。行の説明は `--fs-base`、段落（`.bio p`）は
 `--fs-md` で、1行は約40字（`--measure: 40em`）。小節の見出し（`SectionHead` の `sub`。作品の

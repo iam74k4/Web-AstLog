@@ -63,23 +63,12 @@ export const AdminDashboard = (props: {
       </div>
     </div>
 
-    <section
-      class="dashboard-preview dashboard-observatory"
-      aria-labelledby="dashboard-preview-title"
-    >
-      <div class="dashboard-observatory__copy">
-        <span class="crumbs">あなたのサイト</span>
-        <h2 id="dashboard-preview-title">つくったものを、届けよう。</h2>
-        <p>公開状況を確認して、続きの編集へ。</p>
-        <div class="dashboard-preview__actions">
-          <a class="btn btn--primary" href="/admin/items/new?type=app">
-            ＋ 作品を追加
-          </a>
-          <a class="btn btn--ghost" href="/admin/preview" target="_blank" rel="noreferrer">
-            全体をプレビュー ↗
-          </a>
-        </div>
-      </div>
+    {/*
+      公開の状況と、いちばん使う2つの手。前は「あなたのサイト／つくったものを、届けよう。」の
+      呼びかけの面を頭に置いていた——持ち主1人の管理画面に、呼びかける相手は居ない。数を先に出す
+    */}
+    <section class="dashboard-preview" aria-labelledby="dashboard-preview-title">
+      <h2 id="dashboard-preview-title">公開の状況</h2>
       <dl class="dashboard-metrics">
         <div>
           <dt>公開中の作品</dt>
@@ -103,6 +92,14 @@ export const AdminDashboard = (props: {
           </dd>
         </div>
       </dl>
+      <div class="dashboard-preview__actions">
+        <a class="btn btn--primary" href="/admin/items/new?type=app">
+          ＋ 作品を追加
+        </a>
+        <a class="btn btn--ghost" href="/admin/preview" target="_blank" rel="noreferrer">
+          全体をプレビュー ↗
+        </a>
+      </div>
     </section>
 
     <section class="dashboard-next" aria-labelledby="dashboard-next-title">
@@ -122,7 +119,7 @@ export const AdminDashboard = (props: {
     </section>
 
     {props.recent?.length ? (
-      <section class="dashboard-recent" aria-labelledby="dashboard-recent-title">
+      <section class="dashboard-settings" aria-labelledby="dashboard-recent-title">
         <div class="dashboard-settings__head">
           <h2 id="dashboard-recent-title">最近編集した作品</h2>
           <a href="/admin/items">作品一覧 →</a>
@@ -252,7 +249,7 @@ export const AdminDashboard = (props: {
       画像と動画の容量。上限に達すると新しい画像と動画を保存できない（src/lib/media-usage.ts）。
       外した画像の控えは数えないので、別に言う（90日で消える）
     */}
-    <section class="dashboard-settings dashboard-storage" aria-labelledby="dashboard-storage-title">
+    <section class="dashboard-settings" aria-labelledby="dashboard-storage-title">
       <div class="dashboard-settings__head">
         <h2 id="dashboard-storage-title">画像と動画の容量</h2>
         <p>上限に達すると、新しい画像と動画を保存できません。</p>
