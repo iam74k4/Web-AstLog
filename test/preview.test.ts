@@ -456,7 +456,7 @@ describe('保存前プレビューから編集を続ける案内', () => {
       expect(response.status).toBe(400)
       expect(response.headers.get('cache-control')).toBe('private, no-store')
       const html = await response.text()
-      expect(html).toContain('編集していたタブに戻り、入力を修正してください')
+      expect(html).toContain('入力を修正してから、もう一度プレビューしてください')
       expect(html).toContain('編集を続けるにはプレビューを閉じてください')
       expect(html).not.toContain('編集画面を開く ↗')
       for (const message of messages) expect(html).toContain(message)
@@ -716,7 +716,7 @@ describe('メンバーと作品の保存前プレビュー', () => {
       expect(response.status).toBe(400)
       expect(response.headers.get('cache-control')).toBe('private, no-store')
       const html = await response.text()
-      expect(html).toContain('編集していたタブに戻り')
+      expect(html).toContain('入力を修正してから、もう一度プレビューしてください')
       expect(html).not.toContain('src="data:')
       expect(html).not.toContain('<script')
     }

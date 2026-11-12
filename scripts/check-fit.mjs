@@ -24,7 +24,8 @@
     (4) h1 がちょうど1つ   1ページ = 1ドキュメント（WCAG 1.3.1）。見出しの左にアイコンの
                           ある見出し（作品のページ）は、アイコンと見出しが同じ行に居る
                           （1行に入らない題が次の行へ落ちて、アイコンだけが残らない）
-    (5) 帯の場所           上の帯が本文の上、足元が本文の下
+    (5) 帯の場所           上の帯が本文の上、足元が本文の下。中身が画面に収まるページは縦に送れない
+                       （足元が画面の底に居る。柱が見える幅では柱の底が足元を受ける）
     (6) 帯の貼り付け       上の帯の position が sticky。本文の下に画面3つぶんの空きを
                           足して一番下まで送っても、帯といまの印が画面の中に見えて
                           いて、本文より手前に描かれ（印の真ん中の点が帯）、地が透けていない
@@ -234,9 +235,14 @@ const measure = ([, cfg]) => {
   if (navs.length > 1) problems.push('目次が2組とも見えている（上の帯と左の柱）')
   // 柱が見えているなら、足元の行き先は柱が受ける（どちらにも無い・両方にある、を止める）。
   // 本文の中の、その人の行き先（個人ページの OwnSocials）は数えない
-  const socials = [...document.querySelectorAll('.pillar > .socials, .foot .socials')]
+  const socials = [...document.querySelectorAll('.pillar__foot > .socials, .foot .socials')]
   if (socials.length && socials.filter(shown).length !== 1) {
     problems.push(`サイトの行き先が ${socials.filter(shown).length} 組見えている（1組のはず）`)
+  }
+  // 著作権表示も同じ（柱の底か足元の、ちょうど片方）
+  const marks = [...document.querySelectorAll('.pillar__foot > .foot__meta, .foot > .foot__meta')]
+  if (marks.filter(shown).length !== 1) {
+    problems.push(`著作権表示が ${marks.filter(shown).length} つ見えている（1つのはず）`)
   }
 
   // (4) h1 はちょうど1つ
@@ -264,9 +270,29 @@ const measure = ([, cfg]) => {
       `上の帯が本文の上に居ない（帯 ${round(topBox.bottom)} / 本文 ${round(mainBox.top)}）`,
     )
   }
-  if (footBox.top < mainBox.bottom - slack) {
+  // 足元は、柱が見えている幅では柱の底が受けて畳まれる（箱が無い）。見えているときだけ場所を測る
+  if (shown(foot) && footBox.top < mainBox.bottom - slack) {
     problems.push(
       `足元が本文の下に居ない（足元 ${round(footBox.top)} / 本文 ${round(mainBox.bottom)}）`,
+    )
+  }
+  /*
+    (5b) 足元を画面の底に置く。中身が画面に収まるページは、縦に送れない——送れるなら、足元
+    （か柱）が画面の外へ押し出されている。柱の下に足元を積んでいたころ、900 以上のどの短い
+    ページも、著作権表示の1行のぶんだけ縦に送れた（この検査は足元が本文の下に居ることしか
+    見ておらず、緑のままだった）。中身が画面に収まるかは、本文の中身の下端で決める——本文の箱は
+    残りの高さを受けて伸びるので、箱の高さでは比べられない
+  */
+  const last = main.lastElementChild
+  const contentBottom = last ? last.getBoundingClientRect().bottom + scrollY : 0
+  const footRoom = shown(foot) ? footBox.height : 0
+  const mainPad = Number.parseFloat(getComputedStyle(main).paddingBottom) || 0
+  if (
+    contentBottom + mainPad + footRoom <= innerHeight - slack &&
+    root.scrollHeight > innerHeight + slack
+  ) {
+    problems.push(
+      `中身は画面に収まるのに、縦に ${round(root.scrollHeight - innerHeight)}px 送れる（足元か柱が画面の外）`,
     )
   }
 

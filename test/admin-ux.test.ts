@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import * as schema from '../src/db/schema'
+import { ADMIN_BEHAVIOR } from '../src/ui/admin-behavior'
 import { db, form, resetDb, seedItem, seedMember, signIn } from './helpers'
 
 beforeEach(resetDb)
@@ -240,6 +241,30 @@ describe('書きながら横に完成形を置く', () => {
       })
     ).text()
     expect(site).toContain('data-still=""')
+  })
+
+  /*
+    横の完成形は入力が止まるたびに勝手に送るので、何も打っていない追加のフォームからも届く。
+    そこで「入力を確認してください」を 400 で返していたころは、新しい作品を開いた瞬間に右の枠が
+    エラーになり、枠の頭は「保存済みの内容」と言っていた（保存したものはまだ無い）
+  */
+  it('描けない書きかけは、横の完成形ではエラーにせず待つ。押して開くプレビューは 400 のまま', async () => {
+    const signed = await signIn()
+    const empty = () => form({ type: 'app', title: '' })
+    const live = await signed('/admin/preview/items?live=1', { method: 'POST', body: empty() })
+    expect(live.status).toBe(200)
+    const waiting = await live.text()
+    expect(waiting).toContain('ここに完成形が出ます')
+    expect(waiting).toContain('タイトルは必須です')
+    expect(waiting).not.toContain('入力を確認してください')
+    const pressed = await signed('/admin/preview/items', { method: 'POST', body: empty() })
+    expect(pressed.status).toBe(400)
+    expect(await pressed.text()).toContain('入力を修正してから、もう一度プレビューしてください')
+    // 追加のフォームは一度きりの札を持つ。補助はそれを見て、枠の頭を「まだ保存されていません」にする
+    expect(await (await signed('/admin/items/new?type=app')).text()).toContain('name="formKey"')
+    expect(ADMIN_BEHAVIOR).toContain(
+      "document.querySelector('.form-errors')||form.elements.formKey",
+    )
   })
 })
 

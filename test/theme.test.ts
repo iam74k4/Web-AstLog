@@ -956,8 +956,8 @@ describe('部品の作法', () => {
     /*
       前の柱のころは 899 以下で肩書き・一言・GitHub / メールを畳み、畳んだぶんが
       「どこにも無くなる」ことがあった（素の .socials を隠して、GitHub のプロフィールが
-      電話から辿れなくなった。WCAG 1.4.10）。いまの左の柱（900 以上）は、上の帯の目次・足元の
-      行き先・入口の札と同じ中身をもう1組持ち、柱があるページ（body[data-pillar]）でだけ、
+      電話から辿れなくなった。WCAG 1.4.10）。いまの左の柱（900 以上）は、上の帯の目次・足元
+      （行き先と著作権表示）・入口の札と同じ中身をもう1組持ち、柱があるページ（body[data-pillar]）でだけ、
       柱が見える幅でだけ、元のほうを畳む。柱そのものは素で畳んであり、900 以上でだけ出す
       ——どの幅でも片方は必ず見える。2組あることは test/public.test.ts の「左の柱」が見る
     */
@@ -967,7 +967,7 @@ describe('部品の作法', () => {
         rule.decls.some(([name, value]) => name === 'display' && value === 'none'),
     )
     expect(folds.map((rule) => rule.selectors.join(', '))).toEqual([
-      'body[data-pillar] :is(.top .toc, .foot .socials)',
+      'body[data-pillar] :is(.top .toc, .foot)',
       "body[data-pillar='owner'] .hero--cover > .eyebrow",
     ])
     for (const rule of folds) expect(rule.context.join(' ')).toContain('min-width: 900px')
