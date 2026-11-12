@@ -393,9 +393,6 @@ HTML に絵・件数の帯は置かない。
 （ワードマークと favicon の SVG、favicon・apple-touch-icon・共有カードの PNG）は
 `scripts/logo/export.mjs` が書く。共有カードは墨の地（`LOGO_COLORS`）に白い字。
 
-**メンバーの天体（`members.celestial_body` / `celestial_accent`）は使わない列。** `schema.ts` から
-外した（読まない）。D1 の列は次のリリースの移行で落とす（contract）。
-
 ## 文言
 
 - 見出しは言い切り。動詞で終える
