@@ -6,8 +6,7 @@
 -- ここに持つと本番と黙ってずれていき（作品の顔ぶれが入れ替わっても、ここは古いまま）、
 -- 経歴・連絡先・規約の全文まで二重に持つことになった。形だけを本番にそろえる——1人のサイト、
 -- 公開中の個人開発5件と業務2件、下書き3件。アイコン・画像5枚・押し手・文書2本を持つ作品が1件。
--- 名前と画像が実物なのは、検査画像（scripts/fixtures/media/）を借りている AppMixer と、この
--- サイト（AstLog）だけ。どちらも公開している作品で、文の中身は見本。
+-- 画像（scripts/fixtures/media/）も検査のために描いた絵で、実在の製品や人の絵ではない。
 --
 -- プラットフォームの選択肢（platforms）は参照データなので、ここではなく移行
 -- （drizzle/0011_platforms_reference）が入れる。先に移行を流してから流すこと。
@@ -82,17 +81,17 @@ Playwright',
 -- slug は作品1件の恒久リンク（/apps/item/<slug> と /works/item/<slug>）の3語目。
 -- 作り方は管理画面と同じ toSlug（小文字にして、英数字とハイフン以外をハイフンに畳む）。
 -- 題が日本語だけのもの（業務の2件）は toSlug が空を返すので、意味の分かる英語を手で置く。
--- check:gallery は /apps/item/appmixer を開く。
+-- check:gallery は /apps/item/sample-mixer を開く。
 --
--- 本文（body と story_*）と、AppMixer 以外の画像は書かない。本番の1人のサイトも、本文を
+-- 本文（body と story_*）と、1 以外の画像は書かない。本番の1人のサイトも、本文を
 -- 書いていない作品のほうが多い（本文の小節は check:fit の fixture が長い本文で測る）。
 
 INSERT INTO items (id, type, member_id, platform_key, title, slug, year, summary, published, sort_order) VALUES
-  (1, 'app', 1, 'macos', 'AppMixer', 'appmixer', '2026', 'Mac で鳴っているアプリごとに音量と出力先を変える常駐アプリ。Mac App Store で配布している。', 1, 10),
+  (1, 'app', 1, 'macos', 'Sample Mixer', 'sample-mixer', '2026', 'Mac で鳴っているアプリごとに音量と出力先を変える常駐アプリ。ダウンロードで配布している。', 1, 10),
   (2, 'app', 1, 'ios', 'Pocket Inbox', 'pocket-inbox', '2026', 'メモ・ToDo・買い物リストを1つの受信箱にまとめる iPhone アプリ。3つの入口を1画面で扱えるようにしている。', 1, 20),
   (3, 'app', 1, 'cli', 'Config Sync', 'config-sync', '2026', 'エディタごとにばらつく設定を1か所に集め、1コマンドで各環境へ配る道具。手元の環境をそろえるためにつくった。', 1, 30),
   (4, 'app', 1, 'server', 'Chat Bot', 'chat-bot', '2026', '機能をコマンド単位で足せるモジュール構成のチャットボット。記録を SQLite に残し、継続デプロイしている。', 1, 40),
-  (5, 'app', 1, 'web', 'AstLog', 'astlog', '2026', 'Cloudflare Workers で動くポートフォリオ。本文と導線をサーバーで描画し、JavaScript なしで読める。', 1, 50);
+  (5, 'app', 1, 'web', 'Portfolio Site', 'portfolio-site', '2026', 'Cloudflare Workers で動くポートフォリオ。本文と導線をサーバーで描画し、JavaScript なしで読める。', 1, 50);
 
 -- 5 の前の slug（/apps/item/portfolio）は転送表に残す（管理画面で slug を変えたときと同じ形。
 -- 下の item_slug_redirects）。行き先（item_links）を持たない作品も1件ある形にしておく
@@ -128,19 +127,19 @@ INSERT INTO item_tags (item_id, tag, sort_order) VALUES
 
 -- リンク ------------------------------------------------------------------
 
--- 行き先は example.com（見本）。AppMixer だけは公開している App Store の掲載
+-- 行き先は example.com（見本）
 INSERT INTO item_links (item_id, label, url, sort_order) VALUES
-  (1, 'App Store', 'https://apps.apple.com/jp/app/appmixer/id6804171608', 0),
+  (1, 'Download', 'https://example.com/sample-mixer', 0),
   (3, 'Repository', 'https://example.com/config-sync', 0),
   (4, 'Repository', 'https://example.com/chat-bot', 0),
   (6, 'Repository', 'https://example.com/booking-sample', 0),
   (7, 'Repository', 'https://example.com/log-replay', 0),
   (8, 'Repository', 'https://example.com/deck-controller', 0);
 
--- AppMixer（1）の1本目（App Store）は押し手にする（items.lead_link）
+-- 1 の1本目（Download）は押し手にする（items.lead_link）
 UPDATE items SET lead_link = 1 WHERE id = 1;
 
--- 作品の文書のページ（/apps/item/appmixer/privacy・…/support）。中身は形を測るための見本で、
+-- 作品の文書のページ（/apps/item/sample-mixer/privacy・…/support）。中身は形を測るための見本で、
 -- 本番のアプリの規約ではない（本番は管理画面の「プライバシーポリシーとサポートを書く」で書く）。
 -- 「## 日本語」「## English」で分けた文書の言語の切り替え、### の見出し、太字・箇条書き・
 -- リンクを1つずつ持たせてある
@@ -163,7 +162,7 @@ UPDATE items SET
 
 ご質問はサポートのページからお寄せください。
 
-[サポート](/apps/item/appmixer/support)
+[サポート](/apps/item/sample-mixer/support)
 
 ## English
 
@@ -181,7 +180,7 @@ Per-app volume levels and output assignments are stored only on your Mac. Deleti
 
 Questions may be sent via the support page.
 
-[Support](/apps/item/appmixer/support?lang=en)',
+[Support](/apps/item/sample-mixer/support?lang=en)',
   support = '## 日本語
 
 ご質問や不具合のご報告は、このページの下にある連絡先までお寄せください（検査のための見本の文です）。
@@ -198,7 +197,7 @@ macOS 14.4 以降で動作します。
 
 ### 購入と返金
 
-Mac App Store での購入と返金の手続きは Apple が扱います。
+購入と返金の手続きは、購入したストアが扱います。
 
 ## English
 
@@ -216,31 +215,31 @@ macOS 14.4 or later.
 
 ### Purchases and refunds
 
-Purchases and refunds on the Mac App Store are handled by Apple.'
+Purchases and refunds are handled by the store you bought the app from.'
 WHERE id = 1;
 
 -- 画像 ------------------------------------------------------------------
 
--- AppMixer（1）のアイコンとスクリーンショットは、Mac App Store の掲載と同じ検査画像。
+-- 1 のアイコンと画像5枚（どれも検査のために描いた見本の絵）。
 -- 検査用の画像はローカル KV に置く。本番の public/ には含めない。
 -- 寸法は表示と共有カードに使う。メインの画像が先頭。
 UPDATE items SET
-  icon_url = '/images/items/appmixer-icon.png',
-  image_url = '/images/items/appmixer-01-per-app-volume.jpg',
-  image_alt = 'アプリごとの音量を変えるミキサーの画面。3つのアプリの音量の帯が並んでいる',
+  icon_url = '/images/items/sample-icon-mixer.png',
+  image_url = '/images/items/sample-screen-01.jpg',
+  image_alt = '見本のミキサーの画面。4つの項目の音量の帯が並んでいる',
   image_width = 1440,
   image_height = 900
 WHERE id = 1;
 
 -- アイコンのある作品をもう2件（一覧の行で、アイコンのある行と無い行が並ぶ形）
-UPDATE items SET icon_url = '/images/items/discord-bot-icon.png' WHERE id = 4;
-UPDATE items SET icon_url = '/images/items/astlog-icon.png' WHERE id = 5;
+UPDATE items SET icon_url = '/images/items/sample-icon-chat.png' WHERE id = 4;
+UPDATE items SET icon_url = '/images/items/sample-icon-site.png' WHERE id = 5;
 
 INSERT INTO item_shots (item_id, url, alt, width, height, sort_order) VALUES
-  (1, '/images/items/appmixer-02-auto-ducking.jpg', '通話が始まり、ほかのアプリの音量を自動で下げている画面', 1440, 900, 10),
-  (1, '/images/items/appmixer-03-per-device-memory.jpg', 'イヤホンとスピーカーで、同じアプリの音量を別々に覚えている画面', 1440, 900, 20),
-  (1, '/images/items/appmixer-04-per-app-output.jpg', 'アプリごとに出力先を振り分けている画面', 1440, 900, 30),
-  (1, '/images/items/appmixer-05-features.jpg', '機能の一覧。アプリ別の音量とミュート、レベルメーター、自動で下げる音量、出力先の振り分け', 1440, 900, 40);
+  (1, '/images/items/sample-screen-02.jpg', '見本の画面のふたつめ。音量の帯の並びが変わっている', 1440, 900, 10),
+  (1, '/images/items/sample-screen-03.jpg', '見本の画面のみっつめ。差し色が黄色の画面', 1440, 900, 20),
+  (1, '/images/items/sample-screen-04.jpg', '見本の画面のよっつめ。差し色が赤の画面', 1440, 900, 30),
+  (1, '/images/items/sample-screen-05.jpg', '見本の画面のいつつめ。差し色が紫の画面', 1440, 900, 40);
 
 -- 前の slug --------------------------------------------------------------
 
