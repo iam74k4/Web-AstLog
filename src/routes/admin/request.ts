@@ -159,6 +159,13 @@ export function uniqueViolation(error: unknown, column: string): boolean {
   return false
 }
 
+/*
+  一覧の「公開する」を関門（src/blocks.ts の publishErrors）が止めたときの知らせ。止めたら、その行の
+  編集画面へ送り（?publish=blocked）、理由を欄に出して「公開する」に印を付けて描く——直して
+  保存すれば、押したかった「公開」がそのまま通る。作品・メンバー・ページ構成で同じ
+*/
+export const PUBLISH_BLOCKED = '公開できませんでした。下の理由を直して保存すると、公開されます'
+
 // 削除の確認から「キャンセル」したときの戻り先。編集画面から来たなら編集画面へ
 export const cameFromEdit = (c: Context<AppEnv>) => c.req.query('from') === 'edit'
 

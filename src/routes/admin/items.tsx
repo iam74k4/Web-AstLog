@@ -10,6 +10,7 @@ import {
   ITEM_KINDS,
   type ItemDocumentKey,
   type ItemKind,
+  isItemKind,
   KIND_LABEL,
   readKind,
   STORY_SECTIONS,
@@ -32,6 +33,7 @@ import { IMAGE_ACCEPT, isVideoUrl, SHOT_ACCEPT } from '../../lib/image'
 import { DOCUMENT_HINT, MARKDOWN_HINT } from '../../lib/markdown'
 import { isContactEmail, SITE } from '../../site'
 import {
+  AddRow,
   Area,
   Confirm,
   Field,
@@ -74,6 +76,7 @@ import {
   formKeyOf,
   mergeErrors,
   newFormKey,
+  PUBLISH_BLOCKED,
   parseId,
   readSlug,
   readSortOrder,
@@ -91,18 +94,29 @@ export const itemRoutes = new Hono<AppEnv>()
   ごとに違う（個人開発はプラットフォーム、業務は業界）ので、タブは区分ごと。本文の
   テンプレート（STORY_SECTIONS）と実績値は、どちらの区分も同じ欄。
 */
+// 一覧の見方。query の type が区分ならその区分だけ、無ければ全部（公開ページと同じ混ぜた並び）
+const viewOf = (value: string | null | undefined): ItemKind | null =>
+  value && isItemKind(value) ? value : null
+const listHref = (view: ItemKind | null) => (view ? `/admin/items?type=${view}` : '/admin/items')
+
 itemRoutes.get('/items', async (c) => {
-  const type = readKind(c.req.query('type'))
+  const view = viewOf(c.req.query('type'))
   /*
     並びは公開ページと同じ（年の新しい順 → 並び順 → 作った順。queries.ts の
     itemOrder）。並び順だけで並べていたころは、ここで先頭に見えている作品が
-    公開ページでは年に負けて後ろにいて、公開の並びをどこでも確かめられなかった
+    公開ページでは年に負けて後ろにいて、公開の並びをどこでも確かめられなかった。
+
+    初めに開くのは全部を混ぜた並び（公開ページの Projects と同じ順）。区分のタブしか
+    無かったころは、個人開発と業務が混ざった公開の並びを管理画面のどこでも見られず、
+    並び順は1件ずつ編集を開いて数字を打つしかなかった。同じ年の中の入れ替え（↑↓）は
+    この全部の並びでだけ出す——区分で絞ると、隣の行が公開ページの隣とは限らない
   */
   const rows = await db(c).query.items.findMany({
-    where: eq(schema.items.type, type),
+    where: view ? eq(schema.items.type, view) : undefined,
     orderBy: itemOrder,
     with: { member: true, platform: true, shots: { orderBy: shotOrder, limit: 1 } },
   })
+  const blocked = c.req.query('move') === 'blocked'
 
   return c.html(
     <AdminLayout title="作品" active="items" account={c.get('account')} flash={flashFor(c)}>
@@ -110,11 +124,14 @@ itemRoutes.get('/items', async (c) => {
         <div class="admin-head__title">
           <h1>作品</h1>
           <div class="tabs">
+            <a href="/admin/items" aria-current={view === null ? 'page' : undefined}>
+              すべて
+            </a>
             {ITEM_KINDS.map((kind) => (
               <a
                 key={kind.key}
                 href={`/admin/items?type=${kind.key}`}
-                aria-current={type === kind.key ? 'page' : undefined}
+                aria-current={view === kind.key ? 'page' : undefined}
               >
                 {kind.label}
               </a>
@@ -122,32 +139,50 @@ itemRoutes.get('/items', async (c) => {
           </div>
         </div>
         {/* 押す手の言葉は日本語（CLAUDE.md「文言」。空の一覧の「＋ 最初の作品を追加」と同じ言い方） */}
-        <a class="btn btn--primary" href={`/admin/items/new?type=${type}`}>
-          ＋ 作品を追加
-        </a>
+        {view ? (
+          <a class="btn btn--primary" href={`/admin/items/new?type=${view}`}>
+            ＋ 作品を追加
+          </a>
+        ) : (
+          <div class="admin-head__actions">
+            {ITEM_KINDS.map((kind, index) => (
+              <a
+                key={kind.key}
+                class={index === 0 ? 'btn btn--primary' : 'btn btn--ghost'}
+                href={`/admin/items/new?type=${kind.key}`}
+              >
+                ＋ {kind.label}を追加
+              </a>
+            ))}
+          </div>
+        )}
       </div>
+      {blocked ? (
+        <p class="banner banner--error">
+          年の違う作品とは入れ替えられません（一覧は年の新しい順が先）。年を変えるには編集を開きます
+        </p>
+      ) : null}
 
       {/*
-        タブは入力欄の違い（プラットフォーム / 業界）で分けているだけで、
-        公開ページでは1つの一覧。並びの規則を1文で言っておく
+        公開ページでは区分を混ぜた1つの一覧。並びの規則を1文で言っておく
       */}
       <p class="form-note">
-        公開ページでは{ITEM_KINDS.map((kind) => kind.label).join('と')}
-        を1つの一覧に混ぜ、年の新しい順 → 並び順（区分をまたいで比べる）→
-        作った順に並べます。ここもその順です。{' '}
-        {type === 'app' ? <a href="/admin/platforms">プラットフォームの選択肢を直す →</a> : null}
+        {view
+          ? `公開ページでは${ITEM_KINDS.map((kind) => kind.label).join('と')}を1つの一覧に混ぜて並べます。並びを見る・入れ替えるのは「すべて」のタブで。`
+          : '公開ページと同じ並びです（年の新しい順 → 並び順 → 作った順）。同じ年の中は ↑↓ で入れ替えられます。'}{' '}
+        {view === 'work' ? null : <a href="/admin/platforms">プラットフォームの選択肢を直す →</a>}
       </p>
 
       {rows.length === 0 ? (
         <div class="empty-state">
-          <p>{KIND_LABEL[type]} はまだありません</p>
-          <a class="btn btn--primary" href={`/admin/items/new?type=${type}`}>
+          <p>{view ? `${KIND_LABEL[view]} はまだありません` : '作品はまだありません'}</p>
+          <a class="btn btn--primary" href={`/admin/items/new?type=${view ?? ITEM_KINDS[0].key}`}>
             ＋ 最初の作品を追加
           </a>
         </div>
       ) : (
         <ul class="rows">
-          {rows.map((item) => {
+          {rows.map((item, index) => {
             /*
               見本はアイコンを先に（作品の印。画像を持つ作品と持たない作品で、行ごとに見本の種類が
               変わらない）。アイコンが無ければ絵——動画は <img> に描けないので、ほかの画像の先頭が
@@ -156,8 +191,28 @@ itemRoutes.get('/items', async (c) => {
             const thumb = item.iconUrl
               ? null
               : (item.imageUrl ?? item.shots.find((shot) => !isVideoUrl(shot.url))?.url)
+            // 入れ替えられるのは、同じ年（year_from）の隣だけ
+            const sameYear = (other: (typeof rows)[number] | undefined) =>
+              other !== undefined && other.yearFrom === item.yearFrom
             return (
-              <li class="row row--project" key={item.id}>
+              <li class="row row--project" key={item.id} id={`item-row-${item.id}`}>
+                {view === null ? (
+                  <span class="row__move">
+                    {(['up', 'down'] as const).map((dir) => (
+                      <form method="post" action={`/admin/items/${item.id}/move`} key={dir}>
+                        <input type="hidden" name="dir" value={dir} />
+                        <button
+                          class="move-btn"
+                          type="submit"
+                          disabled={!sameYear(rows[dir === 'up' ? index - 1 : index + 1])}
+                          aria-label={`${item.title} を${dir === 'up' ? '前へ' : '後ろへ'}`}
+                        >
+                          {dir === 'up' ? '↑' : '↓'}
+                        </button>
+                      </form>
+                    ))}
+                  </span>
+                ) : null}
                 {item.iconUrl ? (
                   <img
                     class="row__thumb row__thumb--icon"
@@ -198,9 +253,9 @@ itemRoutes.get('/items', async (c) => {
                     {itemHref(item) ?? '恒久リンクなし（保存すると付く）'}
                   </span>
                 </span>
+                {view === null ? <span class="row__col">{KIND_LABEL[item.type]}</span> : null}
                 <span class="row__col">{item.platform?.label ?? item.category}</span>
                 <span class="row__col">{item.year}</span>
-                <span class="row__col row__col--num">{item.sortOrder}</span>
                 <StatusPill published={item.published} />
                 <span class="row__actions">
                   <a
@@ -226,6 +281,25 @@ itemRoutes.get('/items', async (c) => {
                       <span class="icon-btn__text">公開ページ</span>
                     </a>
                   ) : null}
+                  {/*
+                    公開と下書きを、編集フォームを開かずに切り替える（ページ構成の一覧と同じ手）。
+                    公開にするほうは編集フォームと同じ関門を通る（止めたらその作品の編集画面へ）
+                  */}
+                  <form
+                    class="row__publish"
+                    method="post"
+                    action={`/admin/items/${item.id}/publish`}
+                  >
+                    <input type="hidden" name="published" value={item.published ? '' : '1'} />
+                    <input type="hidden" name="view" value={view ?? ''} />
+                    <button
+                      class="icon-btn icon-btn--wide"
+                      type="submit"
+                      aria-label={`${item.title} を${item.published ? '下書きにする' : '公開する'}`}
+                    >
+                      {item.published ? '下書きにする' : '公開する'}
+                    </button>
+                  </form>
                   <a
                     class="icon-btn"
                     href={`/admin/items/${item.id}/edit`}
@@ -252,6 +326,96 @@ itemRoutes.get('/items', async (c) => {
   )
 })
 
+/*
+  一覧から公開と下書きを切り替える。下書きにするほうは無条件（長い中身でも引っ込められる）、
+  公開にするほうは編集フォームと同じ関門（publishErrors）を通し、止めたらその作品の編集画面へ
+  送って理由を出す（GET /items/:id/edit の publish=blocked）
+*/
+itemRoutes.post('/items/:id/publish', async (c) => {
+  const id = parseId(c.req.param('id'))
+  if (!id) return c.notFound()
+  const database = db(c)
+  const item = await database.query.items.findFirst({
+    where: eq(schema.items.id, id),
+    with: { shots: { orderBy: shotOrder } },
+  })
+  if (!item) return c.notFound()
+  const form = await c.req.formData()
+  const published = bool(form.get('published'))
+  if (published && itemPublishBlock(item)) {
+    return c.redirect(`/admin/items/${id}/edit?publish=blocked`, 303)
+  }
+  await database
+    .update(schema.items)
+    .set({ published, updatedAt: nextUpdatedAt(item.updatedAt) })
+    .where(eq(schema.items.id, id))
+  const view = viewOf(str(form.get('view')))
+  // 押した行へ戻す
+  return c.redirect(
+    `${listHref(view)}${view ? '&' : '?'}saved=${savedParam(published)}#item-row-${id}`,
+    303,
+  )
+})
+
+// 保存済みの作品が、いま公開の関門を通るか（一覧の「公開する」と、止めたあとの編集画面が読む）
+const itemPublishBlock = (item: schema.Item & { shots: schema.ItemShot[] }) =>
+  publishErrors({
+    kind: 'item',
+    title: item.title,
+    summary: item.summary,
+    imageAlt: item.imageAlt,
+    hasImage: item.imageUrl !== null,
+    shots: item.shots.map((shot, index) => ({ alt: shot.alt, name: `${index + 1} 枚目` })),
+  })
+
+/*
+  同じ年の中で、上下に1つ動かす。並びは年（year_from）が先に効くので、入れ替えられるのは
+  同じ年の隣だけ（年の違う行とは入れ替えず、そう知らせる）。その年の並び順を 10 刻みで
+  振り直す——同じ値が並んで「動かしたのに順番が変わらない」ことが起きない。ほかの年の
+  作品の数は変えない（並びは年が先なので、年をまたいだ数の大小は効かない）
+*/
+itemRoutes.post('/items/:id/move', async (c) => {
+  const id = parseId(c.req.param('id'))
+  if (!id) return c.notFound()
+  const database = db(c)
+  const rows = await database.query.items.findMany({
+    orderBy: itemOrder,
+    columns: { id: true, yearFrom: true, sortOrder: true, updatedAt: true },
+  })
+  const index = rows.findIndex((row) => row.id === id)
+  const moving = rows[index]
+  if (!moving) return c.notFound()
+  const dir = str((await c.req.formData()).get('dir'))
+  // 'up' 以外を全部「下へ」にすると、打ち間違いの POST でも並びが変わる
+  if (dir !== 'up' && dir !== 'down') return c.text('動かす向きが分かりません', 400)
+  const target = rows[dir === 'up' ? index - 1 : index + 1]
+  if (!target || target.yearFrom !== moving.yearFrom) {
+    return c.redirect(`/admin/items?move=blocked#item-row-${id}`, 303)
+  }
+  const year = rows.filter((row) => row.yearFrom === moving.yearFrom)
+  const at = year.findIndex((row) => row.id === id)
+  const swap = dir === 'up' ? at - 1 : at + 1
+  const order = year.slice()
+  order[at] = target
+  order[swap] = moving
+  // 数が変わる行だけを書く（変わらない行の更新時刻を動かさない）
+  const writes = order.flatMap((row, position) => {
+    const sortOrder = (position + 1) * 10
+    return row.sortOrder === sortOrder
+      ? []
+      : [
+          database
+            .update(schema.items)
+            .set({ sortOrder, updatedAt: nextUpdatedAt(row.updatedAt) })
+            .where(eq(schema.items.id, row.id)),
+        ]
+  })
+  const [first, ...rest] = writes
+  if (first) await database.batch([first, ...rest])
+  // 動かした行へ戻す
+  return c.redirect(`/admin/items#item-row-${id}`, 303)
+})
+
 type ItemFormData = {
   account: string
   type: ItemKind
@@ -270,6 +434,8 @@ type ItemFormData = {
   defaults?: ItemDefaults
   // この作品の前の slug（転送の行。itemRedirects）。編集でだけ渡す
   redirects?: string[]
+  // 一覧の「公開する」を関門が止めて来た（理由は errors。「公開する」に印を付けて描く）
+  publishBlocked?: boolean
   // 入力エラーで描き直すとき、送られてきた内容をそのまま返すために使う
   submitted?: Record<string, string>
   version?: string
@@ -674,10 +840,11 @@ const ShotFields = ({
 const ItemForm = (props: ItemFormData) => {
   const item = props.item
   const d = itemDraft(item, props.submitted, props.defaults)
+  if (props.publishBlocked) d.published = 1
   /*
     リンクの欄は、持っている行を全部と、空いた行を足して出す（LINK_ROWS まで。
-    持っている行が LINK_ROWS 以上なら空いた行を1つ）。JavaScript が無いので欄を
-    足す手が無く、もう1本足したい人は保存して開き直せば次の空いた行が出る。
+    持っている行が LINK_ROWS 以上なら空いた行を1つ）。もっと足すのは「＋ 行を足す」
+    （AdminForm.tsx の AddRow。JavaScript が無ければ、保存して開き直すと次の空いた行が出る）。
     持っている行を切って出すと、出なかった行が保存の総入れ替えで黙って消える
     （3行で切っていたころ、4本目から先がそうなった）
   */
@@ -730,6 +897,7 @@ const ItemForm = (props: ItemFormData) => {
           </div>
         ) : null}
       </div>
+      {props.publishBlocked ? <p class="banner banner--error">{PUBLISH_BLOCKED}</p> : null}
       <p class="form-note">入力中の内容と選んだ画像は、保存前にプレビューで確認できます。</p>
 
       {/* 画像を受け取るので multipart。アバターのフォーム（MemberForm）と同じ */}
@@ -1016,14 +1184,14 @@ const ItemForm = (props: ItemFormData) => {
                 </div>
               )
             })}
+            <AddRow rows=".link-row" />
             {props.errors?.links ? (
               <span class="field__error" id="field-links-error">
                 {props.errors.links}
               </span>
             ) : null}
             <span class="field__hint">
-              ラベルと URL は両方入れる。URL は https:// か mailto: か / から ·
-              もっと足すときは、保存してから開き直すと空いた行が出る
+              ラベルと URL は両方入れる。URL は https:// か mailto: か / から
             </span>
             {/*
               押し手にするのは1本目だけ（並びで選ぶ。作品に1本。schema の items.lead_link）。
@@ -1183,7 +1351,7 @@ const ItemForm = (props: ItemFormData) => {
         <div class="form-foot">
           <PublishToggle published={d.published} />
           <FormActions
-            cancelHref={`/admin/items?type=${props.type}`}
+            cancelHref={item ? `/admin/items#item-row-${item.id}` : '/admin/items'}
             previewAction={item ? `/admin/preview/items/${item.id}` : '/admin/preview/items'}
             deleteHref={item ? `/admin/items/${item.id}/delete?from=edit` : undefined}
           />
@@ -1233,6 +1401,8 @@ itemRoutes.get('/items/:id/edit', async (c) => {
   })
   if (!item) return c.notFound()
   const { members, platforms, contactEmail } = await formContext(c)
+  // 一覧の「公開する」を関門が止めて来た。理由がもう無ければ（別のタブで直した）ふつうの編集画面
+  const blocked = c.req.query('publish') === 'blocked' ? itemPublishBlock(item) : null
   return c.html(
     <ItemForm
       account={c.get('account')}
@@ -1243,6 +1413,8 @@ itemRoutes.get('/items/:id/edit', async (c) => {
       item={item}
       redirects={await itemRedirects(db(c), item.id)}
       flash={flashFor(c)}
+      errors={blocked ?? undefined}
+      publishBlocked={Boolean(blocked)}
     />,
   )
 })
@@ -2046,7 +2218,7 @@ itemRoutes.get('/items/:id/delete', async (c) => {
         title={`「${item.title}」を削除しますか？`}
         detail="この操作は取り消せません。"
         action={`/admin/items/${id}/delete`}
-        cancelHref={cameFromEdit(c) ? `/admin/items/${id}/edit` : `/admin/items?type=${item.type}`}
+        cancelHref={cameFromEdit(c) ? `/admin/items/${id}/edit` : `/admin/items#item-row-${id}`}
       >
         <p>
           タグ {item.tags.length} 件とリンク {item.links.length} 件
@@ -2082,5 +2254,5 @@ itemRoutes.post('/items/:id/delete', async (c) => {
     item.iconUrl,
     ...item.shots.map((shot) => shot.url),
   ])
-  return c.redirect(`/admin/items?type=${item.type}&deleted=1`, 303)
+  return c.redirect('/admin/items?deleted=1', 303)
 })

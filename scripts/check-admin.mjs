@@ -284,12 +284,37 @@ try {
   await page.getByRole('textbox', { name: '1件目のラベル', exact: true }).fill('Example')
   await page.getByRole('textbox', { name: '1件目のURL', exact: true }).fill('https://example.test/')
   await page.getByRole('textbox', { name: '1件目の補足', exact: true }).fill('入力した補足')
+  // 行は保存せずに足せる（AddRow。足した行は空で、番号と読み上げの名前が続きになる）
+  assert.equal(await page.locator('.block-fields__row').count(), 3)
+  await page.getByRole('button', { name: '＋ 行を足す' }).click()
+  assert.equal(await page.locator('.block-fields__row').count(), 4)
+  assert.equal(await page.locator('.block-fields__number').last().textContent(), '04')
+  await page.getByRole('textbox', { name: '4件目のラベル', exact: true }).fill('Fourth')
+  await page
+    .getByRole('textbox', { name: '4件目のURL', exact: true })
+    .fill('https://example.test/4')
   await submit(page)
   await page.getByRole('link', { name: '項目別のリンク を編集', exact: true }).click()
   assert.equal(
     await page.getByRole('textbox', { name: '1件目のURL', exact: true }).inputValue(),
     'https://example.test/',
   )
+  // 空の2行は捨てられ、足した行は2件目として残る
+  assert.equal(
+    await page.getByRole('textbox', { name: '2件目のURL', exact: true }).inputValue(),
+    'https://example.test/4',
+  )
+  // 作品のリンクも同じ手で足せる
+  await go(page, '/admin/items/1/edit')
+  await page
+    .locator('details')
+    .filter({ has: page.locator('[name=linkUrl]') })
+    .locator('summary')
+    .click()
+  const linkRows = await page.locator('.link-row').count()
+  await page.getByRole('button', { name: '＋ 行を足す' }).click()
+  assert.equal(await page.locator('.link-row').count(), linkRows + 1)
+  assert.equal(await page.locator('.link-row').last().locator('input').first().inputValue(), '')
   await context.close()
 
   const native = await contextFor(390, false)

@@ -44,6 +44,7 @@ import {
   formKeyOf,
   mergeErrors,
   newFormKey,
+  PUBLISH_BLOCKED,
   parseId,
   readSlug,
   readSortOrder,
@@ -91,8 +92,24 @@ memberRoutes.get('/members', async (c) => {
         </div>
       ) : (
         <ul class="rows">
-          {members.map((member) => (
-            <li class="row" key={member.id}>
+          {members.map((member, index) => (
+            <li class="row" key={member.id} id={`member-row-${member.id}`}>
+              {/* 並び（Team の順）を、編集を開かずに入れ替える（ページ構成・作品の一覧と同じ手） */}
+              <span class="row__move">
+                {(['up', 'down'] as const).map((dir) => (
+                  <form method="post" action={`/admin/members/${member.id}/move`} key={dir}>
+                    <input type="hidden" name="dir" value={dir} />
+                    <button
+                      class="move-btn"
+                      type="submit"
+                      disabled={dir === 'up' ? index === 0 : index === members.length - 1}
+                      aria-label={`${member.name} を${dir === 'up' ? '前へ' : '後ろへ'}`}
+                    >
+                      {dir === 'up' ? '↑' : '↓'}
+                    </button>
+                  </form>
+                ))}
+              </span>
               <Avatar src={member.avatarUrl} name={member.name} size={36} />
               <span class="row__main">
                 {/* 名前を押すと編集へ（右端の「編集」と同じ行き先） */}
@@ -102,7 +119,6 @@ memberRoutes.get('/members', async (c) => {
                 <span class="row__sub">/members/{member.slug}</span>
               </span>
               <span class="row__col">{member.role}</span>
-              <span class="row__col row__col--num">{member.sortOrder}</span>
               <StatusPill published={member.published} />
               <span class="row__actions">
                 <a
@@ -128,6 +144,21 @@ memberRoutes.get('/members', async (c) => {
                     <span class="icon-btn__text">公開ページ</span>
                   </a>
                 ) : null}
+                {/* 公開と下書きの切り替え。公開にするほうは編集フォームと同じ関門を通る */}
+                <form
+                  class="row__publish"
+                  method="post"
+                  action={`/admin/members/${member.id}/publish`}
+                >
+                  <input type="hidden" name="published" value={member.published ? '' : '1'} />
+                  <button
+                    class="icon-btn icon-btn--wide"
+                    type="submit"
+                    aria-label={`${member.name} を${member.published ? '下書きにする' : '公開する'}`}
+                  >
+                    {member.published ? '下書きにする' : '公開する'}
+                  </button>
+                </form>
                 <a
                   class="icon-btn"
                   href={`/admin/members/${member.id}/edit`}
@@ -169,6 +200,8 @@ const MemberForm = (props: {
   values?: Record<string, string>
   // この人の前の slug（転送の行。memberRedirects）。編集でだけ渡す
   redirects?: string[]
+  // 一覧の「公開する」を関門が止めて来た（理由は errors。「公開する」に印を付けて描く）
+  publishBlocked?: boolean
 }) => {
   const member = props.member
   const value = (key: keyof schema.Member, fallback = '') =>
@@ -179,7 +212,11 @@ const MemberForm = (props: {
     slug の重なりで弾かれて直すと、描き直しで付いた「公開する」がそのまま
     送られて、引っ込めたはずのページが公開のまま残った
   */
-  const published = props.values ? Number(props.values.published === '1') : (member?.published ?? 0)
+  const published = props.publishBlocked
+    ? 1
+    : props.values
+      ? Number(props.values.published === '1')
+      : (member?.published ?? 0)
 
   return (
     <AdminLayout
@@ -224,6 +261,7 @@ const MemberForm = (props: {
           </div>
         ) : null}
       </div>
+      {props.publishBlocked ? <p class="banner banner--error">{PUBLISH_BLOCKED}</p> : null}
       <p class="form-note">入力中の内容は、保存前にプレビューで確認できます。</p>
 
       <form
@@ -447,6 +485,11 @@ memberRoutes.get('/members/:id/edit', async (c) => {
   })
   if (!member) return c.notFound()
   const [{ total } = { total: 0 }] = await db(c).select({ total: count() }).from(schema.members)
+  // 一覧の「公開する」を関門が止めて来た。理由がもう無ければ、ふつうの編集画面
+  const blocked =
+    c.req.query('publish') === 'blocked'
+      ? publishErrors({ kind: 'member', headline: member.headline })
+      : null
   return c.html(
     <MemberForm
       account={c.get('account')}
@@ -455,8 +498,71 @@ memberRoutes.get('/members/:id/edit', async (c) => {
       flash={flashFor(c)}
       solo={total === 1}
       onTop={total === 1}
+      errors={blocked ?? undefined}
+      publishBlocked={Boolean(blocked)}
     />,
   )
+})
+
+/*
+  一覧から公開と下書きを切り替える（作品の一覧と同じ）。公開にするほうは関門を通し、止めたら
+  その人の編集画面へ送って理由を出す
+*/
+memberRoutes.post('/members/:id/publish', async (c) => {
+  const id = parseId(c.req.param('id'))
+  if (!id) return c.notFound()
+  const database = db(c)
+  const member = await database.query.members.findFirst({ where: eq(schema.members.id, id) })
+  if (!member) return c.notFound()
+  const published = bool((await c.req.formData()).get('published'))
+  if (published && publishErrors({ kind: 'member', headline: member.headline })) {
+    return c.redirect(`/admin/members/${id}/edit?publish=blocked`, 303)
+  }
+  await database
+    .update(schema.members)
+    .set({ published, updatedAt: nextUpdatedAt(member.updatedAt) })
+    .where(eq(schema.members.id, id))
+  return c.redirect(`/admin/members?saved=${savedParam(published)}#member-row-${id}`, 303)
+})
+
+/*
+  上下に1つ動かす。並び順は 10 刻みで振り直す（同じ値が並んで「動かしたのに順番が変わらない」
+  を起こさない）。数が変わる行だけを書く
+*/
+memberRoutes.post('/members/:id/move', async (c) => {
+  const id = parseId(c.req.param('id'))
+  if (!id) return c.notFound()
+  const database = db(c)
+  const rows = await database.query.members.findMany({
+    orderBy: [asc(schema.members.sortOrder), asc(schema.members.id)],
+    columns: { id: true, sortOrder: true, updatedAt: true },
+  })
+  const index = rows.findIndex((row) => row.id === id)
+  const moving = rows[index]
+  if (!moving) return c.notFound()
+  const dir = str((await c.req.formData()).get('dir'))
+  if (dir !== 'up' && dir !== 'down') return c.text('動かす向きが分かりません', 400)
+  const swap = dir === 'up' ? index - 1 : index + 1
+  const other = rows[swap]
+  if (other) {
+    const order = rows.slice()
+    order[index] = other
+    order[swap] = moving
+    const writes = order.flatMap((row, position) => {
+      const sortOrder = (position + 1) * 10
+      return row.sortOrder === sortOrder
+        ? []
+        : [
+            database
+              .update(schema.members)
+              .set({ sortOrder, updatedAt: nextUpdatedAt(row.updatedAt) })
+              .where(eq(schema.members.id, row.id)),
+          ]
+    })
+    const [first, ...rest] = writes
+    if (first) await database.batch([first, ...rest])
+  }
+  return c.redirect(`/admin/members#member-row-${id}`, 303)
 })
 
 export function readMemberForm(form: FormData, existing?: schema.Member) {

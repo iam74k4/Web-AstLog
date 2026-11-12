@@ -51,6 +51,7 @@ import {
   flashFor,
   formKeyOf,
   newFormKey,
+  PUBLISH_BLOCKED,
   parseId,
   savedParam,
 } from './request'
@@ -489,7 +490,6 @@ blockRoutes.get('/blocks/new', (c) => {
   保存すれば、押したかった「公開」がそのまま通る。理由がもう無ければ（別の
   タブで直した）、ふつうの編集画面。
 */
-const PUBLISH_BLOCKED = '公開できませんでした。下の理由を直して保存すると、公開されます'
 
 blockRoutes.get('/blocks/:id/edit', async (c) => {
   const id = parseId(c.req.param('id'))

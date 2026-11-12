@@ -417,6 +417,11 @@
 }
 
 .icon-btn--danger {
+  /*
+    消す手は行の幅を分け合わない。操作が5つの行（作品・メンバー）では狭い画面で2行に折れ、
+    最後に回った「削除」だけが行いっぱいの赤い帯になっていた
+  */
+  flex: 0 0 auto;
   background: var(--danger-soft);
   color: var(--danger);
 }
@@ -789,6 +794,18 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
+}
+
+/*
+  「＋ 行を足す」（AdminForm.tsx の AddRow）。幅いっぱいに伸ばさず、行の頭にそろえる。補助が
+  動くまでは隠す——.btn の display が hidden 属性より強いので、ここで畳む
+*/
+.add-row {
+  align-self: flex-start;
+}
+
+.add-row[hidden] {
+  display: none;
 }
 
 /*
@@ -1493,9 +1510,19 @@ html:has(.admin-shell) {
   object-fit: contain;
   padding: var(--sp-4);
 }
+/*
+  絵の無い作品の空の枠。行が横に並ぶ幅（600 以上）でだけ置く——題の頭をそろえるための枠なので、
+  見本が題の上に積まれる狭い画面では、何も無い灰色の箱が行ごとに1つ増えるだけだった
+*/
 .row__thumb--empty {
-  display: block;
+  display: none;
   flex: none;
+}
+
+@media (min-width: 600px) {
+  .row__thumb--empty {
+    display: block;
+  }
 }
 .row__actions {
   flex-wrap: wrap;
