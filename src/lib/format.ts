@@ -190,11 +190,13 @@ export function yearInJapan(now: Date = new Date()): number {
 }
 
 /*
-  D1 の datetime('now')（UTC の「YYYY-MM-DD HH:MM:SS」）を、日本時間の
-  「YYYY-MM-DD HH:MM」にする。管理画面の「最後のログイン」。読めない値はそのまま返す
+  UTC の時刻を日本時間の「YYYY-MM-DD HH:MM」にする。来る形は2つ——D1 の datetime('now')
+  （「YYYY-MM-DD HH:MM:SS」。最後のログイン）と、ISO の時刻（「…T…Z」。作品の更新日時・外した
+  画像の日付）。時差の印が無ければ UTC として読む。読めない値はそのまま返す
 */
 export function timeInJapan(utc: string): string {
-  const date = new Date(`${utc.replace(' ', 'T')}Z`)
+  const iso = utc.replace(' ', 'T')
+  const date = new Date(/(?:Z|[+-]\d\d:\d\d)$/.test(iso) ? iso : `${iso}Z`)
   if (Number.isNaN(date.getTime())) return utc
   return new Date(date.getTime() + JST_OFFSET_MS).toISOString().slice(0, 16).replace('T', ' ')
 }

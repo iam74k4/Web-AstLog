@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import * as schema from '../src/db/schema'
 import { db, get, resetDb, seedItem, seedMember, signIn } from './helpers'
@@ -93,7 +94,8 @@ describe('管理画面の概要', () => {
     const html = await (await signed('/admin')).text()
     expect(html).toContain('プロフィールの下書きを確認する')
     expect(html).toContain(`href="/admin/members/${member.id}/edit"`)
-    expect(plain(html)).toContain('公開 0 件下書き 1 件')
+    // プロフィールは人で数える
+    expect(plain(html)).toContain('公開 0 人下書き 1 人')
   })
 
   it('全ページの取り下げを既定の構成と混同しない', async () => {
@@ -118,14 +120,41 @@ describe('管理画面の概要', () => {
     expect(await db().query.blocks.findMany()).toHaveLength(4)
   })
 
-  it('保存済みの公開内容があるときは全体プレビューを案内する', async () => {
+  it('やることが無ければ「次にできること」を出さず、全体プレビューの押し手は1つ', async () => {
     await seedMember()
     await seedItem()
+    await db()
+      .insert(schema.blocks)
+      .values(
+        (['hero', 'projects', 'team', 'contact'] as const).map((type, i) => ({
+          type,
+          published: 1,
+          sortOrder: (i + 1) * 10,
+        })),
+      )
     const signed = await signIn()
     const html = await (await signed('/admin')).text()
-    expect(html).toContain('公開画面を確認する')
+    expect(html).not.toContain('次にできること')
     expect(html).toContain('保存済み')
     expect(html).not.toContain('公開準備完了')
+    // 本文の全体プレビューは「公開の状況」の1つだけ（横の柱の入口は別に数えない）
+    const main = html.slice(html.indexOf('id="admin-main"'))
+    expect(main.match(/href="\/admin\/preview"/g)).toHaveLength(1)
+    // ページ構成の札は、ふだんは何も言わない（見出しのすぐ後ろが目次の数）
+    expect(plain(html)).toContain('ページ構成目次に表示:')
+  })
+
+  it('最近編集した作品の日時は日本時間で出す（ISO のまま出さない）', async () => {
+    await seedMember()
+    const item = await seedItem()
+    await db()
+      .update(schema.items)
+      .set({ updatedAt: '2026-11-11T23:34:48.154Z' })
+      .where(eq(schema.items.id, item.id))
+    const signed = await signIn()
+    const html = await (await signed('/admin')).text()
+    expect(html).toContain('2026-11-12 08:34')
+    expect(html).not.toContain('2026-11-11T23:34:48.154Z')
   })
 
   it('業務だけ登録している場合は、空の個人開発一覧へ送らない', async () => {

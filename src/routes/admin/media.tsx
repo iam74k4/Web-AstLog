@@ -63,7 +63,7 @@ const fileHref = (one: Pick<Archived, 'place' | 'name'>) =>
   `/admin/media/file/${one.place}/${one.name}`
 
 // 「2026-11-12」。日本の日付で言う（外した日・消える日）
-const day = (iso: string | undefined) => (iso ? timeInJapan(iso.replace('Z', '')).slice(0, 10) : '')
+const day = (iso: string | undefined) => (iso ? timeInJapan(iso).slice(0, 10) : '')
 
 mediaRoutes.get('/media', async (c) => {
   const archived = await listArchive(c.env.MEDIA)

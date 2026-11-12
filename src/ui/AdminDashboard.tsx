@@ -15,17 +15,21 @@ export type DashboardAction = {
   note: string
   href: string
   label: string
-  newTab?: boolean
 }
 
-const CountSummary = ({ counts }: { counts: DashboardCounts }) => (
+// 人は「人」、作品は「件」で数える
+const CountSummary = ({ counts, unit }: { counts: DashboardCounts; unit: '人' | '件' }) => (
   <span class="dashboard-counts">
     {counts.total === 0 ? (
       <span class="dashboard-state">未登録</span>
     ) : (
       <>
-        <span>公開 {counts.published} 件</span>
-        <span>下書き {counts.drafts} 件</span>
+        <span>
+          公開 {counts.published} {unit}
+        </span>
+        <span>
+          下書き {counts.drafts} {unit}
+        </span>
       </>
     )}
   </span>
@@ -41,7 +45,8 @@ export const AdminDashboard = (props: {
     published: number
     updatedAt: string
   }[]
-  next: DashboardAction
+  // やることが無いときは null（案内の面を出さない）
+  next: DashboardAction | null
   members: DashboardCounts
   apps: DashboardCounts
   works: DashboardCounts
@@ -102,21 +107,18 @@ export const AdminDashboard = (props: {
       </div>
     </section>
 
-    <section class="dashboard-next" aria-labelledby="dashboard-next-title">
-      <div>
-        <span class="dashboard-next__label">次にできること</span>
-        <h2 id="dashboard-next-title">{props.next.title}</h2>
-        <p>{props.next.note}</p>
-      </div>
-      <a
-        class="btn btn--ghost"
-        href={props.next.href}
-        target={props.next.newTab ? '_blank' : undefined}
-        rel={props.next.newTab ? 'noreferrer' : undefined}
-      >
-        {props.next.label}
-      </a>
-    </section>
+    {props.next ? (
+      <section class="dashboard-next" aria-labelledby="dashboard-next-title">
+        <div>
+          <span class="dashboard-next__label">次にできること</span>
+          <h2 id="dashboard-next-title">{props.next.title}</h2>
+          <p>{props.next.note}</p>
+        </div>
+        <a class="btn btn--ghost" href={props.next.href}>
+          {props.next.label}
+        </a>
+      </section>
+    ) : null}
 
     {props.recent?.length ? (
       <section class="dashboard-settings" aria-labelledby="dashboard-recent-title">
@@ -161,7 +163,7 @@ export const AdminDashboard = (props: {
     <section class="dashboard-settings" aria-labelledby="dashboard-settings-title">
       <div class="dashboard-settings__head">
         <h2 id="dashboard-settings-title">設定する場所</h2>
-        <p>必要な内容から整えられます。下書きは公開サイトに出ません。</p>
+        <p>下書きは公開サイトに出ません。</p>
       </div>
       <div class="dashboard-grid">
         <a class="dashboard-card" href="/admin/site">
@@ -181,7 +183,7 @@ export const AdminDashboard = (props: {
           <div class="dashboard-card__head">
             <h3>プロフィール・チーム</h3>
           </div>
-          <CountSummary counts={props.members} />
+          <CountSummary counts={props.members} unit="人" />
           {props.members.published > 0 && !props.profilesShown ? (
             <span class="dashboard-card__status">プロフィール・チームは目次から外れています</span>
           ) : null}
@@ -203,13 +205,13 @@ export const AdminDashboard = (props: {
             <div>
               <dt>個人開発</dt>
               <dd>
-                <CountSummary counts={props.apps} />
+                <CountSummary counts={props.apps} unit="件" />
               </dd>
             </div>
             <div>
               <dt>業務</dt>
               <dd>
-                <CountSummary counts={props.works} />
+                <CountSummary counts={props.works} unit="件" />
               </dd>
             </div>
           </dl>
@@ -223,21 +225,20 @@ export const AdminDashboard = (props: {
 
         <a class="dashboard-card" href="/admin/blocks">
           <div class="dashboard-card__head">
-            <h3>ページの構成</h3>
-            <span class="dashboard-state">
-              {props.blockCount === 0
-                ? '既定の並び'
-                : props.blockDrafts === props.blockCount
-                  ? 'すべて下書き'
-                  : props.pages === 0
-                    ? '目次に表示なし'
-                    : '設定あり'}
-            </span>
+            <h3>ページ構成</h3>
+            {/* 札は目を留めてほしい状態のときだけ。ふだんの「設定あり」は何も言っていなかった */}
+            {props.blockCount === 0 ? (
+              <span class="dashboard-state">既定の並び</span>
+            ) : props.blockDrafts === props.blockCount ? (
+              <span class="dashboard-state">すべて下書き</span>
+            ) : props.pages === 0 ? (
+              <span class="dashboard-state">目次に表示なし</span>
+            ) : null}
           </div>
           <span class="dashboard-card__status">目次に表示: {props.pages} ページ</span>
-          {props.blockCount > 0 ? (
+          {props.blockDrafts > 0 ? (
             <span class="dashboard-card__status">
-              公開 {props.blockCount - props.blockDrafts} 件 · 下書き {props.blockDrafts} 件
+              下書き {props.blockDrafts} 件（公開サイトに出ません）
             </span>
           ) : null}
           <span class="dashboard-card__action">ページ構成を開く →</span>
@@ -267,8 +268,8 @@ export const AdminDashboard = (props: {
       */}
       {props.storage.archived ? (
         <p class="dashboard-storage__note">
-          ほかに、外した画像の控えが {megabytes(props.storage.archived)}
-          （90日で消える。容量には数えない）。 <a href="/admin/media">外した画像を見る →</a>
+          ほかに、外した画像の控えが {megabytes(props.storage.archived)}{' '}
+          あります。容量には数えず、90日で消えます。 <a href="/admin/media">外した画像を見る →</a>
         </p>
       ) : null}
     </section>
