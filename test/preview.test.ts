@@ -325,8 +325,8 @@ describe('保存前のサイト設定・見た目', () => {
   it.each(['site'])(
     '%sのTeamプレビューは公開中の複数人を表示し、下書きや永続設定を変えない',
     async (target) => {
-      await seedMember({ name: '公開の一人目', celestialBody: 'moon' })
-      await seedMember({ slug: 'second', name: '公開の二人目', celestialBody: 'sun' })
+      await seedMember({ name: '公開の一人目' })
+      await seedMember({ slug: 'second', name: '公開の二人目' })
       await seedMember({ slug: 'draft-person', name: '未公開の人', published: 0 })
       const fetch = await signIn()
       const before = await previewStorageState()
