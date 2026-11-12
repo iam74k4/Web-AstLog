@@ -6,9 +6,9 @@ import packageJson from 'virtual:repo:package.json'
 import seedSql from 'virtual:repo:seed.sql'
 import { drizzle } from 'drizzle-orm/d1'
 import { describe, expect, it } from 'vitest'
-import { listBlocks } from '../src/db/queries'
 import * as schema from '../src/db/schema'
 import app from '../src/index'
+import { createSession, SESSION_COOKIE } from '../src/lib/auth'
 import { uncachedEnv } from './helpers'
 
 /*
@@ -58,9 +58,9 @@ async function open(path: string) {
   return response
 }
 
-// 移行前の本番にあった形の行。構成は Apps と Works が別の2節だったころのもの。
-// 選択肢はそのころ seed.sql が入れていた（移行 0011 より前の D1 にも行がある）
-async function legacyRows() {
+// 本番にある形の行（1人・作品3件・構成の決まった4節）。選択肢は移行 0011 より前の D1 にも
+// 行があるよう、ここでも入れる（INSERT OR IGNORE）
+async function liveRows() {
   await d1().batch([
     d1().prepare(
       "INSERT OR IGNORE INTO platforms (key, label, sort_order) VALUES ('web', 'Web', 50), ('cli', 'CLI', 30)",
@@ -72,7 +72,7 @@ async function legacyRows() {
       "INSERT INTO items (id, type, member_id, platform_key, category, title, slug, year, summary, published, sort_order) VALUES (1, 'app', 1, 'web', '', 'AppMixer', 'appmixer', '2026', '音量を混ぜる常駐アプリ。配布している。', 1, 10), (2, 'app', 1, 'cli', '', 'Tool', 'tool', '2025', '道具。作った。', 1, 20), (3, 'work', 1, NULL, '金融', '基幹刷新', 'kikan', '2024 — 現在', '基幹の刷新。担当した。', 1, 30)",
     ),
     d1().prepare(
-      "INSERT INTO blocks (id, type, published, sort_order) VALUES (1, 'hero', 1, 10), (2, 'apps', 0, 20), (3, 'works', 1, 30), (4, 'team', 1, 40), (5, 'contact', 1, 50)",
+      "INSERT INTO blocks (id, type, published, sort_order) VALUES (1, 'hero', 1, 10), (2, 'projects', 1, 20), (4, 'team', 1, 40), (5, 'contact', 1, 50)",
     ),
     // Contact は連絡先があるときだけ出る（src/blocks.ts の blockShown）。前の DB にも置いておく
     d1().prepare("INSERT INTO settings (key, value) VALUES ('site.email', 'contact@example.test')"),
@@ -92,6 +92,7 @@ const PAGES = [
   '/contact',
   '/all',
   '/sitemap.xml',
+  '/members/okazaki',
 ]
 
 async function snapshot() {
@@ -108,45 +109,68 @@ async function snapshot() {
 }
 
 describe('前の DB ＋ 今のコード', () => {
-  it('Apps / Works を Projects に畳む書き換え（0004）を流す前の D1 でも、Projects を描く', async () => {
-    const rewrite = migrationNamed('merge_apps_works')
+  /*
+    使わなくなった天体の列（members.celestial_body / celestial_accent）を落とす移行は、この版が
+    どの環境にも出たあとの次のリリースで出す（expand → contract。src/db/schema.ts の members）。
+    移行はデプロイより先に流れるので、そのあいだ動いているのはこの版——列を落とした D1 でも、
+    この版のコードが描けて、メンバーを書けることをここで確かめておく
+  */
+  it('天体の列を落とした D1 でも、今のコードは描けて、メンバーを足して直せる', async () => {
     await emptyD1()
-    await migrate((name) => name !== rewrite)
-    await legacyRows()
-
+    await migrate(() => true)
+    await liveRows()
     const before = await snapshot()
-    // 以前はここで /projects が 404、入口の帯も目次も sitemap の /projects も無かった
-    expect(before['/projects']?.status).toBe(200)
-    expect(before['/projects']?.body).toContain('AppMixer')
-    expect(before['/projects?kind=app']?.status).toBe(200)
-    expect(before['/projects?kind=app']?.body).toContain('AppMixer')
-    expect(before['/projects?kind=app']?.body).not.toContain('基幹刷新')
-    expect(before['/projects?kind=work']?.body).toContain('基幹刷新')
-    expect(before['/projects?kind=work']?.body).not.toContain('AppMixer')
-    expect(before['/apps']).toMatchObject({ status: 301, location: '/projects?kind=app' })
-    expect(before['/']?.body).toContain('href="/projects"')
-    expect(before['/sitemap.xml']?.body).toContain('/projects</loc>')
-    expect(before['/all']?.body).toContain('AppMixer')
-    expect(before['/all']?.body).toContain('基幹刷新')
-    for (const path of PAGES) {
-      expect(before[path]?.status, path).toBeLessThan(400)
-    }
-
-    // 管理画面の構成の一覧も、前の名前の2行を Projects の1行として読む
-    const rows = await listBlocks(drizzle(d1(), { schema }))
-    expect(rows.map((row) => [row.id, row.type, row.published])).toEqual([
-      [1, 'hero', 1],
-      [2, 'projects', 1],
-      [4, 'team', 1],
-      [5, 'contact', 1],
-    ])
-
-    // 書き換えを流したあとも、1字も変わらない（読み替えは 0004 と同じ形に畳む）
-    await migrate((name) => name === rewrite)
+    await d1().prepare('ALTER TABLE members DROP COLUMN celestial_body').run()
+    await d1().prepare('ALTER TABLE members DROP COLUMN celestial_accent').run()
     const after = await snapshot()
     for (const path of PAGES) {
+      expect(after[path]?.status, path).toBeLessThan(400)
       expect(after[path], path).toEqual(before[path])
     }
+
+    // 管理画面の書き込み（足す・直す）。セッションは D1 にハッシュで置く（src/lib/auth.ts）
+    const database = drizzle(d1(), { schema })
+    const [owner] = await database.insert(schema.users).values({ role: 'owner' }).returning()
+    if (!owner) throw new Error('owner を作れなかった')
+    const { token } = await createSession(database, owner.id)
+    const signed = async (path: string, body: Record<string, string>) => {
+      const form = new FormData()
+      for (const [key, value] of Object.entries(body)) form.append(key, value)
+      const ctx = createExecutionContext()
+      const response = await app.fetch(
+        new Request(`http://localhost${path}`, {
+          method: 'POST',
+          body: form,
+          headers: { cookie: `${SESSION_COOKIE}=${token}` },
+          redirect: 'manual',
+        }),
+        uncachedEnv({ DB: d1() }),
+        ctx,
+      )
+      await waitOnExecutionContext(ctx)
+      return response
+    }
+    const added = await signed('/admin/members', { name: '星野', slug: 'hoshino', _version: 'new' })
+    expect(added.status).toBe(303)
+    const current = await database.query.members.findFirst({
+      where: (table, { eq }) => eq(table.id, 1),
+    })
+    const edited = await signed('/admin/members/1', {
+      name: '岡崎 昂功',
+      slug: 'okazaki',
+      role: 'Engineer',
+      published: '1',
+      _version: current?.updatedAt ?? '',
+    })
+    expect(edited.status).toBe(303)
+    const names = (await database.query.members.findMany()).map((member) => [
+      member.name,
+      member.role,
+    ])
+    expect(names).toEqual([
+      ['岡崎 昂功', 'Engineer'],
+      ['星野', ''],
+    ])
   })
 
   it('移行を流していない D1 では正しく描けない（表が無ければ 500、列が無ければ列の名前が字で出る）——だから deploy は移行をいつも流す', async () => {
@@ -162,13 +186,13 @@ describe('前の DB ＋ 今のコード', () => {
     const shots = migrationNamed('item_shots')
     await emptyD1()
     await migrate((name) => name < shots)
-    await legacyRows()
+    await liveRows()
     expect((await open('/projects')).status).toBe(500)
 
     const story = migrationNamed('item_story')
     await emptyD1()
     await migrate((name) => name < story)
-    await legacyRows()
+    await liveRows()
     const page = await open('/apps/item/appmixer')
     expect(page.status).toBe(200)
     expect(await page.text()).toContain('<p>story_background</p>')

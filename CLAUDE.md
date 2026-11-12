@@ -393,8 +393,8 @@ HTML に絵・件数の帯は置かない。
 （ワードマークと favicon の SVG、favicon・apple-touch-icon・共有カードの PNG）は
 `scripts/logo/export.mjs` が書く。共有カードは墨の地（`LOGO_COLORS`）に白い字。
 
-**メンバーの天体（`members.celestial_body` / `celestial_accent`）は使わない列。** 読む口も書く口も
-外し、列だけを残している（前のコードが読む。expand → contract の contract を次のリリースで出す）。
+**メンバーの天体（`members.celestial_body` / `celestial_accent`）は使わない列。** `schema.ts` から
+外した（読まない）。D1 の列は次のリリースの移行で落とす（contract）。
 
 ## 文言
 
@@ -536,9 +536,9 @@ URL を動かすなら前の URL は転送で残す（貼られたリンクを�
   `MIGRATION_DB` に前の移行まで流して行を入れてから確かめる
 - **データを書き換える移行は、expand → contract の2リリースで出す。** 移行は deploy より先に
   流れるので、「新しい DB ＋ 前のコード」（deploy の失敗・`wrangler rollback`）も「前の DB ＋
-  新しいコード」（流し忘れ）も起きる。先のリリースで読む側を広げ（`src/blocks.ts` の
-  `LEGACY_BLOCK_KEYS`）、`test/deploy.test.ts` の「前の DB ＋ 今のコード」のように、書き換えの
-  前後で同じ HTML になることを確かめる。前の形を外してよいのは、どの環境にも当たったあと
+  新しいコード」（流し忘れ）も起きる。先のリリースで読む側を合わせ（列を落とすなら先に読まなくする）、
+  `test/deploy.test.ts` の「前の DB ＋ 今のコード」のように、移行の前後で同じ HTML になることを
+  確かめる。前の形を外してよいのは、どの環境にも当たったあと
 - `0006`・`0007` の移行は旧認証列も同時に落とした。それより前の Worker へ戻すなら D1 も戻す（README）。
 - **`seed.sql` はローカルの開発・検査専用で、中身を全部消す。** `db:seed:local` だけが
   流す。本番への seed 経路は作らず、内容は管理画面から登録する。作品の検査画像は

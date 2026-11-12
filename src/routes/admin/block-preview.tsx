@@ -14,7 +14,7 @@ export const blockPreviewRoutes = new Hono<AppEnv>()
 async function previewBlockPost(c: Context<AppEnv>, askedId?: string) {
   const id = askedId === undefined ? null : parseId(askedId)
   if (askedId !== undefined && !id) return c.notFound()
-  const existing = id ? (await findAdminBlock(db(c), id))?.block : undefined
+  const existing = id ? await findAdminBlock(db(c), id) : undefined
   if (id && !existing) return c.notFound()
   let form: FormData
   try {

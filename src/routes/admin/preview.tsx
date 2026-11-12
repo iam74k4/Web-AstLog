@@ -484,9 +484,6 @@ async function memberPreviewPost(c: Context<AppEnv>, askedId?: string) {
     id: existing?.id ?? 0,
     formKey: existing?.formKey ?? null,
     createdAt: existing?.createdAt ?? '',
-    // もう読まない列（src/db/schema.ts の members の注記）。行の形を満たすためだけに持つ
-    celestialBody: existing?.celestialBody ?? 'black-hole',
-    celestialAccent: existing?.celestialAccent ?? 'inherit',
     ...values,
     // 保存と同じ: 選べば差し替え、「外す」なら無し、どちらでもなければいまのまま
     avatarUrl: picked.image

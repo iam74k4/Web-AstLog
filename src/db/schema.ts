@@ -54,13 +54,11 @@ export const members = sqliteTable(
     // /images/<key>（KV にアップロードしたもの）か /assets/...（同梱）。null なら頭文字
     avatarUrl: text('avatar_url'),
     /*
-      もう読まない列（天体と装飾色の選択）。サイトを簡素にしたときに表示も管理画面の欄も外した。
-      列だけ残すのは expand → contract のため——この列を書く前の版のコードへ戻したとき
-      （wrangler rollback）も動くように、次のリリースで ALTER TABLE … DROP COLUMN で落とす
-      （CLAUDE.md「移行」）。既定値は落とす日まで変えない（drizzle-kit が移行を作らないように）
+      D1 にはまだ、使わなくなった天体の列（celestial_body / celestial_accent。既定値つき）が
+      ある。expand → contract の1段目として、ここ（読む・書く側）から先に外した——この版が
+      どの環境にも出たあとの次のリリースで、移行が列を落とす（CLAUDE.md「移行」）。同じ
+      リリースで落とすと、移行のあとデプロイまでのあいだ、前の版が無い列を SELECT して落ちる
     */
-    celestialBody: text('celestial_body').notNull().default('black-hole'),
-    celestialAccent: text('celestial_accent').notNull().default('inherit'),
     github: text('github'),
     email: text('email'),
     published: integer('published').notNull().default(0),
