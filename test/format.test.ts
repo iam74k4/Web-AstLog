@@ -10,6 +10,7 @@ import {
   parseSkills,
   parseTags,
   skillRows,
+  timeInJapan,
   toSlug,
   yearFrom,
   yearInJapan,
@@ -215,6 +216,16 @@ describe('yearInJapan', () => {
   it('日本時間で年を数える。UTC の大晦日 15 時は、日本ではもう元日', () => {
     expect(yearInJapan(new Date('2026-12-31T14:59:59Z'))).toBe(2026)
     expect(yearInJapan(new Date('2026-12-31T15:00:00Z'))).toBe(2027)
+  })
+})
+
+describe('timeInJapan', () => {
+  it('D1 の datetime と ISO の時刻のどちらも、日本時間の分までにする', () => {
+    // 概要の「最近編集した作品」が「2026-11-11T23:34:48.154Z」のまま出ていた（Z を2つ付けて読めなかった）
+    expect(timeInJapan('2026-11-11 23:34:48')).toBe('2026-11-12 08:34')
+    expect(timeInJapan('2026-11-11T23:34:48.154Z')).toBe('2026-11-12 08:34')
+    expect(timeInJapan('2026-11-11T23:34:48+09:00')).toBe('2026-11-11 23:34')
+    expect(timeInJapan('読めない')).toBe('読めない')
   })
 })
 
