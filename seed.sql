@@ -2,6 +2,13 @@
 -- 本番には流さず、管理画面から内容と画像を登録する。
 -- 画像は scripts/fixtures/media/ からローカル KV にだけ入れる。
 --
+-- 中身は検査のための見本（作り話）で、本人のサイトの写しではない。本番の正は D1 で、写しを
+-- ここに持つと本番と黙ってずれていき（作品の顔ぶれが入れ替わっても、ここは古いまま）、
+-- 経歴・連絡先・規約の全文まで二重に持つことになった。形だけを本番にそろえる——1人のサイト、
+-- 公開中の個人開発5件と業務2件、下書き3件。アイコン・画像5枚・押し手・文書2本を持つ作品が1件。
+-- 名前と画像が実物なのは、検査画像（scripts/fixtures/media/）を借りている AppMixer と、この
+-- サイト（AstLog）だけ。どちらも公開している作品で、文の中身は見本。
+--
 -- プラットフォームの選択肢（platforms）は参照データなので、ここではなく移行
 -- （drizzle/0011_platforms_reference）が入れる。先に移行を流してから流すこと。
 
@@ -15,90 +22,88 @@ DELETE FROM members;
 DELETE FROM blocks;
 
 -- トップの並び（src/blocks.ts の DEFAULT_BLOCKS と揃える）。
--- Projects は個人開発と業務を1つにした一覧（以前の Apps と Works）
+-- Projects は個人開発と業務を1つにした一覧
 INSERT INTO blocks (type, published, sort_order) VALUES
   ('hero',     1, 10),
   ('projects', 1, 20),
   ('team',     1, 30),
   ('contact',  1, 40);
 
+-- 見本の人。紹介文・技術・経歴は、本番の1人のサイトと同じくらいの長さと形（段落3つ、技術の
+-- 塊3つに補足、経歴3行で1行目が「現在」）にしてある。check:fit がこの長さで版面を測る
 INSERT INTO members (id, slug, name, name_latin, role, location, headline, bio, skills_text, career_text, avatar_url, github, email, published, sort_order)
 VALUES (
   1,
-  'okazaki',
-  '岡崎 昂功',
-  'Okazaki Takanari',
-  'System Engineer',
-  'Kanagawa, Japan',
-  'つくる工程そのものを、速くする。',
-  'コンピュータサイエンスを専攻し、2024年から株式会社リンクレアの金融ビジネス本部でシステム開発に携わっています。証券会社向け基幹システムのモダナイゼーション案件で、基礎検討・要件定義から基本設計、C# による実装、単体からシナリオまでのテスト、レビューまでを担当しています。
+  'mihon',
+  '見本 花子',
+  'Mihon Hanako',
+  'Software Engineer',
+  'Tokyo, Japan',
+  '小さな道具で、毎日の手間を減らす。',
+  '情報工学を専攻し、2023年から株式会社サンプルの業務システム部で開発に携わっています。物流会社向けの在庫管理と出荷のシステムを新しくする案件で、現場への聞き取りと要件の整理から基本設計、TypeScript による実装、単体から結合までのテスト、レビューまでを担当しています。
 
-生成AIと自動化ツールで開発工程を効率化することに取り組んでいます。設計書の Markdown 変換、画面コードの生成、テスト支援などを通じて、40人日を見込んでいた14画面の製造・単体テストを約20人日で完了しました。製造業の案件では、ドキュメントを参照して問い合わせに答えるエージェントを Copilot Studio で構築しています。
+手作業の多い工程を道具で短くすることに取り組んでいます。帳票の取り込み、画面の雛形の生成、テストデータの作成などを自動化し、40人日を見込んでいた12画面の製造と単体テストを約20人日で終えました。問い合わせの多い部署では、社内の資料を引いて回答の候補を出す仕組みを組み、一次対応の手順の中で毎日使ってもらっています。
 
-社外では顧客・ベンダーを含む約200名規模のライトニングトークで AI 活用事例を発表し、社内では約500名規模の全社発表に登壇しました。自部署ではハンズオン形式の AI 勉強会を企画・開催しています。',
+社外では顧客や協力会社を含む約150名の勉強会で業務の自動化の事例を話し、社内では約300名の全体会議で発表しました。自分の部署では、手を動かしながら学ぶ小さな勉強会を月に一度企画し、開いています。',
   'LANGUAGES:
-C# | 3年以上
+TypeScript | 3年以上
 SQL | 3年以上
 JavaScript | 3年以上
 HTML / CSS | 3年以上
 Python | 1年以上
-TypeScript
+Go
 Swift
 FRAMEWORKS / INFRA:
-.NET Framework | 3年以上
-ASP.NET | 3年以上
-SQL Server | 3年以上
-Oracle Database | 3年以上
+Node.js | 3年以上
+React | 3年以上
+PostgreSQL | 3年以上
+Cloudflare Workers | 1年以上
 Docker
-Google Cloud
+AWS
 PRACTICE:
-生成AI・開発効率化
+業務の自動化
 基本設計 / 詳細設計 | 3年以上
 開発・実装 | 3年以上
-テスト（単体〜シナリオ） | 3年以上
+テスト（単体〜結合） | 3年以上
 Git / GitHub Actions
 Playwright',
-  '2024.03 — 現在 | システムエンジニア / 金融ビジネス本部 | 株式会社リンクレア
-2024.03 卒業 | コンピュータサイエンス学部 コンピュータサイエンス学科 | 東京工科大学
-2021.03 卒業 | 情報処理科 | 日本工学院八王子専門学校',
+  '2023.04 — 現在 | ソフトウェアエンジニア / 業務システム部 | 株式会社サンプル
+2023.03 卒業 | 情報工学部 情報工学科 | 見本工科大学
+2019.03 卒業 | 情報処理科 | 見本情報専門学校',
   '/images/avatars/avatar.png',
-  'https://github.com/iam74k4',
-  'iam74k4@gmail.com',
+  'https://github.com/example',
+  'hanako@example.com',
   1,
   10
 );
 
--- Apps ------------------------------------------------------------------
+-- 個人開発 ---------------------------------------------------------------
 
 -- slug は作品1件の恒久リンク（/apps/item/<slug> と /works/item/<slug>）の3語目。
 -- 作り方は管理画面と同じ toSlug（小文字にして、英数字とハイフン以外をハイフンに畳む）。
--- 重なったら末尾に -2, -3 と付けて一意にする（いまは重なっていない）。
--- 題が日本語だけのもの（Works の2件）は toSlug が空を返すので、意味の分かる英語を手で置く。
--- ここを変えると、貼られたリンクが切れる。足すのはよいが、書き換えないこと。
+-- 題が日本語だけのもの（業務の2件）は toSlug が空を返すので、意味の分かる英語を手で置く。
+-- check:gallery は /apps/item/appmixer を開く。
 --
--- 本文（body）と画像（image_url / image_alt）は書かない。列の既定値のまま
--- （本文と代替テキストは空、画像は無し）入る。作品の中身は本人が管理画面から
--- 書くもので、ここで作り話を埋めると、それが本人の言葉として公開される。
+-- 本文（body と story_*）と、AppMixer 以外の画像は書かない。本番の1人のサイトも、本文を
+-- 書いていない作品のほうが多い（本文の小節は check:fit の fixture が長い本文で測る）。
 
 INSERT INTO items (id, type, member_id, platform_key, title, slug, year, summary, published, sort_order) VALUES
-  (1, 'app', 1, 'macos', 'AppMixer', 'appmixer', '2026', 'macOS 14.4 の Core Audio Process Tap でアプリ単位の音量と出力先を制御する常駐アプリ。Mac App Store で配布している。', 1, 10),
-  (2, 'app', 1, 'ios', 'AllTasks', 'alltasks', '2026', 'Apple リマインダー・Microsoft To Do・Google ToDo を1つの受信箱にまとめるタスクアプリ。3つのサービスを横断して1画面で扱えるようにしている。', 1, 20),
-  (3, 'app', 1, 'cli', 'AI Agent Config', 'ai-agent-config', '2026', 'Cursor / Claude Code / Copilot でばらつくルールを1か所に集約し、1コマンドで各環境へ配る設定ツール。本業の AI 活用を自分の環境にも通すためにつくった。', 1, 30),
-  (4, 'app', 1, 'server', 'Discord Bot', 'discord-bot', '2026', '機能追加がコマンド単位で完結する153ファイルのモジュール構成。VC 録音と SQLite 永続化を備え、Railway へ継続デプロイしている。', 1, 40),
-  (5, 'app', 1, 'web', 'AstLog', 'astlog', '2026', 'Cloudflare Workers で動くこのポートフォリオ。本文と導線をサーバーで描画し、JavaScript なしで読める。', 1, 50);
+  (1, 'app', 1, 'macos', 'AppMixer', 'appmixer', '2026', 'Mac で鳴っているアプリごとに音量と出力先を変える常駐アプリ。Mac App Store で配布している。', 1, 10),
+  (2, 'app', 1, 'ios', 'Pocket Inbox', 'pocket-inbox', '2026', 'メモ・ToDo・買い物リストを1つの受信箱にまとめる iPhone アプリ。3つの入口を1画面で扱えるようにしている。', 1, 20),
+  (3, 'app', 1, 'cli', 'Config Sync', 'config-sync', '2026', 'エディタごとにばらつく設定を1か所に集め、1コマンドで各環境へ配る道具。手元の環境をそろえるためにつくった。', 1, 30),
+  (4, 'app', 1, 'server', 'Chat Bot', 'chat-bot', '2026', '機能をコマンド単位で足せるモジュール構成のチャットボット。記録を SQLite に残し、継続デプロイしている。', 1, 40),
+  (5, 'app', 1, 'web', 'AstLog', 'astlog', '2026', 'Cloudflare Workers で動くポートフォリオ。本文と導線をサーバーで描画し、JavaScript なしで読める。', 1, 50);
 
--- 5 は前の Portfolio（スクロールしない SPA のサイト。リポジトリはもう無い）を、このサイトに
--- 差し替えたもの。前の slug（/apps/item/portfolio）は転送表に残し、貼られたリンクを殺さない
--- （管理画面で slug を変えたときと同じ形。下の item_slug_redirects）。このサイトの
--- リポジトリは非公開なので、行き先（item_links）は置かない
+-- 5 の前の slug（/apps/item/portfolio）は転送表に残す（管理画面で slug を変えたときと同じ形。
+-- 下の item_slug_redirects）。行き先（item_links）を持たない作品も1件ある形にしておく
 
--- 説明文がまだ書けていないもの。消さずに下書きのまま置いておく
+-- 説明文がまだ書けていないもの。下書きのまま置いておく
 INSERT INTO items (id, type, member_id, platform_key, title, slug, year, summary, published, sort_order) VALUES
-  (6, 'app', 1, 'web', 'Booking-Platform', 'booking-platform', '2026', '', 0, 60),
-  (7, 'app', 1, 'cli', 'EventPlayback', 'eventplayback', '2026', '', 0, 70),
-  (8, 'app', 1, 'cli', 'AgentDeck for Stream Deck+', 'agentdeck-for-stream-deck', '2026', '', 0, 80);
+  (6, 'app', 1, 'web', 'Booking Sample', 'booking-sample', '2026', '', 0, 60),
+  (7, 'app', 1, 'cli', 'Log Replay', 'log-replay', '2026', '', 0, 70),
+  (8, 'app', 1, 'cli', 'Deck Controller for Stream Deck+', 'deck-controller', '2026', '', 0, 80);
 
--- Works -----------------------------------------------------------------
+-- 業務 -------------------------------------------------------------------
 
 -- 続いているものの年は「2024 — 現在」（経歴の期間と同じ書き方）。「2024 —」だけでは
 -- ダッシュの先が空いて書きかけに見える。並びは頭の4桁で決まるので 2024 のまま。
@@ -106,211 +111,152 @@ INSERT INTO items (id, type, member_id, platform_key, title, slug, year, summary
 -- 40人日から半減」）。「見込み 40人日 → 実績」と書くと → が値の前を指して逆に読める。
 
 INSERT INTO items (id, type, member_id, category, title, slug, year, summary, metric_value, metric_unit, metric_note, published, sort_order) VALUES
-  (9, 'work', 1, '金融系基幹システム', '開発工程の効率化', 'dev-efficiency', '2024 — 現在', '生成AIと自動化を設計・製造・テストに組み込む取り組み。横断で使える集計ツールも展開している。', '20', '人日', '見込み 40人日から半減', 1, 10),
-  (10, 'work', 1, '製造業', '問い合わせ対応エージェント', 'support-agent', '2026', 'Copilot Studio で構築した、ドキュメントを参照して問い合わせに答えるエージェント。参照する資料を整理し、回答を検証して一次対応に充てた。', NULL, NULL, NULL, 1, 20);
+  (9, 'work', 1, '物流業務システム', '開発工程の自動化', 'dev-automation', '2024 — 現在', '帳票の取り込みとテストの準備を自動化する取り組み。部署をまたいで使える集計の道具も配っている。', '20', '人日', '見込み 40人日から半減', 1, 10),
+  (10, 'work', 1, '製造業', '問い合わせ回答の候補出し', 'answer-assist', '2026', '社内の資料を引いて、問い合わせへの回答の候補を出す仕組み。参照する資料を整理し、候補を確かめて一次対応に充てた。', NULL, NULL, NULL, 1, 20);
 
 -- タグ --------------------------------------------------------------------
 
 INSERT INTO item_tags (item_id, tag, sort_order) VALUES
   (1, 'Swift', 0), (1, 'SwiftUI', 1), (1, 'Core Audio', 2),
-  (2, 'Swift', 0), (2, 'SwiftUI', 1), (2, 'watchOS', 2),
-  (3, 'Shell', 0), (3, 'PowerShell', 1), (3, 'Node.js', 2),
-  (4, 'TypeScript', 0), (4, 'discord.js', 1), (4, 'SQLite', 2),
+  (2, 'Swift', 0), (2, 'SwiftUI', 1), (2, 'WidgetKit', 2),
+  (3, 'Shell', 0), (3, 'Node.js', 1), (3, 'YAML', 2),
+  (4, 'TypeScript', 0), (4, 'SQLite', 1), (4, 'Docker', 2),
   (5, 'TypeScript', 0), (5, 'Hono', 1), (5, 'Cloudflare Workers', 2),
   (7, 'Python', 0),
-  (9, '生成AI', 0), (9, 'C#', 1), (9, 'Playwright', 2),
-  (10, 'Copilot Studio', 0), (10, 'Power Platform', 1), (10, 'RAG', 2);
+  (9, '自動化', 0), (9, 'TypeScript', 1), (9, 'Playwright', 2),
+  (10, '検索', 0), (10, 'Python', 1), (10, 'RAG', 2);
 
 -- リンク ------------------------------------------------------------------
 
--- AllTasks（2）のリポジトリは公開していない（URL が 404）ので、行き先を置かない。公開したら
--- 管理画面から足す
--- AppMixer（1）は Mac App Store で公開している。行き先はリポジトリではなく App Store（持ち主の
--- 判断。手に入れる所はそこだけにする）
-
+-- 行き先は example.com（見本）。AppMixer だけは公開している App Store の掲載
 INSERT INTO item_links (item_id, label, url, sort_order) VALUES
   (1, 'App Store', 'https://apps.apple.com/jp/app/appmixer/id6804171608', 0),
-  (3, 'Repository', 'https://github.com/iam74k4/Tool-AgentConfig', 0),
-  (4, 'Repository', 'https://github.com/iam74k4/Bot-Discord', 0),
-  (6, 'Repository', 'https://github.com/iam74k4/Booking-Platform', 0),
-  (7, 'Repository', 'https://github.com/iam74k4/Tool-EventPlayback', 0),
-  (8, 'Repository', 'https://github.com/iam74k4/Device-AgentDeck', 0);
+  (3, 'Repository', 'https://example.com/config-sync', 0),
+  (4, 'Repository', 'https://example.com/chat-bot', 0),
+  (6, 'Repository', 'https://example.com/booking-sample', 0),
+  (7, 'Repository', 'https://example.com/log-replay', 0),
+  (8, 'Repository', 'https://example.com/deck-controller', 0);
 
--- AppMixer（1）の1本目（App Store）は押し手にする（items.lead_link）。手に入る所は
--- 一覧の行から押せる大きさで見せる。リポジトリの行き先は押し手にしない
+-- AppMixer（1）の1本目（App Store）は押し手にする（items.lead_link）
 UPDATE items SET lead_link = 1 WHERE id = 1;
 
--- AppMixer（1）の文書のページ（/apps/item/appmixer/privacy・…/support）。アプリのバイナリと
--- App Store Connect に登録している URL。本番は管理画面の「プライバシーポリシーとサポートを書く」で
--- 同じ文面を書いている（ここはローカルの見本）。
+-- 作品の文書のページ（/apps/item/appmixer/privacy・…/support）。中身は形を測るための見本で、
+-- 本番のアプリの規約ではない（本番は管理画面の「プライバシーポリシーとサポートを書く」で書く）。
+-- 「## 日本語」「## English」で分けた文書の言語の切り替え、### の見出し、太字・箇条書き・
+-- リンクを1つずつ持たせてある
 UPDATE items SET
-  privacy = '最終更新日 / Last updated: 2026-10-20
+  privacy = '最終更新日 / Last updated: 2026-11-12
 
 ## 日本語
 
 ### 収集する情報
 
-**AppMixer は、いかなる個人情報も収集、保存、送信しません。**
+**このアプリは個人情報を収集、保存、送信しません。**（検査のための見本の文です）
 
-本アプリには、解析ツール、広告ネットワーク、クラッシュレポート送信機能、その他のサードパーティ製 SDK が一切含まれていません。外部サーバーとの通信機能を持ちません。
-
-### 音声の取り扱い
-
-AppMixer は、アプリごとの音量を調整するという目的のためだけに、macOS の Core Audio が提供する Process Tap 機能を用いて、お使いの Mac 上で再生されている音声を経由させます。
-
-この音声は、**録音・保存・送信のいずれも行いません。** 音量の調整と、画面に表示するレベルメーターの描画のために、お使いの Mac のメモリ上でのみ処理され、直ちに破棄されます。
+解析ツール、広告、クラッシュレポートの送信、そのほかの外部の SDK を含みません。外部のサーバーと通信する機能もありません。
 
 ### 保存される設定
 
-アプリごとの音量、ミュートの状態、出力先の割り当てといった設定は、macOS の標準的な仕組み（UserDefaults）を用いて、お使いの Mac の内部にのみ保存されます。これらが外部に送信されることはありません。
-
-App Sandbox が有効なため、保存先は本アプリ専用のコンテナ領域に限定されます。
-
-### アプリの削除
-
-AppMixer を削除すると、上記の設定も併せて削除されます。
+アプリごとの音量や出力先の割り当ては、お使いの Mac の中にだけ保存されます。アプリを削除すると、設定も一緒に削除されます。
 
 ### お問い合わせ
 
-本ポリシーに関するご質問は、AppMixer のサポートページからお寄せください。
+ご質問はサポートのページからお寄せください。
 
-[https://astlog.dev/apps/item/appmixer/support](/apps/item/appmixer/support)
+[サポート](/apps/item/appmixer/support)
 
 ## English
 
 ### Information We Collect
 
-**AppMixer does not collect, store, or transmit any personal information.**
+**This app does not collect, store, or transmit any personal information.** (Sample text for layout checks.)
 
-This application contains no analytics tools, no advertising networks, no crash reporting, and no third-party SDKs of any kind. It has no capability to communicate with external servers.
-
-### How Audio Is Handled
-
-For the sole purpose of adjusting per-application volume, AppMixer routes audio playing on your Mac using the Process Tap facility provided by macOS Core Audio.
-
-This audio is **never recorded, never stored, and never transmitted.** It is processed only in memory on your own Mac — to apply volume adjustments and to draw the on-screen level meters — and is discarded immediately thereafter.
+It contains no analytics, no advertising, no crash reporting, and no third-party SDKs, and it does not communicate with external servers.
 
 ### Settings We Store
 
-Your settings — per-application volume levels, mute states, and output device assignments — are stored only on your own Mac using the standard macOS mechanism (UserDefaults). They are never transmitted anywhere.
-
-Because App Sandbox is enabled, this storage is confined to a container reserved for this application.
-
-### Deleting the App
-
-Removing AppMixer also removes the settings described above.
+Per-app volume levels and output assignments are stored only on your Mac. Deleting the app also deletes these settings.
 
 ### Contact
 
-Questions about this policy may be sent via the AppMixer support page.
+Questions may be sent via the support page.
 
-[https://astlog.dev/apps/item/appmixer/support?lang=en](/apps/item/appmixer/support?lang=en)',
+[Support](/apps/item/appmixer/support?lang=en)',
   support = '## 日本語
 
-AppMixer についてのご質問や不具合のご報告は、このページの下にある連絡先までお寄せください。
+ご質問や不具合のご報告は、このページの下にある連絡先までお寄せください（検査のための見本の文です）。
 
 不具合をご報告いただくときは、次のことを添えていただけると原因を早く確かめられます。
 
 - macOS のバージョン
-- AppMixer のバージョン（メニューの「問題を報告する（バージョン …）」に出ています）
+- アプリのバージョン
 - 起きたことと、そのときの操作
-- 音量が変わらないアプリや出力デバイスの名前
 
 ### 動作環境
 
 macOS 14.4 以降で動作します。
 
-### 「システム音声録音の許可が必要です」と出たとき
-
-アプリごとの音量を変えるために、macOS の「システム音声録音」の許可が必要です（マイクの許可ではありません）。「許可」を押してください。一度許可しなかった場合は、「設定」を押して開くシステム設定（プライバシーとセキュリティ → システム音声録音）で AppMixer をオンにしてください。
-
-音声を録音・保存・送信することはありません（[プライバシーポリシー](/apps/item/appmixer/privacy)）。
-
-### 音量が変わらない出力デバイスがあるとき
-
-一部の出力デバイス（HDMI・AV アンプなど）では、音量の調整を行いません。また、100% を超えて音量を上げることはできません。
-
-### AppMixer を終了したとき
-
-音量を変えたアプリは、元の音量に戻ります。
-
 ### 購入と返金
 
-Mac App Store での購入と返金の手続きは Apple が扱います。返金のご依頼は [Apple の「問題を報告する」](https://reportaproblem.apple.com) からお願いします。
+Mac App Store での購入と返金の手続きは Apple が扱います。
 
 ## English
 
-For questions or bug reports about AppMixer, please contact us using the details at the bottom of this page.
+For questions or bug reports, please use the contact details at the bottom of this page. (Sample text for layout checks.)
 
-When reporting a problem, it helps to include:
+When reporting a problem, please include:
 
 - your macOS version
-- your AppMixer version (shown in the menu item “Report a problem (version …)”)
+- the app version
 - what happened and what you were doing at the time
-- the name of any app or output device whose volume does not change
 
 ### Requirements
 
 macOS 14.4 or later.
 
-### “System audio recording access is required”
-
-AppMixer needs the macOS System Audio Recording permission (not the microphone permission) to adjust the volume of each app. Click Allow. If you declined it earlier, click Settings and turn AppMixer on in System Settings (Privacy & Security, System Audio Recording).
-
-Audio is never recorded, stored, or transmitted ([Privacy Policy](/apps/item/appmixer/privacy?lang=en)).
-
-### Some output devices do not change volume
-
-AppMixer does not adjust the volume of some output devices, such as HDMI outputs and AV receivers. Volume cannot be raised above 100%.
-
-### When you quit AppMixer
-
-Apps whose volume you changed return to their original volume.
-
 ### Purchases and refunds
 
-Purchases and refunds on the Mac App Store are handled by Apple. To request a refund, use [Apple’s Report a Problem page](https://reportaproblem.apple.com).'
+Purchases and refunds on the Mac App Store are handled by Apple.'
 WHERE id = 1;
 
 -- 画像 ------------------------------------------------------------------
 
--- AppMixer（1）のアイコンとスクリーンショットは、Mac App Store の掲載（id6804171608）と同じもの。
+-- AppMixer（1）のアイコンとスクリーンショットは、Mac App Store の掲載と同じ検査画像。
 -- 検査用の画像はローカル KV に置く。本番の public/ には含めない。
 -- 寸法は表示と共有カードに使う。メインの画像が先頭。
 UPDATE items SET
   icon_url = '/images/items/appmixer-icon.png',
   image_url = '/images/items/appmixer-01-per-app-volume.jpg',
-  image_alt = 'AppMixer のミキサー。Discord・Google Chrome・ミュージックの音量をアプリごとに変えている画面',
+  image_alt = 'アプリごとの音量を変えるミキサーの画面。3つのアプリの音量の帯が並んでいる',
   image_width = 1440,
   image_height = 900
 WHERE id = 1;
 
--- Discord Bot（4）と AstLog（5）のアイコン。AppMixer と同じ角丸の墨の台に、Discord の印と
--- ΛSTLOG の Λ（src/ui/logo.ts）を載せたもの。
+-- アイコンのある作品をもう2件（一覧の行で、アイコンのある行と無い行が並ぶ形）
 UPDATE items SET icon_url = '/images/items/discord-bot-icon.png' WHERE id = 4;
 UPDATE items SET icon_url = '/images/items/astlog-icon.png' WHERE id = 5;
 
 INSERT INTO item_shots (item_id, url, alt, width, height, sort_order) VALUES
-  (1, '/images/items/appmixer-02-auto-ducking.jpg', 'FaceTime の通話が始まり、ほかのアプリの音量を自動で下げている画面', 1440, 900, 10),
-  (1, '/images/items/appmixer-03-per-device-memory.jpg', 'AirPods Pro と MacBook Air のスピーカーで、同じアプリの音量を別々に覚えている画面', 1440, 900, 20),
-  (1, '/images/items/appmixer-04-per-app-output.jpg', 'ミュージックの出力先をスピーカーに、FaceTime を AirPods Pro に振り分けている画面', 1440, 900, 30),
-  (1, '/images/items/appmixer-05-features.jpg', 'AppMixer の機能の一覧。アプリ別の音量とミュート、レベルメーター、通話中の自動ダッキング、デバイスごとの音量の記憶、アプリ別の出力先、メニューバー常駐', 1440, 900, 40);
+  (1, '/images/items/appmixer-02-auto-ducking.jpg', '通話が始まり、ほかのアプリの音量を自動で下げている画面', 1440, 900, 10),
+  (1, '/images/items/appmixer-03-per-device-memory.jpg', 'イヤホンとスピーカーで、同じアプリの音量を別々に覚えている画面', 1440, 900, 20),
+  (1, '/images/items/appmixer-04-per-app-output.jpg', 'アプリごとに出力先を振り分けている画面', 1440, 900, 30),
+  (1, '/images/items/appmixer-05-features.jpg', '機能の一覧。アプリ別の音量とミュート、レベルメーター、自動で下げる音量、出力先の振り分け', 1440, 900, 40);
 
 -- 前の slug --------------------------------------------------------------
 
--- 差し替えた 5 の前の URL を、いまの URL へ 301 で送る（src/routes/public/item.tsx の renderItem）
+-- 5 の前の URL を、いまの URL へ 301 で送る（src/routes/public/item.tsx の renderItem）
 INSERT INTO item_slug_redirects (old_slug, item_id) VALUES
   ('portfolio', 5);
 
 
 -- ローカル見本のサイト設定 ------------------------------------------------
--- 公開文言・宛先の編集は管理画面で行う。本番の初期値には個人データを置かない。
+-- 公開文言・宛先の編集は管理画面で行う。宛先は example.com（見本）
 INSERT OR REPLACE INTO settings (key, value) VALUES
   ('site.tagline', 'つくったものを、ひとつずつ記録する。'),
-  ('site.heroLead', 'つくったアプリと、仕事で取り組んだ開発効率化をまとめています。'),
-  ('site.heroRoles', 'System Engineer' || char(10) || 'iOS / macOS Developer' || char(10) || 'AI Workflow Engineer'),
-  ('site.contactLead', '生成AIを使った開発効率化や個人開発について、話しませんか。お仕事のご相談も歓迎します。'),
-  ('site.email', 'iam74k4@gmail.com'),
-  ('site.github', 'https://github.com/iam74k4'),
+  ('site.heroLead', 'つくったアプリと、仕事で取り組んだ自動化をまとめています。'),
+  ('site.heroRoles', 'Software Engineer' || char(10) || 'iOS / macOS Developer' || char(10) || 'Automation Engineer'),
+  ('site.contactLead', '業務の自動化や個人開発について、話しませんか。お仕事のご相談も歓迎します。'),
+  ('site.email', 'hanako@example.com'),
+  ('site.github', 'https://github.com/example'),
   ('site.instagram', ''),
   ('site.x', '');

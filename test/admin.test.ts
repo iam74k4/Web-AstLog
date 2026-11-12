@@ -2592,18 +2592,19 @@ describe('大見出し・ブロックの見出しの上限（公開の関門）'
   })
 
   /*
-    seed.sql の紹介文は本人の文章で、1画面に収めていたころの上限（400 字）を
-    超えていて、公開のまま保存し直すと止まっていた。いまは紹介文を長さで止めないので、
-    本人の言葉を削らずにそのまま公開で保存できる。
+    seed.sql の紹介文は本番の1人のサイトと同じくらいの長さで、1画面に収めていたころの
+    上限（400 字）を超えている。そのころは公開のまま保存し直すと止まっていた。いまは紹介文を
+    長さで止めないので、そのまま公開で保存できる。
   */
-  it('seed の紹介文（本人の文章）は、公開のまま保存し直せる', async () => {
+  it('seed の紹介文（400 字を超える長さ）は、公開のまま保存し直せる', async () => {
     const tuple = seedSql.slice(seedSql.indexOf('INSERT INTO members'))
     const strings = [...tuple.matchAll(/'((?:[^']|'')*)'/g)].map((found) =>
       (found[1] ?? '').replaceAll("''", "'"),
     )
     // slug, name, name_latin, role, location, headline, bio の順
     const bio = strings[6] ?? ''
-    expect(bio).toContain('コンピュータサイエンス')
+    expect(bio).toContain('情報工学を専攻し')
+    expect([...bio].length).toBeGreaterThan(400)
 
     const member = await seedMember({ bio, published: 1 })
     const signed = await signIn()
