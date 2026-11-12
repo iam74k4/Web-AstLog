@@ -166,7 +166,7 @@ export function blockType(key: string): BlockType | undefined {
   なって、500 ではないので誰も気づかない。
 
   だから読む側を先に広げる（expand）。構成の行を読むところ（src/db/queries.ts の
-  listBlocks と findBlock）が、この表で前の名前をいまの名前に読み替え、apps と works
+  listBlocks と、管理画面の findAdminBlock）が、この表で前の名前をいまの名前に読み替え、apps と works
   の2行は 0004 と同じ形の1行に畳む（先に並んでいたほうの位置、どちらかが公開中なら
   公開）。書き換え（contract）が済んだ D1 でも済んでいない D1 でも、同じ画面になる
   （test/deploy.test.ts が2つを描き比べている）。

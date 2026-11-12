@@ -286,8 +286,8 @@ export async function saveSiteSettings(db: Db, site: SiteSettings, version?: str
 /* ------------------------------------------------------------- 構成 */
 
 /*
-  構成の行を読む口はこの2つ（listBlocks / findBlock）だけで、どちらも前の版の種類の
-  名前をいまの名前に読み替える（src/blocks.ts の LEGACY_BLOCK_KEYS）。公開ページも
+  構成の行を読む口は listBlocks（と、1行を引く src/routes/admin/blocks.tsx の findAdminBlock）で、
+  どちらも前の版の種類の名前をいまの名前に読み替える（src/blocks.ts の LEGACY_BLOCK_KEYS）。公開ページも
   管理画面もここを通るので、書き換えの移行（0004）を流していない D1 でも、Projects が
   描かれ、構成の一覧に Projects の行として並ぶ。
 */
@@ -296,13 +296,6 @@ export async function listBlocks(db: Db): Promise<schema.Block[]> {
     orderBy: [asc(schema.blocks.sortOrder), asc(schema.blocks.id)],
   })
   return readLegacyBlocks(rows)
-}
-
-export async function findBlock(db: Db, id: number): Promise<schema.Block | undefined> {
-  const row = await db.query.blocks.findFirst({ where: eq(schema.blocks.id, id) })
-  if (!row) return undefined
-  const key = LEGACY_BLOCK_KEYS[row.type]
-  return key ? { ...row, type: key } : row
 }
 
 /*

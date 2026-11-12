@@ -145,7 +145,7 @@ export const Stylesheets = ({
       上の帯・見出し・作品名と名前に使う Poppins の 500・600・700 を、CSS を読み終える前から
       取りに行く（CSS の @font-face で見つけてからだと、その往復のぶん字の差し替えが遅れる。
       600 は入口では使わず、先に取らないと初めて開いた Projects の作品名が一瞬だけ代わりの
-      書体で出た）。400 は窓の札だけなので、見つけてからでよい。URL は app.css の
+      書体で出た）。400 は画像の番号（.gallery__count）だけなので、見つけてからでよい。URL は app.css の
       @font-face と同じ版つきの名前（違うと同じ書体を2度取る）
     */}
     <link
@@ -492,8 +492,8 @@ const twoDigits = (value: number) => String(value).padStart(2, '0')
 
 /*
   見出しの上に添える小さな札（入口の「名前・職種・所在地」、全体ページの頭の職種）。
-  部分ごとに、英字だけなら等幅の小さな大文字（lang="en"。langOf）、和文を含めば
-  本文の書体のまま——「System Engineer」と「神奈川」を並べても、それぞれの字で組む。
+  部分ごとに、英字だけなら lang="en"（読み上げの発音の印。langOf）を付ける。書体は
+  どちらも本文のまま——「System Engineer」と「神奈川」を並べても、同じ字で組む。
   部分のあいだは区切りの字を置かず、間隔で分ける（app.css の .eyebrow）。
 */
 export const Eyebrow = ({ parts }: { parts: string[] }) => (
@@ -605,7 +605,7 @@ export const ScreenSection = ({
 const LATIN_ONLY = /^[ -~\u2010-\u2026]+$/
 export const langOf = (text: string) => (LATIN_ONLY.test(text) ? 'en' : undefined)
 
-// タグ。英字だけの札にだけ lang="en"（等幅になる。langOf を見ること）
+// タグ。英字だけの札にだけ lang="en"（読み上げの発音の印。langOf を見ること）
 export const Tags = ({ tags }: { tags: string[] }) =>
   tags.length ? (
     <ul class="tags">
@@ -1041,9 +1041,7 @@ export const ItemShots = ({ images }: { images: ItemImage[] }) =>
             >
               <span class="gallery__mini">
                 {isVideoUrl(image.url) || !image.url ? (
-                  <span class="gallery__video" aria-hidden="true">
-                    ▷
-                  </span>
+                  <span aria-hidden="true">▷</span>
                 ) : (
                   <img src={image.url} alt="" loading="lazy" decoding="async" />
                 )}
@@ -1317,8 +1315,8 @@ export const MemberCardCompact = ({ member }: { member: PublicMember }) => (
 /*
   一覧への帯。件数を添えて、押す前に「ここに何件あるか」を見せる。
 
-  使うのは、2人以上のサイトの個人ページの名札の下（入口は同じことを「Projects →」
-  と件数の帯 Tally で言う）。作品そのものは別の URL（その人で絞った一覧）にあるので、
+  使うのは、2人以上のサイトの個人ページの名札の下（入口は同じ行き先を押し手の
+  「Projects →」で言う）。作品そのものは別の URL（その人で絞った一覧）にあるので、
   そこに何があるかを数で示してから送り出す。行き先は呼ぶ側が決める（項目のある側へ
   送ること。0件の側へ送ると、0件の知らせだけのページに着く）。
 

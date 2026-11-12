@@ -570,9 +570,8 @@ describe('入口の画面', () => {
   it('全体ページの頭は名前を目に見える h1 で置き、肩書きを添える。和文の肩書きには lang を付けない', async () => {
     /*
       全体ページ（/all）は印刷と Ctrl-F の宛先なので、名前を目に見える字で置く。
-      等幅は英字の札にだけ掛ける（app.css は .eyebrow :lang(en)）。和文の
-      肩書きに lang="en" を付けると、読み上げが英語の発音で読み、字も等幅の
-      字間で組まれる
+      lang="en" は英字だけの札にだけ付ける（読み上げの発音の印）。和文の
+      肩書きに付けると、読み上げが英語の発音で読む
     */
     await seedMember({ name: '岡崎 昂功', role: 'システムエンジニア' })
 
@@ -583,7 +582,7 @@ describe('入口の画面', () => {
     expect(hero).not.toContain('class="cta')
   })
 
-  it('全体ページの英字だけの肩書きには lang="en"（読み上げの発音と、等幅の札にする印）', async () => {
+  it('全体ページの英字だけの肩書きには lang="en"（読み上げの発音の印）', async () => {
     await seedMember({ name: '岡崎 昂功', role: 'System Engineer' })
     const whole = await okText('/all')
     expect(whole).toContain('<p class="eyebrow"><span lang="en">System Engineer</span></p>')
@@ -1015,8 +1014,8 @@ describe('技術の小見出しと、英語の塊', () => {
 
   it('タグは英字だけの札にだけ lang="en"。和文のタグ（生成AI）には付けない', async () => {
     /*
-      等幅は英字の札にだけ掛ける（app.css の .tags li:lang(en)）。和文のタグに
-      印を付けると、読み上げが英語の発音で読み、字も等幅の字間で組まれる。
+      lang="en" は英字だけの札にだけ付ける（読み上げの発音の印）。和文のタグに
+      付けると、読み上げが英語の発音で読む。
       一覧の行と作品のページは同じ Tags を使う
     */
     const item = await seedItem({ slug: 'dev', type: 'work' })
@@ -1273,7 +1272,7 @@ describe('ページの URL', () => {
     const html = await okText('/projects')
     expect(html).toContain('href="/projects" aria-current="page"')
     // 1人のサイトなので、Team の位置はプロフィール（目次の名前は Profile）
-    // 英字だけの行き先には lang="en"（等幅の小さな大文字の札にする印）
+    // 英字だけの行き先には lang="en"（読み上げの発音の印）
     expect(tocOf(html)).toContain('<a href="/members/okazaki" lang="en">Profile</a>')
     // 1つの目次に2つ付くと、どちらが「いま」なのか読み上げでも見た目でも決まらない。上の帯の
     // 目次と柱の目次に1つずつ（同時に見えるのは片方だけ）

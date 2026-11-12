@@ -56,7 +56,7 @@ export const showMemberOf = (blocks: schema.Block[], members: PublicMember[]) =>
 export const kindsOf = (counts: KindCounts): ItemKind[] =>
   ITEM_KIND_KEYS.filter((kind) => counts[kind] > 0)
 
-// 一覧への1本（入口の「Projects →」と件数、2人以上のサイトの個人ページの帯。components.tsx の Cta / Tally / Band）
+// 一覧への1本（入口の「Projects →」と、2人以上のサイトの個人ページの帯。components.tsx の Cta / Band）
 export type BandData = { href: string; counts: KindCounts }
 
 /*
