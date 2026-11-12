@@ -1,10 +1,10 @@
 import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test'
 import assetSums from 'virtual:asset-sha256'
 import assetFiles from 'virtual:assets'
-import securityTxt from 'virtual:repo:public/.well-known/security.txt'
 import assetHeaders from 'virtual:repo:public/_headers'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import appCss from '../public/app.css'
+import { saveSiteSettings } from '../src/db/queries'
 import app from '../src/index'
 import { createSession, HOST_SESSION_COOKIE } from '../src/lib/auth'
 import { HSTS, PERMISSIONS_POLICY } from '../src/lib/headers'
@@ -20,6 +20,7 @@ import {
   seedItem,
   seedMember,
   signIn,
+  TEST_SITE,
   uncachedEnv,
 } from './helpers'
 
@@ -289,30 +290,40 @@ describe('応答のヘッダ', () => {
   })
 
   /*
-    脆弱性を見つけた人の連絡先（RFC 9116。public/.well-known/security.txt）。Expires は必須で、
-    切れた security.txt は古いものとして読まれる。切れる30日前からここが落ちる——1年先の日付に
-    書き換えて出し直す
+    脆弱性を見つけた人の連絡先（RFC 9116。src/routes/public/crawl.ts の securityTxt）。連絡先は
+    サイト設定から、期限は応答のたびに半年先。固定のファイルだったころは、連絡先が直書きで、
+    期限は毎年ソースを書き換えて出し直していた
   */
-  it('security.txt は連絡先と、30日より先の期限を持つ', () => {
-    const fields = Object.fromEntries(
-      securityTxt
-        .split('\n')
-        .filter((line) => line.includes(': '))
-        .map((line) => [line.slice(0, line.indexOf(': ')), line.slice(line.indexOf(': ') + 2)]),
-    )
-    expect(fields.Contact).toMatch(/^mailto:\S+@\S+$/)
+  it('security.txt は Worker が出す。連絡先はサイト設定、期限は30日より先で1年以内', async () => {
+    const read = async () => {
+      const response = await get('/.well-known/security.txt')
+      const text = await response.text()
+      const fields = Object.fromEntries(
+        text
+          .split('\n')
+          .filter((line) => line.includes(': '))
+          .map((line) => [line.slice(0, line.indexOf(': ')), line.slice(line.indexOf(': ') + 2)]),
+      )
+      return { response, fields }
+    }
+    const { response, fields } = await read()
+    expect(response.status).toBe(200)
+    // RFC 9116 は text/plain; charset=utf-8 を求める
+    expect(response.headers.get('content-type')?.toLowerCase()).toBe('text/plain; charset=utf-8')
+    expectPageHeaders(response, 'security.txt')
+    expect(fields.Contact).toBe(`mailto:${TEST_SITE.email}`)
     expect(fields.Canonical).toBe('https://astlog.dev/.well-known/security.txt')
     const expires = Date.parse(fields.Expires ?? '')
     const day = 86_400_000
-    expect(expires - Date.now(), 'security.txt の Expires を1年先へ更新する').toBeGreaterThan(
-      30 * day,
-    )
+    expect(expires - Date.now()).toBeGreaterThan(30 * day)
     // RFC 9116 は1年より先にしないことを勧める
     expect(expires - Date.now()).toBeLessThan(366 * day)
-    // 配るときは charset=utf-8 を名乗る（RFC 9116。public/_headers）
-    expect(headerRules().get('/.well-known/security.txt')?.['content-type']).toBe(
-      'text/plain; charset=utf-8',
-    )
+
+    // メールを載せていないサイトは GitHub、どちらも無ければ 404（連絡先の無い security.txt は出さない）
+    await saveSiteSettings(db(), { ...TEST_SITE, email: '' })
+    expect((await read()).fields.Contact).toBe(TEST_SITE.github)
+    await saveSiteSettings(db(), { ...TEST_SITE, email: '', github: '' })
+    expect((await read()).response.status).toBe(404)
   })
 
   it('静的なファイルのヘッダは public/_headers が持つ', () => {

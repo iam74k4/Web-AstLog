@@ -35,6 +35,9 @@ const paths = [
   '/admin/blocks/1/edit',
   '/admin/items/1/delete',
   '/admin/members/1/delete',
+  '/admin/platforms',
+  '/admin/platforms/web/delete',
+  '/admin/media',
 ]
 try {
   dev = await devServer(undefined, Number(process.env.ADMIN_PORT ?? 8816), state.dir)
@@ -206,6 +209,31 @@ try {
       await page.locator('[name^="shotAlt-"]').nth(1).inputValue(),
       '保存前に変えた画像の説明',
     )
+    if (width === 1440) {
+      /*
+        押して開くプレビューと、横の完成形の描き直しがぶつかる並び。どちらも同じフォームを別の枠へ
+        送り、フォームが予定している送信は1つだけなので、後から送ったほうが前の予定を取り消す。
+        「印を変える（横が送る）→ 押す → 横の枠の読み込みが届いて、待たせていた描き直しを送る」の順に
+        なると、ダイアログへの送信が取り消されて空のまま開いた（CI でだけ時々落ちた。本番前の検査が
+        これで止まった）。同じ並びをここで必ず起こす——読み込みの知らせは、届く順をこちらで決める
+      */
+      await go(page, '/admin/items/1/edit')
+      await live.locator('.shots--showcase').waitFor()
+      await page.evaluate(() => {
+        const form = document.querySelector('.live__edit form[method=post]')
+        const mark = form.querySelector('[name=leadLink]')
+        mark.click() // 横の完成形が送る
+        mark.click() // 送っている最中なので、次の描き直しを待たせる
+        form.querySelector('button[formaction]').click() // 押して開く
+        document.querySelector('iframe[name=live-preview]').dispatchEvent(new Event('load'))
+      })
+      await modal.locator('.shots--showcase').waitFor()
+      await page.keyboard.press('Escape')
+      await page.locator('#editor-preview[open]').waitFor({ state: 'hidden' })
+      // 待たせた横の描き直しも、ダイアログが読み込まれたあとで送られる（止まったままにならない）
+      await page.locator('.live__status').filter({ hasText: 'まだ保存されていません' }).waitFor()
+      await live.locator('.shots--showcase').waitFor()
+    }
     await context.close()
   }
   const forced = await contextFor(390)

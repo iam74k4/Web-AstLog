@@ -10,14 +10,15 @@ import {
 import * as schema from '../../db/schema'
 import { ITEM_DOCUMENTS } from '../../domain'
 import type { AppEnv } from '../../env'
-import { SITE } from '../../site'
+import { isHttpsUrl } from '../../lib/format'
+import { isContactEmail, SITE } from '../../site'
 import { itemDocumentHref, itemHref } from '../../ui/components'
 import { NO_FILTER } from './data'
 import { memberHref } from './member-page'
 import { sitePageLinks, sitePages } from './site'
 
 /*
-  クローラ向けの2本（robots.txt と sitemap.xml）。
+  クローラ向けの2本（robots.txt と sitemap.xml）と、security.txt。
 
   手で URL を並べた表は置かない——構成を並べ替えたり、作品を1件足したり
   した日に、実物と表が静かにずれる。公開ページのページの並びをそのまま数え上げる
@@ -41,6 +42,37 @@ export const robotsTxt = (c: Context<AppEnv>) =>
       '',
     ].join('\n'),
   )
+
+/*
+  脆弱性を見つけた人の連絡先（RFC 9116 の security.txt）。連絡先はサイト設定のメール（無ければ
+  GitHub）、期限は応答のたびに半年先（RFC は1年より先にしないことを勧める）。
+
+  public/ に置いた固定のファイルだったころは、連絡先がサイト設定とは別の直書きで（管理画面で
+  メールを変えても古いまま）、期限は毎年ソースを書き換えて出し直す決まりだった（切れる30日前から
+  CI が落ちた）。どちらの連絡先も無いサイトでは 404——連絡先の無い security.txt は書式を満たさない
+*/
+export async function securityTxt(c: Context<AppEnv>) {
+  const site = await loadSiteSettings(drizzle(c.env.DB, { schema }))
+  const contact = isContactEmail(site.email)
+    ? `mailto:${site.email}`
+    : isHttpsUrl(site.github)
+      ? site.github
+      : null
+  if (!contact) return c.notFound()
+  const expires = new Date(Date.now() + 180 * 86_400_000)
+  expires.setUTCHours(0, 0, 0, 0)
+  return c.text(
+    [
+      `Contact: ${contact}`,
+      `Expires: ${expires.toISOString()}`,
+      'Preferred-Languages: ja, en',
+      `Canonical: ${SITE.origin}/.well-known/security.txt`,
+      '',
+    ].join('\n'),
+    200,
+    { 'cache-control': 'public, max-age=86400' },
+  )
+}
 
 /*
   XML に入れる文字を落とす。slug は英数字とハイフンに畳んであり、いまのところ

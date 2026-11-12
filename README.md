@@ -616,9 +616,10 @@ JPEG・PNG・WebP は撮った場所・日時・機種などの付け足し（EX
 で消してよい。この2本は前のコードが読む列を同じリリースで落とすので、流したあとで
 前の版へ戻すときは、上の「前の版の Worker へ戻すときの注意」を読むこと。
 
-プラットフォームの選択肢（`platforms`）は `0011_platforms_reference` が入れる
+プラットフォームの選択肢（`platforms`）の初めの5つは `0011_platforms_reference` が入れる
 （`INSERT OR IGNORE`。前に seed で入った行・運用で直した表示名や並び順は書き換えない）。
-`seed.sql` はもう platforms に触らない。
+`seed.sql` はもう platforms に触らない。足す・直す・消すのは管理画面（作品 → プラットフォーム。
+作品のフォームの「選択肢に無いとき」に書いて保存しても足せる）。
 
 `0012_item_indexes` は索引だけを張り替える（行には触らない）。公開の一覧の3つの
 引き方（全部・区分・担当）に、公開の並び（`year_from` の新しい順 → 並び順 → id）の
@@ -672,7 +673,7 @@ src/
       member-page.tsx  個人ページの中身（名札・About・Skills・Career）と URL
       member.tsx     個人ページ（/members/:slug）と前の続きの URL の転送
       item.tsx       作品1件の恒久リンク（本文の小節つき）と前の本文の画面の転送
-      crawl.ts       /robots.txt・/sitemap.xml
+      crawl.ts       /robots.txt・/sitemap.xml・/.well-known/security.txt
       images.ts      /images/*（KV の画像。キーの形の検査と配るときのヘッダ）
     admin/           管理画面（/admin/*）
       index.ts       組み立て（送り元の検査 → ログインの往復 → 認証の壁 → 資源ごと）
@@ -685,6 +686,8 @@ src/
       images.ts      画像の取り込み（pickImage / putImage）と KV・D1 の順序
       members.tsx    プロフィール（メンバー）
       items.tsx      作品（個人開発・業務）
+      platforms.tsx  プラットフォームの選択肢（足す・直す・消す）
+      media.tsx      外した画像の控え（一覧と保存）
       blocks.tsx     ページ構成
       site-settings.tsx 公開する文言と連絡先
       account.tsx    アカウント
@@ -710,9 +713,6 @@ public/
   admin.css          管理画面だけの規則。管理画面は app.css のあとにこれを読み、
                      公開ページは読まない（:root は持たず、app.css の段を読む）
   preview.css        管理プレビューの案内。公開の部品は app.css を使う
-  .well-known/security.txt  脆弱性を見つけた人の連絡先（RFC 9116）。Expires を毎年1年先へ
-                     書き換える（切れる30日前から test/headers.test.ts が落ちて知らせる）。
-                     charset=utf-8 は _headers が付ける
   BingSiteAuth.xml   Bing Webmaster Tools の所有の確認（Bing が決めた名前と形。中の値は
                      Bing の管理画面が出したもの。消すと Bing の確認が外れる）
   _headers           静的なファイルに付けるヘッダ（Worker を通らないので、ここで付ける）。

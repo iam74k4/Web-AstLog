@@ -264,10 +264,14 @@ export const AdminDashboard = (props: {
           <span class="dashboard-state">残りわずか</span>
         ) : null}
       </p>
+      {/*
+        外した画像の控え。数える容量とは別（90日で消える）。取り出す口は「外した画像」の画面
+        （src/routes/admin/media.tsx）——控えがあるときだけ入口を出す
+      */}
       {props.storage.archived ? (
         <p class="dashboard-storage__note">
           ほかに、外した画像の控えが {megabytes(props.storage.archived)}
-          （90日で消える。容量には数えない）
+          （90日で消える。容量には数えない）。 <a href="/admin/media">外した画像を見る →</a>
         </p>
       ) : null}
     </section>

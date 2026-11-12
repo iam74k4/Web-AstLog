@@ -307,6 +307,34 @@
   border-color: var(--accent);
 }
 
+/*
+  選択肢の行（プラットフォーム。src/routes/admin/platforms.tsx）。行の中に小さなフォームを持ち、
+  表示名・並び順・保存を1行に置く（狭い幅では折り返す）。追加の枠（.catalog）も同じ形
+*/
+.option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-3);
+}
+
+/* 行の中では、使っている数と「消す」の左で残りの幅を取る（追加の枠は縦の flex なので、ここに書くと高さになる） */
+.row--option > .option {
+  flex: 1 1 320px;
+}
+
+.option .field {
+  flex: 1 1 180px;
+}
+
+.option .option__order {
+  flex: 0 1 96px;
+}
+
+.row--option .row__actions {
+  flex: 0 0 auto;
+}
+
 .row__main {
   display: flex;
   flex-direction: column;

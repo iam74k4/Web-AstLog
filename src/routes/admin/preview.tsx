@@ -488,7 +488,12 @@ async function memberPreviewPost(c: Context<AppEnv>, askedId?: string) {
     celestialBody: existing?.celestialBody ?? 'black-hole',
     celestialAccent: existing?.celestialAccent ?? 'inherit',
     ...values,
-    avatarUrl: picked.image ? imageDataUrl(picked.image) : (existing?.avatarUrl ?? null),
+    // 保存と同じ: 選べば差し替え、「外す」なら無し、どちらでもなければいまのまま
+    avatarUrl: picked.image
+      ? imageDataUrl(picked.image)
+      : bool(form.get('removeAvatar')) === 1
+        ? null
+        : (existing?.avatarUrl ?? null),
   }
   return memberResponse(c, await snapshot(c), member, {
     editHref,
@@ -514,7 +519,12 @@ async function itemPreviewPost(c: Context<AppEnv>, askedId?: string) {
   const existing = id || twin ? await findAdminItemView(database, id ?? twin?.id ?? 0) : undefined
   if (id && !existing) return c.notFound()
   const context = await formContext(c)
-  const { values, tags, errors: unreadable } = readItemForm(form, context, existing ?? undefined)
+  const {
+    values,
+    tags,
+    newPlatform,
+    errors: unreadable,
+  } = readItemForm(form, context, existing ?? undefined)
   const existingShots = existing
     ? await database.query.itemShots.findMany({
         where: eq(schema.itemShots.itemId, existing.id),
@@ -567,7 +577,11 @@ async function itemPreviewPost(c: Context<AppEnv>, askedId?: string) {
         : (existing?.iconUrl ?? null),
     tags,
     links: links.links,
-    platformLabel: context.platforms.find((one) => one.key === values.platformKey)?.label ?? null,
+    // 「選択肢に無いとき」に書いた名前は、まだ選択肢に無い（保存のときに足す）
+    platformLabel:
+      newPlatform?.label ??
+      context.platforms.find((one) => one.key === values.platformKey)?.label ??
+      null,
     memberName: member?.name ?? null,
     memberSlug: member?.slug ?? null,
     shots: [

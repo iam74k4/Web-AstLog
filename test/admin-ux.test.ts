@@ -131,7 +131,7 @@ describe('管理フォームの入力とプレビュー導線', () => {
     })
     const signed = await signIn()
     for (const [path, values, title] of [
-      ['/admin/items', { type: 'app', title: 'テスト', memberId: '999' }, '分類と担当を設定する'],
+      ['/admin/items', { type: 'app', title: 'テスト', memberId: '999' }, '担当とタグを設定する'],
       [
         '/admin/items',
         { type: 'app', title: 'テスト', linkLabel: 'Repository', linkUrl: '' },
