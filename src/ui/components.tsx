@@ -366,13 +366,21 @@ export const SectionHead = ({
       ) : null}
     </>
   )
+  /*
+    節の名札（字間の広い大文字）は英字の組み方。和文の見出し（打ち込むブロックの見出し・
+    お知らせの画面）にそのまま掛けると「デ ー タ ベ ー ス」と1字ずつ離れるので、英字だけで
+    ない見出しには印を付け、和文の字間に下げる（app.css の .head--ja）。英字の見出しの
+    HTML は今までと同じ
+  */
   const kind = sub
     ? 'head head--sub'
     : chapter
       ? 'head head--chapter'
       : item
         ? 'head head--item'
-        : 'head'
+        : langOf(title)
+          ? 'head'
+          : 'head head--ja'
   return icon ? (
     <div class={`${kind} head--icon`}>
       <img class="head__icon" src={icon} alt="" width="64" height="64" decoding="async" />
@@ -687,7 +695,7 @@ export const itemTransition = (item: { slug: string | null }) =>
   矢印も付かない——押しても何も起きない行に、押せる合図を出さない。
 
   アイコン（items.icon_url）は題の軸の外に吊るす（app.css の .entry__icon。題の頭は
-  アイコンの有無によらずそろう）。飾り（alt=""）で、h3 の中・題のリンクの外に置く
+  アイコンの有無によらずそろう）。飾り（alt=""）で、題の見出しの中・題のリンクの外に置く
   （行の面は題のリンクの覆いが受けるので、押せば作品のページへ。リンクの名前と、
   ページを移るときにつなぐ題の字は題だけのまま）。
 */
@@ -699,8 +707,15 @@ export const ItemRow = ({
   item,
   showMember,
   showKind = true,
+  level = 3,
 }: {
   item: ItemView
+  /*
+    行の題の見出しの段。Projects のページでは節の見出しが h1 なので h2、全体ページ（/all）では
+    節が h2 なので h3（renderBlock の whole）。どちらでも h3 にしていたころは、Projects の
+    ページが h1 のすぐ下に h3 を並べ、h2 を飛ばしていた（見出しで移動する人には段が抜けて聞こえる）
+  */
+  level?: 2 | 3
   showMember?: boolean
   showKind?: boolean
 }) => {
@@ -717,6 +732,18 @@ export const ItemRow = ({
       decoding="async"
     />
   ) : null
+  const title = (
+    <>
+      {icon}
+      {href ? (
+        <a class="entry__link" href={href} style={itemTransition(item)}>
+          {item.title}
+        </a>
+      ) : (
+        item.title
+      )}
+    </>
+  )
   return (
     // id は作品のページの「← Projects」の着地点（itemCardId）
     <article class="entry" id={itemCardId(item)}>
@@ -733,16 +760,7 @@ export const ItemRow = ({
         ) : null}
       </ul>
       <div class="entry__main">
-        <h3>
-          {icon}
-          {href ? (
-            <a class="entry__link" href={href} style={itemTransition(item)}>
-              {item.title}
-            </a>
-          ) : (
-            item.title
-          )}
-        </h3>
+        {level === 2 ? <h2>{title}</h2> : <h3>{title}</h3>}
         {item.summary ? <p>{item.summary}</p> : null}
         <Metric item={item} />
         <Tags tags={item.tags} />

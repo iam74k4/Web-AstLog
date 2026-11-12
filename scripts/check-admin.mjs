@@ -137,7 +137,7 @@ try {
     assert.notEqual(await page.locator('[name=name]').inputValue(), 'プレビューだけの名前')
     // 保存済み・保存前・横の完成形を、公開と同じショーケースで操作できる。
     await go(page, '/admin/items')
-    const savedLink = page.locator('[data-item-preview]').first()
+    const savedLink = page.locator('[data-saved-preview]').first()
     await savedLink.click()
     const modal = page.frameLocator('#editor-preview iframe')
     await modal.locator('.shots--showcase').waitFor()

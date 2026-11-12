@@ -144,6 +144,20 @@
     gap: var(--sp-6);
   }
 
+  /*
+    横に完成形を置くと、編集の列は画面の半分（600 より狭い）。保存の帯を画面の幅で1段に
+    していると、「公開する」の説明が1〜2字ずつ3〜4行に折れた。列が狭いあいだは、狭い画面と
+    同じ2段（上に公開の切り替えと削除、下に押す手）のまま——幅は画面ではなく部品で決める
+  */
+  .live .form-foot {
+    display: grid;
+    gap: var(--sp-2);
+  }
+
+  .live .form-foot .form-actions {
+    display: contents;
+  }
+
   .live__preview {
     position: sticky;
     top: var(--gutter);
@@ -540,7 +554,7 @@
   gap: var(--sp-4);
 }
 
-/* 画像と動画の容量（概要。AdminDashboard の dashboard-storage）。数字は桁をそろえる */
+/* 画像と動画の容量（概要。AdminDashboard の容量の節）。数字は桁をそろえる */
 .dashboard-storage__usage {
   display: flex;
   flex-wrap: wrap;
@@ -1484,9 +1498,6 @@ html:has(.admin-shell) {
   padding-inline: var(--sp-3);
   white-space: nowrap;
 }
-.form-actions__right .btn[formaction] {
-  font-size: var(--fs-meta);
-}
 .form-actions > .btn--danger {
   align-self: flex-start;
   min-height: var(--tap);
@@ -1668,22 +1679,9 @@ html:has(.admin-shell) {
   color: var(--ink-weak);
   font-variant-numeric: tabular-nums;
 }
-.dashboard-observatory {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  overflow: hidden;
-}
-.dashboard-observatory__copy h2 {
-  font-size: var(--fs-display-xs);
-  margin-top: var(--sp-3);
-}
 .dashboard-metrics {
-  grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  border-top: 1px solid var(--line);
-  margin-top: var(--sp-5);
-  padding-top: var(--sp-5);
 }
 .dashboard-metrics dt {
   color: var(--ink-weak);

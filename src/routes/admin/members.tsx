@@ -124,6 +124,7 @@ memberRoutes.get('/members', async (c) => {
                 <a
                   class="icon-btn"
                   href={`/admin/preview/members/${member.id}`}
+                  data-saved-preview=""
                   target="_blank"
                   rel="noreferrer"
                   aria-label={`${member.name} の保存済み内容をプレビュー`}
@@ -243,10 +244,11 @@ const MemberForm = (props: {
             <a
               class="btn btn--ghost"
               href={`/admin/preview/members/${member.id}`}
+              data-saved-preview=""
               target="_blank"
               rel="noreferrer"
             >
-              保存済み内容をプレビュー ↗
+              保存済み内容をプレビュー
             </a>
             {member.published ? (
               <a

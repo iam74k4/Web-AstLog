@@ -1438,6 +1438,10 @@ describe('文字の段', () => {
     expect(label).toContain('font-size: var(--fs-md)')
     expect(label).toContain('letter-spacing: var(--track-label)')
     expect(label).toContain('text-transform: uppercase')
+    // 和文の見出しには英大文字の字間を掛けない（「デ ー タ ベ ー ス」と1字ずつ離れた）
+    const japanese = bodyOf(sheet, '.head--ja :is(h1, h2) {')
+    expect(japanese).toContain('letter-spacing: var(--track-label-ja)')
+    expect(japanese).toContain('text-transform: none')
     expect(bodyOf(sheet, '.head::after {')).toContain('background: var(--line-strong)')
     expect(bodyOf(sheet, '.head--item :is(h1, h2) {')).toContain('font-size: var(--fs-display-xl)')
     expect(bodyOf(sheet, '.hero h1.hero__headline {')).toContain('font-size: var(--fs-display)')
@@ -1454,7 +1458,7 @@ describe('文字の段', () => {
     */
     expect(bodyOf(sheet, '.head--sub :is(h2, h3) {')).toContain('font-size: var(--fs-lg)')
     // 一覧の行の題は節の見出しから2段以上離す
-    expect(bodyOf(sheet, '.entry__main h3 {')).toContain('font-size: var(--fs-display-xs)')
+    expect(bodyOf(sheet, '.entry__main :is(h2, h3) {')).toContain('font-size: var(--fs-display-xs)')
   })
 
   it('見出し・行の説明・段落は文節で折り、最後の行に1〜2字だけ落とさない', () => {
@@ -1468,7 +1472,7 @@ describe('文字の段', () => {
     for (const part of [
       '.hero h1',
       '.head :is(h1, h2, h3)',
-      '.entry__main :is(h3, p)',
+      '.entry__main :is(h2, h3, p)',
       '.statement__text',
       '.bio :is(p, li)',
       // 画像の説明。細い列で「画 / 面」と1字だけの行が出た

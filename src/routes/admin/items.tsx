@@ -261,7 +261,7 @@ itemRoutes.get('/items', async (c) => {
                   <a
                     class="icon-btn"
                     href={`/admin/preview/items/${item.id}`}
-                    data-item-preview=""
+                    data-saved-preview=""
                     target="_blank"
                     rel="noreferrer"
                     aria-label={`${item.title} の保存済み内容をプレビュー`}
@@ -878,7 +878,7 @@ const ItemForm = (props: ItemFormData) => {
             <a
               class="btn btn--ghost"
               href={`/admin/preview/items/${item.id}`}
-              data-item-preview=""
+              data-saved-preview=""
               target="_blank"
               rel="noreferrer"
             >

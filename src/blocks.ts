@@ -76,7 +76,8 @@ export const BLOCK_TYPES = [
     label: '数字',
     note: '大きな数字を並べる。2〜4つが収まりがよい',
     kind: 'free',
-    title: '数字で見る',
+    // 既定の見出しは、ほかの種類（Now・Links・Timeline）と同じ英語（目次に並ぶ節の名前）
+    title: 'Numbers',
     hint: '1行に1件。「値 | 単位 | 説明」',
   },
   {

@@ -251,6 +251,7 @@ const BlocksPage = (props: {
                     <a
                       class="icon-btn"
                       href={`/admin/preview/blocks/${block.id}`}
+                      data-saved-preview=""
                       target="_blank"
                       rel="noreferrer"
                       aria-label={`${blockLabel(block)} の保存済み内容をプレビュー`}
@@ -399,10 +400,11 @@ const BlockForm = (props: {
           <a
             class="btn btn--ghost"
             href={`/admin/preview/blocks/${block.id}`}
+            data-saved-preview=""
             target="_blank"
             rel="noreferrer"
           >
-            保存済みをプレビュー ↗
+            保存済み内容をプレビュー
           </a>
         ) : null}
       </div>

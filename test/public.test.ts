@@ -1556,10 +1556,18 @@ describe('作品1件の恒久リンク', () => {
       .entry__link::after）の付け先。style はページの切り替えでつなぐ名前
     */
     expect(html).toContain(
+      '<h2><a class="entry__link" href="/apps/item/appmixer" style="view-transition-name:item-appmixer">AppMixer</a></h2>',
+    )
+    /*
+      行の題は、節の見出し（h1 の Projects）のすぐ下の段。どこでも h3 にしていたころは、
+      このページが h1 の下に h3 を並べ、h2 を飛ばしていた。全体ページ（/all）では節が h2 なので h3
+    */
+    expect(html).not.toMatch(/<h3\b/)
+    expect(mainOf(await okText('/all'))).toContain(
       '<h3><a class="entry__link" href="/apps/item/appmixer" style="view-transition-name:item-appmixer">AppMixer</a></h3>',
     )
     // 当てにならない URL を出すくらいなら、リンクそのものを出さない。覆いも矢印も付かない
-    expect(html).toContain('<h3>まだ無いほう</h3>')
+    expect(html).toContain('<h2>まだ無いほう</h2>')
     expect(html.match(/class="entry__link"/g) ?? []).toHaveLength(1)
     expect(html.match(/class="entry__go"/g) ?? []).toHaveLength(1)
   })
@@ -1615,7 +1623,7 @@ describe('作品1件の恒久リンク', () => {
     }
     // slug の無い作品は、戻ってくる作品のページが無いので id も持たない
     expect(html).toContain('<article class="entry"><ul class="entry__meta">')
-    expect(html).toContain('<h3>まだ無いほう</h3>')
+    expect(html).toContain('<h2>まだ無いほう</h2>')
     expect(html).not.toMatch(/card--lean|entry__index/)
   })
 
