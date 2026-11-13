@@ -309,7 +309,9 @@ describe('保存前のサイト設定・見た目', () => {
       )
       expect(html).toContain('プレビュー · Profile')
       expect(html).toContain('hero--profile')
-      expect(html).toContain('プロフィールの表紙')
+      // 1人のサイトなので大見出しは入口のもの。プロフィールの頭は名前（説明文にも入れない）
+      expect(html).toContain('<h1 class="nameplate__name">岡崎 昂功</h1>')
+      expect(html).not.toContain('プロフィールの表紙')
       expect(html).toContain('公開中の自己紹介')
       expect(html).not.toContain('未公開の人')
       expect(html).toContain('このプレビューでは保存されません')

@@ -487,6 +487,41 @@ export const Phrases = ({ text }: { text: string }) => (
   </>
 )
 
+/*
+  入口の大見出し。打ち替える言葉（TypedWords）と同じ打ち方で、1字ずつ打って全部そろった
+  ところで止まる（消さずに1回だけ。app.css の「動き」の .hero__char。1字の間もカーソルも
+  打ち替える言葉にそろえる。止める設定・紙では打ち終えた姿のまま）。行の切り方は Phrases と
+  同じ塊ごと（和文は句読点で行を改める）で、欧文は1行の中で左から打つ。字の場所は初めから
+  取ってある（透明から出す。字ごとに幅を広げると、打つたびに行が組み直されて下の字が揺れる）。
+
+  読み上げには aria-label で文を1つ渡し、字の span は隠す（1字ずつの span は、読み上げが
+  字ごとに区切って読むことがある）。検索エンジンと Ctrl-F は、字をつないだ同じ文を読む。
+  字の番号（--i）は大見出し全体の通し番号で、打つ時刻を決める。下の線・打ち替える言葉・
+  リード文・押し手は、打ち終えるのを待たずにいつもの間で出る
+*/
+const headlineParts = (text: string) => splitPhrases(text.trim()).map((part) => [...part])
+
+export const TypedHeadline = ({ text }: { text: string }) => {
+  const phrases = headlineParts(text)
+  // 塊ごとの、最初の字の通し番号
+  const first = phrases.map((_, p) =>
+    phrases.slice(0, p).reduce((total, letters) => total + letters.length, 0),
+  )
+  return (
+    <h1 lang={langOf(text)} aria-label={text.trim()}>
+      {phrases.map((letters, p) => (
+        <span key={`${p}`} class="phrase" aria-hidden="true">
+          {letters.map((letter, i) => (
+            <span key={`${i}`} class="hero__char" style={`--i: ${(first[p] ?? 0) + i}`}>
+              {letter}
+            </span>
+          ))}
+        </span>
+      ))}
+    </h1>
+  )
+}
+
 // 2桁にそろえた番号（01・02 …）。Projects の件数とギャラリーの番号で同じ書き方
 const twoDigits = (value: number) => String(value).padStart(2, '0')
 
@@ -511,31 +546,36 @@ export const Eyebrow = ({ parts }: { parts: string[] }) => (
   打っては消し、次の言葉へ移る。JavaScript を持たないので、字を1つずつの span に分け、
   打った字数を CSS の数（--typed、0 → 1 → 0）から決める（app.css の「動き」の typed）。
 
-  読み上げと検索エンジンには、言葉を「 / 」でつないだ1行を渡し、打つ字の列は隠す
-  （1字ずつの読み上げにしない）。動きを止める設定では、最初の言葉が打ち終わった姿で止まる。
+  読み上げと検索エンジンには、言葉を読点でつないだ1行を渡し、打つ字の列は隠す
+  （1字ずつの読み上げにしない）。英字だけなら「, 」、和文を含めば「、」。区切りに「/」を
+  使わない——言葉の中の「/」（「iOS / macOS Developer」）と区別が付かず、3つの言葉が
+  4つに読めた。動きを止める設定では、最初の言葉が打ち終わった姿で止まる。
   言葉が1つなら打ち替えず、その言葉を置くだけ（--N の印が無いので動かず、カーソルも無い）。
   巡りの形は言葉の数で決まる（app.css の typed-2〜4。数は src/site.ts の HERO_ROLES）。
 */
-export const TypedWords = ({ words }: { words: string[] }) => (
-  <p class="typed" lang={langOf(words.join(''))}>
-    <span class="sr-only">{words.join(' / ')}</span>
-    <span
-      class={words.length > 1 ? `typed__words typed__words--${words.length}` : 'typed__words'}
-      aria-hidden="true"
-      style={`--words: ${words.length}`}
-    >
-      {words.map((word, k) => (
-        <span class="typed__word" key={word} style={`--k: ${k}; --len: ${[...word].length}`}>
-          {[...word].map((letter, i) => (
-            <span key={`${i}`} style={`--i: ${i}`}>
-              {letter}
-            </span>
-          ))}
-        </span>
-      ))}
-    </span>
-  </p>
-)
+export const TypedWords = ({ words }: { words: string[] }) => {
+  const lang = langOf(words.join(''))
+  return (
+    <p class="typed" lang={lang}>
+      <span class="sr-only">{words.join(lang === 'en' ? ', ' : '、')}</span>
+      <span
+        class={words.length > 1 ? `typed__words typed__words--${words.length}` : 'typed__words'}
+        aria-hidden="true"
+        style={`--words: ${words.length}`}
+      >
+        {words.map((word, k) => (
+          <span class="typed__word" key={word} style={`--k: ${k}; --len: ${[...word].length}`}>
+            {[...word].map((letter, i) => (
+              <span key={`${i}`} style={`--i: ${i}`}>
+                {letter}
+              </span>
+            ))}
+          </span>
+        ))}
+      </span>
+    </p>
+  )
+}
 
 /*
   押し手（入口の「Projects →」「Profile →」）。塗りはページでいちばん強い1本にだけ

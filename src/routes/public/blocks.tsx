@@ -14,7 +14,6 @@ import {
   ItemRow,
   ItemStories,
   LinkList,
-  langOf,
   MemberCardCompact,
   MemberCardWide,
   Note,
@@ -28,6 +27,7 @@ import {
   SectionHead,
   Statement,
   Timeline,
+  TypedHeadline,
   TypedWords,
 } from '../../ui/components'
 import { siteCountsOf, soloMember, type TopData } from './data'
@@ -183,10 +183,11 @@ export function renderBlock(
         node: (
           <Hero cover>
             {eyebrow.length ? <Eyebrow parts={eyebrow} /> : null}
-            {/* 英字だけの大見出し（「Harder, Better, Faster, Stronger.」）は英語の読みで読ませる */}
-            <h1 lang={langOf(statement)}>
-              <Phrases text={statement} />
-            </h1>
+            {/*
+              大見出しは打ち替える言葉と同じく1字ずつ打つ（TypedHeadline）。英字だけの大見出し
+              （「Harder, Better, Faster, Stronger.」）は英語の読みで読ませる
+            */}
+            <TypedHeadline text={statement} />
             {typed.length ? <TypedWords words={typed} /> : null}
             <p class="hero__lead">
               <Phrases text={site.heroLead} />

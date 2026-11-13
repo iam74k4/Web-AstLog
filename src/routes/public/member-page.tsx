@@ -74,12 +74,14 @@ export function memberPage(
   const { about, skills, career } = memberUnits(member)
 
   /*
-    説明文は大見出しと紹介文の1段落目をつないだもの（検索結果と共有カードに出る）。
-    大見出しだけにしていたころは、標語の1文（「つくる工程そのものを、速くする。」）
-    しか出ず、検索結果から誰の何のページかが分からなかった。長さは describe が切る
+    説明文は、このページに出ている大見出しと紹介文の1段落目をつないだもの（検索結果と
+    共有カードに出る）。大見出しだけにしていたころは、標語の1文（「つくる工程そのものを、
+    速くする。」）しか出ず、検索結果から誰の何のページかが分からなかった。titled のときは
+    大見出しをこのページに置かないので、説明文にも入れない（入れると、このページに無い入口の
+    一文が説明の頭に立つ）。長さは describe が切る
   */
   const description = describe(
-    sentences(member.headline, plainText(about[0]?.paragraphs[0] ?? '')) ||
+    sentences(titled ? '' : member.headline, plainText(about[0]?.paragraphs[0] ?? '')) ||
       `${nameWithRole(member)}のプロフィール`,
   )
 

@@ -218,6 +218,12 @@ const MemberForm = (props: {
     : props.values
       ? Number(props.values.published === '1')
       : (member?.published ?? 0)
+  /*
+    名前の読み（ローマ字）と肩書きが出る名札の場所。1人のサイトでは左の柱にも名札が立つ
+    （src/ui/Layout.tsx の Pillar）。2人以上では Team のカードに肩書きが出る（読みは出ない）。
+    欄で言わないと、直した字がどこに出るのかを探しに行くことになる
+  */
+  const plates = props.onTop ? '左の柱と個人ページの名札' : '個人ページの名札'
 
   return (
     <AdminLayout
@@ -283,13 +289,23 @@ const MemberForm = (props: {
             error={props.errors?.name}
           />
           <Field
-            label="名前（ローマ字）"
+            label="氏名（ローマ字）"
             name="nameLatin"
             value={value('nameLatin')}
             placeholder="Okazaki Takanari"
-            hint="個人ページの名前の下と、検索エンジン向けの情報に出ます。空なら出しません"
+            hint={`${plates}で、氏名のすぐ下に出る。個人ページの題と検索エンジン向けの情報にも使う。空なら出さない`}
           />
-          <Field label="役割 / 肩書" name="role" value={value('role')} />
+          {/* 題に肩書きが入るのは1人のサイトの入口と全体ページだけ（meta.ts の nameWithRole） */}
+          <Field
+            label="役割 / 肩書き"
+            name="role"
+            value={value('role')}
+            hint={
+              props.onTop
+                ? `${plates}で、氏名の下に出る。入口の題と検索エンジン向けの情報にも使う`
+                : `${plates}と Team のカードで、氏名の下に出る。検索エンジン向けの情報にも使う`
+            }
+          />
           {/*
             1人のサイトでは、この見出しが入口（トップページ）の大見出しになり、個人ページには
             出さない（CLAUDE.md「個人ページは1ページで、サイトの並びの一部」）。どこに出るかを
@@ -302,14 +318,14 @@ const MemberForm = (props: {
             error={props.errors?.headline}
             hint={
               props.onTop
-                ? `トップページの一番大きな一文（1人のサイトでは個人ページには出しません）。言い切りで · ${MAX_CHARS.memberHeadline} 字まで`
-                : `個人ページの一番上。言い切りで · ${MAX_CHARS.memberHeadline} 字まで`
+                ? `入口（トップページ）の一番大きな一文。個人ページには出さない。言い切りで · ${MAX_CHARS.memberHeadline} 字まで`
+                : `個人ページの一番上に出る。言い切りで · ${MAX_CHARS.memberHeadline} 字まで`
             }
           />
         </FormSection>
         <FormDetails
           title="プロフィールを詳しく書く"
-          note="紹介文・スキル・経歴・所在地・画像（任意）"
+          note="所在地・紹介文・スキル・経歴・アバター画像（任意）"
           errors={props.errors}
           fields={['bio', 'skillsText', 'careerText', 'location', 'avatar']}
         >
@@ -346,7 +362,7 @@ const MemberForm = (props: {
               （src/lib/format.ts の isOngoing）。書いた字で決まるので、書き方をここで言う
               ——「2024.03 —」と先を空けて書くと、星は黙って付かない
             */
-            hint={`1行に1件。「期間 | 会社・学校 | 役割・学科」（例: 2021.04 — 2024.03 | 東京工科大学 | コンピュータサイエンス学部）。「Experience:」「Education:」のように末尾が : の行で塊に分けると横に並びます。行の下に「- 案件の相手」「・プロジェクト」の行を足せます。${ONGOING_HINT}`}
+            hint={`1行に1件。「期間 | 会社・学校 | 役割・学科」（例: 2021.04 — 2024.03 | 東京工科大学 | コンピュータサイエンス学部）。「Experience:」「Education:」のように末尾が : の行で塊に分けると横に並ぶ。行の下に「- 案件の相手」「・プロジェクト」の行を足せる。${ONGOING_HINT}`}
           />
           <label class="field">
             <span class="field__label">アバター画像</span>
@@ -896,7 +912,7 @@ memberRoutes.get('/members/:id/delete', async (c) => {
         cancelHref={cameFromEdit(c) ? `/admin/members/${id}/edit` : '/admin/members'}
       >
         <p>
-          担当している項目 {n} 件は消えず、担当者が空になります。
+          担当している作品 {n} 件は消えず、担当者が空になります。
           {member.avatarUrl ? (
             <>
               <br />
