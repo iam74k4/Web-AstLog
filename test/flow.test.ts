@@ -288,6 +288,8 @@ describe('削除の確認から戻る', () => {
 
     const fromEdit = await (await signed(`/admin/members/${member.id}/delete?from=edit`)).text()
     expect(fromEdit).toContain(`href="/admin/members/${member.id}/edit"`)
+    // 左のメニューと同じ「作品」で数える（前は「項目」で、何のことか分からなかった）
+    expect(fromEdit).toContain('担当している作品 0 件は消えず')
     const itemFromEdit = await (await signed(`/admin/items/${item.id}/delete?from=edit`)).text()
     expect(itemFromEdit).toContain(`href="/admin/items/${item.id}/edit"`)
 

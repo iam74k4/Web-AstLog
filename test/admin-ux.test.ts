@@ -334,7 +334,7 @@ describe('見出しの欄は、どこに出るかで名前を変える', () => {
     const signed = await signIn()
     const solo = await (await signed(`/admin/members/${member.id}/edit`)).text()
     expect(solo).toContain('入口の大見出し')
-    expect(solo).toContain('1人のサイトでは個人ページには出しません')
+    expect(solo).toContain('入口（トップページ）の一番大きな一文。個人ページには出さない')
     // まだ誰もいないときの追加は、その人が1人目になる
     await db().delete(schema.members)
     expect(await (await signed('/admin/members/new')).text()).toContain('入口の大見出し')
@@ -343,5 +343,25 @@ describe('見出しの欄は、どこに出るかで名前を変える', () => {
     const team = await (await signed(`/admin/members/${again.id}/edit`)).text()
     expect(team).toContain('ページの見出し')
     expect(team).not.toContain('入口の大見出し')
+  })
+
+  /*
+    ローマ字と肩書きは名札に出る。1人のサイトでは左の柱にも名札が立つのに、案内が
+    「個人ページの名前の下」としか言わず、直した字がどこに出るのか分からなかった
+  */
+  it('ローマ字と肩書きの欄は、名札が出る場所を人数で言い分ける', async () => {
+    const member = await seedMember()
+    const signed = await signIn()
+    const solo = await (await signed(`/admin/members/${member.id}/edit`)).text()
+    expect(solo).toContain('氏名（ローマ字）')
+    expect(solo).toContain('左の柱と個人ページの名札で、氏名のすぐ下に出る')
+    expect(solo).toContain('役割 / 肩書き')
+    expect(solo).toContain('左の柱と個人ページの名札で、氏名の下に出る。入口の題')
+
+    await seedMember({ slug: 'second', name: '星野' })
+    const team = await (await signed(`/admin/members/${member.id}/edit`)).text()
+    expect(team).not.toContain('左の柱')
+    expect(team).toContain('個人ページの名札で、氏名のすぐ下に出る')
+    expect(team).toContain('個人ページの名札と Team のカードで、氏名の下に出る')
   })
 })

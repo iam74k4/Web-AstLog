@@ -86,7 +86,7 @@ describe('CSS の読み込み', () => {
       テストもブラウザも何も言わない。アクセントの6色を外した日、管理画面の注意の色
       （--ember）が黙って継承色になっていた。部品が style 属性で渡すものだけは除く——顔の
       大きさ（--avatar-size）と、打ち替える言葉の数・何番目の言葉か・字数・何番目の字か
-      （components.tsx の TypedWords）
+      （components.tsx の TypedWords と TypedHeadline）
     */
     const fromStyle = ['--avatar-size', '--words', '--k', '--len', '--i']
     const defined = new Set([...sheets.matchAll(/(--[\w-]+)\s*:/g)].map(([, name]) => name))
@@ -1698,6 +1698,37 @@ describe('動き', () => {
       ruleWith(sheet, 'animation-delay: calc(var(--reveal-from) + var(--stagger) * 6)').selector,
     ).toContain('.hero__actions')
     expect(motion).not.toMatch(/\.hero[^{]*\{[^}]*infinite/)
+  })
+
+  /*
+    大見出しは打ち替える言葉と同じ打ち方で1字ずつ打ち、全部そろったところで止まる（消さない）。
+    字の場所は初めから取っておき（透明から出す。幅を変えると打つたびに行が組み直される）、
+    カーソルは打ち替える言葉と同じ太さ。ほかの字は打ち終えるのを待たない（大見出しを打ち
+    終えるまでほかが出ないと、最初の画面が大見出しだけのまま止まって見えた）
+  */
+  it('大見出しは1字ずつ打ち、ほかは待たせない。カーソルは打ち替える言葉と同じ', () => {
+    const char = bodyOf(sheet, '.hero__char {')
+    expect(char).toContain('animation: type-in 1ms steps(1)')
+    expect(char).toContain('var(--i) * var(--type-step)')
+    expect(char).not.toContain('infinite')
+    expect(keyframesOf('type-in')).toContain('opacity: 0')
+    const caret = bodyOf(sheet, '.hero__char::after {')
+    expect(caret).toContain('opacity: 0')
+    expect(caret).toContain('width: var(--caret-w)')
+    expect(
+      bodyOf(sheet, ':is(.typed__words--2, .typed__words--3, .typed__words--4)::after {'),
+    ).toContain('width: var(--caret-w)')
+    for (const [selector, step] of [
+      ['.hero--cover h1::after', '4'],
+      ['.hero--cover > .typed', '4.5'],
+      ['.hero--cover > .hero__lead', '5'],
+      ['.hero--cover > .hero__actions', '6'],
+    ] as const) {
+      expect(
+        ruleWith(sheet, `calc(var(--reveal-from) + var(--stagger) * ${step})`).selector,
+        selector,
+      ).toContain(selector)
+    }
   })
 
   it('締めの幕開け（Contact）は入口と同じ rise と間で、1文 → 表の行の順に1回だけ', () => {

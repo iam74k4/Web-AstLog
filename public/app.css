@@ -367,6 +367,13 @@
   */
   --typed-window: 4.3s;
   --caret-blink: 1.06s;
+  /*
+    --type-step は入口の大見出しを1字打つ間（.hero__char）。打ち替える言葉の打つ速さ（1語を
+    1.5 秒。14〜21 字の言葉で1字 0.07〜0.1 秒）にそろえる。
+    --caret-w はカーソルの太さで、大見出しと打ち替える言葉の2本で同じ
+  */
+  --type-step: 70ms;
+  --caret-w: 2px;
   --press: 0.96;
   --dot: 6px;
 
@@ -993,7 +1000,7 @@ body[data-site] > .frame {
 :is(.typed__words--2, .typed__words--3, .typed__words--4)::after {
   content: '';
   display: inline-block;
-  width: 2px;
+  width: var(--caret-w);
   height: 1.1em;
   margin-inline-start: var(--sp-1);
   vertical-align: text-bottom;
@@ -3319,7 +3326,8 @@ body[data-site] > .frame {
     - 読み込みの幕（外から入口へ来たときだけ）: 真っ黒の幕の真ん中でロゴの O が回り、線が読み込みの
       ように満ちてから、幕が上下に開く
     - 終わらない動きは、経歴のいまの行の星と、入口の打ち替える言葉だけ
-    - 入口の幕開け: 札・大見出し・線・打ち替える言葉・リード文・押し手が順に1回だけ現れる
+    - 入口の幕開け: 札・大見出し・線・打ち替える言葉・リード文・押し手が順に1回だけ現れる。
+      大見出しは打ち替える言葉と同じ打ち方で1字ずつ打つ（打ち終えるのを待たずに、ほかも出る）
     - 入口の打ち替える言葉: 大見出しの下で言葉を1字ずつ打っては消し、次の言葉へ（Cavani の入口）
     - ページを移るとき: 本文が少し下から入り、目次の印が左から満ちる（横に滑らせると字ごと
       伸び縮みして見えた）。作品名は作品のページの見出しへつながる（itemTransition）
@@ -3328,7 +3336,7 @@ body[data-site] > .frame {
   スクロールに連動するものは @supports で括る（知らないブラウザでは止まった姿のまま）。
 */
 
-/* 入口の幕開け。札 → 大見出し（句読点の塊ごと）→ 線 → リード文 → 押し手の順に、1回だけ */
+/* 入口の幕開け。札 → 大見出し（1字ずつ打つ）→ 線 → リード文 → 押し手の順に、1回だけ */
 @keyframes rise {
   from {
     opacity: 0;
@@ -3349,7 +3357,6 @@ body[data-site] > .frame {
 }
 
 .hero--cover > .eyebrow,
-.hero--cover h1 .phrase,
 .hero--cover > .hero__lead,
 .hero--cover > .hero__actions {
   animation: rise var(--dur-reveal) var(--ease) both;
@@ -3359,18 +3366,49 @@ body[data-site] > .frame {
   animation-delay: var(--reveal-from);
 }
 
-.hero--cover h1 .phrase:nth-child(1) {
-  animation-delay: calc(var(--reveal-from) + var(--stagger));
+/*
+  大見出しは1字ずつ打ち、全部そろったところで止まる（components.tsx の TypedHeadline。
+  打ち替える言葉と同じ打ち方・同じ速さ・同じカーソルで、消さずに1回だけ）。字は打つ時刻まで
+  透明で、打つとそのまま残る。カーソルは打った字のすぐ後ろに、次の字を打つまでだけ出る
+  （打ち終えたら消える。点滅し続けるのは打ち替える言葉のカーソルだけ）。カーソルの高さ（字の箱の上下を
+  0.15em ずつ空けて約 1.1em）と字とのすき間は、打ち替える言葉のカーソルと同じ。
+  字の場所は初めから取ってある（字ごとに幅を広げると、打つたびに行が組み直され、下の字が揺れる）
+*/
+.hero__char {
+  position: relative;
+  animation: type-in 1ms steps(1)
+    calc(var(--reveal-from) + var(--stagger) + var(--i) * var(--type-step)) backwards;
 }
 
-.hero--cover h1 .phrase:nth-child(2) {
-  animation-delay: calc(var(--reveal-from) + var(--stagger) * 2);
+.hero__char::after {
+  content: '';
+  position: absolute;
+  inset-block: 0.15em;
+  inset-inline-start: calc(100% + var(--sp-1));
+  width: var(--caret-w);
+  background: currentColor;
+  opacity: 0;
+  animation: type-caret var(--type-step) steps(1)
+    calc(var(--reveal-from) + var(--stagger) + var(--i) * var(--type-step));
 }
 
-.hero--cover h1 .phrase:nth-child(n + 3) {
-  animation-delay: calc(var(--reveal-from) + var(--stagger) * 3);
+@keyframes type-in {
+  from {
+    opacity: 0;
+  }
 }
 
+@keyframes type-caret {
+  from,
+  to {
+    opacity: 1;
+  }
+}
+
+/*
+  下の線・打ち替える言葉・リード文・押し手は、大見出しを打っているあいだにいつもの間で出る
+  （打ち終えるまで待たせると、最初の画面が大見出しだけのまま止まって見えた）
+*/
 .hero--cover h1::after {
   transform-origin: left;
   animation: draw-x var(--dur-reveal) var(--ease) calc(var(--reveal-from) + var(--stagger) * 4) both;

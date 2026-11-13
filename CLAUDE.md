@@ -187,7 +187,7 @@ H.264 の動画（MP4・MOV。MOV も MP4 として置く）（`src/lib/image.ts
 動きの終わりの姿と同じ）。
 
 **動きは持ち主が動画で見て選んだ組だけ**（app.css の「動き」の節。量と長さは `:root` の
-`--rise`・`--dur-reveal`・`--stagger`・`--twinkle`・`--opening-load`・`--opening-open`）。
+`--rise`・`--dur-reveal`・`--stagger`・`--type-step`・`--twinkle`・`--opening-load`・`--opening-open`）。
 - 読み込みの幕（外から入口へ来たときだけ。`fromInside`。`Layout` の `opening` が幕の要素 `Opening` を出す）:
   真っ黒の幕（`--opening-ground`。墨ではなく黒）の真ん中でロゴの O が回り（`OpeningMark`。
   ロゴと同じ向きで止まる）、下の線が読み込みのように
@@ -197,7 +197,8 @@ H.264 の動画（MP4・MOV。MOV も MP4 として置く）（`src/lib/image.ts
   幕は画面の下の縁に触れず、開くときも縁を越えない（iPhone の Safari が上下の帯を黒のまま残した）。
   動きを減らす設定・紙・強制色では幕ごと出さず、入口の字も待たせない（止めるだけだと幕が残る）
 - 入口の幕開け: 札 → 大見出し → 線 → 打ち替える言葉 → リード文 → 押し手が1回だけ順に（幕が
-  開き始めると同時に。`--reveal-from`）。Contact も1文 → 表の行を同じに
+  開き始めると同時に。`--reveal-from`）。大見出しは打ち替える言葉と同じ打ち方で1字ずつ打つ
+  （`TypedHeadline`。消さない。打ち終えるのを待たずに、ほかもいつもの間で出る）。Contact も1文 → 表の行を同じに
 - 打ち替える言葉（`TypedWords`。サイト設定の `heroRoles`）: 大見出しの下で言葉を1字ずつ打っては
   消す（Cavani の入口）。止まった姿は最初の言葉を打ち終えたところ
 - ページを移るとき: 本文が少し下から入り、目次の印が移った先で左から満ちる。印を横に滑らせない
