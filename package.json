@@ -35,7 +35,7 @@
   },
   "dependencies": {
     "drizzle-orm": "^0.45.4",
-    "hono": "^4.13.14"
+    "hono": "^4.13.16"
   },
   "overrides": {
     "undici": "7.30.1",
