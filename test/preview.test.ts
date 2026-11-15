@@ -444,8 +444,8 @@ describe('保存前プレビューから編集を続ける案内', () => {
     const cases = [
       {
         path: '/admin/preview/site',
-        body: form({ ...TEST_SITE, tagline: '', heroLead: '' }),
-        messages: ['サイトの一言: 文を入れてください', '入口の紹介文: 文を入れてください'],
+        body: form({ ...TEST_SITE, tagline: '' }),
+        messages: ['サイトの一言: 文を入れてください'],
       },
       {
         path: '/admin/preview/site',

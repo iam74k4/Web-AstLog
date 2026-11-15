@@ -8,7 +8,8 @@ export const SITE = {
   name: 'AstLog',
   origin: 'https://astlog.dev',
   tagline: 'つくったものを、ひとつずつ記録する。',
-  heroLead: 'つくったものと、取り組んできたことをまとめています。',
+  // 入口の大見出しの下のリード文。空なら出さない（説明文は名前と肩書きだけで組む）
+  heroLead: '',
   // 入口の大見出しの下で打ち替える言葉（1行に1つ）。空なら出さない
   heroRoles: '',
   contactLead: 'お仕事のご相談や取り組みについて、話しませんか。',
@@ -116,9 +117,11 @@ export function siteSettingsErrors(site: SiteSettings): Record<string, string> |
       errors[key] = `${SITE_SETTING_LIMITS[key]} 字までにしてください`
     }
   }
-  for (const key of ['tagline', 'heroLead', 'contactLead'] as const) {
+  for (const key of ['tagline', 'contactLead'] as const) {
     if (!site[key]) errors[key] = '文を入れてください'
-    else if (CONTROL.test(site[key])) errors[key] = '改行や制御文字を含めないでください'
+  }
+  for (const key of ['tagline', 'heroLead', 'contactLead'] as const) {
+    if (CONTROL.test(site[key])) errors[key] = '改行や制御文字を含めないでください'
   }
   const roles = heroRoleWords(site)
   if (CONTROL_BUT_NEWLINE.test(site.heroRoles)) errors.heroRoles = '制御文字を含めないでください'
