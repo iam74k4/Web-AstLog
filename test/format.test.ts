@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   chunk,
+  headlineLines,
+  headlineText,
   int,
   isHttpsUrl,
   isSafeUrl,
@@ -15,6 +17,39 @@ import {
   yearFrom,
   yearInJapan,
 } from '../src/lib/format'
+
+/*
+  大見出しの改行（管理画面の欄で Enter）。打った行が見出しの行の変わり目になり、1行に畳む場所
+  （説明文・読み上げの名前・Team のカード・lang の判定）は継ぎ目に空きを置くか詰めるかを決める
+*/
+describe('headlineLines / headlineText', () => {
+  it('CRLF・空の行・行の前後の空きを畳み、打った行だけを残す', () => {
+    expect(headlineLines('  Harder, Better,\r\n\r\n  Faster, Stronger.  \n')).toEqual([
+      'Harder, Better,',
+      'Faster, Stronger.',
+    ])
+    expect(headlineLines('')).toEqual([])
+    expect(headlineLines('つくる工程そのものを、速くする。')).toEqual([
+      'つくる工程そのものを、速くする。',
+    ])
+  })
+
+  it('1行に畳むとき、両側が和文なら詰め、片側でも欧文なら半角の空きを1つ置く', () => {
+    expect(headlineText('Harder, Better,\nFaster, Stronger.')).toBe(
+      'Harder, Better, Faster, Stronger.',
+    )
+    expect(headlineText('つくる工程そのものを、\r\n速くする。')).toBe(
+      'つくる工程そのものを、速くする。',
+    )
+    // 英数字と日本語のあいだは半角の空き（文言の決まり）
+    expect(headlineText('アプリを\nSwift でつくる')).toBe('アプリを Swift でつくる')
+    expect(headlineText('Swift で\nつくる')).toBe('Swift でつくる')
+    // 改行が無ければそのまま
+    expect(headlineText('Harder, Better, Faster, Stronger.')).toBe(
+      'Harder, Better, Faster, Stronger.',
+    )
+  })
+})
 
 describe('parseSkills', () => {
   it('末尾が : の行でグループを分ける', () => {

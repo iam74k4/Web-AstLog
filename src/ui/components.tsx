@@ -21,10 +21,13 @@ import {
 import {
   type CareerDetail,
   type CareerGroup,
+  headlineLines,
+  headlineText,
   initials,
   isHttpsUrl,
   isOngoing,
   isSafeUrl,
+  lineJoint,
   type SkillGroup,
   skillRows,
 } from '../lib/format'
@@ -488,35 +491,82 @@ export const Phrases = ({ text }: { text: string }) => (
 )
 
 /*
+  大見出し（members.headline）の塊。改行を打ってあれば、打った行がそのまま塊になり、行の中は
+  句読点で切らない——行を自分で決めた人の見出しを、こちらの句読点の規則でさらに割らない。
+  改行が無ければ今までどおり句読点で切る（splitPhrases）。英字の大見出し（「Harder, Better,
+  Faster, Stronger.」）は句読点の規則では1つの塊のままで、行を決められるのは改行だけ。
+
+  塊を1行ずつに積むのは CSS（.hero h1 .phrase と .profile__headline .phrase の
+  display: block）。行が窓より長いときは、塊の中を文節で折る（.phrase のすぐ下の規則）。
+  1行に畳んだ文が要る場所（説明文・読み上げの名前・Team のカード）は src/lib/format.ts の
+  headlineText を読む。
+
+  joint は塊の前に置く継ぎ目の字（打った行の継ぎ目で、片側でも欧文なら半角の空き。lineJoint）。
+  塊の span の外に素の字で置く——行は block に積むので見た目には出ないが、検索エンジンと
+  Ctrl-F が読む字は headlineText と同じ1文になる（無いと「Better,Faster」と語がつながる）。
+  句読点で切った塊は元の文の続きなので、継ぎ目は空
+*/
+export const headlinePhrases = (text: string): { part: string; joint: string }[] => {
+  const lines = headlineLines(text)
+  if (lines.length < 2) return splitPhrases(text.trim()).map((part) => ({ part, joint: '' }))
+  return lines.map((part, i) => ({
+    part,
+    joint: i === 0 ? '' : lineJoint(lines[i - 1] ?? '', part),
+  }))
+}
+
+// 大見出しを塊の span に並べる（個人ページの h1 と、/all の Profile の大見出し）
+export const HeadlinePhrases = ({ text }: { text: string }) => (
+  <>
+    {headlinePhrases(text).map(({ part, joint }, p) => (
+      <>
+        {joint}
+        <span key={`${p}`} class="phrase">
+          {part}
+        </span>
+      </>
+    ))}
+  </>
+)
+
+/*
   入口の大見出し。打ち替える言葉（TypedWords）と同じ打ち方で、1字ずつ打って全部そろった
   ところで止まる（消さずに1回だけ。app.css の「動き」の .hero__char。1字の間もカーソルも
-  打ち替える言葉にそろえる。止める設定・紙では打ち終えた姿のまま）。行の切り方は Phrases と
-  同じ塊ごと（和文は句読点で行を改める）で、欧文は1行の中で左から打つ。字の場所は初めから
-  取ってある（透明から出す。字ごとに幅を広げると、打つたびに行が組み直されて下の字が揺れる）。
+  打ち替える言葉にそろえる。止める設定・紙では打ち終えた姿のまま）。行の切り方は
+  headlinePhrases の塊ごと（打った改行で、改行が無ければ和文の句読点で行を改める）で、
+  塊の中は1行の中で左から打つ。字の場所は初めから取ってある（透明から出す。字ごとに幅を
+  広げると、打つたびに行が組み直されて下の字が揺れる）。
 
-  読み上げには aria-label で文を1つ渡し、字の span は隠す（1字ずつの span は、読み上げが
-  字ごとに区切って読むことがある）。検索エンジンと Ctrl-F は、字をつないだ同じ文を読む。
-  字の番号（--i）は大見出し全体の通し番号で、打つ時刻を決める。下の線・打ち替える言葉・
-  リード文・押し手は、打ち終えるのを待たずにいつもの間で出る
+  読み上げには aria-label で1行に畳んだ文（headlineText）を渡し、字の span は隠す（1字ずつの
+  span は、読み上げが字ごとに区切って読むことがある）。検索エンジンと Ctrl-F は、字をつないだ
+  同じ文を読む（行の継ぎ目の空きは、塊の外の素の字。headlinePhrases の joint で、打たない）。
+  字の番号（--i）は大見出し全体の通し番号で、打つ時刻を決める（行が変わっても続きの番号）。
+  下の線・打ち替える言葉・リード文・押し手は、打ち終えるのを待たずにいつもの間で出る
 */
-const headlineParts = (text: string) => splitPhrases(text.trim()).map((part) => [...part])
+const headlineParts = (text: string) =>
+  headlinePhrases(text).map(({ part, joint }) => ({ letters: [...part], joint }))
 
 export const TypedHeadline = ({ text }: { text: string }) => {
   const phrases = headlineParts(text)
   // 塊ごとの、最初の字の通し番号
   const first = phrases.map((_, p) =>
-    phrases.slice(0, p).reduce((total, letters) => total + letters.length, 0),
+    phrases.slice(0, p).reduce((total, { letters }) => total + letters.length, 0),
   )
+  // lang の判定と読み上げの名前は1行に畳んだ文で（改行のままでは英字だけと見なされない）
+  const sentence = headlineText(text)
   return (
-    <h1 lang={langOf(text)} aria-label={text.trim()}>
-      {phrases.map((letters, p) => (
-        <span key={`${p}`} class="phrase" aria-hidden="true">
-          {letters.map((letter, i) => (
-            <span key={`${i}`} class="hero__char" style={`--i: ${(first[p] ?? 0) + i}`}>
-              {letter}
-            </span>
-          ))}
-        </span>
+    <h1 lang={langOf(sentence)} aria-label={sentence}>
+      {phrases.map(({ letters, joint }, p) => (
+        <>
+          {joint}
+          <span key={`${p}`} class="phrase" aria-hidden="true">
+            {letters.map((letter, i) => (
+              <span key={`${i}`} class="hero__char" style={`--i: ${(first[p] ?? 0) + i}`}>
+                {letter}
+              </span>
+            ))}
+          </span>
+        </>
       ))}
     </h1>
   )
@@ -1333,7 +1383,8 @@ export const MemberCardWide = ({ member }: { member: PublicMember }) => (
           {member.location ? ` · ${member.location}` : ''}
         </span>
       </span>
-      {member.headline ? <span class="member__lead">{member.headline}</span> : null}
+      {/* カードの小さな1行。打った改行は畳む（行を改めるのは大見出しとして出す場所だけ） */}
+      {member.headline ? <span class="member__lead">{headlineText(member.headline)}</span> : null}
     </span>
     <span class="member__go" lang="en">
       Profile →
@@ -1865,7 +1916,7 @@ export const ProfileWhole = ({
     <Nameplate member={member} />
     {member.headline ? (
       <p class="profile__headline">
-        <Phrases text={member.headline} />
+        <HeadlinePhrases text={member.headline} />
       </p>
     ) : null}
     {children}

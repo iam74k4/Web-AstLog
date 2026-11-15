@@ -8,7 +8,7 @@ import type { Db } from '../../db/queries'
 import * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
 import { newToken } from '../../lib/auth'
-import { bool, isHttpsUrl, ONGOING_HINT, str } from '../../lib/format'
+import { bool, headlineLines, isHttpsUrl, ONGOING_HINT, str } from '../../lib/format'
 import { IMAGE_ACCEPT } from '../../lib/image'
 import { MARKDOWN_HINT } from '../../lib/markdown'
 import { isContactEmail } from '../../site'
@@ -55,6 +55,10 @@ import {
 } from './request'
 
 export const memberRoutes = new Hono<AppEnv>()
+
+// 大見出しの欄の、行の改め方の案内（行の組み方は src/ui/components.tsx の headlinePhrases）
+const HEADLINE_BREAK_HINT =
+  'Enter で改行した所で行が変わる（改行が無ければ句読点の後で変わる。改行は字数に数えない）'
 
 memberRoutes.get('/members', async (c) => {
   const members = await db(c).query.members.findMany({
@@ -309,18 +313,24 @@ const MemberForm = (props: {
           {/*
             1人のサイトでは、この見出しが入口（トップページ）の大見出しになり、個人ページには
             出さない（CLAUDE.md「個人ページは1ページで、サイトの並びの一部」）。どこに出るかを
-            欄で言わないと、直しても横の完成形（個人ページ）に何も出ず、直せていないように見える
+            欄で言わないと、直しても横の完成形（個人ページ）に何も出ず、直せていないように見える。
+
+            欄は複数行（Enter で改行）。打った改行がそのまま見出しの行の変わり目になる
+            （src/ui/components.tsx の headlinePhrases）。改行が無ければ今までどおり句読点の
+            後で行を改める。隣の肩書きと同じ半分の幅に置く（広げると肩書きの隣が空く）
           */}
-          <Field
+          <Area
             label={props.onTop ? '入口の大見出し' : 'ページの見出し'}
             name="headline"
             value={value('headline')}
+            rows={2}
+            half
             error={props.errors?.headline}
-            hint={
+            hint={`${
               props.onTop
-                ? `入口（トップページ）の一番大きな一文。個人ページには出さない。言い切りで · ${MAX_CHARS.memberHeadline} 字まで`
-                : `個人ページの一番上に出る。言い切りで · ${MAX_CHARS.memberHeadline} 字まで`
-            }
+                ? '入口（トップページ）の一番大きな一文。個人ページには出さない。'
+                : '個人ページの一番上に出る。'
+            }言い切りで · ${MAX_CHARS.memberHeadline} 字まで · ${HEADLINE_BREAK_HINT}`}
           />
         </FormSection>
         <FormDetails
@@ -601,7 +611,8 @@ export function readMemberForm(form: FormData, existing?: schema.Member) {
       slug,
       role: str(form.get('role')),
       location: str(form.get('location')),
-      headline: str(form.get('headline')),
+      // 改行は大見出しの行の変わり目。CRLF・空の行・行の前後の空きを畳んで LF の行で持つ
+      headline: headlineLines(str(form.get('headline'))).join('\n'),
       bio: str(form.get('bio')),
       skillsText: str(form.get('skillsText')),
       careerText: str(form.get('careerText')),
