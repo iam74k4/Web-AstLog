@@ -832,6 +832,7 @@
 }
 
 .link-row,
+.pair-row,
 .metric-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -851,6 +852,82 @@
 
 .link-row + .link-row {
   margin-top: var(--sp-4);
+}
+
+/*
+  見出しと説明の組の1行（AdminForm.tsx の PairRows。大事にしていること・相談の流れ）。
+  リンクの組と同じ形: 600 未満は見出しと説明を積んで組と組のあいだを空け、600 以上は横1行
+  （見出しは短いので説明に幅を譲る）
+*/
+.pair-row {
+  row-gap: var(--sp-1);
+}
+
+.pair-row + .pair-row {
+  margin-top: var(--sp-4);
+}
+
+/*
+  選ぶ欄を並べて見せる（AdminForm.tsx の AvailabilityFields。受付の状態）。1回押して保存
+  できるよう、選択肢を全部見せる（select は開くまで今の値しか見えない）。どの選択肢にも
+  公開ページに出る文を添える。選んだものは墨の線で囲む（:has は1本の規則に）
+*/
+.choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: var(--sp-2);
+}
+
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  min-height: var(--tap);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--highlight);
+  cursor: pointer;
+}
+
+.choice:has(input:checked) {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.choice input {
+  margin-top: var(--sp-1);
+  accent-color: var(--accent);
+}
+
+.choice__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.choice__label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.choice__note {
+  color: var(--ink-mid);
+  font-size: var(--fs-meta);
+  line-height: 1.6;
+}
+
+/* 概要の「受付状況」（AdminDashboard.tsx）。保存の手は欄の下に並べる */
+.dashboard-availability {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.dashboard-availability__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
 }
 
 /*
@@ -1275,7 +1352,11 @@
     grid-template-columns: 160px minmax(0, 1fr);
   }
 
-  .link-row + .link-row {
+  .pair-row {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 5fr);
+  }
+
+  :is(.link-row, .pair-row) + :is(.link-row, .pair-row) {
     margin-top: 0;
   }
 

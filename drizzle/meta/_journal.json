@@ -183,6 +183,13 @@
       "when": 1794495519363,
       "tag": "0025_drop_member_celestial",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1794760879589,
+      "tag": "0026_member_principles",
+      "breakpoints": true
     }
   ]
 }

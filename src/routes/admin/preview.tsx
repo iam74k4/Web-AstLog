@@ -14,7 +14,7 @@ import * as schema from '../../db/schema'
 import { ITEM_DOCUMENTS, ITEM_KIND_KEYS, type ItemView, type KindCounts } from '../../domain'
 import type { AppEnv } from '../../env'
 import { bool, str, yearFrom } from '../../lib/format'
-import { SITE_SETTING_KEYS, type SiteSettings, siteSettingsErrors } from '../../site'
+import { SITE_SETTING_KEYS, type SiteSettings } from '../../site'
 import {
   Band,
   Empty,
@@ -55,6 +55,7 @@ import {
 } from './items'
 import { memberErrors, memberSlugTaken, readMemberForm } from './members'
 import { db, formKeyOf, mergeErrors, parseId } from './request'
+import { readSiteForm } from './site-settings'
 
 export const previewRoutes = new Hono<AppEnv>()
 
@@ -664,11 +665,8 @@ previewRoutes.get('/preview/blocks/:id', async (c) => {
 previewRoutes.post('/preview/site', async (c) => {
   const form = await postedForm(c)
   if (!form) return c.text('フォームを読み取れませんでした。編集画面から再送してください。', 400)
-  const site = Object.fromEntries(
-    SITE_SETTING_KEYS.map((key) => [key, str(form.get(key))]),
-  ) as SiteSettings
+  const { site, errors } = readSiteForm(form)
   const screen = SCREENS.find((one) => one === (str(form.get('previewScreen')) || 'hero'))
-  const errors = siteSettingsErrors(site)
   const labels: Record<keyof SiteSettings, string> = {
     tagline: 'サイトの一言',
     heroLead: '入口の紹介文',
@@ -679,6 +677,11 @@ previewRoutes.post('/preview/site', async (c) => {
     instagram: '公開する Instagram URL',
     discord: '公開する Discord のユーザー名',
     x: '公開する X URL',
+    availability: '受付の状態',
+    availabilityReply: '返信の目安',
+    availabilityHours: '連絡のつく時間',
+    availabilityFormat: '進め方',
+    contactSteps: '相談の流れ',
   }
   const previewErrors: Record<string, string> = {}
   for (const key of SITE_SETTING_KEYS) {

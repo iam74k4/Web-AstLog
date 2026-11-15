@@ -171,6 +171,8 @@ dashboardRoutes.get('/', async (c) => {
       blockDrafts={blockDrafts}
       pages={pages}
       storage={storage}
+      availability={site}
+      flash={c.req.query('availability') === 'saved' ? '受付状況を保存しました' : null}
     />,
   )
 })

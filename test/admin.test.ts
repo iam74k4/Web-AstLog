@@ -3204,6 +3204,58 @@ describe('メンバーのフォーム', () => {
   })
 })
 
+describe('大事にしていること（見出しと説明の組の欄）', () => {
+  it('組ごとの2つの欄で受け、空いた行を畳んで1行1件で持つ。いまの組は全部と空いた行を出す', async () => {
+    const member = await seedMember({ principlesText: '一 | 説明一\n二 | 説明二\n三\n四 | 説明四' })
+    const signed = await signIn()
+    const page = await (await signed(`/admin/members/${member.id}/edit`)).text()
+    // 持っている組を切らずに全部（切ると、出なかった組が保存で黙って消える）と、空いた行を1つ
+    expect(page.match(/name="principleTitle"/g)).toHaveLength(5)
+    expect(page).toContain('value="四"')
+    expect(page).toContain('aria-label="大事にしていること 5 の見出し"')
+    expect(page).toContain('data-add-row=".pair-row"')
+
+    const saved = await signed(`/admin/members/${member.id}`, {
+      method: 'POST',
+      body: form({
+        name: member.name,
+        slug: member.slug,
+        principleTitle: ['手作業は仕組みに', '', '先に動くものを'],
+        principleText: ['二度したら自動化を考えます。', '', ''],
+      }),
+    })
+    expect(saved.status).toBe(303)
+    const row = await db().query.members.findFirst({ where: eq(schema.members.id, member.id) })
+    expect(row?.principlesText).toBe(
+      '手作業は仕組みに | 二度したら自動化を考えます。\n先に動くものを',
+    )
+  })
+
+  it('説明だけの行は何行目かを言って止め、欄を開いて打った字を返す', async () => {
+    const member = await seedMember({ principlesText: '元の組 | 元の説明' })
+    const signed = await signIn()
+    const response = await signed(`/admin/members/${member.id}`, {
+      method: 'POST',
+      body: form({
+        name: member.name,
+        slug: member.slug,
+        principleTitle: ['手作業は仕組みに', ''],
+        principleText: ['説明', '説明だけ'],
+      }),
+    })
+    expect(response.status).toBe(400)
+    const page = await response.text()
+    expect(page).toContain('2 行目は見出しを入れてください')
+    expect(page).toContain('value="説明だけ"')
+    // 畳んだ「プロフィールを詳しく書く」は開いて返す（FormDetails）
+    expect(page).toMatch(
+      /<details class="form-details" open="">\s*<summary class="form-details__summary">プロフィールを詳しく書く/,
+    )
+    const row = await db().query.members.findFirst({ where: eq(schema.members.id, member.id) })
+    expect(row?.principlesText).toBe('元の組 | 元の説明')
+  })
+})
+
 /*
   並び順（ADM-11）。欄は type=text なので、日本語入力のまま全角で入る。以前は
   Number('２０') が NaN になり、黙って 0 で保存してその行を一覧の先頭へ動かした。

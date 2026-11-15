@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { settingsVersion } from '../src/db/edit'
 import { loadSiteSettings, saveSiteSettings } from '../src/db/queries'
 import * as schema from '../src/db/schema'
-import { SITE, SITE_SETTING_LIMITS, type SiteSettings } from '../src/site'
+import { parsePairs } from '../src/lib/format'
+import { AVAILABILITY, SITE, SITE_SETTING_LIMITS, type SiteSettings } from '../src/site'
 import {
   db,
   form,
@@ -27,9 +29,32 @@ const configured: SiteSettings = {
   instagram: 'https://www.instagram.com/astlog.example',
   x: 'https://x.com/astlog_example',
   discord: 'astlog_example',
+  availability: 'open',
+  availabilityReply: '2日以内',
+  availabilityHours: '平日の夜と土日',
+  availabilityFormat: 'オンライン',
+  contactSteps:
+    'ご連絡 | メールで一言いただければ十分です。\nお話し | オンラインで30分ほど伺います。',
 }
 
 const plain = (html: string) => html.replace(/<[^>]*>/g, '')
+
+const emptyAvailability = {
+  availability: '',
+  availabilityReply: '',
+  availabilityHours: '',
+  availabilityFormat: '',
+}
+
+// サイト設定のフォームの形。相談の流れは組ごとの欄で送る（src/routes/admin/site-settings.tsx の readSiteForm）
+const siteForm = ({ contactSteps, ...rest }: SiteSettings) => {
+  const steps = parsePairs(contactSteps)
+  return form({
+    ...rest,
+    stepTitle: steps.map((step) => step.title),
+    stepText: steps.map((step) => step.text),
+  })
+}
 
 describe('サイト設定', () => {
   it('空の DB は個人データや無効な連絡先リンクを公開しない', async () => {
@@ -45,6 +70,11 @@ describe('サイト設定', () => {
       instagram: '',
       x: '',
       discord: '',
+      availability: '',
+      availabilityReply: '',
+      availabilityHours: '',
+      availabilityFormat: '',
+      contactSteps: '',
     })
     for (const path of ['/', '/all']) {
       const html = await okText(path)
@@ -60,7 +90,9 @@ describe('サイト設定', () => {
 
   it('ログインと送信元の検査を通ってから編集できる', async () => {
     expect((await get('/admin/site')).status).toBe(303)
-    expect((await get('/admin/site', { method: 'POST', body: form(configured) })).status).toBe(303)
+    expect((await get('/admin/site', { method: 'POST', body: siteForm(configured) })).status).toBe(
+      303,
+    )
     const signed = await signIn()
     expect((await signed('/admin/site')).status).toBe(200)
     expect(await (await signed('/')).text()).toContain('class="top__admin" href="/admin/site"')
@@ -68,7 +100,7 @@ describe('サイト設定', () => {
       (
         await signed('/admin/site', {
           method: 'POST',
-          body: form(configured),
+          body: siteForm(configured),
           headers: { origin: 'https://other.example' },
         })
       ).status,
@@ -78,7 +110,7 @@ describe('サイト設定', () => {
 
   it('保存した文言と連絡先をすべての公開ページ・メタデータに反映する', async () => {
     const signed = await signIn()
-    const response = await signed('/admin/site', { method: 'POST', body: form(configured) })
+    const response = await signed('/admin/site', { method: 'POST', body: siteForm(configured) })
     expect(response.status).toBe(303)
     expect(response.headers.get('location')).toBe('/admin/site?saved=1')
     expect(await loadSiteSettings(db())).toEqual(configured)
@@ -129,7 +161,14 @@ describe('サイト設定', () => {
       (
         await signed('/admin/site', {
           method: 'POST',
-          body: form({ ...configured, email: '', github: '', instagram: '', x: '', discord: '' }),
+          body: siteForm({
+            ...configured,
+            email: '',
+            github: '',
+            instagram: '',
+            x: '',
+            discord: '',
+          }),
         })
       ).status,
     ).toBe(303)
@@ -149,7 +188,7 @@ describe('サイト設定', () => {
     const signed = await signIn()
     const response = await signed('/admin/site', {
       method: 'POST',
-      body: form({ ...configured, heroLead: '' }),
+      body: siteForm({ ...configured, heroLead: '' }),
     })
     expect(response.status).toBe(303)
     expect((await loadSiteSettings(db())).heroLead).toBe('')
@@ -341,10 +380,194 @@ describe('Discord', () => {
     for (const discord of ['@iam74k4', 'iam74k4#1234', 'https://discord.com/users/1', 'a']) {
       const response = await signed('/admin/site', {
         method: 'POST',
-        body: form({ ...configured, discord }),
+        body: siteForm({ ...configured, discord }),
       })
       expect(response.status, discord).toBe(400)
       expect(await response.text(), discord).toContain('Discord のユーザー名を入れてください')
     }
+  })
+})
+
+/*
+  Contact の受付状況（Availability）と相談の流れ（How it works）。どちらもサイト設定で書いた
+  ときだけ出す。受付の状態は選ぶだけで、文は src/site.ts の AVAILABILITY が決める。状態は
+  よく変わるので、概要の「受付状況」から受付状況の4つの欄だけを1回で保存できる
+*/
+describe('受付状況と相談の流れ', () => {
+  it('書いた行だけを、連絡先の表の横（受付状況）と下（相談の流れ）に出す', async () => {
+    await saveSiteSettings(db(), configured)
+    await touch()
+    const html = await okText('/contact')
+    const at = (needle: string) => html.indexOf(needle)
+    expect(html).toContain('<h2 class="side-head" lang="en">Availability</h2>')
+    expect(html).toContain(
+      `<dt lang="en">Status</dt><dd><span class="availability__dot availability__dot--open" aria-hidden="true"></span>${AVAILABILITY.open.text}</dd>`,
+    )
+    expect(html).toContain('<dt lang="en">Response</dt><dd>2日以内</dd>')
+    expect(html).toContain('<dt lang="en">Hours</dt><dd>平日の夜と土日</dd>')
+    expect(html).toContain('<dt lang="en">Format</dt><dd>オンライン</dd>')
+    // 並びに意味がある組なので <ol>。番号は見た目だけ（読み上げは ol が渡す）
+    expect(html).toContain(
+      '<h2 class="side-head" lang="en">How it works</h2><ol class="pairs pairs--numbered">',
+    )
+    expect(html).toContain(
+      '<li class="pairs__item"><span class="pairs__number" aria-hidden="true">01</span><strong class="pairs__title">ご連絡</strong><span class="pairs__text">メールで一言いただければ十分です。</span></li>',
+    )
+    expect(html).toContain('<span class="pairs__number" aria-hidden="true">02</span>')
+    // 表 → 受付状況（同じ段の横）→ 相談の流れ（下の段）
+    expect(at('class="contact-list"')).toBeLessThan(at('class="availability"'))
+    expect(at('class="availability"')).toBeLessThan(at('class="steps"'))
+    expect(at('class="contact__body"')).toBeLessThan(at('class="availability"'))
+    // ページの h1 は1つのまま。全体ページでは Contact が h2 なので小見出しは h3
+    expect(html.match(/<h1[\s>]/g)).toHaveLength(1)
+    const whole = await okText('/all')
+    expect(whole).toContain('<h3 class="side-head" lang="en">Availability</h3>')
+    expect(whole).toContain('<h3 class="side-head" lang="en">How it works</h3>')
+  })
+
+  it('書いていない行は出さず、4つとも空なら受付状況ごと出さない', async () => {
+    await saveSiteSettings(db(), {
+      ...configured,
+      availability: '',
+      availabilityHours: '',
+      availabilityFormat: '',
+      contactSteps: '',
+    })
+    await touch()
+    const some = await okText('/contact')
+    expect(some).toContain('<dt lang="en">Response</dt>')
+    expect(some).not.toContain('<dt lang="en">Status</dt>')
+    expect(some).not.toContain('<dt lang="en">Hours</dt>')
+    expect(some).not.toContain('class="steps"')
+
+    await saveSiteSettings(db(), { ...configured, ...emptyAvailability })
+    await touch()
+    expect(await okText('/contact')).not.toContain('class="availability"')
+  })
+
+  it('状態ごとに点の形と文が決まっている。知らない状態は保存させない', async () => {
+    for (const state of Object.keys(AVAILABILITY) as (keyof typeof AVAILABILITY)[]) {
+      await saveSiteSettings(db(), { ...configured, availability: state })
+      await touch()
+      const html = await okText('/contact')
+      expect(html, state).toContain(`availability__dot--${state}`)
+      expect(html, state).toContain(AVAILABILITY[state].text)
+    }
+    const signed = await signIn()
+    const response = await signed('/admin/site', {
+      method: 'POST',
+      body: siteForm({ ...configured, availability: 'busy' }),
+    })
+    expect(response.status).toBe(400)
+    expect(await response.text()).toContain('受付の状態を選び直してください')
+  })
+
+  it('相談の流れは見出しと説明の組の欄で受け、説明だけの行と見出しの「|」は何行目かを言って止める', async () => {
+    const signed = await signIn()
+    const sent = await signed('/admin/site', {
+      method: 'POST',
+      body: form({
+        ...configured,
+        contactSteps: '',
+        stepTitle: ['ご連絡', '', 'お話し'],
+        stepText: ['メールで。', '', 'オンラインで。'],
+      }),
+    })
+    expect(sent.status).toBe(303)
+    // 空いた行は畳み、1行1件の形で持つ
+    expect((await loadSiteSettings(db())).contactSteps).toBe(
+      'ご連絡 | メールで。\nお話し | オンラインで。',
+    )
+
+    const before = await loadSiteSettings(db())
+    const broken = await signed('/admin/site', {
+      method: 'POST',
+      body: form({
+        ...configured,
+        contactSteps: '',
+        stepTitle: ['ご連絡', '', 'a|b'],
+        stepText: ['メールで。', '説明だけ', 'x'],
+      }),
+    })
+    expect(broken.status).toBe(400)
+    const page = await broken.text()
+    expect(page).toContain('2 行目は見出しを入れてください')
+    expect(page).toContain('3 行目の見出しに「|」は使えません')
+    // 打った説明は欄に残して返す
+    expect(page).toContain('value="説明だけ"')
+    expect(await loadSiteSettings(db())).toEqual(before)
+  })
+
+  it('概要の「受付状況」から、受付状況の4つの欄だけを1回で保存できる', async () => {
+    await saveSiteSettings(db(), configured)
+    await touch()
+    const signed = await signIn()
+    const dashboard = await (await signed('/admin')).text()
+    expect(dashboard).toContain('<form method="post" action="/admin/site/availability"')
+    expect(dashboard).toMatch(/<input type="radio" name="availability" value="open" checked=""\/>/)
+    expect(dashboard).toContain(AVAILABILITY.closed.text)
+
+    const response = await signed('/admin/site/availability', {
+      method: 'POST',
+      body: form({
+        availability: 'closed',
+        availabilityReply: '1週間以内',
+        availabilityHours: '',
+        availabilityFormat: 'オンライン',
+      }),
+    })
+    expect(response.status).toBe(303)
+    // 頭の知らせ（保存しました）が見えるよう、節へは飛ばさない（節は概要の2つ目で、頭のすぐ下）
+    expect(response.headers.get('location')).toBe('/admin?availability=saved')
+    // 受付状況の欄だけが変わる（ほかの欄は送っていないが消えない）
+    expect(await loadSiteSettings(db())).toEqual({
+      ...configured,
+      availability: 'closed',
+      availabilityReply: '1週間以内',
+      availabilityHours: '',
+    })
+    // 公開ページの写しの版も上がる（管理画面の書き込み。touchSiteOnWrite）
+    const contact = await okText('/contact')
+    expect(contact).toContain('availability__dot--closed')
+    expect(contact).toContain(AVAILABILITY.closed.text)
+    expect(contact).not.toContain('平日の夜と土日')
+    expect(await (await signed('/admin?availability=saved')).text()).toContain(
+      '受付状況を保存しました',
+    )
+  })
+
+  it('概要で受付状況を変えたあと、開いたままのサイト設定は上書きせず競合を返す', async () => {
+    await saveSiteSettings(db(), configured)
+    const signed = await signIn()
+    const opened = await settingsVersion(db(), 'site.')
+    await signed('/admin/site/availability', {
+      method: 'POST',
+      body: form({ ...emptyAvailability, availability: 'closed' }),
+    })
+    const stale = await signed('/admin/site', {
+      method: 'POST',
+      body: (() => {
+        const body = siteForm(configured)
+        body.set('_version', opened)
+        return body
+      })(),
+    })
+    expect(stale.status).toBe(409)
+    expect((await loadSiteSettings(db())).availability).toBe('closed')
+  })
+
+  it('知らない状態を概要から送ると、サイト設定の画面で欄を示して返し、何も書かない', async () => {
+    await saveSiteSettings(db(), configured)
+    const before = await loadSiteSettings(db())
+    const signed = await signIn()
+    const response = await signed('/admin/site/availability', {
+      method: 'POST',
+      body: form({ ...emptyAvailability, availability: 'busy' }),
+    })
+    expect(response.status).toBe(400)
+    const page = await response.text()
+    expect(page).toContain('受付の状態を選び直してください')
+    expect(page).toContain('action="/admin/site"')
+    expect(await loadSiteSettings(db())).toEqual(before)
   })
 })

@@ -30,7 +30,7 @@ INSERT INTO blocks (type, published, sort_order) VALUES
 
 -- 見本の人。紹介文・技術・経歴は、本番の1人のサイトと同じくらいの長さと形（段落3つ、技術の
 -- 塊3つに補足、経歴3行で1行目が「現在」）にしてある。check:fit がこの長さで版面を測る
-INSERT INTO members (id, slug, name, name_latin, role, location, headline, bio, skills_text, career_text, avatar_url, github, email, published, sort_order)
+INSERT INTO members (id, slug, name, name_latin, role, location, headline, bio, skills_text, career_text, principles_text, avatar_url, github, email, published, sort_order)
 VALUES (
   1,
   'mihon',
@@ -69,6 +69,9 @@ Playwright',
   '2023.04 — 現在 | ソフトウェアエンジニア / 業務システム部 | 株式会社サンプル
 2023.03 卒業 | 情報工学部 情報工学科 | 見本工科大学
 2019.03 卒業 | 情報処理科 | 見本情報専門学校',
+  '手作業は仕組みに | 同じ作業を二度したら、自動化できないかを先に考えます。
+先に動くものを | 説明より先に、触れる試作で確かめます。
+知見は配る | 分かったことは勉強会や文書にして、チームの道具にします。',
   '/images/avatars/avatar.png',
   'https://github.com/example',
   'hanako@example.com',
@@ -258,4 +261,9 @@ INSERT OR REPLACE INTO settings (key, value) VALUES
   ('site.email', 'hanako@example.com'),
   ('site.github', 'https://github.com/example'),
   ('site.instagram', ''),
-  ('site.x', '');
+  ('site.x', ''),
+  ('site.availability', 'open'),
+  ('site.availabilityReply', '2日以内'),
+  ('site.availabilityHours', '平日の夜と土日（日本時間）'),
+  ('site.availabilityFormat', 'オンライン'),
+  ('site.contactSteps', 'ご連絡 | メールで、やりたいことを一言いただければ十分です。' || char(10) || 'お話し | オンラインで30分ほど、目的と制約を伺います。' || char(10) || 'ご提案 | 進め方と期間の目安を、文書でお送りします。' || char(10) || '開発 | 動くものを早めにお見せし、確かめながら進めます。');

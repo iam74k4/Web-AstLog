@@ -1731,9 +1731,16 @@ describe('動き', () => {
     }
   })
 
-  it('締めの幕開け（Contact）は入口と同じ rise と間で、1文 → 表の行の順に1回だけ', () => {
-    expect(bodyOf(sheet, '.contact > .contact__lead,')).toContain(
+  it('締めの幕開け（Contact）は入口と同じ rise と間で、1文 → 表の行 → 相談の流れの順に1回だけ', () => {
+    expect(bodyOf(sheet, '.contact__main > .contact__lead,')).toContain(
       'animation: rise var(--dur-reveal) var(--ease) both',
+    )
+    // 受付状況は表の2行目と一緒に、相談の流れは表の行（5段目まで）のあと
+    expect(bodyOf(sheet, '.contact .availability {')).toContain(
+      'animation-delay: calc(var(--stagger) * 2)',
+    )
+    expect(bodyOf(sheet, '.contact .steps {')).toContain(
+      'animation-delay: calc(var(--stagger) * 6)',
     )
     expect(bodyOf(sheet, '.contact .contact-list__row:nth-child(1) {')).toContain(
       'animation-delay: var(--stagger)',

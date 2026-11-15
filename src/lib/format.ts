@@ -97,6 +97,34 @@ export function skillRows(skills: SkillGroup['skills']): SkillRow[] {
 }
 
 /*
+  見出しと説明の組（メンバーの「大事にしていること」と、Contact の「相談の流れ」）。1行 =
+  「見出し | 説明」で、切るのは最初の「|」だけ——説明の中の「|」はそのまま残す（見出しに「|」は
+  入れさせない。管理画面の pairRowErrors）。見出しの無い行も落とさずに返す: 管理画面が弾いた
+  入力をそのまま描き直すため。公開ページは見出しのある組だけを描く（components.tsx の PairList）
+*/
+export type Pair = { title: string; text: string }
+
+export function parsePairs(text: string): Pair[] {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const at = line.indexOf('|')
+      return at < 0
+        ? { title: line, text: '' }
+        : { title: line.slice(0, at).trim(), text: line.slice(at + 1).trim() }
+    })
+}
+
+// parsePairs の逆。空の組は畳む（1行ずつの欄の、空いた行）
+export const pairsText = (pairs: Pair[]) =>
+  pairs
+    .filter((pair) => pair.title || pair.text)
+    .map((pair) => (pair.text ? `${pair.title} | ${pair.text}` : pair.title))
+    .join('\n')
+
+/*
   1行1件・「|」区切りのテキストを、列の配列に開く。
 
   経歴も、ブロック（数字・リンク集・できごと …）の body も、どれもこの形。

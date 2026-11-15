@@ -5,6 +5,7 @@ import { headlineText } from '../../lib/format'
 import { plainText } from '../../lib/markdown'
 import { SITE, type SiteSettings } from '../../site'
 import {
+  AboutParts,
   CareerGroups,
   Empty,
   HeadlinePhrases,
@@ -15,7 +16,7 @@ import {
   Screen,
   SectionHead,
   SkillGroups,
-  StoryParts,
+  shownPairs,
 } from '../../ui/components'
 import { describe, nameWithRole, sentences } from './meta'
 
@@ -23,7 +24,7 @@ import { describe, nameWithRole, sentences } from './meta'
   個人ページ（/members/<slug>）の中身。1ページに縦に並べる。
 
     名札・大見出し（Hero）      h1 は大見出し、無ければ名札の名前
-    About   #about              紹介文（h2）
+    About   #about              紹介文と大事にしていること（h2）
     Skills  #skills             技術（h2。塊の小見出しは h3）
     Career  #career             経歴（h2）
 
@@ -72,7 +73,7 @@ export function memberPage(
   titled = false,
 ) {
   // 開き方は src/blocks.ts の memberUnits が正（全体ページの Profile の節も同じ式を読む）
-  const { about, skills, career } = memberUnits(member)
+  const { about, principles, skills, career } = memberUnits(member)
 
   /*
     説明文は、このページに出ている大見出しと紹介文の1段落目をつないだもの（検索結果と
@@ -116,9 +117,12 @@ export function memberPage(
       {/* 添えは置かない。訳語（紹介）は見出しを2度言うだけ */}
       <Screen id="about" label="About">
         <SectionHead title="About" chapter />
-        {/* 小節の見出しが h2 なので、Work / Personal の小見出しは h3（Skills の塊と同じ） */}
-        {about.length ? (
-          <StoryParts parts={about} level={3} />
+        {/*
+          小節の見出しが h2 なので、Principles・Work / Personal の小見出しは h3（Skills の塊と
+          同じ）。紹介文も大事にしていることも無ければ「準備中です」
+        */}
+        {about.length || shownPairs(principles) ? (
+          <AboutParts parts={about} principles={principles} level={3} />
         ) : (
           <Note paragraphs={[]}>
             <Empty>準備中です</Empty>

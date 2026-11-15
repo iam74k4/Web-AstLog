@@ -2,6 +2,7 @@ import type { Child } from 'hono/jsx'
 import { blockLines, blockShown, blockTexts, blockType, itemStory, memberUnits } from '../../blocks'
 import type * as schema from '../../db/schema'
 import { KIND_LABEL, KIND_NAME } from '../../domain'
+import { parsePairs } from '../../lib/format'
 import { plainText } from '../../lib/markdown'
 import { heroRoleWords, SITE } from '../../site'
 import {
@@ -388,6 +389,8 @@ export function renderBlock(
             x={site.x}
             instagram={site.instagram}
             discord={site.discord}
+            availability={site}
+            steps={parsePairs(site.contactSteps)}
             whole={whole}
           />
         ),
