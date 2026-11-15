@@ -1442,6 +1442,7 @@ body[data-site] > .frame {
   狭いほう。塊は上にそろえる（長さが違っても、小見出しが同じ高さに並ぶ）
 */
 .story-parts--columns {
+  container: about-parts / inline-size;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--about-col)), 1fr));
   align-items: start;
@@ -1449,13 +1450,17 @@ body[data-site] > .frame {
 }
 
 /*
-  横に並んだとき、短いほうの塊は読み進めるあいだ帯の下に残る（長い Work の横で、短い Personal の
-  下が丸ごと白く空いた）。動くのは短いほうだけ——長いほうは行の高さいっぱいで、ずれる余地が無い。
-  縦に積んだときも同じで、どの塊も自分の高さの行に居るので動かない
+  横に並んだとき（--about-col × 2 + 間 --sp-7 = 752px。クエリの条件には段を書けないので、和を
+  ここに書く）、短いほうの塊は読み進めるあいだ帯の下に残る（長い Work の横で、短い Personal の
+  下が丸ごと白く空いた）。動くのは短いほうだけ——長いほうは格子の高さいっぱいで、ずれる余地が無い。
+  縦に積む幅では貼らない——貼り付けが動ける範囲は自分の行ではなく格子の全体なので、上の塊が
+  帯の下に残り、下の塊がその上へ重なって流れた
 */
-.story-parts--columns > * {
-  position: sticky;
-  top: var(--top-clear);
+@container about-parts (min-width: 752px) {
+  .story-parts--columns > * {
+    position: sticky;
+    top: var(--top-clear);
+  }
 }
 
 /*
