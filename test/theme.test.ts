@@ -1180,6 +1180,36 @@ describe('部品の作法', () => {
   一覧の行（Projects の索引）。列の数を数える規則は持たない——1列の行を縦に並べ、
   行の中の区画の幅だけを :root の段で決める（広い画面ほど本文が細る、を起こさない）。
 */
+describe('Profile と Contact の並べ方', () => {
+  it('About の塊が横に並ぶとき、短いほうは帯の下に残る（長いほうは行いっぱいで動かない）', () => {
+    const rule = bodyOf(sheet, '.story-parts--columns > * {')
+    expect(rule).toContain('position: sticky')
+    expect(rule).toContain('top: var(--top-clear)')
+    // 塊は上にそろえる（伸ばすと短いほうも行いっぱいになり、残らない）
+    expect(bodyOf(sheet, '.story-parts--columns {')).toContain('align-items: start')
+  })
+
+  it('連絡先の表と受付状況が横に並ぶ幅では、2つの表の上の罫線を同じ高さにそろえる', () => {
+    expect(bodyOf(sheet, '.contact {')).toContain('container: contact / inline-size')
+    // 条件は2つの下限と間の和（--contact-main 400 + --availability-col 260 + --sp-7 32）
+    const wide = blockAt(sheet, '@container contact (min-width: 692px) {')
+    expect(bodyOf(wide, '.contact__body {')).toContain('display: grid')
+    expect(bodyOf(wide, '.contact__main,\n  .availability {')).toContain('display: contents')
+    expect(bodyOf(wide, '.contact-list {')).toContain('grid-area: 2 / 1')
+    expect(bodyOf(wide, '.availability__list {')).toContain('grid-area: 2 / 2')
+    expect(bodyOf(wide, '.availability > .side-head {')).toContain('align-self: end')
+    expect(sheet).toContain('--contact-main: 400px;')
+    expect(sheet).toContain('--availability-col: 260px;')
+  })
+
+  it('受付の状態の選択肢は 600 以上で2つずつ。添えの文は1字だけ落とさない', () => {
+    expect(bodyOf(blockAt(adminSheet, '@media (min-width: 600px) {'), '.choices {')).toContain(
+      'grid-template-columns: repeat(2, minmax(0, 1fr))',
+    )
+    expect(bodyOf(adminSheet, '.choice__note {')).toContain('text-wrap: pretty')
+  })
+})
+
 describe('一覧の行', () => {
   it('行は1列に縦に並べる。列を数える規則も、サーバーから数を受け取る口も持たない', async () => {
     expect(sheet).not.toContain('--cols')
@@ -1735,9 +1765,9 @@ describe('動き', () => {
     expect(bodyOf(sheet, '.contact__main > .contact__lead,')).toContain(
       'animation: rise var(--dur-reveal) var(--ease) both',
     )
-    // 受付状況は表の2行目と一緒に、相談の流れは表の行（5段目まで）のあと
-    expect(bodyOf(sheet, '.contact .availability {')).toContain(
-      'animation-delay: calc(var(--stagger) * 2)',
+    // 受付状況は表の最後の行と一緒に、相談の流れはそのあと（狭い画面で表の下の受付状況が先に入らない）
+    expect(bodyOf(sheet, '.contact .availability > * {')).toContain(
+      'animation-delay: calc(var(--stagger) * 5)',
     )
     expect(bodyOf(sheet, '.contact .steps {')).toContain(
       'animation-delay: calc(var(--stagger) * 6)',

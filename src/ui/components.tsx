@@ -1139,7 +1139,25 @@ export const ItemShots = ({ images }: { images: ItemImage[] }) =>
               key={image.url || `thumb-${index}`}
             >
               <span class="gallery__mini">
-                {isVideoUrl(image.url) || !image.url ? (
+                {/*
+                  動画は1コマ目を見本にし（本文の Clip と同じ #t=0.1 と preload="metadata"。controls を
+                  持たない video は押す部品にならないので、押し手の中に置ける）、上に再生の印を重ねる。
+                  灰色の面に ▷ だけだったころは、静止画の見本と並ぶと作りかけに見えた
+                */}
+                {isVideoUrl(image.url) ? (
+                  <>
+                    <video
+                      src={`${image.url}#t=0.1`}
+                      muted
+                      playsinline
+                      preload="metadata"
+                      aria-hidden="true"
+                    />
+                    <span class="gallery__play" aria-hidden="true">
+                      ▷
+                    </span>
+                  </>
+                ) : !image.url ? (
                   <span aria-hidden="true">▷</span>
                 ) : (
                   <img src={image.url} alt="" loading="lazy" decoding="async" />

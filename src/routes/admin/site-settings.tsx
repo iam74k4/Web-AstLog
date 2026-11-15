@@ -92,13 +92,17 @@ const SiteSettingsPage = (props: {
           { value: 'contact', label: 'Contact' },
           { value: 'all', label: '全体' },
         ]}
-        hint="Profile / Team は、公開中のメンバーが1人ならプロフィール、複数ならメンバー一覧です。画面の選択は設定として保存されません"
+        hint="欄に触れると、その欄が出る画面に切り替わります。Profile / Team は、公開中のメンバーが1人ならプロフィール、複数ならメンバー一覧です。画面の選択は設定として保存されません"
       />
       <PlacementHint label="表示される場所">
         入口の紹介文 → トップページ ／ Contact の案内文・受付状況・相談の流れ → お問い合わせ ／
         GitHub・Instagram・X・Discord・Mail → ページ下部
       </PlacementHint>
-      <FormSection title="サイトの紹介" note="入口の文章と、サイト全体の短い紹介を設定します。">
+      <FormSection
+        title="サイトの紹介"
+        note="入口の文章と、サイト全体の短い紹介を設定します。"
+        preview="hero"
+      >
         <Field
           label="サイトの一言"
           name="tagline"
@@ -127,7 +131,11 @@ const SiteSettingsPage = (props: {
           error={props.errors?.heroRoles}
         />
       </FormSection>
-      <FormSection title="お問い合わせ" note="Contact とページ下部に表示する連絡先です。">
+      <FormSection
+        title="お問い合わせ"
+        note="Contact とページ下部に表示する連絡先です。"
+        preview="contact"
+      >
         <Area
           rows={3}
           label="Contact の案内文"
@@ -186,10 +194,15 @@ const SiteSettingsPage = (props: {
       <FormSection
         title="受付状況"
         note="Contact の連絡先の表の横に出します。状態は概要の画面からも変えられます。"
+        preview="contact"
       >
         <AvailabilityFields site={props.site} errors={props.errors} />
       </FormSection>
-      <FormSection title="相談の流れ" note="Contact の下に、連絡から始まる手順を横に並べます。">
+      <FormSection
+        title="相談の流れ"
+        note="Contact の下に、連絡から始まる手順を横に並べます。"
+        preview="contact"
+      >
         <PairRows
           legend="手順"
           name="contactSteps"

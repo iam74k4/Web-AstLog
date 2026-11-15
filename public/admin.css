@@ -867,6 +867,11 @@
   margin-top: var(--sp-4);
 }
 
+/* 説明の欄は2行ぶん（rows）の高さ。ほかの複数行の欄の下限（.input--area）は持たない */
+.pair-row .input--area {
+  min-height: 0;
+}
+
 /*
   選ぶ欄を並べて見せる（AdminForm.tsx の AvailabilityFields。受付の状態）。1回押して保存
   できるよう、選択肢を全部見せる（select は開くまで今の値しか見えない）。どの選択肢にも
@@ -874,7 +879,7 @@
 */
 .choices {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-2);
 }
 
@@ -915,6 +920,9 @@
   color: var(--ink-mid);
   font-size: var(--fs-meta);
   line-height: 1.6;
+  /* 1字だけ次の行へ落ちる折れ（「受け付けていま / す」）を避ける */
+  word-break: auto-phrase;
+  text-wrap: pretty;
 }
 
 /* 概要の「受付状況」（AdminDashboard.tsx）。保存の手は欄の下に並べる */
@@ -1352,8 +1360,17 @@
     grid-template-columns: 160px minmax(0, 1fr);
   }
 
+  /*
+    受付の状態の選択肢は2つずつ（4つを1列に並べると1つの幅が狭く、添えの文が細かく折れた）
+  */
+  .choices {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* 見出しは説明の欄の1行目にそろえる（説明は2行の欄） */
   .pair-row {
     grid-template-columns: minmax(0, 2fr) minmax(0, 5fr);
+    align-items: start;
   }
 
   :is(.link-row, .pair-row) + :is(.link-row, .pair-row) {

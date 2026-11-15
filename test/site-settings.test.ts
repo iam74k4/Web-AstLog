@@ -4,6 +4,7 @@ import { loadSiteSettings, saveSiteSettings } from '../src/db/queries'
 import * as schema from '../src/db/schema'
 import { parsePairs } from '../src/lib/format'
 import { AVAILABILITY, SITE, SITE_SETTING_LIMITS, type SiteSettings } from '../src/site'
+import { ADMIN_BEHAVIOR } from '../src/ui/admin-behavior'
 import {
   db,
   form,
@@ -494,8 +495,37 @@ describe('受付状況と相談の流れ', () => {
     expect(page).toContain('2 行目は見出しを入れてください')
     expect(page).toContain('3 行目の見出しに「|」は使えません')
     // 打った説明は欄に残して返す
-    expect(page).toContain('value="説明だけ"')
+    expect(page).toMatch(/<textarea[^>]*>説明だけ<\/textarea>/)
     expect(await loadSiteSettings(db())).toEqual(before)
+  })
+
+  it('サイト設定の節は、触れると横の完成形をその欄が出る画面へ替える', async () => {
+    const signed = await signIn()
+    const page = await (await signed('/admin/site')).text()
+    expect(page).toContain('<section class="form-section" data-preview-screen="hero">')
+    expect(page.match(/data-preview-screen="contact"/g)).toHaveLength(3)
+    // 替えるのは管理画面の補助（許可したハッシュの1本）。補助が動かなければ頭の選択で選ぶ
+    expect(ADMIN_BEHAVIOR).toContain("document.querySelectorAll('[data-preview-screen]')")
+    expect(page).toContain('欄に触れると、その欄が出る画面に切り替わります')
+  })
+
+  it('組の説明の欄は2行。打った改行は文の継ぎ目に畳んで1組1行で持つ', async () => {
+    const signed = await signIn()
+    const sent = await signed('/admin/site', {
+      method: 'POST',
+      body: form({
+        ...configured,
+        contactSteps: '',
+        stepTitle: ['ご連絡'],
+        stepText: ['メールで、\r\nやりたいことを一言。\r\nDiscord\r\nでも。'],
+      }),
+    })
+    expect(sent.status).toBe(303)
+    expect((await loadSiteSettings(db())).contactSteps).toBe(
+      'ご連絡 | メールで、やりたいことを一言。 Discord でも。',
+    )
+    const page = await (await signed('/admin/site')).text()
+    expect(page).toMatch(/<textarea class="input input--area" name="stepText" rows="2"/)
   })
 
   it('概要の「受付状況」から、受付状況の4つの欄だけを1回で保存できる', async () => {
