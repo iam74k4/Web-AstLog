@@ -34,7 +34,8 @@ const AdminHead = ({ title }: { title: string }) => (
 
 export const AdminLayout = (props: {
   title: string
-  active: 'dashboard' | 'members' | 'items' | 'blocks' | 'site' | 'account'
+  // 目次のどの行にも印を付けない画面（管理画面の中の 404）は 'none'
+  active: 'dashboard' | 'members' | 'items' | 'blocks' | 'site' | 'account' | 'none'
   // いま誰として入っているか（最後にログインしたアカウントの @ログイン名かメールアドレス）
   account: string
   flash?: string | null

@@ -190,11 +190,13 @@ export function yearInJapan(now: Date = new Date()): number {
 }
 
 /*
-  D1 の datetime('now')（UTC の「YYYY-MM-DD HH:MM:SS」）を、日本時間の
-  「YYYY-MM-DD HH:MM」にする。管理画面の「最後のログイン」。読めない値はそのまま返す
+  UTC の時刻を日本時間の「YYYY-MM-DD HH:MM」にする。来る形は2つ——D1 の datetime('now')
+  （「YYYY-MM-DD HH:MM:SS」。最後のログイン）と、ISO の時刻（「…T…Z」。作品の更新日時・外した
+  画像の日付）。時差の印が無ければ UTC として読む。読めない値はそのまま返す
 */
 export function timeInJapan(utc: string): string {
-  const date = new Date(`${utc.replace(' ', 'T')}Z`)
+  const iso = utc.replace(' ', 'T')
+  const date = new Date(/(?:Z|[+-]\d\d:\d\d)$/.test(iso) ? iso : `${iso}Z`)
   if (Number.isNaN(date.getTime())) return utc
   return new Date(date.getTime() + JST_OFFSET_MS).toISOString().slice(0, 16).replace('T', ' ')
 }
@@ -209,6 +211,37 @@ type FormValue = string | File | null | undefined
 export function str(value: FormValue): string {
   return typeof value === 'string' ? value.trim() : ''
 }
+
+/*
+  大見出し（members.headline）の行。管理画面の欄で打った改行が、そのまま大見出しの行の
+  変わり目になる（行の組み方は src/ui/components.tsx の headlinePhrases）。行の前後の空きと
+  空の行は捨てる——空の行を残すと、見出しの中に字の無い1行ぶんの穴が空く。
+  保存のときにこの形へ畳む（src/routes/admin/members.tsx の readMemberForm。フォームは改行を
+  CRLF で送ってくる）
+*/
+export const headlineLines = (text: string) =>
+  text
+    .split(/\r\n?|\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== '')
+
+// 和文の字（かな・漢字・和文の約物・全角）。行の継ぎ目に空きを置くかを決める
+const WIDE = /[　-ヿ㐀-䶿一-鿿豈-﫿＀-￯]/
+
+/*
+  大見出しを1行の文に畳む。行を改めない場所（説明文・読み上げの名前・Team のカード・
+  lang の判定）はこれを読む。改行のまま渡すと、lang の判定（langOf）は改行を英字と見なさず、
+  英字だけの大見出しに lang="en" が付かなくなる。
+  継ぎ目は、両側が和文なら詰め、片側でも欧文なら半角の空きを1つ（英数字と日本語の
+  あいだに半角の空き、の決まりと同じ）
+*/
+export const lineJoint = (before: string, after: string) =>
+  WIDE.test([...before].at(-1) ?? '') && WIDE.test([...after][0] ?? '') ? '' : ' '
+
+export const headlineText = (text: string) =>
+  headlineLines(text)
+    .map((line, i, lines) => (i === 0 ? line : `${lineJoint(lines[i - 1] ?? '', line)}${line}`))
+    .join('')
 
 /*
   人が打った整数（並び順）と、フォームが送る id（担当メンバー）を読む。

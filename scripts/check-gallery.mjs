@@ -21,7 +21,7 @@ try {
       if (/Content Security Policy|Refused to execute/.test(message.text()))
         errors.push(message.text())
     })
-    await page.goto(`${server.base}/apps/item/appmixer`)
+    await page.goto(`${server.base}/apps/item/sample-mixer`)
     const root = page.locator('.shots--showcase')
     await root.waitFor()
     const thumbs = root.locator('.gallery__thumb')
@@ -89,7 +89,7 @@ try {
     javaScriptEnabled: false,
     viewport: { width: 390, height: 844 },
   })
-  await noJS.goto(`${server.base}/apps/item/appmixer`)
+  await noJS.goto(`${server.base}/apps/item/sample-mixer`)
   assert.equal(await noJS.locator('.gallery__item:visible').count(), 5)
   assert.equal(await noJS.locator('.gallery__controls').isVisible(), false)
   assert.equal(await noJS.locator('.gallery__image').first().getAttribute('target'), '_blank')

@@ -7,6 +7,7 @@ import { pageCache } from './lib/page-cache'
 import { adminRoutes } from './routes/admin/index'
 import { publicRoutes } from './routes/public/routes'
 import { SITE } from './site'
+import { AdminLayout } from './ui/AdminLayout'
 import { ADMIN_CSP } from './ui/admin-behavior'
 import {
   Brand,
@@ -192,8 +193,31 @@ const ErrorPage = ({
   次の一手（下のトップへの道）だけを置く。断定しない——こちらからは、
   変わったのか打ち間違えたのかを見分けられない。
 */
-app.notFound((c) =>
-  c.html(
+/*
+  404。ログインして管理画面の中に居る人（認証の壁を通った /admin/*。account が入っている）には、
+  管理画面の外枠のまま出す——公開ページの 404 を出していたころは、消した作品の編集画面を開いた
+  だけで管理画面の目次が消え、戻る手が公開サイトの「Home」しか無かった
+*/
+app.notFound((c) => {
+  const account = c.get('account')
+  // プレビュー（/admin/preview/*）は script を許さない枠の中に出るので、補助を持つ管理の外枠にしない
+  if (account && /^\/admin(\/|$)/.test(c.req.path) && !/^\/admin\/preview(\/|$)/.test(c.req.path)) {
+    return c.html(
+      <AdminLayout title="ページが見つかりません" active="none" account={account}>
+        <div class="admin-head">
+          <h1>ページが見つかりません</h1>
+        </div>
+        <div class="empty-state">
+          <p>消したあとか、URL が変わったのかもしれません。</p>
+          <a class="btn btn--primary" href="/admin">
+            概要へ戻る
+          </a>
+        </div>
+      </AdminLayout>,
+      404,
+    )
+  }
+  return c.html(
     <ErrorPage
       code="404"
       label="Not Found"
@@ -201,8 +225,8 @@ app.notFound((c) =>
       detail="URL が変わったか、打ち間違えているかもしれません。"
     />,
     404,
-  ),
-)
+  )
+})
 
 /*
   500 のログ（Workers Logs）には、要求の method と path（query は書かない）と、例外の連なり

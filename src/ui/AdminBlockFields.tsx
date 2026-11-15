@@ -1,5 +1,5 @@
 import { BLOCK_COLUMNS, BLOCK_ROW_NOTES } from '../block-editor'
-import { Area } from './AdminForm'
+import { AddRow, Area } from './AdminForm'
 
 export const BlockBodyFields = ({
   type,
@@ -37,7 +37,7 @@ export const BlockBodyFields = ({
     <fieldset class="block-fields field--wide">
       <legend>内容を組み立てる</legend>
       <p class="field__hint">
-        1行が1件です。空の行は表示されません。保存すると追加の入力欄ができます。
+        1行が1件です。空の行は表示されません。
         {BLOCK_ROW_NOTES[type] ? `${BLOCK_ROW_NOTES[type]}。` : null}
       </p>
       {error ? (
@@ -63,6 +63,7 @@ export const BlockBodyFields = ({
           ))}
         </div>
       ))}
+      <AddRow rows=".block-fields__row" />
     </fieldset>
   )
 }

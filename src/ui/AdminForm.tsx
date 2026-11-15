@@ -167,8 +167,13 @@ export const Area = (props: {
   */
   required?: boolean
   maxlength?: number
+  /*
+    欄の格子の半分の幅に置く（既定は1行ぶん全部）。短い複数行の欄（大見出し）を、
+    隣の1行の欄と並べるときだけ。広げると隣の欄の横が空く
+  */
+  half?: boolean
 }) => (
-  <label class="field field--wide">
+  <label class={props.half ? 'field' : 'field field--wide'}>
     <span class="field__label" id={`field-${props.name}-label`}>
       {props.label}
     </span>
@@ -219,6 +224,57 @@ export const Select = (props: {
     </select>
     <Feedback {...props} />
   </label>
+)
+
+/*
+  前の URL（slug を変えたときに残る転送の行。src/db/schema.ts の item_slug_redirects /
+  member_slug_redirects）。見えるようにして、転送をやめる手を持つ——転送に使っている slug は
+  ほかの行が使えないので（貼られた URL が黙って別の行を指さないように）、打ち間違いで作った
+  前の URL を空けるには D1 を直に消すしかなかった。フォームに出すのは、いまある転送だけ
+*/
+export const SlugRedirects = (props: {
+  redirects: { slug: string; href: string }[]
+  // 弾いたあとの描き直しで、付けた印を残す
+  dropped?: readonly string[]
+  // 「ほかの作品」「ほかのメンバー」
+  others: string
+}) =>
+  props.redirects.length ? (
+    <fieldset class="field field--wide fieldset">
+      <legend class="field__label">前の URL（いまの URL へ転送中）</legend>
+      {props.redirects.map((one) => (
+        <label class="check" key={one.slug}>
+          <input
+            type="checkbox"
+            name="dropRedirect"
+            value={one.slug}
+            checked={props.dropped?.includes(one.slug)}
+          />
+          {one.href} の転送をやめる
+        </label>
+      ))}
+      <span class="field__hint">
+        印を付けて保存すると、その URL は見つからなくなり（404）、{props.others}の URL
+        に使えるようになります。貼ったリンクが残っているなら、そのままにします
+      </span>
+    </fieldset>
+  ) : null
+
+/*
+  行を足す手（リンク・ブロックの行）。管理画面の補助（admin-behavior.ts）が、いちばん後ろの行を
+  空にして写す。補助が動くまで押せないので、初めは隠しておく（hidden。補助が外す）——
+  JavaScript が無ければ、今までどおり保存して開き直すと空いた行が出る（noscript の案内）。
+  rows は、同じ親の中で行を選ぶセレクタ
+*/
+export const AddRow = ({ rows }: { rows: string }) => (
+  <>
+    <button type="button" class="btn btn--ghost add-row" data-add-row={rows} hidden>
+      ＋ 行を足す
+    </button>
+    <noscript>
+      <span class="field__hint">もっと足すときは、保存してから開き直すと空いた行が出る</span>
+    </noscript>
+  </>
 )
 
 export const PublishToggle = ({ published }: { published: number }) => (

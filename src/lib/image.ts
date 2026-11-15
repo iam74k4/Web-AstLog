@@ -36,9 +36,6 @@ export const IMAGE_ACCEPT = IMAGE_FORMATS.map((format) => format.type).join(',')
 
 export const IMAGE_LABELS = IMAGE_FORMATS.map((format) => format.label).join('・')
 
-export const isImageType = (type: string | undefined | null): type is string =>
-  IMAGE_FORMATS.some((format) => format.type === type)
-
 /*
   動画。作品のほかの画像（スクリーンショット）の欄でだけ受ける（src/routes/admin/images.ts の
   pickImages）。iPhone の Safari と Chrome のどちらでも再生できるのは H.264 の映像。入れ物は
@@ -82,7 +79,7 @@ export function imageTypeOfPath(path: string): string | undefined {
 
 /*
   判定の結果。width / height は読めたときだけ（共有カードの og:image:width /
-  height と twitter:card の大きさ、作品のページの横の帯の幅を決めるのに使う）。
+  height と twitter:card の大きさ、作品のページのギャラリーの img の寸法に使う）。
   読めないときは無しで返し、呼ぶ側は寸法を名乗らない。
 */
 export type SniffedImage = ImageFormat & { width?: number; height?: number }

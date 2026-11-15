@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   chunk,
+  headlineLines,
+  headlineText,
   int,
   isHttpsUrl,
   isSafeUrl,
@@ -10,10 +12,44 @@ import {
   parseSkills,
   parseTags,
   skillRows,
+  timeInJapan,
   toSlug,
   yearFrom,
   yearInJapan,
 } from '../src/lib/format'
+
+/*
+  大見出しの改行（管理画面の欄で Enter）。打った行が見出しの行の変わり目になり、1行に畳む場所
+  （説明文・読み上げの名前・Team のカード・lang の判定）は継ぎ目に空きを置くか詰めるかを決める
+*/
+describe('headlineLines / headlineText', () => {
+  it('CRLF・空の行・行の前後の空きを畳み、打った行だけを残す', () => {
+    expect(headlineLines('  Harder, Better,\r\n\r\n  Faster, Stronger.  \n')).toEqual([
+      'Harder, Better,',
+      'Faster, Stronger.',
+    ])
+    expect(headlineLines('')).toEqual([])
+    expect(headlineLines('つくる工程そのものを、速くする。')).toEqual([
+      'つくる工程そのものを、速くする。',
+    ])
+  })
+
+  it('1行に畳むとき、両側が和文なら詰め、片側でも欧文なら半角の空きを1つ置く', () => {
+    expect(headlineText('Harder, Better,\nFaster, Stronger.')).toBe(
+      'Harder, Better, Faster, Stronger.',
+    )
+    expect(headlineText('つくる工程そのものを、\r\n速くする。')).toBe(
+      'つくる工程そのものを、速くする。',
+    )
+    // 英数字と日本語のあいだは半角の空き（文言の決まり）
+    expect(headlineText('アプリを\nSwift でつくる')).toBe('アプリを Swift でつくる')
+    expect(headlineText('Swift で\nつくる')).toBe('Swift でつくる')
+    // 改行が無ければそのまま
+    expect(headlineText('Harder, Better, Faster, Stronger.')).toBe(
+      'Harder, Better, Faster, Stronger.',
+    )
+  })
+})
 
 describe('parseSkills', () => {
   it('末尾が : の行でグループを分ける', () => {
@@ -215,6 +251,16 @@ describe('yearInJapan', () => {
   it('日本時間で年を数える。UTC の大晦日 15 時は、日本ではもう元日', () => {
     expect(yearInJapan(new Date('2026-12-31T14:59:59Z'))).toBe(2026)
     expect(yearInJapan(new Date('2026-12-31T15:00:00Z'))).toBe(2027)
+  })
+})
+
+describe('timeInJapan', () => {
+  it('D1 の datetime と ISO の時刻のどちらも、日本時間の分までにする', () => {
+    // 概要の「最近編集した作品」が「2026-11-11T23:34:48.154Z」のまま出ていた（Z を2つ付けて読めなかった）
+    expect(timeInJapan('2026-11-11 23:34:48')).toBe('2026-11-12 08:34')
+    expect(timeInJapan('2026-11-11T23:34:48.154Z')).toBe('2026-11-12 08:34')
+    expect(timeInJapan('2026-11-11T23:34:48+09:00')).toBe('2026-11-11 23:34')
+    expect(timeInJapan('読めない')).toBe('読めない')
   })
 })
 

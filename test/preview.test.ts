@@ -309,7 +309,9 @@ describe('保存前のサイト設定・見た目', () => {
       )
       expect(html).toContain('プレビュー · Profile')
       expect(html).toContain('hero--profile')
-      expect(html).toContain('プロフィールの表紙')
+      // 1人のサイトなので大見出しは入口のもの。プロフィールの頭は名前（説明文にも入れない）
+      expect(html).toContain('<h1 class="nameplate__name">岡崎 昂功</h1>')
+      expect(html).not.toContain('プロフィールの表紙')
       expect(html).toContain('公開中の自己紹介')
       expect(html).not.toContain('未公開の人')
       expect(html).toContain('このプレビューでは保存されません')
@@ -325,8 +327,8 @@ describe('保存前のサイト設定・見た目', () => {
   it.each(['site'])(
     '%sのTeamプレビューは公開中の複数人を表示し、下書きや永続設定を変えない',
     async (target) => {
-      await seedMember({ name: '公開の一人目', celestialBody: 'moon' })
-      await seedMember({ slug: 'second', name: '公開の二人目', celestialBody: 'sun' })
+      await seedMember({ name: '公開の一人目' })
+      await seedMember({ slug: 'second', name: '公開の二人目' })
       await seedMember({ slug: 'draft-person', name: '未公開の人', published: 0 })
       const fetch = await signIn()
       const before = await previewStorageState()
@@ -456,7 +458,7 @@ describe('保存前プレビューから編集を続ける案内', () => {
       expect(response.status).toBe(400)
       expect(response.headers.get('cache-control')).toBe('private, no-store')
       const html = await response.text()
-      expect(html).toContain('編集していたタブに戻り、入力を修正してください')
+      expect(html).toContain('入力を修正してから、もう一度プレビューしてください')
       expect(html).toContain('編集を続けるにはプレビューを閉じてください')
       expect(html).not.toContain('編集画面を開く ↗')
       for (const message of messages) expect(html).toContain(message)
@@ -716,7 +718,7 @@ describe('メンバーと作品の保存前プレビュー', () => {
       expect(response.status).toBe(400)
       expect(response.headers.get('cache-control')).toBe('private, no-store')
       const html = await response.text()
-      expect(html).toContain('編集していたタブに戻り')
+      expect(html).toContain('入力を修正してから、もう一度プレビューしてください')
       expect(html).not.toContain('src="data:')
       expect(html).not.toContain('<script')
     }

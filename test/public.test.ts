@@ -176,6 +176,23 @@ describe('トップページ', () => {
     expect(order).toEqual([...order].sort((a, b) => a - b))
   })
 
+  it('改行を打った大見出しは、個人ページの h1 では行ごとに積み、Team のカードでは1行に畳む', async () => {
+    await seedMember({ headline: 'Harder, Better,\nFaster, Stronger.' })
+    await seedMember({ slug: 'hoshino', name: '星野', sortOrder: 20 })
+
+    const page = await okText('/members/okazaki')
+    expect(page).toContain(
+      '<h1 class="hero__headline"><span class="phrase">Harder, Better,</span> <span class="phrase">Faster, Stronger.</span></h1>',
+    )
+    // 説明文は1行に畳んだ文から（改行を残すと、検索結果の文が語の途中でつながる）
+    expect(page).toContain('content="Harder, Better, Faster, Stronger.')
+
+    // カードの小さな1行では行を改めない
+    expect(await okText('/all')).toContain(
+      '<span class="member__lead">Harder, Better, Faster, Stronger.</span>',
+    )
+  })
+
   it('メンバーが2人なら横長、3人以上ならグリッドにする', async () => {
     // 1人のサイトでは Team そのものが無い（プロフィールに置き換わる）
     await seedMember()
@@ -525,7 +542,73 @@ describe('入口の画面', () => {
     ])
     // 句読点が無ければ1つの塊のまま（英語は塊の中の空白で折れる）
     expect(splitPhrases('AstLog')).toEqual(['AstLog'])
+    expect(splitPhrases('Okazaki Takanari')).toEqual(['Okazaki Takanari'])
     expect(splitPhrases('')).toEqual([''])
+    // 欧文の約物では切らない（入口の大見出しは1行の中で語を並べる。TypedHeadline）
+    expect(splitPhrases('Harder, Better, Faster, Stronger.')).toEqual([
+      'Harder, Better, Faster, Stronger.',
+    ])
+  })
+
+  /*
+    入口の大見出しは打ち替える言葉と同じく1字ずつ打つ（TypedHeadline）。欧文は1行の中で
+    左から打ち（塊に切って行を改めない）、空白も1字。字の番号は大見出し全体の通し番号で、
+    打つ時刻を決める。読み上げには文を1つ渡し、字の span は隠す（字ごとに区切って読ませない）
+  */
+  it('入口の大見出しは1字ずつの span に分け、1行のまま並べ、読み上げには文を1つ渡す', async () => {
+    await seedMember({ headline: 'Harder, Better, Faster, Stronger.' })
+    const hero = heroOf(await okText('/'))
+    const h1 = hero.match(/<h1[^>]*>.*?<\/h1>/)?.[0] ?? ''
+    expect(h1).toMatch(
+      /^<h1 lang="en" aria-label="Harder, Better, Faster, Stronger."><span class="phrase" aria-hidden="true"><span class="hero__char" style="--i: 0">H<\/span>/,
+    )
+    // 塊は1つ（欧文は行を改めない）。空白も1字として打つ
+    expect(h1.match(/class="phrase"/g)).toHaveLength(1)
+    expect(h1).toContain('<span class="hero__char" style="--i: 7"> </span>')
+    expect(h1).toContain('<span class="hero__char" style="--i: 32">.</span>')
+    // 字をつなぐと同じ文（検索エンジン・Ctrl-F が読む字）
+    expect(h1.replace(/<[^>]+>/g, '')).toBe('Harder, Better, Faster, Stronger.')
+  })
+
+  it('和文の大見出しは句読点の塊ごとに行を改め、字の番号は塊をまたいで続く', async () => {
+    await seedMember({ headline: 'つくる、速くする。' })
+    const hero = heroOf(await okText('/'))
+    const h1 = hero.match(/<h1[^>]*>.*?<\/h1>/)?.[0] ?? ''
+    expect(h1.match(/class="phrase"/g)).toHaveLength(2)
+    // 2つ目の塊の頭の「速」は 4 字目（つ・く・る・、の次）
+    expect(h1).toContain(
+      '</span></span><span class="phrase" aria-hidden="true"><span class="hero__char" style="--i: 4">速</span>',
+    )
+  })
+
+  /*
+    管理画面の欄で打った改行が、入口の大見出しの行の変わり目になる（headlinePhrases）。
+    英字の大見出しは句読点の規則では1行のままで、行を決められるのは改行だけ。行の中は
+    句読点で切らない（行を決めた人の見出しを、さらに割らない）
+  */
+  it('改行を打った大見出しは、打った行ごとに塊を作る。読み上げと字は1行に畳んだ文', async () => {
+    await seedMember({ headline: 'Harder, Better,\nFaster, Stronger.' })
+    const hero = heroOf(await okText('/'))
+    const h1 = hero.match(/<h1[^>]*>.*?<\/h1>/)?.[0] ?? ''
+    // 改行のままでは英字だけと見なされず、lang="en" が落ちる——1行に畳んで判定する
+    expect(h1).toMatch(/^<h1 lang="en" aria-label="Harder, Better, Faster, Stronger.">/)
+    expect(h1.match(/class="phrase"/g)).toHaveLength(2)
+    // 2行目の頭の「F」は 15 字目。行が変わっても打つ番号は続く。継ぎ目の空きは打たない
+    expect(h1).toContain(
+      '</span></span> <span class="phrase" aria-hidden="true"><span class="hero__char" style="--i: 15">F</span>',
+    )
+    // 字をつなぐと1行の文（継ぎ目の空きは塊の外の素の字。検索エンジン・Ctrl-F が読む）
+    expect(h1.replace(/<[^>]+>/g, '')).toBe('Harder, Better, Faster, Stronger.')
+  })
+
+  it('改行を打った和文の大見出しは、行の中の句読点では切らない', async () => {
+    await seedMember({ headline: 'つくる工程そのものを、速くする。\nそれが仕事です。' })
+    const h1 = heroOf(await okText('/')).match(/<h1[^>]*>.*?<\/h1>/)?.[0] ?? ''
+    // 句読点で切れば3つ。打った行は2つ
+    expect(h1.match(/class="phrase"/g)).toHaveLength(2)
+    // 和文どうしの継ぎ目は詰める
+    expect(h1.replace(/<[^>]+>/g, '')).toBe('つくる工程そのものを、速くする。それが仕事です。')
+    expect(h1).toContain('aria-label="つくる工程そのものを、速くする。それが仕事です。"')
   })
 
   it('入口の大見出しは、その人の大見出し。名前は大見出しの上の札。押し手も Hero の中', async () => {
@@ -544,7 +627,7 @@ describe('入口の画面', () => {
     await seedItem()
 
     const hero = heroOf(await okText('/'))
-    expect(hero.match(/<h1>(.*?)<\/h1>/)?.[1]?.replace(/<[^>]+>/g, '')).toBe(
+    expect(hero.match(/<h1[^>]*>(.*?)<\/h1>/)?.[1]?.replace(/<[^>]+>/g, '')).toBe(
       'つくる工程そのものを、速くする。',
     )
     // 札は「名前・職種・所在地」。部分ごとに、英字だけのものにだけ lang="en"
@@ -564,26 +647,25 @@ describe('入口の画面', () => {
   it('大見出しを書いていない人の入口は、名前を大見出しにする', async () => {
     await seedMember({ name: '岡崎 昂功', headline: '' })
     const hero = heroOf(await okText('/'))
-    expect(hero.match(/<h1>(.*?)<\/h1>/)?.[1]?.replace(/<[^>]+>/g, '')).toBe('岡崎 昂功')
+    expect(hero.match(/<h1[^>]*>(.*?)<\/h1>/)?.[1]?.replace(/<[^>]+>/g, '')).toBe('岡崎 昂功')
   })
 
   it('全体ページの頭は名前を目に見える h1 で置き、肩書きを添える。和文の肩書きには lang を付けない', async () => {
     /*
       全体ページ（/all）は印刷と Ctrl-F の宛先なので、名前を目に見える字で置く。
-      等幅は英字の札にだけ掛ける（app.css は .eyebrow :lang(en)）。和文の
-      肩書きに lang="en" を付けると、読み上げが英語の発音で読み、字も等幅の
-      字間で組まれる
+      lang="en" は英字だけの札にだけ付ける（読み上げの発音の印）。和文の
+      肩書きに付けると、読み上げが英語の発音で読む
     */
     await seedMember({ name: '岡崎 昂功', role: 'システムエンジニア' })
 
     const hero = heroOf(await okText('/all'))
-    expect(hero.match(/<h1>(.*?)<\/h1>/)?.[1]?.replace(/<[^>]+>/g, '')).toBe('岡崎 昂功')
+    expect(hero.match(/<h1[^>]*>(.*?)<\/h1>/)?.[1]?.replace(/<[^>]+>/g, '')).toBe('岡崎 昂功')
     expect(hero).toContain('<p class="eyebrow"><span>システムエンジニア</span></p>')
     // 押し手は置かない（一覧はすぐ下に並ぶ）
     expect(hero).not.toContain('class="cta')
   })
 
-  it('全体ページの英字だけの肩書きには lang="en"（読み上げの発音と、等幅の札にする印）', async () => {
+  it('全体ページの英字だけの肩書きには lang="en"（読み上げの発音の印）', async () => {
     await seedMember({ name: '岡崎 昂功', role: 'System Engineer' })
     const whole = await okText('/all')
     expect(whole).toContain('<p class="eyebrow"><span lang="en">System Engineer</span></p>')
@@ -594,7 +676,7 @@ describe('入口の画面', () => {
     await seedMember({ slug: 'tanaka', name: '田中 未来', sortOrder: 20 })
 
     const hero = heroOf(await okText('/'))
-    expect(hero.match(/<h1>(.*?)<\/h1>/)?.[1]?.replace(/<[^>]+>/g, '')).toBe(SITE.tagline)
+    expect(hero.match(/<h1[^>]*>(.*?)<\/h1>/)?.[1]?.replace(/<[^>]+>/g, '')).toBe(SITE.tagline)
     expect(hero).not.toContain('class="eyebrow"')
   })
 })
@@ -1015,8 +1097,8 @@ describe('技術の小見出しと、英語の塊', () => {
 
   it('タグは英字だけの札にだけ lang="en"。和文のタグ（生成AI）には付けない', async () => {
     /*
-      等幅は英字の札にだけ掛ける（app.css の .tags li:lang(en)）。和文のタグに
-      印を付けると、読み上げが英語の発音で読み、字も等幅の字間で組まれる。
+      lang="en" は英字だけの札にだけ付ける（読み上げの発音の印）。和文のタグに
+      付けると、読み上げが英語の発音で読む。
       一覧の行と作品のページは同じ Tags を使う
     */
     const item = await seedItem({ slug: 'dev', type: 'work' })
@@ -1273,7 +1355,7 @@ describe('ページの URL', () => {
     const html = await okText('/projects')
     expect(html).toContain('href="/projects" aria-current="page"')
     // 1人のサイトなので、Team の位置はプロフィール（目次の名前は Profile）
-    // 英字だけの行き先には lang="en"（等幅の小さな大文字の札にする印）
+    // 英字だけの行き先には lang="en"（読み上げの発音の印）
     expect(tocOf(html)).toContain('<a href="/members/okazaki" lang="en">Profile</a>')
     // 1つの目次に2つ付くと、どちらが「いま」なのか読み上げでも見た目でも決まらない。上の帯の
     // 目次と柱の目次に1つずつ（同時に見えるのは片方だけ）
@@ -1556,10 +1638,18 @@ describe('作品1件の恒久リンク', () => {
       .entry__link::after）の付け先。style はページの切り替えでつなぐ名前
     */
     expect(html).toContain(
+      '<h2><a class="entry__link" href="/apps/item/appmixer" style="view-transition-name:item-appmixer">AppMixer</a></h2>',
+    )
+    /*
+      行の題は、節の見出し（h1 の Projects）のすぐ下の段。どこでも h3 にしていたころは、
+      このページが h1 の下に h3 を並べ、h2 を飛ばしていた。全体ページ（/all）では節が h2 なので h3
+    */
+    expect(html).not.toMatch(/<h3\b/)
+    expect(mainOf(await okText('/all'))).toContain(
       '<h3><a class="entry__link" href="/apps/item/appmixer" style="view-transition-name:item-appmixer">AppMixer</a></h3>',
     )
     // 当てにならない URL を出すくらいなら、リンクそのものを出さない。覆いも矢印も付かない
-    expect(html).toContain('<h3>まだ無いほう</h3>')
+    expect(html).toContain('<h2>まだ無いほう</h2>')
     expect(html.match(/class="entry__link"/g) ?? []).toHaveLength(1)
     expect(html.match(/class="entry__go"/g) ?? []).toHaveLength(1)
   })
@@ -1615,7 +1705,7 @@ describe('作品1件の恒久リンク', () => {
     }
     // slug の無い作品は、戻ってくる作品のページが無いので id も持たない
     expect(html).toContain('<article class="entry"><ul class="entry__meta">')
-    expect(html).toContain('<h3>まだ無いほう</h3>')
+    expect(html).toContain('<h2>まだ無いほう</h2>')
     expect(html).not.toMatch(/card--lean|entry__index/)
   })
 
@@ -2217,7 +2307,8 @@ describe('メンバーページ', () => {
     await seedMember({ headline: 'つくる工程そのものを、速くする。' })
     const response = await get('/members/okazaki')
     expect(response.status).toBe(200)
-    expect(await response.text()).toContain('つくる工程そのものを、速くする。')
+    // 1人のサイトなので頭は名前の h1（大見出しは入口のもの）
+    expect(await response.text()).toContain('<h1 class="nameplate__name">岡崎 昂功</h1>')
   })
 
   it('下書きなら 404', async () => {
@@ -2371,9 +2462,9 @@ describe('個人ページは1ページ', () => {
     expect(about).toContain('<li>全角の空白の箇条書き:</li>')
     expect(about).toContain('<strong>Bold</strong>:')
     expect(about).toContain('<p>以下は長い文の末尾がたまたまコロンになっている段落の例です:</p>')
-    // 説明文は見出しではなく、1段落目の文を続ける
+    // 説明文は小見出しではなく、1段落目の文（1人のサイトなので大見出しは入口のもの）
     expect(html).toContain(
-      '<meta name="description" content="つくる工程そのものを、速くする。金融系のシステム開発と、個人のアプリ開発をしています。"/>',
+      '<meta name="description" content="金融系のシステム開発と、個人のアプリ開発をしています。"/>',
     )
     // 全体ページは About（h3）の下なので h4
     const whole = await okText('/all')
@@ -2678,6 +2769,14 @@ describe('1人のサイトのプロフィール', () => {
     expect(two).toContain('<div class="head"><h2>Team</h2>')
     expect(two).not.toContain('<section id="profile"')
     expect(two.match(/<h1[^>]*>/g) ?? []).toHaveLength(1)
+  })
+
+  it('/all の Profile の大見出しも、打った改行の行ごとに積む', async () => {
+    await seedMember({ headline: 'つくる工程そのものを、速くする。\nそれが仕事です。' })
+    const html = await okText('/all')
+    expect(html).toContain(
+      '<p class="profile__headline"><span class="phrase">つくる工程そのものを、速くする。</span><span class="phrase">それが仕事です。</span></p>',
+    )
   })
 
   it('sitemap にはプロフィールを1度だけ載せ、/team と前の続きの URL は載せない', async () => {
@@ -3270,18 +3369,33 @@ describe('共有カードとページごとの説明文', () => {
   })
 
   /*
-    個人ページの説明文は大見出しと紹介文の1段落目。大見出しだけのころは標語の1文しか
-    出ず、検索結果から誰の何のページかが分からなかった。「。」で終わる大見出しに
-    もう1つ「。」を重ねない
+    個人ページの説明文は、そのページに出ている大見出しと紹介文の1段落目。大見出しだけの
+    ころは標語の1文しか出ず、検索結果から誰の何のページかが分からなかった。「。」で終わる
+    大見出しにもう1つ「。」を重ねない。大見出しが個人ページに出るのは2人以上のサイト
   */
   it('個人ページの説明文は、大見出しに紹介文の1段落目を続ける', async () => {
     await seedMember({
       headline: 'つくる工程そのものを、速くする。',
       bio: '2024年からシステム開発に携わっています。\n\n二段落目は説明文に入れない。',
     })
+    await seedMember({ slug: 'hoshino', name: '星野' })
     expect(descriptionOf(await okText('/members/okazaki'))).toBe(
       'つくる工程そのものを、速くする。2024年からシステム開発に携わっています。',
     )
+  })
+
+  /*
+    1人のサイトでは、その人の大見出しは入口の h1 で、個人ページには置かない。説明文に
+    入れていたころは、ページに無い入口の一文が検索結果の説明の頭に立った
+  */
+  it('1人のサイトのプロフィールの説明文は、紹介文から始める（大見出しは入口のもの）', async () => {
+    await seedMember({
+      headline: 'Harder, Better, Faster, Stronger.',
+      bio: '2024年からシステム開発に携わっています。\n\n二段落目は説明文に入れない。',
+    })
+    const html = await okText('/members/okazaki')
+    expect(html).not.toContain('Harder, Better')
+    expect(descriptionOf(html)).toBe('2024年からシステム開発に携わっています。')
   })
 
   it('英字だけの大見出しは英語として読ませ、説明文では和文とのあいだを空ける', async () => {
@@ -3289,7 +3403,8 @@ describe('共有カードとページごとの説明文', () => {
       headline: 'Harder, Better, Faster, Stronger.',
       bio: '2024年からシステム開発に携わっています。',
     })
-    expect(await okText('/')).toContain('<h1 lang="en">')
+    expect(await okText('/')).toContain('<h1 lang="en" aria-label=')
+    await seedMember({ slug: 'hoshino', name: '星野' })
     expect(descriptionOf(await okText('/members/okazaki'))).toBe(
       'Harder, Better, Faster, Stronger. 2024年からシステム開発に携わっています。',
     )
@@ -3297,6 +3412,7 @@ describe('共有カードとページごとの説明文', () => {
 
   it('言い切りの「。」の無い大見出しは、つなぐときに「。」を足す', async () => {
     await seedMember({ headline: '速くする', bio: '' })
+    await seedMember({ slug: 'hoshino', name: '星野' })
     expect(descriptionOf(await okText('/members/okazaki'))).toBe('速くする。')
   })
 
@@ -3489,6 +3605,13 @@ describe('左の柱', () => {
       // 行き先は足元と同じ
       expect(links(pillar.split('</nav>')[1] ?? ''), path).toEqual(links(footOf(html)))
       expect(links(footOf(html)).length, path).toBeGreaterThan(0)
+      /*
+        著作権表示も柱の底に持つ（柱が見える幅では足元ごと畳むので、ここに無いとどこにも出ない。
+        行き先だけを移して足元に1行残していたころは、その1行のぶんだけ短いページが縦に送れた）
+      */
+      const mark = footOf(html).match(/<p class="foot__meta">[^<]*<\/p>/)?.[0]
+      expect(mark, path).toMatch(/© \d{4} AstLog/)
+      expect(pillar.split('<div class="pillar__foot">')[1], path).toContain(mark)
     }
   })
 

@@ -62,7 +62,7 @@ describe('文章ページの保存前プレビュー', () => {
     })
     expect(response.status).toBe(400)
     const html = await response.text()
-    expect(html).toContain('編集していたタブに戻り')
+    expect(html).toContain('入力を修正してから、もう一度プレビューしてください')
     expect(html).not.toContain('href="javascript:')
     expect(await db().query.blocks.findMany()).toEqual([])
   })

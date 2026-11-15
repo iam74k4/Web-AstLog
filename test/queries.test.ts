@@ -219,8 +219,6 @@ describe('公開の問い合わせが読む列', () => {
   async function seedPrivate() {
     const member = await seedMember({
       formKey: `${SENTINEL}-form`,
-      celestialBody: `${SENTINEL}-body`,
-      celestialAccent: `${SENTINEL}-accent`,
       createdAt: `${SENTINEL}-created`,
     })
     await seedItem({ slug: 'appmixer', memberId: member.id, platformKey: 'web' })
@@ -234,7 +232,7 @@ describe('公開の問い合わせが読む列', () => {
       (key) => !PUBLIC_MEMBER_KEYS.includes(key),
     )
     expect(hidden).toEqual(
-      expect.arrayContaining(['formKey', 'celestialBody', 'createdAt', 'published', 'sortOrder']),
+      expect.arrayContaining(['formKey', 'createdAt', 'published', 'sortOrder']),
     )
 
     const listed = await listPublishedMembers(db())

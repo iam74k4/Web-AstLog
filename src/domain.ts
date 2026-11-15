@@ -45,7 +45,7 @@ export const KIND_PATH = Object.fromEntries(
   ITEM_KINDS.map((kind) => [kind.key, kind.path]),
 ) as Record<ItemKind, (typeof ITEM_KINDS)[number]['path']>
 
-const isItemKind = (value: string): value is ItemKind =>
+export const isItemKind = (value: string): value is ItemKind =>
   ITEM_KIND_KEYS.some((kind) => kind === value)
 
 // フォームと query の区分の読み方。知らない値・無い値は先頭の区分
@@ -62,7 +62,7 @@ export const totalOf = (counts: KindCounts) =>
   公開ページが読むメンバーの列（src/db/queries.ts の listPublishedMembers /
   findPublishedMember がこの列だけを引く）。members に列を足しても、ここに足すまでは公開の
   リクエストで読まれない——行を丸ごと読むと、描く側で1回 `...member` と書くだけで、
-  公開しない値がページに出る。form_key・日時・使わない天体の列は持たない。
+  公開しない値がページに出る。form_key・日時は持たない。
 */
 export const PUBLIC_MEMBER_COLUMNS = {
   id: true,

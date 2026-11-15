@@ -14,7 +14,6 @@ import {
   ItemRow,
   ItemStories,
   LinkList,
-  langOf,
   MemberCardCompact,
   MemberCardWide,
   Note,
@@ -28,6 +27,7 @@ import {
   SectionHead,
   Statement,
   Timeline,
+  TypedHeadline,
   TypedWords,
 } from '../../ui/components'
 import { siteCountsOf, soloMember, type TopData } from './data'
@@ -124,7 +124,7 @@ export function renderBlock(
         全体ページ（/all）の頭。印刷・Ctrl-F・翻訳の宛先なので、誰のサイトかを
         目に見える h1 で置く——1人のサイトならその人の名前と肩書き、そうでなければ
         サイトの名前だけ。軌道図は置かない（紙に装飾を刷らせない）。英字だけの
-        肩書きには lang="en"（読み上げの発音と、等幅の札にする印。langOf）。
+        肩書きには lang="en"（読み上げの発音の印。langOf）。
       */
       if (whole) {
         return {
@@ -183,10 +183,11 @@ export function renderBlock(
         node: (
           <Hero cover>
             {eyebrow.length ? <Eyebrow parts={eyebrow} /> : null}
-            {/* 英字だけの大見出し（「Harder, Better, Faster, Stronger.」）は英語の読みで読ませる */}
-            <h1 lang={langOf(statement)}>
-              <Phrases text={statement} />
-            </h1>
+            {/*
+              大見出しは打ち替える言葉と同じく1字ずつ打つ（TypedHeadline）。英字だけの大見出し
+              （「Harder, Better, Faster, Stronger.」）は英語の読みで読ませる
+            */}
+            <TypedHeadline text={statement} />
             {typed.length ? <TypedWords words={typed} /> : null}
             <p class="hero__lead">
               <Phrases text={site.heroLead} />
@@ -275,7 +276,13 @@ export function renderBlock(
               // 行を縦に並べる（索引）。並びは新しい順（src/db/queries.ts の itemOrder）
               <div class="entries">
                 {projects.rows.map((item) => (
-                  <ItemRow key={item.id} item={item} showMember={showMember} showKind={!soleKind} />
+                  <ItemRow
+                    key={item.id}
+                    item={item}
+                    showMember={showMember}
+                    showKind={!soleKind}
+                    level={whole ? 3 : 2}
+                  />
                 ))}
               </div>
             ) : (

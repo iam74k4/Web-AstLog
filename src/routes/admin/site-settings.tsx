@@ -46,6 +46,23 @@ const SiteSettingsPage = (props: {
     </p>
     <form method="post" action="/admin/site" class="form">
       <FormVersion value={props.version} />
+      {/*
+        どの画面で確かめるかは、フォームの頭で選ぶ（横の完成形と「保存前にプレビュー」の行き先）。
+        いちばん下に置いていたころは、欄を直して完成形を見るたびに、下まで送って画面を選び直していた
+      */}
+      <Select
+        label="プレビューする画面"
+        name="previewScreen"
+        value="hero"
+        options={[
+          { value: 'hero', label: '入口' },
+          { value: 'projects', label: 'Projects' },
+          { value: 'team', label: 'Profile / Team' },
+          { value: 'contact', label: 'Contact' },
+          { value: 'all', label: '全体' },
+        ]}
+        hint="Profile / Team は、公開中のメンバーが1人ならプロフィール、複数ならメンバー一覧です。画面の選択は設定として保存されません"
+      />
       <PlacementHint label="表示される場所">
         入口の紹介文 → トップページ ／ Contact の案内文 → お問い合わせ ／
         GitHub・Instagram・X・Discord・Mail → ページ下部
@@ -136,19 +153,6 @@ const SiteSettingsPage = (props: {
           error={props.errors?.discord}
         />
       </FormSection>
-      <Select
-        label="プレビューする画面"
-        name="previewScreen"
-        value="hero"
-        options={[
-          { value: 'hero', label: '入口' },
-          { value: 'projects', label: 'Projects' },
-          { value: 'team', label: 'Profile / Team' },
-          { value: 'contact', label: 'Contact' },
-          { value: 'all', label: '全体' },
-        ]}
-        hint="Profile / Team は、公開中のメンバーが1人ならプロフィール、複数ならメンバー一覧です。画面の選択は設定として保存されません"
-      />
       <FormActions cancelHref="/admin/site" previewAction="/admin/preview/site" />
     </form>
   </AdminLayout>

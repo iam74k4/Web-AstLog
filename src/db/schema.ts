@@ -53,14 +53,6 @@ export const members = sqliteTable(
     careerText: text('career_text').notNull().default(''),
     // /images/<key>（KV にアップロードしたもの）か /assets/...（同梱）。null なら頭文字
     avatarUrl: text('avatar_url'),
-    /*
-      もう読まない列（天体と装飾色の選択）。サイトを簡素にしたときに表示も管理画面の欄も外した。
-      列だけ残すのは expand → contract のため——この列を書く前の版のコードへ戻したとき
-      （wrangler rollback）も動くように、次のリリースで ALTER TABLE … DROP COLUMN で落とす
-      （CLAUDE.md「移行」）。既定値は落とす日まで変えない（drizzle-kit が移行を作らないように）
-    */
-    celestialBody: text('celestial_body').notNull().default('black-hole'),
-    celestialAccent: text('celestial_accent').notNull().default('inherit'),
     github: text('github'),
     email: text('email'),
     published: integer('published').notNull().default(0),
@@ -187,9 +179,9 @@ export const items = sqliteTable(
     support: text('support').notNull().default(''),
     /*
       メインの画像（スクリーンショット）。/images/items/<…>（管理画面から KV に上げたもの）か、
-      /assets/…（同梱）。作品の顔の1枚で、作品のページ・一覧のサムネイル・共有カードに出る。
+      /assets/…（同梱）。作品の顔の1枚で、作品のページ・管理画面の一覧の見本・共有カードに出る。
       null ならメインの画像なし——ほかの画像（item_shots）があれば、その1枚目が顔になり
-      （src/domain.ts の itemImages）、どちらも無ければ画像の位置に星図が出る。
+      （src/domain.ts の itemImages）、どちらも無ければ絵を置かない（代わりの絵は出さない）。
 
       代替テキストは別の列で持つ（画像そのものに焼き込めない）。空のまま
       公開させない検査は src/blocks.ts の publishErrors（公開の関門）。
@@ -200,9 +192,8 @@ export const items = sqliteTable(
       画像の寸法（px）。上げたときに中身の頭から読んだもの（src/lib/image.ts の
       sniffImage）。使うのは2か所——共有カード（og:image:width / height と、
       twitter:card を大きい札にするかどうか。src/ui/Layout.tsx の OgImage）と、
-      作品のページの横の帯（components.tsx の ItemShots。帯は高さを決めて幅を絵の比から
-      取るので、img に書けば読み込む前から幅が決まる）。説明の組の絵（Shot）と一覧の
-      サムネイルの枠には使わない（枠の形は CSS が先に決める。CLAUDE.md「画像の枠は
+      作品のページのギャラリーの img の width / height（components.tsx の ItemShots。読み込む
+      前から縦横比が決まる）。枠の形そのものは CSS が先に決める（CLAUDE.md「画像の枠は
       絵に合わせない」）。
 
       null は「分からない」。この列より前に上げた画像と、寸法を読めなかった

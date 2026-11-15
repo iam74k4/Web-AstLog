@@ -440,3 +440,32 @@ describe('Apps と Works を Projects に畳む移行', () => {
     expect((await rows()).map((row) => row.type)).toEqual(['team'])
   })
 })
+
+/*
+  節の名札（字間の広い大文字）は英字の組み方。和文の見出しに掛けると「デ ー タ ベ ー ス」と
+  1字ずつ離れるので、英字だけでない見出しには印（.head--ja）を付けて字間を下げる
+  （components.tsx の SectionHead。字間は test/theme.test.ts の「見出しの段」）
+*/
+describe('見出しの字の言語', () => {
+  it('和文の見出しには印を付け、英字の見出しは今までの形のまま', async () => {
+    await seedMember()
+    const [japanese, english] = await db()
+      .insert(schema.blocks)
+      .values([
+        { type: 'note', title: 'お知らせ', body: '本文です。', published: 1, sortOrder: 10 },
+        { type: 'note', title: 'Notes', body: '本文です。', published: 1, sortOrder: 20 },
+      ])
+      .returning()
+    await env.MEDIA.put('site:version', crypto.randomUUID())
+    expect(await okText(`/block-${japanese?.id}`)).toContain(
+      '<div class="head head--ja"><h1>お知らせ</h1></div>',
+    )
+    expect(await okText(`/block-${english?.id}`)).toContain(
+      '<div class="head"><h1>Notes</h1></div>',
+    )
+    // 全体ページでも同じ印（見出しの段だけが h2 になる）
+    const all = await okText('/all')
+    expect(all).toContain('<div class="head head--ja"><h2>お知らせ</h2></div>')
+    expect(all).toContain('<div class="head"><h2>Notes</h2></div>')
+  })
+})

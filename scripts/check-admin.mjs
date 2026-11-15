@@ -35,6 +35,9 @@ const paths = [
   '/admin/blocks/1/edit',
   '/admin/items/1/delete',
   '/admin/members/1/delete',
+  '/admin/platforms',
+  '/admin/platforms/web/delete',
+  '/admin/media',
 ]
 try {
   dev = await devServer(undefined, Number(process.env.ADMIN_PORT ?? 8816), state.dir)
@@ -134,7 +137,7 @@ try {
     assert.notEqual(await page.locator('[name=name]').inputValue(), 'プレビューだけの名前')
     // 保存済み・保存前・横の完成形を、公開と同じショーケースで操作できる。
     await go(page, '/admin/items')
-    const savedLink = page.locator('[data-item-preview]').first()
+    const savedLink = page.locator('[data-saved-preview]').first()
     await savedLink.click()
     const modal = page.frameLocator('#editor-preview iframe')
     await modal.locator('.shots--showcase').waitFor()
@@ -170,7 +173,7 @@ try {
     await page
       .locator('[name=newShot]')
       .first()
-      .setInputFiles(join(ROOT, 'scripts/fixtures/media/appmixer-icon.png'))
+      .setInputFiles(join(ROOT, 'scripts/fixtures/media/sample-icon-mixer.png'))
     await page.locator('button[formaction]').click()
     await modal.locator('.shots--showcase').waitFor()
     await modal.locator('.gallery__thumb').nth(1).click()
@@ -206,6 +209,31 @@ try {
       await page.locator('[name^="shotAlt-"]').nth(1).inputValue(),
       '保存前に変えた画像の説明',
     )
+    if (width === 1440) {
+      /*
+        押して開くプレビューと、横の完成形の描き直しがぶつかる並び。どちらも同じフォームを別の枠へ
+        送り、フォームが予定している送信は1つだけなので、後から送ったほうが前の予定を取り消す。
+        「印を変える（横が送る）→ 押す → 横の枠の読み込みが届いて、待たせていた描き直しを送る」の順に
+        なると、ダイアログへの送信が取り消されて空のまま開いた（CI でだけ時々落ちた。本番前の検査が
+        これで止まった）。同じ並びをここで必ず起こす——読み込みの知らせは、届く順をこちらで決める
+      */
+      await go(page, '/admin/items/1/edit')
+      await live.locator('.shots--showcase').waitFor()
+      await page.evaluate(() => {
+        const form = document.querySelector('.live__edit form[method=post]')
+        const mark = form.querySelector('[name=leadLink]')
+        mark.click() // 横の完成形が送る
+        mark.click() // 送っている最中なので、次の描き直しを待たせる
+        form.querySelector('button[formaction]').click() // 押して開く
+        document.querySelector('iframe[name=live-preview]').dispatchEvent(new Event('load'))
+      })
+      await modal.locator('.shots--showcase').waitFor()
+      await page.keyboard.press('Escape')
+      await page.locator('#editor-preview[open]').waitFor({ state: 'hidden' })
+      // 待たせた横の描き直しも、ダイアログが読み込まれたあとで送られる（止まったままにならない）
+      await page.locator('.live__status').filter({ hasText: 'まだ保存されていません' }).waitFor()
+      await live.locator('.shots--showcase').waitFor()
+    }
     await context.close()
   }
   const forced = await contextFor(390)
@@ -256,12 +284,37 @@ try {
   await page.getByRole('textbox', { name: '1件目のラベル', exact: true }).fill('Example')
   await page.getByRole('textbox', { name: '1件目のURL', exact: true }).fill('https://example.test/')
   await page.getByRole('textbox', { name: '1件目の補足', exact: true }).fill('入力した補足')
+  // 行は保存せずに足せる（AddRow。足した行は空で、番号と読み上げの名前が続きになる）
+  assert.equal(await page.locator('.block-fields__row').count(), 3)
+  await page.getByRole('button', { name: '＋ 行を足す' }).click()
+  assert.equal(await page.locator('.block-fields__row').count(), 4)
+  assert.equal(await page.locator('.block-fields__number').last().textContent(), '04')
+  await page.getByRole('textbox', { name: '4件目のラベル', exact: true }).fill('Fourth')
+  await page
+    .getByRole('textbox', { name: '4件目のURL', exact: true })
+    .fill('https://example.test/4')
   await submit(page)
   await page.getByRole('link', { name: '項目別のリンク を編集', exact: true }).click()
   assert.equal(
     await page.getByRole('textbox', { name: '1件目のURL', exact: true }).inputValue(),
     'https://example.test/',
   )
+  // 空の2行は捨てられ、足した行は2件目として残る
+  assert.equal(
+    await page.getByRole('textbox', { name: '2件目のURL', exact: true }).inputValue(),
+    'https://example.test/4',
+  )
+  // 作品のリンクも同じ手で足せる
+  await go(page, '/admin/items/1/edit')
+  await page
+    .locator('details')
+    .filter({ has: page.locator('[name=linkUrl]') })
+    .locator('summary')
+    .click()
+  const linkRows = await page.locator('.link-row').count()
+  await page.getByRole('button', { name: '＋ 行を足す' }).click()
+  assert.equal(await page.locator('.link-row').count(), linkRows + 1)
+  assert.equal(await page.locator('.link-row').last().locator('input').first().inputValue(), '')
   await context.close()
 
   const native = await contextFor(390, false)

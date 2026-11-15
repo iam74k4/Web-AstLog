@@ -86,7 +86,7 @@ describe('CSS の読み込み', () => {
       テストもブラウザも何も言わない。アクセントの6色を外した日、管理画面の注意の色
       （--ember）が黙って継承色になっていた。部品が style 属性で渡すものだけは除く——顔の
       大きさ（--avatar-size）と、打ち替える言葉の数・何番目の言葉か・字数・何番目の字か
-      （components.tsx の TypedWords）
+      （components.tsx の TypedWords と TypedHeadline）
     */
     const fromStyle = ['--avatar-size', '--words', '--k', '--len', '--i']
     const defined = new Set([...sheets.matchAll(/(--[\w-]+)\s*:/g)].map(([, name]) => name))
@@ -380,6 +380,14 @@ const bodyOf = (raw: string, selector: string) => {
   const open = source.indexOf('{', at)
   expectNotOverridden(raw, open)
   return source.slice(open + 1, source.indexOf('}', open)).trim()
+}
+
+// 公開のシートの @keyframes を名前で引く（見出しの行から閉じ括弧まで。無ければ落とす）
+const keyframesOf = (name: string) => {
+  const at = sheet.indexOf(`@keyframes ${name} {`)
+  expect(at, `@keyframes ${name} が見つからない`).toBeGreaterThan(-1)
+  const frames = sheet.slice(at)
+  return frames.slice(0, frames.indexOf('}\n}') + 3)
 }
 
 describe('CSS を読む道具', () => {
@@ -956,8 +964,8 @@ describe('部品の作法', () => {
     /*
       前の柱のころは 899 以下で肩書き・一言・GitHub / メールを畳み、畳んだぶんが
       「どこにも無くなる」ことがあった（素の .socials を隠して、GitHub のプロフィールが
-      電話から辿れなくなった。WCAG 1.4.10）。いまの左の柱（900 以上）は、上の帯の目次・足元の
-      行き先・入口の札と同じ中身をもう1組持ち、柱があるページ（body[data-pillar]）でだけ、
+      電話から辿れなくなった。WCAG 1.4.10）。いまの左の柱（900 以上）は、上の帯の目次・足元
+      （行き先と著作権表示）・入口の札と同じ中身をもう1組持ち、柱があるページ（body[data-pillar]）でだけ、
       柱が見える幅でだけ、元のほうを畳む。柱そのものは素で畳んであり、900 以上でだけ出す
       ——どの幅でも片方は必ず見える。2組あることは test/public.test.ts の「左の柱」が見る
     */
@@ -967,7 +975,7 @@ describe('部品の作法', () => {
         rule.decls.some(([name, value]) => name === 'display' && value === 'none'),
     )
     expect(folds.map((rule) => rule.selectors.join(', '))).toEqual([
-      'body[data-pillar] :is(.top .toc, .foot .socials)',
+      'body[data-pillar] :is(.top .toc, .foot)',
       "body[data-pillar='owner'] .hero--cover > .eyebrow",
     ])
     for (const rule of folds) expect(rule.context.join(' ')).toContain('min-width: 900px')
@@ -1438,6 +1446,10 @@ describe('文字の段', () => {
     expect(label).toContain('font-size: var(--fs-md)')
     expect(label).toContain('letter-spacing: var(--track-label)')
     expect(label).toContain('text-transform: uppercase')
+    // 和文の見出しには英大文字の字間を掛けない（「デ ー タ ベ ー ス」と1字ずつ離れた）
+    const japanese = bodyOf(sheet, '.head--ja :is(h1, h2) {')
+    expect(japanese).toContain('letter-spacing: var(--track-label-ja)')
+    expect(japanese).toContain('text-transform: none')
     expect(bodyOf(sheet, '.head::after {')).toContain('background: var(--line-strong)')
     expect(bodyOf(sheet, '.head--item :is(h1, h2) {')).toContain('font-size: var(--fs-display-xl)')
     expect(bodyOf(sheet, '.hero h1.hero__headline {')).toContain('font-size: var(--fs-display)')
@@ -1454,7 +1466,7 @@ describe('文字の段', () => {
     */
     expect(bodyOf(sheet, '.head--sub :is(h2, h3) {')).toContain('font-size: var(--fs-lg)')
     // 一覧の行の題は節の見出しから2段以上離す
-    expect(bodyOf(sheet, '.entry__main h3 {')).toContain('font-size: var(--fs-display-xs)')
+    expect(bodyOf(sheet, '.entry__main :is(h2, h3) {')).toContain('font-size: var(--fs-display-xs)')
   })
 
   it('見出し・行の説明・段落は文節で折り、最後の行に1〜2字だけ落とさない', () => {
@@ -1468,7 +1480,7 @@ describe('文字の段', () => {
     for (const part of [
       '.hero h1',
       '.head :is(h1, h2, h3)',
-      '.entry__main :is(h3, p)',
+      '.entry__main :is(h2, h3, p)',
       '.statement__text',
       '.bio :is(p, li)',
       // 画像の説明。細い列で「画 / 面」と1字だけの行が出た
@@ -1572,9 +1584,10 @@ describe('配色（白い地と墨）', () => {
     const curtain = bodyOf(sheet, '.opening::before,')
     expect(curtain).toContain('background: var(--opening-ground)')
     expect(bodyOf(sheet, ':root {')).toContain('--opening-ground: #000000;')
-    expect(sheets.match(/var\(--opening-ground\)/g)).toHaveLength(1)
-    const frames = sheet.slice(sheet.indexOf('@keyframes opening-up {'))
-    expect(frames.slice(0, frames.indexOf('}\n}'))).toContain('visibility: hidden')
+    // 黒を読むのは幕と、幕のあいだだけ黒くする地（opening-ground）の2か所
+    expect(sheets.match(/var\(--opening-ground\)/g)).toHaveLength(2)
+    expect(keyframesOf('opening-ground')).toContain('background-color: var(--opening-ground)')
+    expect(keyframesOf('opening-part')).toContain('visibility: hidden')
   })
 
   it('ロゴの素材に焼く色は、塗りの押し手の :root の段と同じ', () => {
@@ -1687,6 +1700,37 @@ describe('動き', () => {
     expect(motion).not.toMatch(/\.hero[^{]*\{[^}]*infinite/)
   })
 
+  /*
+    大見出しは打ち替える言葉と同じ打ち方で1字ずつ打ち、全部そろったところで止まる（消さない）。
+    字の場所は初めから取っておき（透明から出す。幅を変えると打つたびに行が組み直される）、
+    カーソルは打ち替える言葉と同じ太さ。ほかの字は打ち終えるのを待たない（大見出しを打ち
+    終えるまでほかが出ないと、最初の画面が大見出しだけのまま止まって見えた）
+  */
+  it('大見出しは1字ずつ打ち、ほかは待たせない。カーソルは打ち替える言葉と同じ', () => {
+    const char = bodyOf(sheet, '.hero__char {')
+    expect(char).toContain('animation: type-in 1ms steps(1)')
+    expect(char).toContain('var(--i) * var(--type-step)')
+    expect(char).not.toContain('infinite')
+    expect(keyframesOf('type-in')).toContain('opacity: 0')
+    const caret = bodyOf(sheet, '.hero__char::after {')
+    expect(caret).toContain('opacity: 0')
+    expect(caret).toContain('width: var(--caret-w)')
+    expect(
+      bodyOf(sheet, ':is(.typed__words--2, .typed__words--3, .typed__words--4)::after {'),
+    ).toContain('width: var(--caret-w)')
+    for (const [selector, step] of [
+      ['.hero--cover h1::after', '4'],
+      ['.hero--cover > .typed', '4.5'],
+      ['.hero--cover > .hero__lead', '5'],
+      ['.hero--cover > .hero__actions', '6'],
+    ] as const) {
+      expect(
+        ruleWith(sheet, `calc(var(--reveal-from) + var(--stagger) * ${step})`).selector,
+        selector,
+      ).toContain(selector)
+    }
+  })
+
   it('締めの幕開け（Contact）は入口と同じ rise と間で、1文 → 表の行の順に1回だけ', () => {
     expect(bodyOf(sheet, '.contact > .contact__lead,')).toContain(
       'animation: rise var(--dur-reveal) var(--ease) both',
@@ -1703,20 +1747,16 @@ describe('動き', () => {
     const curtain = bodyOf(sheet, '.opening {')
     expect(curtain).toContain('position: fixed')
     expect(curtain).toContain('pointer-events: none')
-    // 動かすのは位置・倍率・回転・透明度だけ（幅や高さを動かすと毎コマ描き直しになる）
-    const names = [
-      'opening-up',
-      'opening-down',
-      'opening-turn',
-      'opening-fill',
-      'opening-out',
-      'opening-done',
-    ]
-    for (const name of names) {
-      const frames = sheet.slice(sheet.indexOf(`@keyframes ${name} {`))
-      const body = frames.slice(0, frames.indexOf('}\n}') + 3)
-      expect(body, name).toContain(`@keyframes ${name} {`)
-      expect(body, name).not.toMatch(/\b(width|height|top|left|bottom|right|inset)\s*:/)
+    // 毎コマ動かすのは倍率・回転・透明度だけ（幅や高さを動かすと毎コマ描き直しになる）
+    for (const name of ['opening-part', 'opening-turn', 'opening-fill', 'opening-out']) {
+      expect(keyframesOf(name), name).not.toMatch(
+        /\b(width|height|top|left|bottom|right|inset)\s*:/,
+      )
+    }
+    // 箱の位置を変えるのは 1ms で終わる1度きりの段だけ（描き直しは1回）
+    for (const name of ['opening-lift', 'opening-done']) {
+      expect(keyframesOf(name), name).toContain('to {')
+      expect(curtain).toMatch(new RegExp(`${name} 1ms linear `))
     }
     // 1回だけ動いて終わる（幕に終わらない動きを持たせない）
     const opening = rulesOf(sheet).filter((rule) =>
@@ -1738,15 +1778,39 @@ describe('動き', () => {
     )
     expect(bodyOf(off, '.opening {')).toContain('display: none')
     expect(bodyOf(off, 'body[data-opening] {')).toContain('--reveal-from: 0ms')
+    expect(bodyOf(off, 'body[data-opening] {')).toContain('animation: none')
+  })
+
+  it('幕は iPhone の Safari の上下の帯を黒く残さない（縁に触れず、縁を越えず、開き始めに外れる）', () => {
+    /*
+      Safari 26 は画面の縁に触れる fixed の要素の色で上下の帯を塗り、下の帯は隠しても
+      その要素がページにあるあいだ最初の色のまま残す。幕が全面の fixed だったころ、開いた
+      あとも上下が黒く、ページが黒い枠に縮んで見えた（app.css の .opening のコメント）
+    */
+    const root = bodyOf(sheet, ':root {')
+    expect(root).toMatch(/--opening-edge: [1-9]\d*px;/)
+    const curtain = bodyOf(sheet, '.opening {')
+    // 下の縁に触れない。空いた所は、幕のあいだだけ黒い地が埋める
+    expect(curtain).toContain('inset: 0 0 var(--opening-edge)')
+    expect(bodyOf(sheet, 'body[data-opening] {')).toContain(
+      'animation: opening-ground 1ms linear var(--opening-load) backwards',
+    )
+    // 半分ずつ外側の縁へ縮む。滑らせて縁を越えさせない
+    const part = keyframesOf('opening-part')
+    expect(part).toContain('scale: 1 0')
+    expect(part).not.toContain('translate')
+    expect(bodyOf(sheet, '.opening::before,')).toContain('transform-origin: top')
+    // 下の半分だけの規則（並べた規則の後ろ）
+    expect(bodyOf(sheet, '.opening::after {\n  top:')).toContain('transform-origin: bottom')
+    // 開き始め（地が白に戻るのと同じ時）に、箱の上も縁から外す
+    expect(curtain).toContain('opening-lift 1ms linear var(--opening-load) forwards')
+    expect(keyframesOf('opening-lift')).toContain('top: var(--opening-edge)')
   })
 
   it('読み込みの線は一定の速さで満ちない。進んでは少し止まる（読み込みの間合い）', () => {
-    const frames = sheet.slice(sheet.indexOf('@keyframes opening-fill {'))
-    const body = frames.slice(0, frames.indexOf('}\n}') + 3)
-    const steps = [...body.matchAll(/(\d+)% \{\s*scale: ([\d.]+) 1/g)].map(([, at, to]) => [
-      Number(at),
-      Number(to),
-    ])
+    const steps = [...keyframesOf('opening-fill').matchAll(/(\d+)% \{\s*scale: ([\d.]+) 1/g)].map(
+      ([, at, to]) => [Number(at), Number(to)],
+    )
     expect(steps.length).toBeGreaterThanOrEqual(5)
     // 進みは戻らない
     for (let i = 1; i < steps.length; i += 1) {

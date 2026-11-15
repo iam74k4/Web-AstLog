@@ -1722,6 +1722,57 @@ describe('画像の受け入れ', () => {
       await signed(`/admin/members/${member.id}/delete`, { method: 'POST' })
       expect(await keys('avatars/')).toEqual([])
     })
+
+    /*
+      アバターには差し替えの口しか無く、一度上げた顔を頭文字に戻せなかった（作品のアイコンと
+      画像には「外す」があった）。外した画像は、ほかの画像と同じく控え（archive/）へ移る
+    */
+    it('「アバターを外す」で保存すると頭文字に戻り、画像は公開の置き場から控えへ移る', async () => {
+      for (const key of await keys('archive/avatars/')) await env.MEDIA.delete(key)
+      await env.MEDIA.put('avatars/okazaki-cccc.png', 'bytes')
+      const member = await seedMember({ avatarUrl: '/images/avatars/okazaki-cccc.png' })
+      const signed = await signIn()
+      const edit = await (await signed(`/admin/members/${member.id}/edit`)).text()
+      expect(edit).toContain('name="removeAvatar"')
+      expect(edit).toContain('src="/images/avatars/okazaki-cccc.png"')
+      // プレビューは外した姿を描くが、何も書かない
+      const preview = await signed(`/admin/preview/members/${member.id}`, {
+        method: 'POST',
+        body: form({ name: member.name, slug: member.slug, removeAvatar: '1' }),
+      })
+      expect(await preview.text()).not.toContain('/images/avatars/okazaki-cccc.png')
+      expect(await keys('avatars/')).toEqual(['avatars/okazaki-cccc.png'])
+      const saved = await signed(`/admin/members/${member.id}`, {
+        method: 'POST',
+        body: form({ name: member.name, slug: member.slug, removeAvatar: '1' }),
+      })
+      expect(saved.status).toBe(303)
+      const after = await db().query.members.findFirst({ where: eq(schema.members.id, member.id) })
+      expect(after?.avatarUrl).toBeNull()
+      expect(await keys('avatars/')).toEqual([])
+      expect(await keys('archive/avatars/')).toEqual(['archive/avatars/okazaki-cccc.png'])
+      // 顔の無い人のフォームには、外す手を出さない
+      expect(await (await signed(`/admin/members/${member.id}/edit`)).text()).not.toContain(
+        'name="removeAvatar"',
+      )
+    })
+
+    it('外すに印を付けても、新しい顔を選んでいればそちらを採る', async () => {
+      await env.MEDIA.put('avatars/okazaki-dddd.png', 'bytes')
+      const member = await seedMember({ avatarUrl: '/images/avatars/okazaki-dddd.png' })
+      const signed = await signIn()
+      const response = await signed(`/admin/members/${member.id}`, {
+        method: 'POST',
+        body: withAvatar(
+          { name: member.name, slug: member.slug, removeAvatar: '1' },
+          file(png(), 'new.png', 'image/png'),
+        ),
+      })
+      expect(response.status).toBe(303)
+      const after = await db().query.members.findFirst({ where: eq(schema.members.id, member.id) })
+      expect(after?.avatarUrl).toMatch(/^\/images\/avatars\/okazaki-[0-9a-f]{32}\.png$/)
+      expect(await keys('avatars/')).toHaveLength(1)
+    })
   })
 
   it('寸法の列を足しても既にある行はそのまま（前の移行まで当てた D1 に行を入れてから当てる）', async () => {
@@ -2490,6 +2541,36 @@ describe('大見出し・ブロックの見出しの上限（公開の関門）'
     expect(await db().select().from(schema.members)).toHaveLength(0)
   })
 
+  /*
+    大見出しの欄は複数行で、打った改行が見出しの行の変わり目（src/ui/components.tsx の
+    headlinePhrases）。改行は字数に数えない——上限ちょうどの字を2行に分けても公開できる
+  */
+  it('大見出しの改行は字数に数えず、CRLF・空の行・前後の空きを畳んで LF の行で持つ', async () => {
+    const signed = await signIn()
+    const half = 'あ'.repeat(MAX_CHARS.memberHeadline / 2)
+    const response = await signed('/admin/members', {
+      method: 'POST',
+      body: form({
+        name: '岡崎 昂功',
+        slug: 'okazaki',
+        headline: `  ${half}  \r\n\r\n${half}\r\n`,
+        published: '1',
+      }),
+    })
+    expect(response.status).toBe(303)
+    const [saved] = await db().select().from(schema.members)
+    expect(saved?.headline).toBe(`${half}\n${half}`)
+
+    // 編集の欄は複数行の textarea で、打った行のまま返す
+    const edit = await (await signed(`/admin/members/${saved?.id}/edit`)).text()
+    expect(edit).toMatch(
+      new RegExp(
+        `<textarea class="input input--area" name="headline"[^>]*>${half}\\n${half}</textarea>`,
+      ),
+    )
+    expect(edit).toContain('Enter で改行した所で行が変わる')
+  })
+
   it('下書きでは長さを見ない（上限より前に書いた人を行き止まりにしない）', async () => {
     const signed = await signIn()
     const response = await signed('/admin/members', {
@@ -2541,18 +2622,19 @@ describe('大見出し・ブロックの見出しの上限（公開の関門）'
   })
 
   /*
-    seed.sql の紹介文は本人の文章で、1画面に収めていたころの上限（400 字）を
-    超えていて、公開のまま保存し直すと止まっていた。いまは紹介文を長さで止めないので、
-    本人の言葉を削らずにそのまま公開で保存できる。
+    seed.sql の紹介文は本番の1人のサイトと同じくらいの長さで、1画面に収めていたころの
+    上限（400 字）を超えている。そのころは公開のまま保存し直すと止まっていた。いまは紹介文を
+    長さで止めないので、そのまま公開で保存できる。
   */
-  it('seed の紹介文（本人の文章）は、公開のまま保存し直せる', async () => {
+  it('seed の紹介文（400 字を超える長さ）は、公開のまま保存し直せる', async () => {
     const tuple = seedSql.slice(seedSql.indexOf('INSERT INTO members'))
     const strings = [...tuple.matchAll(/'((?:[^']|'')*)'/g)].map((found) =>
       (found[1] ?? '').replaceAll("''", "'"),
     )
     // slug, name, name_latin, role, location, headline, bio の順
     const bio = strings[6] ?? ''
-    expect(bio).toContain('コンピュータサイエンス')
+    expect(bio).toContain('情報工学を専攻し')
+    expect([...bio].length).toBeGreaterThan(400)
 
     const member = await seedMember({ bio, published: 1 })
     const signed = await signIn()
@@ -3237,6 +3319,57 @@ describe('恒久リンクの slug を変える', () => {
     expect(await db().select().from(schema.itemSlugRedirects)).toEqual([
       expect.objectContaining({ oldSlug: 'app-mixer', itemId: first.id }),
     ])
+  })
+
+  /*
+    前の URL はフォームに見え、転送をやめられる。転送に使っている slug はほかの行が使えないので、
+    打ち間違いで作った前の URL を空けるには、以前は D1 の転送表を直に消すしかなかった
+  */
+  it('前の URL はフォームに出る。「転送をやめる」で保存すると 404 に戻り、ほかの作品が使える', async () => {
+    const first = await seedItem({ title: 'AppMixer', slug: 'appmixer' })
+    const second = await seedItem({ title: 'Other', slug: 'other' })
+    const signed = await signIn()
+    const save = (id: number, values: Record<string, string>) =>
+      signed(`/admin/items/${id}`, {
+        method: 'POST',
+        body: form({ title: 'x', summary: '説明。', published: '1', ...values }),
+      })
+    await save(first.id, { slug: 'app-mixer' })
+    const edit = await (await signed(`/admin/items/${first.id}/edit`)).text()
+    expect(edit).toContain('前の URL（いまの URL へ転送中）')
+    expect(edit).toContain('<input type="checkbox" name="dropRedirect" value="appmixer"/>')
+    expect(edit).toContain('/apps/item/appmixer の転送をやめる')
+    expect((await get('/apps/item/appmixer')).status).toBe(301)
+    // 転送の無い作品のフォームには出さない
+    expect(await (await signed(`/admin/items/${second.id}/edit`)).text()).not.toContain(
+      'name="dropRedirect"',
+    )
+
+    // ほかの作品の転送は、名指ししても消せない
+    await save(second.id, { slug: 'other', dropRedirect: 'appmixer' })
+    expect(await db().select().from(schema.itemSlugRedirects)).toHaveLength(1)
+
+    expect((await save(first.id, { slug: 'app-mixer', dropRedirect: 'appmixer' })).status).toBe(303)
+    expect(await db().select().from(schema.itemSlugRedirects)).toEqual([])
+    expect((await get('/apps/item/appmixer')).status).toBe(404)
+    expect((await save(second.id, { slug: 'appmixer' })).status).toBe(303)
+  })
+
+  it('メンバーの前の URL も同じ（フォームに出て、転送をやめられる）', async () => {
+    const member = await seedMember({ name: '岡崎 昂功', slug: 'okazaki' })
+    const signed = await signIn()
+    const save = (values: Record<string, string>) =>
+      signed(`/admin/members/${member.id}`, {
+        method: 'POST',
+        body: form({ name: '岡崎 昂功', published: '1', ...values }),
+      })
+    await save({ slug: 'takanari' })
+    const edit = await (await signed(`/admin/members/${member.id}/edit`)).text()
+    expect(edit).toContain('/members/okazaki の転送をやめる')
+    expect((await get('/members/okazaki')).status).toBe(301)
+    expect((await save({ slug: 'takanari', dropRedirect: 'okazaki' })).status).toBe(303)
+    expect(await db().select().from(schema.memberSlugRedirects)).toEqual([])
+    expect((await get('/members/okazaki')).status).toBe(404)
   })
 })
 

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import * as schema from '../src/db/schema'
-import { db, form, resetDb, seedItem, seedMember, signIn } from './helpers'
+import { ADMIN_BEHAVIOR } from '../src/ui/admin-behavior'
+import { db, form, get, resetDb, seedItem, seedMember, signIn } from './helpers'
 
 beforeEach(resetDb)
 
@@ -94,6 +95,66 @@ describe('管理フォームの入力とプレビュー導線', () => {
     }
   })
 
+  /*
+    同じ「保存済みの内容を見る」手が、作品はダイアログ（矢印なし）、メンバーとブロックは別タブ（↗）で、
+    文言も「保存済み内容を…」「保存済みを…」の2通りだった。どこでも同じ名前で、同じダイアログに開く
+    （admin-behavior.ts が a[data-saved-preview] を拾う。JavaScript が無ければ別タブ）
+  */
+  it('保存済みのプレビューは、作品・メンバー・ブロックのどこでも同じ名前・同じ開き方', async () => {
+    const member = await seedMember()
+    await seedMember({ slug: 'second', name: '星野', sortOrder: 20 })
+    const item = await seedItem()
+    const [block] = await db()
+      .insert(schema.blocks)
+      .values({ type: 'note', title: 'メモ', body: '本文', published: 1 })
+      .returning()
+    const signed = await signIn()
+    for (const [list, kind, id] of [
+      ['/admin/items', 'items', item.id],
+      ['/admin/members', 'members', member.id],
+      ['/admin/blocks', 'blocks', block?.id],
+    ] as const) {
+      const href = `href="/admin/preview/${kind}/${id}" data-saved-preview=""`
+      expect(await (await signed(list)).text(), list).toContain(href)
+      const edit = await (await signed(`/admin/${kind}/${id}/edit`)).text()
+      expect(edit, kind).toMatch(
+        new RegExp(`${href} target="_blank" rel="noreferrer">\\s*保存済み内容をプレビュー\\s*</a>`),
+      )
+      expect(edit, kind).not.toContain('保存済みをプレビュー')
+    }
+  })
+
+  /*
+    管理画面の中の 404。公開ページの 404 を出していたころは、消した作品の編集画面を開いただけで
+    管理画面の目次が消え、戻る手が公開サイトの「Home」しか無かった
+  */
+  it('管理画面の中で見つからないページは、管理画面の外枠のまま出す', async () => {
+    const signed = await signIn()
+    for (const path of ['/admin/items/99999/edit', '/admin/no-such-screen']) {
+      const response = await signed(path)
+      expect(response.status, path).toBe(404)
+      const html = await response.text()
+      expect(html, path).toContain('<aside class="admin-nav">')
+      expect(html, path).toContain('<h1>ページが見つかりません</h1>')
+      expect(html, path).toContain('href="/admin"')
+      expect(html.match(/<h1\b/g), path).toHaveLength(1)
+      // 目次のどの行にも「いまのページ」の印を付けない
+      expect(html, path).not.toContain('aria-current="page"')
+    }
+    // プレビューの枠の中（script を許さない）と、公開ページの 404 は今までの形
+    for (const response of [
+      await signed('/admin/preview/items/99999'),
+      await get('/no-such-page'),
+    ]) {
+      expect(response.status).toBe(404)
+      const html = await response.text()
+      expect(html).not.toContain('admin-nav')
+      expect(html).not.toContain('<script>')
+    }
+    // ログインしていなければ、今までどおりログインへ
+    expect((await get('/admin/no-such-screen')).status).toBe(303)
+  })
+
   it('メンバーの名前のローマ字を保存し、編集画面に戻す', async () => {
     const signed = await signIn()
     const response = await signed('/admin/members', {
@@ -130,7 +191,7 @@ describe('管理フォームの入力とプレビュー導線', () => {
     })
     const signed = await signIn()
     for (const [path, values, title] of [
-      ['/admin/items', { type: 'app', title: 'テスト', memberId: '999' }, '分類と担当を設定する'],
+      ['/admin/items', { type: 'app', title: 'テスト', memberId: '999' }, '担当とタグを設定する'],
       [
         '/admin/items',
         { type: 'app', title: 'テスト', linkLabel: 'Repository', linkUrl: '' },
@@ -241,6 +302,30 @@ describe('書きながら横に完成形を置く', () => {
     ).text()
     expect(site).toContain('data-still=""')
   })
+
+  /*
+    横の完成形は入力が止まるたびに勝手に送るので、何も打っていない追加のフォームからも届く。
+    そこで「入力を確認してください」を 400 で返していたころは、新しい作品を開いた瞬間に右の枠が
+    エラーになり、枠の頭は「保存済みの内容」と言っていた（保存したものはまだ無い）
+  */
+  it('描けない書きかけは、横の完成形ではエラーにせず待つ。押して開くプレビューは 400 のまま', async () => {
+    const signed = await signIn()
+    const empty = () => form({ type: 'app', title: '' })
+    const live = await signed('/admin/preview/items?live=1', { method: 'POST', body: empty() })
+    expect(live.status).toBe(200)
+    const waiting = await live.text()
+    expect(waiting).toContain('ここに完成形が出ます')
+    expect(waiting).toContain('タイトルは必須です')
+    expect(waiting).not.toContain('入力を確認してください')
+    const pressed = await signed('/admin/preview/items', { method: 'POST', body: empty() })
+    expect(pressed.status).toBe(400)
+    expect(await pressed.text()).toContain('入力を修正してから、もう一度プレビューしてください')
+    // 追加のフォームは一度きりの札を持つ。補助はそれを見て、枠の頭を「まだ保存されていません」にする
+    expect(await (await signed('/admin/items/new?type=app')).text()).toContain('name="formKey"')
+    expect(ADMIN_BEHAVIOR).toContain(
+      "document.querySelector('.form-errors')||form.elements.formKey",
+    )
+  })
 })
 
 describe('見出しの欄は、どこに出るかで名前を変える', () => {
@@ -249,7 +334,7 @@ describe('見出しの欄は、どこに出るかで名前を変える', () => {
     const signed = await signIn()
     const solo = await (await signed(`/admin/members/${member.id}/edit`)).text()
     expect(solo).toContain('入口の大見出し')
-    expect(solo).toContain('1人のサイトでは個人ページには出しません')
+    expect(solo).toContain('入口（トップページ）の一番大きな一文。個人ページには出さない')
     // まだ誰もいないときの追加は、その人が1人目になる
     await db().delete(schema.members)
     expect(await (await signed('/admin/members/new')).text()).toContain('入口の大見出し')
@@ -258,5 +343,25 @@ describe('見出しの欄は、どこに出るかで名前を変える', () => {
     const team = await (await signed(`/admin/members/${again.id}/edit`)).text()
     expect(team).toContain('ページの見出し')
     expect(team).not.toContain('入口の大見出し')
+  })
+
+  /*
+    ローマ字と肩書きは名札に出る。1人のサイトでは左の柱にも名札が立つのに、案内が
+    「個人ページの名前の下」としか言わず、直した字がどこに出るのか分からなかった
+  */
+  it('ローマ字と肩書きの欄は、名札が出る場所を人数で言い分ける', async () => {
+    const member = await seedMember()
+    const signed = await signIn()
+    const solo = await (await signed(`/admin/members/${member.id}/edit`)).text()
+    expect(solo).toContain('氏名（ローマ字）')
+    expect(solo).toContain('左の柱と個人ページの名札で、氏名のすぐ下に出る')
+    expect(solo).toContain('役割 / 肩書き')
+    expect(solo).toContain('左の柱と個人ページの名札で、氏名の下に出る。入口の題')
+
+    await seedMember({ slug: 'second', name: '星野' })
+    const team = await (await signed(`/admin/members/${member.id}/edit`)).text()
+    expect(team).not.toContain('左の柱')
+    expect(team).toContain('個人ページの名札で、氏名のすぐ下に出る')
+    expect(team).toContain('個人ページの名札と Team のカードで、氏名の下に出る')
   })
 })

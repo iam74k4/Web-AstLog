@@ -7,7 +7,9 @@ import { blockPreviewRoutes } from './block-preview'
 import { blockRoutes } from './blocks'
 import { dashboardRoutes } from './dashboard'
 import { itemRoutes } from './items'
+import { mediaRoutes } from './media'
 import { memberRoutes } from './members'
+import { platformRoutes } from './platforms'
 import { previewRoutes } from './preview'
 import { readAdminForm } from './request'
 import { requireAuth, sameOrigin } from './session'
@@ -41,6 +43,8 @@ walled.use('*', touchSiteOnWrite)
 walled.route('/', dashboardRoutes)
 walled.route('/', memberRoutes)
 walled.route('/', itemRoutes)
+walled.route('/', platformRoutes)
+walled.route('/', mediaRoutes)
 walled.route('/', blockRoutes)
 walled.route('/', siteSettingsRoutes)
 walled.route('/', accountRoutes)

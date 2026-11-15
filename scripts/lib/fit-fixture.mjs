@@ -1,7 +1,7 @@
 /*
   check:fit の2本目の中身。**重い中身の、複数人のサイト**。
 
-  seed.sql は本人のサイトそのもの（1人・打ち込むブロック0本・本文0件）で、
+  seed.sql は本人のサイトと同じ形の見本（1人・打ち込むブロック0本・本文0件）で、
   それだけを測っていたころは、打ち込むブロック6種・3人以上の Team・作品の本文・
   上限の長さの名前は一度も測られていなかった。
 
@@ -562,7 +562,7 @@ export function fixture({ solo = false } = {}) {
 }
 
 /*
-  check:fit の4本目の中身の足し分。**本人のサイト（seed.sql）に、打ち込むブロックを
+  check:fit の4本目の中身の足し分。**本人のサイトと同じ形の見本（seed.sql）に、打ち込むブロックを
   既定の見出しのまま3本**（いま・数字・リンク集。見出しは src/blocks.ts の title）。
 
   seed は目次が3行（Projects / Profile / Contact）で、どの寸法でも帯に収まる。
@@ -583,7 +583,7 @@ export function seedBlocks() {
     { key: 'numbers', body: '20 | 人日 | 見込み 40人日から半減\n14 | 画面 | 製造・単体テスト' },
     {
       key: 'links',
-      body: 'GitHub | https://github.com/iam74k4 | コード\nZenn | https://zenn.dev/ | 記事',
+      body: 'GitHub | https://github.com/example | コード\nZenn | https://zenn.dev/ | 記事',
     },
   ].map((row, index) => ({
     id: 91 + index,

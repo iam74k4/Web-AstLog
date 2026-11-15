@@ -97,8 +97,9 @@
   */
   --font-display: var(--font-latin);
 
-  /* 節の見出し（Cavani の字間の広い大文字）の字間 */
+  /* 節の見出し（Cavani の字間の広い大文字）の字間。和文の見出しは -ja（広げすぎると語に読めない） */
   --track-label: 0.42em;
+  --track-label-ja: 0.12em;
 
   /*
     文字の段（静的）。6つだけ。中間値を足さない。
@@ -345,12 +346,15 @@
     ではなく黒。墨の幕は、開く前の一瞬が灰色がかって見えた）、--opening-track は満ちる前の線の色
     （黒い幕の上の、薄い白）、
     --opening-turn は O が回る量（1回転と4分の3。ロゴと同じ向きで止まる）。
+    --opening-edge は幕が画面の下の縁から空け、開き始めに上の縁からも外す幅（理由は「動き」の
+    節の .opening）。
     --ease-curtain は幕の開き、--ease-loader は O が回り出して静かに止まる曲線
   */
   --opening-load: 1500ms;
   --opening-open: 440ms;
   --opening-mark-h: 20px;
   --opening-gap: 22px;
+  --opening-edge: 8px;
   --opening-ground: #000000;
   --opening-track: rgba(255, 255, 255, 0.24);
   --opening-turn: -630deg;
@@ -363,6 +367,13 @@
   */
   --typed-window: 4.3s;
   --caret-blink: 1.06s;
+  /*
+    --type-step は入口の大見出しを1字打つ間（.hero__char）。打ち替える言葉の打つ速さ（1語を
+    1.5 秒。14〜21 字の言葉で1字 0.07〜0.1 秒）にそろえる。
+    --caret-w はカーソルの太さで、大見出しと打ち替える言葉の2本で同じ
+  */
+  --type-step: 70ms;
+  --caret-w: 2px;
   --press: 0.96;
   --dot: 6px;
 
@@ -931,7 +942,8 @@ body[data-site] > .frame {
 /*
   大見出し（入口の一文、全体ページの頭の名前、個人ページの大見出し）。
 
-  塊（、。まで）を1行ずつに積む。1行に流していたころは、幅しだいで
+  塊（、。まで。管理画面で改行を打ってあれば、打った1行）を1行ずつに積む
+  （components.tsx の headlinePhrases）。1行に流していたころは、幅しだいで
   「置いてお / く。」と語の途中で折れていた（名前は句読点を持たないので1つの塊のまま）。
 
   palt は和文を詰める字形。仮名と約物（、。）の空きが半分になり、見出しの
@@ -989,7 +1001,7 @@ body[data-site] > .frame {
 :is(.typed__words--2, .typed__words--3, .typed__words--4)::after {
   content: '';
   display: inline-block;
-  width: 2px;
+  width: var(--caret-w);
   height: 1.1em;
   margin-inline-start: var(--sp-1);
   vertical-align: text-bottom;
@@ -1088,7 +1100,7 @@ body[data-site] > .frame {
 :is(
   .hero h1,
   .head :is(h1, h2, h3),
-  .entry__main :is(h3, p),
+  .entry__main :is(h2, h3, p),
   .statement__text,
   .bio :is(p, li),
   .doc__head,
@@ -1239,8 +1251,7 @@ body[data-site] > .frame {
 /*
   節の見出しの字。ページごとの URL（1ページ = 1ドキュメント）では h1、縦に積んだ
   全体ページ（/all）では h2。要素が変わっても字面は同じ——見出しの階層は読み上げと
-  検索のためのもので、大きさの段ではない。英字は大文字にして字間を広く取る（和文の
-  見出しは字間だけが広がる）
+  検索のためのもので、大きさの段ではない。英字は大文字にして字間を広く取る
 */
 .head :is(h1, h2) {
   font-family: var(--font-display);
@@ -1249,6 +1260,16 @@ body[data-site] > .frame {
   line-height: 1.4;
   letter-spacing: var(--track-label);
   text-transform: uppercase;
+}
+
+/*
+  和文の見出し（components.tsx の SectionHead が、英字だけでない見出しに付ける印）。名札の
+  広い字間は英大文字の組み方で、和文に掛けると1字ずつ離れて語に読めない。字間を和文の
+  見出しの広さ（--track-label-ja）に下げ、大文字化もしない（和文に混ざる英字はそのまま）
+*/
+.head--ja :is(h1, h2) {
+  letter-spacing: var(--track-label-ja);
+  text-transform: none;
 }
 
 /* 添え（作品の「業界 · 年」、区分名）。和文が入るので本文の書体で、和文の最小の段 */
@@ -1864,8 +1885,11 @@ body[data-site] > .frame {
   min-width: 0;
 }
 
-/* 行の題。節の見出し（--fs-display-xl）から2段以上離した --fs-display-xs */
-.entry__main h3 {
+/*
+  行の題。節の見出し（--fs-display-xl）から2段以上離した --fs-display-xs。要素は置かれる
+  場所の段（Projects のページでは h2、全体ページでは h3。components.tsx の ItemRow の level）
+*/
+.entry__main :is(h2, h3) {
   font-family: var(--font-display);
   font-size: var(--fs-display-xs);
   font-weight: 600;
@@ -2572,7 +2596,7 @@ body[data-site] > .frame {
   font-size: var(--fs-meta);
 }
 
-/* 数字のブロック。入口の件数の帯と同じく、上に罫線を引いたセルを並べる（箱は持たない） */
+/* 数字のブロック。上に罫線を引いたセルを並べる（箱は持たない） */
 .numbers {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -3303,7 +3327,8 @@ body[data-site] > .frame {
     - 読み込みの幕（外から入口へ来たときだけ）: 真っ黒の幕の真ん中でロゴの O が回り、線が読み込みの
       ように満ちてから、幕が上下に開く
     - 終わらない動きは、経歴のいまの行の星と、入口の打ち替える言葉だけ
-    - 入口の幕開け: 札・大見出し・線・打ち替える言葉・リード文・押し手が順に1回だけ現れる
+    - 入口の幕開け: 札・大見出し・線・打ち替える言葉・リード文・押し手が順に1回だけ現れる。
+      大見出しは打ち替える言葉と同じ打ち方で1字ずつ打つ（打ち終えるのを待たずに、ほかも出る）
     - 入口の打ち替える言葉: 大見出しの下で言葉を1字ずつ打っては消し、次の言葉へ（Cavani の入口）
     - ページを移るとき: 本文が少し下から入り、目次の印が左から満ちる（横に滑らせると字ごと
       伸び縮みして見えた）。作品名は作品のページの見出しへつながる（itemTransition）
@@ -3312,7 +3337,7 @@ body[data-site] > .frame {
   スクロールに連動するものは @supports で括る（知らないブラウザでは止まった姿のまま）。
 */
 
-/* 入口の幕開け。札 → 大見出し（句読点の塊ごと）→ 線 → リード文 → 押し手の順に、1回だけ */
+/* 入口の幕開け。札 → 大見出し（1字ずつ打つ）→ 線 → リード文 → 押し手の順に、1回だけ */
 @keyframes rise {
   from {
     opacity: 0;
@@ -3333,7 +3358,6 @@ body[data-site] > .frame {
 }
 
 .hero--cover > .eyebrow,
-.hero--cover h1 .phrase,
 .hero--cover > .hero__lead,
 .hero--cover > .hero__actions {
   animation: rise var(--dur-reveal) var(--ease) both;
@@ -3343,18 +3367,49 @@ body[data-site] > .frame {
   animation-delay: var(--reveal-from);
 }
 
-.hero--cover h1 .phrase:nth-child(1) {
-  animation-delay: calc(var(--reveal-from) + var(--stagger));
+/*
+  大見出しは1字ずつ打ち、全部そろったところで止まる（components.tsx の TypedHeadline。
+  打ち替える言葉と同じ打ち方・同じ速さ・同じカーソルで、消さずに1回だけ）。字は打つ時刻まで
+  透明で、打つとそのまま残る。カーソルは打った字のすぐ後ろに、次の字を打つまでだけ出る
+  （打ち終えたら消える。点滅し続けるのは打ち替える言葉のカーソルだけ）。カーソルの高さ（字の箱の上下を
+  0.15em ずつ空けて約 1.1em）と字とのすき間は、打ち替える言葉のカーソルと同じ。
+  字の場所は初めから取ってある（字ごとに幅を広げると、打つたびに行が組み直され、下の字が揺れる）
+*/
+.hero__char {
+  position: relative;
+  animation: type-in 1ms steps(1)
+    calc(var(--reveal-from) + var(--stagger) + var(--i) * var(--type-step)) backwards;
 }
 
-.hero--cover h1 .phrase:nth-child(2) {
-  animation-delay: calc(var(--reveal-from) + var(--stagger) * 2);
+.hero__char::after {
+  content: '';
+  position: absolute;
+  inset-block: 0.15em;
+  inset-inline-start: calc(100% + var(--sp-1));
+  width: var(--caret-w);
+  background: currentColor;
+  opacity: 0;
+  animation: type-caret var(--type-step) steps(1)
+    calc(var(--reveal-from) + var(--stagger) + var(--i) * var(--type-step));
 }
 
-.hero--cover h1 .phrase:nth-child(n + 3) {
-  animation-delay: calc(var(--reveal-from) + var(--stagger) * 3);
+@keyframes type-in {
+  from {
+    opacity: 0;
+  }
 }
 
+@keyframes type-caret {
+  from,
+  to {
+    opacity: 1;
+  }
+}
+
+/*
+  下の線・打ち替える言葉・リード文・押し手は、大見出しを打っているあいだにいつもの間で出る
+  （打ち終えるまで待たせると、最初の画面が大見出しだけのまま止まって見えた）
+*/
 .hero--cover h1::after {
   transform-origin: left;
   animation: draw-x var(--dur-reveal) var(--ease) calc(var(--reveal-from) + var(--stagger) * 4) both;
@@ -3510,26 +3565,48 @@ body[data-site] > .frame {
   ページはもう届いているので、線が見せているのは本物の進みではなく、見せるための間
   （--opening-load）。入口の字は幕が開き始めると同時に現れ始める（--reveal-from）。
 
-  軽さのために: JavaScript は使わない。幕は .opening の2つの疑似要素で、動かすのは位置
-  （translate）・倍率（scale）・回転（rotate）・透明度だけ——描き直しの要らない合成だけで動く。
-  押す手は幕を通り抜ける（pointer-events: none）。開き終えたら隠す（visibility）。
+  軽さのために: JavaScript は使わない。幕は .opening の2つの疑似要素で、毎コマ動かすのは
+  倍率（scale）・回転（rotate）・透明度だけ——描き直しの要らない合成だけで動く。箱の位置を
+  変えるのは開き始めの1度だけ（opening-lift）。押す手は幕を通り抜ける（pointer-events: none）。
+  開き終えたら隠す（visibility）。
 
   動きを減らす設定・紙・強制色では幕ごと出さない（下の @media。素の動きを止めるだけだと、
   幕が閉じたまま残る）。
+
+  iPhone の Safari（26 から）は、画面の上と下の縁に触れる position: fixed の要素の色で上の
+  帯（時計の列）と下の帯（道具の列）を塗る。隠しても（visibility）数え、下の帯はその要素が
+  ページにあるあいだ最初の色のまま——幕が開いたあとも上下が黒く残り、ページが黒い枠に
+  縮んで見えた。fixed の箱は下の帯の奥まで届かず、そこにはページの地が見える。だから
+  - 幕は下の縁に触れない（--opening-edge だけ空ける）。空いた所と下の帯の奥は、幕のあいだ
+    だけ黒くした地（body の opening-ground）が埋める
+  - 開くときも縁を越えない。半分ずつ外側の縁へ縮む（opening-part。滑らせると、下の半分が
+    縁を越える一瞬に下の帯が黒に決まった）
+  - 開き始めたら、地を白に戻し、箱の上も縁から外す（opening-lift）。上の帯は帯の下の白い面の
+    色に、下の帯は白い地に、同じ瞬間に戻る
 */
 body[data-opening] {
   --reveal-from: var(--opening-load);
+  animation: opening-ground 1ms linear var(--opening-load) backwards;
+}
+
+@keyframes opening-ground {
+  from,
+  to {
+    background-color: var(--opening-ground);
+  }
 }
 
 .opening {
   position: fixed;
-  inset: 0;
+  inset: 0 0 var(--opening-edge);
   z-index: 10;
   display: grid;
   place-items: center;
   color: var(--accent-ink);
   pointer-events: none;
-  animation: opening-done 1ms linear calc(var(--opening-load) + var(--opening-open)) forwards;
+  animation:
+    opening-lift 1ms linear var(--opening-load) forwards,
+    opening-done 1ms linear calc(var(--opening-load) + var(--opening-open)) forwards;
 }
 
 /* 幕の上下の半分。下の半分は 1px 重ねる（端数の高さで、合わせ目から白い地が線になって覗かない） */
@@ -3542,14 +3619,15 @@ body[data-opening] {
   left: 0;
   height: 50%;
   background: var(--opening-ground);
-  animation: opening-up var(--opening-open) var(--ease-curtain) var(--opening-load) both;
+  transform-origin: top;
+  animation: opening-part var(--opening-open) var(--ease-curtain) var(--opening-load) both;
 }
 
 .opening::after {
   top: calc(50% - 1px);
   bottom: 0;
   height: auto;
-  animation-name: opening-down;
+  transform-origin: bottom;
 }
 
 /* ロゴと線。幕より手前に置き、幕が開き始めると同時に消える。線の幅はロゴの幅 */
@@ -3620,17 +3698,18 @@ body[data-opening] {
   }
 }
 
-@keyframes opening-up {
+/* 幕の半分は、外側の縁へ縮んで開く（無地なので、滑って出ていくのと同じに見える） */
+@keyframes opening-part {
   to {
-    translate: 0 -100%;
+    scale: 1 0;
     visibility: hidden;
   }
 }
 
-@keyframes opening-down {
+/* 開き始めの1度だけ、箱の上を縁から外す（上の帯が幕の黒から戻る。描き直しは1回） */
+@keyframes opening-lift {
   to {
-    translate: 0 100%;
-    visibility: hidden;
+    top: var(--opening-edge);
   }
 }
 
@@ -3645,9 +3724,10 @@ body[data-opening] {
     display: none;
   }
 
-  /* 幕が無いので、入口の字も待たせない */
+  /* 幕が無いので、入口の字も待たせず、地も黒くしない */
   body[data-opening] {
     --reveal-from: 0ms;
+    animation: none;
   }
 }
 
@@ -3762,8 +3842,8 @@ body[data-opening] {
     窓で中身が入りきらなければ、柱の中だけを縦に送る（送れる箱は目次の面のはみ出しも切るので、
     面が左へ出るぶん柱の箱を左へ広げておく）。
 
-    柱があるあいだ、同じ中身の上の帯の目次と足元の行き先は出さない（Layout.tsx の Pillar。同じ
-    行き先を2つ見せない）。名札が立っているあいだは、同じ名乗り（入口の札と、個人ページの頭の
+    柱があるあいだ、同じ中身の上の帯の目次と足元（行き先と著作権表示）は出さない（Layout.tsx の
+    Pillar。同じ行き先を2つ見せない）。名札が立っているあいだは、同じ名乗り（入口の札と、個人ページの頭の
     名札）も本文に重ねない——個人ページの名前は h1 なので、見えなくするだけで読み上げには残す
     （.sr-only と同じ畳み方。頭の箱ごと畳むと、空の箱が節のあいだの空きを作らない）
   */
@@ -3795,12 +3875,19 @@ body[data-opening] {
       overflow-y: auto;
     }
 
-    /* 行き先は柱の底に置く */
-    .pillar > .socials {
+    /* 行き先と著作権表示は柱の底に置く */
+    .pillar__foot {
+      display: grid;
+      gap: var(--sp-2);
       margin-top: auto;
     }
 
-    body[data-pillar] :is(.top .toc, .foot .socials) {
+    /*
+      足元は足元ごと畳む（中身の2つは柱の底に立っている）。行き先だけを畳んで著作権表示の1行を
+      残していたころは、柱（画面から帯を引いた高さ）の下に足元が積まれ、中身の短いページでも
+      足元のぶんだけ必ず縦に送れた——「足元を画面の底に置く」が 900 以上でだけ崩れていた
+    */
+    body[data-pillar] :is(.top .toc, .foot) {
       display: none;
     }
 

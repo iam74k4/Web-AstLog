@@ -21,10 +21,13 @@ import {
 import {
   type CareerDetail,
   type CareerGroup,
+  headlineLines,
+  headlineText,
   initials,
   isHttpsUrl,
   isOngoing,
   isSafeUrl,
+  lineJoint,
   type SkillGroup,
   skillRows,
 } from '../lib/format'
@@ -145,7 +148,7 @@ export const Stylesheets = ({
       上の帯・見出し・作品名と名前に使う Poppins の 500・600・700 を、CSS を読み終える前から
       取りに行く（CSS の @font-face で見つけてからだと、その往復のぶん字の差し替えが遅れる。
       600 は入口では使わず、先に取らないと初めて開いた Projects の作品名が一瞬だけ代わりの
-      書体で出た）。400 は窓の札だけなので、見つけてからでよい。URL は app.css の
+      書体で出た）。400 は画像の番号（.gallery__count）だけなので、見つけてからでよい。URL は app.css の
       @font-face と同じ版つきの名前（違うと同じ書体を2度取る）
     */}
     <link
@@ -366,13 +369,21 @@ export const SectionHead = ({
       ) : null}
     </>
   )
+  /*
+    節の名札（字間の広い大文字）は英字の組み方。和文の見出し（打ち込むブロックの見出し・
+    お知らせの画面）にそのまま掛けると「デ ー タ ベ ー ス」と1字ずつ離れるので、英字だけで
+    ない見出しには印を付け、和文の字間に下げる（app.css の .head--ja）。英字の見出しの
+    HTML は今までと同じ
+  */
   const kind = sub
     ? 'head head--sub'
     : chapter
       ? 'head head--chapter'
       : item
         ? 'head head--item'
-        : 'head'
+        : langOf(title)
+          ? 'head'
+          : 'head head--ja'
   return icon ? (
     <div class={`${kind} head--icon`}>
       <img class="head__icon" src={icon} alt="" width="64" height="64" decoding="async" />
@@ -479,13 +490,95 @@ export const Phrases = ({ text }: { text: string }) => (
   </>
 )
 
+/*
+  大見出し（members.headline）の塊。改行を打ってあれば、打った行がそのまま塊になり、行の中は
+  句読点で切らない——行を自分で決めた人の見出しを、こちらの句読点の規則でさらに割らない。
+  改行が無ければ今までどおり句読点で切る（splitPhrases）。英字の大見出し（「Harder, Better,
+  Faster, Stronger.」）は句読点の規則では1つの塊のままで、行を決められるのは改行だけ。
+
+  塊を1行ずつに積むのは CSS（.hero h1 .phrase と .profile__headline .phrase の
+  display: block）。行が窓より長いときは、塊の中を文節で折る（.phrase のすぐ下の規則）。
+  1行に畳んだ文が要る場所（説明文・読み上げの名前・Team のカード）は src/lib/format.ts の
+  headlineText を読む。
+
+  joint は塊の前に置く継ぎ目の字（打った行の継ぎ目で、片側でも欧文なら半角の空き。lineJoint）。
+  塊の span の外に素の字で置く——行は block に積むので見た目には出ないが、検索エンジンと
+  Ctrl-F が読む字は headlineText と同じ1文になる（無いと「Better,Faster」と語がつながる）。
+  句読点で切った塊は元の文の続きなので、継ぎ目は空
+*/
+export const headlinePhrases = (text: string): { part: string; joint: string }[] => {
+  const lines = headlineLines(text)
+  if (lines.length < 2) return splitPhrases(text.trim()).map((part) => ({ part, joint: '' }))
+  return lines.map((part, i) => ({
+    part,
+    joint: i === 0 ? '' : lineJoint(lines[i - 1] ?? '', part),
+  }))
+}
+
+// 大見出しを塊の span に並べる（個人ページの h1 と、/all の Profile の大見出し）
+export const HeadlinePhrases = ({ text }: { text: string }) => (
+  <>
+    {headlinePhrases(text).map(({ part, joint }, p) => (
+      <>
+        {joint}
+        <span key={`${p}`} class="phrase">
+          {part}
+        </span>
+      </>
+    ))}
+  </>
+)
+
+/*
+  入口の大見出し。打ち替える言葉（TypedWords）と同じ打ち方で、1字ずつ打って全部そろった
+  ところで止まる（消さずに1回だけ。app.css の「動き」の .hero__char。1字の間もカーソルも
+  打ち替える言葉にそろえる。止める設定・紙では打ち終えた姿のまま）。行の切り方は
+  headlinePhrases の塊ごと（打った改行で、改行が無ければ和文の句読点で行を改める）で、
+  塊の中は1行の中で左から打つ。字の場所は初めから取ってある（透明から出す。字ごとに幅を
+  広げると、打つたびに行が組み直されて下の字が揺れる）。
+
+  読み上げには aria-label で1行に畳んだ文（headlineText）を渡し、字の span は隠す（1字ずつの
+  span は、読み上げが字ごとに区切って読むことがある）。検索エンジンと Ctrl-F は、字をつないだ
+  同じ文を読む（行の継ぎ目の空きは、塊の外の素の字。headlinePhrases の joint で、打たない）。
+  字の番号（--i）は大見出し全体の通し番号で、打つ時刻を決める（行が変わっても続きの番号）。
+  下の線・打ち替える言葉・リード文・押し手は、打ち終えるのを待たずにいつもの間で出る
+*/
+const headlineParts = (text: string) =>
+  headlinePhrases(text).map(({ part, joint }) => ({ letters: [...part], joint }))
+
+export const TypedHeadline = ({ text }: { text: string }) => {
+  const phrases = headlineParts(text)
+  // 塊ごとの、最初の字の通し番号
+  const first = phrases.map((_, p) =>
+    phrases.slice(0, p).reduce((total, { letters }) => total + letters.length, 0),
+  )
+  // lang の判定と読み上げの名前は1行に畳んだ文で（改行のままでは英字だけと見なされない）
+  const sentence = headlineText(text)
+  return (
+    <h1 lang={langOf(sentence)} aria-label={sentence}>
+      {phrases.map(({ letters, joint }, p) => (
+        <>
+          {joint}
+          <span key={`${p}`} class="phrase" aria-hidden="true">
+            {letters.map((letter, i) => (
+              <span key={`${i}`} class="hero__char" style={`--i: ${(first[p] ?? 0) + i}`}>
+                {letter}
+              </span>
+            ))}
+          </span>
+        </>
+      ))}
+    </h1>
+  )
+}
+
 // 2桁にそろえた番号（01・02 …）。Projects の件数とギャラリーの番号で同じ書き方
 const twoDigits = (value: number) => String(value).padStart(2, '0')
 
 /*
   見出しの上に添える小さな札（入口の「名前・職種・所在地」、全体ページの頭の職種）。
-  部分ごとに、英字だけなら等幅の小さな大文字（lang="en"。langOf）、和文を含めば
-  本文の書体のまま——「System Engineer」と「神奈川」を並べても、それぞれの字で組む。
+  部分ごとに、英字だけなら lang="en"（読み上げの発音の印。langOf）を付ける。書体は
+  どちらも本文のまま——「System Engineer」と「神奈川」を並べても、同じ字で組む。
   部分のあいだは区切りの字を置かず、間隔で分ける（app.css の .eyebrow）。
 */
 export const Eyebrow = ({ parts }: { parts: string[] }) => (
@@ -503,31 +596,36 @@ export const Eyebrow = ({ parts }: { parts: string[] }) => (
   打っては消し、次の言葉へ移る。JavaScript を持たないので、字を1つずつの span に分け、
   打った字数を CSS の数（--typed、0 → 1 → 0）から決める（app.css の「動き」の typed）。
 
-  読み上げと検索エンジンには、言葉を「 / 」でつないだ1行を渡し、打つ字の列は隠す
-  （1字ずつの読み上げにしない）。動きを止める設定では、最初の言葉が打ち終わった姿で止まる。
+  読み上げと検索エンジンには、言葉を読点でつないだ1行を渡し、打つ字の列は隠す
+  （1字ずつの読み上げにしない）。英字だけなら「, 」、和文を含めば「、」。区切りに「/」を
+  使わない——言葉の中の「/」（「iOS / macOS Developer」）と区別が付かず、3つの言葉が
+  4つに読めた。動きを止める設定では、最初の言葉が打ち終わった姿で止まる。
   言葉が1つなら打ち替えず、その言葉を置くだけ（--N の印が無いので動かず、カーソルも無い）。
   巡りの形は言葉の数で決まる（app.css の typed-2〜4。数は src/site.ts の HERO_ROLES）。
 */
-export const TypedWords = ({ words }: { words: string[] }) => (
-  <p class="typed" lang={langOf(words.join(''))}>
-    <span class="sr-only">{words.join(' / ')}</span>
-    <span
-      class={words.length > 1 ? `typed__words typed__words--${words.length}` : 'typed__words'}
-      aria-hidden="true"
-      style={`--words: ${words.length}`}
-    >
-      {words.map((word, k) => (
-        <span class="typed__word" key={word} style={`--k: ${k}; --len: ${[...word].length}`}>
-          {[...word].map((letter, i) => (
-            <span key={`${i}`} style={`--i: ${i}`}>
-              {letter}
-            </span>
-          ))}
-        </span>
-      ))}
-    </span>
-  </p>
-)
+export const TypedWords = ({ words }: { words: string[] }) => {
+  const lang = langOf(words.join(''))
+  return (
+    <p class="typed" lang={lang}>
+      <span class="sr-only">{words.join(lang === 'en' ? ', ' : '、')}</span>
+      <span
+        class={words.length > 1 ? `typed__words typed__words--${words.length}` : 'typed__words'}
+        aria-hidden="true"
+        style={`--words: ${words.length}`}
+      >
+        {words.map((word, k) => (
+          <span class="typed__word" key={word} style={`--k: ${k}; --len: ${[...word].length}`}>
+            {[...word].map((letter, i) => (
+              <span key={`${i}`} style={`--i: ${i}`}>
+                {letter}
+              </span>
+            ))}
+          </span>
+        ))}
+      </span>
+    </p>
+  )
+}
 
 /*
   押し手（入口の「Projects →」「Profile →」）。塗りはページでいちばん強い1本にだけ
@@ -597,7 +695,7 @@ export const ScreenSection = ({
 const LATIN_ONLY = /^[ -~\u2010-\u2026]+$/
 export const langOf = (text: string) => (LATIN_ONLY.test(text) ? 'en' : undefined)
 
-// タグ。英字だけの札にだけ lang="en"（等幅になる。langOf を見ること）
+// タグ。英字だけの札にだけ lang="en"（読み上げの発音の印。langOf を見ること）
 export const Tags = ({ tags }: { tags: string[] }) =>
   tags.length ? (
     <ul class="tags">
@@ -687,7 +785,7 @@ export const itemTransition = (item: { slug: string | null }) =>
   矢印も付かない——押しても何も起きない行に、押せる合図を出さない。
 
   アイコン（items.icon_url）は題の軸の外に吊るす（app.css の .entry__icon。題の頭は
-  アイコンの有無によらずそろう）。飾り（alt=""）で、h3 の中・題のリンクの外に置く
+  アイコンの有無によらずそろう）。飾り（alt=""）で、題の見出しの中・題のリンクの外に置く
   （行の面は題のリンクの覆いが受けるので、押せば作品のページへ。リンクの名前と、
   ページを移るときにつなぐ題の字は題だけのまま）。
 */
@@ -699,8 +797,15 @@ export const ItemRow = ({
   item,
   showMember,
   showKind = true,
+  level = 3,
 }: {
   item: ItemView
+  /*
+    行の題の見出しの段。Projects のページでは節の見出しが h1 なので h2、全体ページ（/all）では
+    節が h2 なので h3（renderBlock の whole）。どちらでも h3 にしていたころは、Projects の
+    ページが h1 のすぐ下に h3 を並べ、h2 を飛ばしていた（見出しで移動する人には段が抜けて聞こえる）
+  */
+  level?: 2 | 3
   showMember?: boolean
   showKind?: boolean
 }) => {
@@ -717,6 +822,18 @@ export const ItemRow = ({
       decoding="async"
     />
   ) : null
+  const title = (
+    <>
+      {icon}
+      {href ? (
+        <a class="entry__link" href={href} style={itemTransition(item)}>
+          {item.title}
+        </a>
+      ) : (
+        item.title
+      )}
+    </>
+  )
   return (
     // id は作品のページの「← Projects」の着地点（itemCardId）
     <article class="entry" id={itemCardId(item)}>
@@ -733,16 +850,7 @@ export const ItemRow = ({
         ) : null}
       </ul>
       <div class="entry__main">
-        <h3>
-          {icon}
-          {href ? (
-            <a class="entry__link" href={href} style={itemTransition(item)}>
-              {item.title}
-            </a>
-          ) : (
-            item.title
-          )}
-        </h3>
+        {level === 2 ? <h2>{title}</h2> : <h3>{title}</h3>}
         {item.summary ? <p>{item.summary}</p> : null}
         <Metric item={item} />
         <Tags tags={item.tags} />
@@ -1023,9 +1131,7 @@ export const ItemShots = ({ images }: { images: ItemImage[] }) =>
             >
               <span class="gallery__mini">
                 {isVideoUrl(image.url) || !image.url ? (
-                  <span class="gallery__video" aria-hidden="true">
-                    ▷
-                  </span>
+                  <span aria-hidden="true">▷</span>
                 ) : (
                   <img src={image.url} alt="" loading="lazy" decoding="async" />
                 )}
@@ -1277,7 +1383,8 @@ export const MemberCardWide = ({ member }: { member: PublicMember }) => (
           {member.location ? ` · ${member.location}` : ''}
         </span>
       </span>
-      {member.headline ? <span class="member__lead">{member.headline}</span> : null}
+      {/* カードの小さな1行。打った改行は畳む（行を改めるのは大見出しとして出す場所だけ） */}
+      {member.headline ? <span class="member__lead">{headlineText(member.headline)}</span> : null}
     </span>
     <span class="member__go" lang="en">
       Profile →
@@ -1299,8 +1406,8 @@ export const MemberCardCompact = ({ member }: { member: PublicMember }) => (
 /*
   一覧への帯。件数を添えて、押す前に「ここに何件あるか」を見せる。
 
-  使うのは、2人以上のサイトの個人ページの名札の下（入口は同じことを「Projects →」
-  と件数の帯 Tally で言う）。作品そのものは別の URL（その人で絞った一覧）にあるので、
+  使うのは、2人以上のサイトの個人ページの名札の下（入口は同じ行き先を押し手の
+  「Projects →」で言う）。作品そのものは別の URL（その人で絞った一覧）にあるので、
   そこに何があるかを数で示してから送り出す。行き先は呼ぶ側が決める（項目のある側へ
   送ること。0件の側へ送ると、0件の知らせだけのページに着く）。
 
@@ -1809,7 +1916,7 @@ export const ProfileWhole = ({
     <Nameplate member={member} />
     {member.headline ? (
       <p class="profile__headline">
-        <Phrases text={member.headline} />
+        <HeadlinePhrases text={member.headline} />
       </p>
     ) : null}
     {children}

@@ -81,7 +81,11 @@ dashboardRoutes.get('/', async (c) => {
   const shown = (type: string) =>
     effectiveBlocks.some((block) => block.type === type && blockShown(block, counts))
 
-  let next: DashboardAction
+  /*
+    次にできること。やることが無ければ出さない——前は「公開画面を確認する」と全体プレビューを
+    案内していたが、すぐ上の「全体をプレビュー」と同じ行き先の押し手が2つ並んだ
+  */
+  let next: DashboardAction | null = null
   if (pages === 0) {
     next = {
       title: '公開ページの構成を確認する',
@@ -130,17 +134,9 @@ dashboardRoutes.get('/', async (c) => {
   } else if (members.firstDraft !== null) {
     next = {
       title: 'プロフィールの下書きを確認する',
-      note: `${members.drafts} 件のプロフィールが下書きです。載せるものだけ公開できます。`,
+      note: `${members.drafts} 人のプロフィールが下書きです。載せる人だけ公開できます。`,
       href: `/admin/members/${members.firstDraft}/edit`,
       label: '下書きを編集',
-    }
-  } else {
-    next = {
-      title: '公開画面を確認する',
-      note: '保存済みの公開内容をまとめて確認できます。必要なところから、いつでも編集できます。',
-      href: '/admin/preview',
-      label: 'プレビューを開く ↗',
-      newTab: true,
     }
   }
 

@@ -215,7 +215,13 @@ describe('入口で打ち替える言葉', () => {
     await touch()
     const html = await okText('/')
     expect(html).toContain('<p class="typed" lang="en">')
-    expect(html).toContain(`<span class="sr-only">${words.join(' / ')}</span>`)
+    /*
+      区切りは「, 」。「 / 」でつないでいたころは、言葉の中の「/」と区別が付かず、
+      3つの言葉が「System Engineer / iOS / macOS Developer / …」と4つに読めた
+    */
+    expect(html).toContain(
+      '<span class="sr-only">System Engineer, iOS / macOS Developer, AI Workflow Engineer</span>',
+    )
     expect(html).toContain(
       '<span class="typed__words typed__words--3" aria-hidden="true" style="--words: 3">',
     )
@@ -238,6 +244,15 @@ describe('入口で打ち替える言葉', () => {
     const one = await okText('/')
     expect(one).toContain('<span class="typed__words" aria-hidden="true" style="--words: 1">')
     expect(one).not.toContain('typed__words--')
+  })
+
+  it('和文を含む言葉は、読み上げの1行を「、」でつなぐ', async () => {
+    await seedMember()
+    await withRoles('システムエンジニア\r\niOS / macOS Developer')
+    await touch()
+    const html = await okText('/')
+    expect(html).toContain('<p class="typed">')
+    expect(html).toContain('<span class="sr-only">システムエンジニア、iOS / macOS Developer</span>')
   })
 
   it('言葉は4つまで、1つは半角24字（全角12字）まで。管理画面で止めて欄を示す', async () => {

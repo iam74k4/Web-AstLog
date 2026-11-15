@@ -1,4 +1,4 @@
-import { eq, inArray, type SQL, sql } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { type Context, Hono } from 'hono'
 import { blockRowError, readBlockBody, readBlockRows } from '../../block-editor'
 import {
@@ -8,7 +8,6 @@ import {
   blockType,
   blockValueErrors,
   isBlockKey,
-  LEGACY_BLOCK_KEYS,
   MAX_CHARS,
   MAX_STATEMENT_SENTENCE,
   publishErrors,
@@ -51,40 +50,16 @@ import {
   flashFor,
   formKeyOf,
   newFormKey,
+  PUBLISH_BLOCKED,
   parseId,
   savedParam,
 } from './request'
 
 export const blockRoutes = new Hono<AppEnv>()
 
-/*
-  前の Apps / Works は、一覧では1つの Projects に畳まれる（listBlocks）。編集と
-  削除もその論理行を操作する。代表だけを書き換えると、隠れた公開行から Projects が
-  戻ってしまうので、元の行の id をまとめ、1つの UPDATE / DELETE に渡す。
-
-  表示する id と公開状態は listBlocks の答えを使う。移行済みの種類は1行のまま。
-*/
-export async function findAdminBlock(database: Db, id: number) {
-  const stored = await database.query.blocks.findFirst({ where: eq(schema.blocks.id, id) })
-  if (!stored) return undefined
-  const type = LEGACY_BLOCK_KEYS[stored.type]
-  if (!type) return { block: stored, where: eq(schema.blocks.id, id) }
-
-  const aliases = Object.entries(LEGACY_BLOCK_KEYS)
-    .filter(([, current]) => current === type)
-    .map(([before]) => sql`${before}`)
-  const [rows, legacy] = await Promise.all([
-    listBlocks(database),
-    database
-      .select({ id: schema.blocks.id })
-      .from(schema.blocks)
-      .where(sql`${schema.blocks.type} in (${sql.join(aliases, sql`, `)})`),
-  ])
-  const ids = legacy.map((row) => row.id)
-  const block = rows.find((row) => ids.includes(row.id)) ?? rows.find((row) => row.id === id)
-  if (!block) return undefined
-  return { block, where: inArray(schema.blocks.id, [...new Set([...ids, block.id])]) }
-}
+// 構成の1行（編集・公開の切り替え・外す・保存前のプレビューが引く）
+export const findAdminBlock = (database: Db, id: number) =>
+  database.query.blocks.findFirst({ where: eq(schema.blocks.id, id) })
 
 /*
   公開ページの並び。置く・外す・前後に動かす、の3つだけ。
@@ -250,6 +225,7 @@ const BlocksPage = (props: {
                     <a
                       class="icon-btn"
                       href={`/admin/preview/blocks/${block.id}`}
+                      data-saved-preview=""
                       target="_blank"
                       rel="noreferrer"
                       aria-label={`${blockLabel(block)} の保存済み内容をプレビュー`}
@@ -309,7 +285,7 @@ const BlocksPage = (props: {
         <section class="catalog">
           <h2 class="catalog__title">
             足す
-            <span class="presets__note">Contact の手前に入る。置いてから前後に動かす</span>
+            <span>Contact の手前に入る。置いてから前後に動かす</span>
           </h2>
           <ul class="catalog__grid">
             {available.map((type) => (
@@ -398,10 +374,11 @@ const BlockForm = (props: {
           <a
             class="btn btn--ghost"
             href={`/admin/preview/blocks/${block.id}`}
+            data-saved-preview=""
             target="_blank"
             rel="noreferrer"
           >
-            保存済みをプレビュー ↗
+            保存済み内容をプレビュー
           </a>
         ) : null}
       </div>
@@ -489,12 +466,11 @@ blockRoutes.get('/blocks/new', (c) => {
   保存すれば、押したかった「公開」がそのまま通る。理由がもう無ければ（別の
   タブで直した）、ふつうの編集画面。
 */
-const PUBLISH_BLOCKED = '公開できませんでした。下の理由を直して保存すると、公開されます'
 
 blockRoutes.get('/blocks/:id/edit', async (c) => {
   const id = parseId(c.req.param('id'))
   if (!id) return c.notFound()
-  const block = (await findAdminBlock(db(c), id))?.block
+  const block = await findAdminBlock(db(c), id)
   const type = block ? blockType(block.type) : undefined
   if (!block || !type) return c.notFound()
   const blocked =
@@ -664,12 +640,11 @@ blockRoutes.post('/blocks/init', async (c) => {
 blockRoutes.post('/blocks/:id', async (c) => {
   const id = parseId(c.req.param('id'))
   if (!id) return c.notFound()
-  const target = await findAdminBlock(db(c), id)
-  const block = target?.block
+  const block = await findAdminBlock(db(c), id)
   const type = block ? blockType(block.type) : undefined
   if (!block || !type) return c.notFound()
 
-  return saveBlock(c, block, type, readBlockForm(await c.req.formData()), false, target?.where)
+  return saveBlock(c, block, type, readBlockForm(await c.req.formData()), false)
 })
 
 /*
@@ -682,7 +657,6 @@ async function saveBlock(
   type: BlockType,
   values: ReturnType<typeof readBlockForm>,
   again: boolean,
-  where: SQL = eq(schema.blocks.id, block.id),
 ) {
   const id = block.id
   const updatedAt = nextUpdatedAt(block.updatedAt)
@@ -712,7 +686,7 @@ async function saveBlock(
         database
           .update(schema.blocks)
           .set(fixed ? { published: values.published, updatedAt } : { ...values, updatedAt })
-          .where(where),
+          .where(eq(schema.blocks.id, id)),
       ])
       return null
     } catch (error) {
@@ -764,9 +738,8 @@ async function saveBlock(
 blockRoutes.post('/blocks/:id/publish', async (c) => {
   const id = parseId(c.req.param('id'))
   if (!id) return c.notFound()
-  const target = await findAdminBlock(db(c), id)
-  if (!target) return c.notFound()
-  const { block, where } = target
+  const block = await findAdminBlock(db(c), id)
+  if (!block) return c.notFound()
 
   const form = await c.req.formData()
   const published = bool(form.get('published'))
@@ -781,7 +754,7 @@ blockRoutes.post('/blocks/:id/publish', async (c) => {
   await db(c)
     .update(schema.blocks)
     .set({ published, updatedAt: new Date().toISOString() })
-    .where(where)
+    .where(eq(schema.blocks.id, block.id))
   // 押した行へ戻す。一覧の頭に戻すと、どれを切り替えたかを探し直すことになる
   return c.redirect(`/admin/blocks?saved=${savedParam(published)}#block-${block.id}`, 303)
 })
@@ -830,7 +803,7 @@ blockRoutes.post('/blocks/:id/move', async (c) => {
 blockRoutes.get('/blocks/:id/delete', async (c) => {
   const id = parseId(c.req.param('id'))
   if (!id) return c.notFound()
-  const block = (await findAdminBlock(db(c), id))?.block
+  const block = await findAdminBlock(db(c), id)
   if (!block) return c.notFound()
   const type = blockType(block.type)
 
@@ -861,9 +834,9 @@ blockRoutes.get('/blocks/:id/delete', async (c) => {
 blockRoutes.post('/blocks/:id/delete', async (c) => {
   const id = parseId(c.req.param('id'))
   if (!id) return c.notFound()
-  const target = await findAdminBlock(db(c), id)
-  if (!target) return c.notFound()
+  const block = await findAdminBlock(db(c), id)
+  if (!block) return c.notFound()
 
-  await db(c).delete(schema.blocks).where(target.where)
+  await db(c).delete(schema.blocks).where(eq(schema.blocks.id, block.id))
   return c.redirect('/admin/blocks?deleted=1', 303)
 })

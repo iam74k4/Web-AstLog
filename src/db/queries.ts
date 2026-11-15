@@ -1,6 +1,6 @@
 import { and, asc, count, eq, sql } from 'drizzle-orm'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
-import { blockType, DEFAULT_BLOCKS, LEGACY_BLOCK_KEYS } from '../blocks'
+import { blockType, DEFAULT_BLOCKS } from '../blocks'
 import {
   ITEM_KIND_KEYS,
   type ItemKind,
@@ -285,52 +285,11 @@ export async function saveSiteSettings(db: Db, site: SiteSettings, version?: str
 
 /* ------------------------------------------------------------- 構成 */
 
-/*
-  構成の行を読む口はこの2つ（listBlocks / findBlock）だけで、どちらも前の版の種類の
-  名前をいまの名前に読み替える（src/blocks.ts の LEGACY_BLOCK_KEYS）。公開ページも
-  管理画面もここを通るので、書き換えの移行（0004）を流していない D1 でも、Projects が
-  描かれ、構成の一覧に Projects の行として並ぶ。
-*/
-export async function listBlocks(db: Db): Promise<schema.Block[]> {
-  const rows = await db.query.blocks.findMany({
+// 構成の行（並び順）。公開ページの並び（publishedBlocks）と管理画面の構成の一覧が読む
+export const listBlocks = (db: Db): Promise<schema.Block[]> =>
+  db.query.blocks.findMany({
     orderBy: [asc(schema.blocks.sortOrder), asc(schema.blocks.id)],
   })
-  return readLegacyBlocks(rows)
-}
-
-export async function findBlock(db: Db, id: number): Promise<schema.Block | undefined> {
-  const row = await db.query.blocks.findFirst({ where: eq(schema.blocks.id, id) })
-  if (!row) return undefined
-  const key = LEGACY_BLOCK_KEYS[row.type]
-  return key ? { ...row, type: key } : row
-}
-
-/*
-  並び順に読んだ行の、前の名前をいまの名前にする。同じ名前に読み替わる前の行が
-  2つ（apps と works）あれば、0004 が作るのと同じ1行に畳む——先に並んでいたほうの
-  位置と id で、どちらかが公開中なら公開。畳まれたほうの行は見えなくなるが、DB には
-  残り、0004 がそのとき消す。
-*/
-function readLegacyBlocks(rows: schema.Block[]): schema.Block[] {
-  const merged = new Map<string, schema.Block>()
-  const out: schema.Block[] = []
-  for (const row of rows) {
-    const key = LEGACY_BLOCK_KEYS[row.type]
-    if (!key) {
-      out.push(row)
-      continue
-    }
-    const first = merged.get(key)
-    if (first) {
-      first.published = Math.max(first.published, row.published)
-      continue
-    }
-    const renamed = { ...row, type: key }
-    merged.set(key, renamed)
-    out.push(renamed)
-  }
-  return out
-}
 
 // 何も置いていないときの並び。id は 0 で、DB には無い
 export function defaultBlocks(): schema.Block[] {

@@ -176,6 +176,13 @@
       "when": 1794414119494,
       "tag": "0024_item_lead_link",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1794495519363,
+      "tag": "0025_drop_member_celestial",
+      "breakpoints": true
     }
   ]
 }

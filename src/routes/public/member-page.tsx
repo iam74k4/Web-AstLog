@@ -1,16 +1,17 @@
 import type { Child } from 'hono/jsx'
 import { memberUnits } from '../../blocks'
 import type { PublicMember } from '../../domain'
+import { headlineText } from '../../lib/format'
 import { plainText } from '../../lib/markdown'
 import { SITE, type SiteSettings } from '../../site'
 import {
   CareerGroups,
   Empty,
+  HeadlinePhrases,
   Hero,
   Nameplate,
   Note,
   OwnSocials,
-  Phrases,
   Screen,
   SectionHead,
   SkillGroups,
@@ -74,13 +75,17 @@ export function memberPage(
   const { about, skills, career } = memberUnits(member)
 
   /*
-    説明文は大見出しと紹介文の1段落目をつないだもの（検索結果と共有カードに出る）。
-    大見出しだけにしていたころは、標語の1文（「つくる工程そのものを、速くする。」）
-    しか出ず、検索結果から誰の何のページかが分からなかった。長さは describe が切る
+    説明文は、このページに出ている大見出しと紹介文の1段落目をつないだもの（検索結果と
+    共有カードに出る）。大見出しだけにしていたころは、標語の1文（「つくる工程そのものを、
+    速くする。」）しか出ず、検索結果から誰の何のページかが分からなかった。titled のときは
+    大見出しをこのページに置かないので、説明文にも入れない（入れると、このページに無い入口の
+    一文が説明の頭に立つ）。長さは describe が切る
   */
   const description = describe(
-    sentences(member.headline, plainText(about[0]?.paragraphs[0] ?? '')) ||
-      `${nameWithRole(member)}のプロフィール`,
+    sentences(
+      titled ? '' : headlineText(member.headline),
+      plainText(about[0]?.paragraphs[0] ?? ''),
+    ) || `${nameWithRole(member)}のプロフィール`,
   )
 
   const node = (
@@ -97,7 +102,7 @@ export function memberPage(
         <Nameplate member={member} heading={titled || !member.headline} title={titled} />
         {member.headline && !titled ? (
           <h1 class="hero__headline">
-            <Phrases text={member.headline} />
+            <HeadlinePhrases text={member.headline} />
           </h1>
         ) : null}
         {/*

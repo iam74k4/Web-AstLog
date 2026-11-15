@@ -32,15 +32,15 @@
 
 **和文の最小は `--fs-meta`（12）。** `--fs-label`（11）は和文が入らない英大文字の小見出し
 と数字の札（Skills・Story・About の英字の小見出し・ADMIN・404 の番号・見出しの件数）だけ。
-**等幅（`--font-mono`）もその札だけ**——目次の行き先・一覧の札・タグ・実績値・GitHub の札は
-本文の書体（等幅の小さな大文字では、ページを移る手がいちばん読みにくかった）。
-英字だけの小見出しは `src/ui/components.tsx` の `langOf` が `lang="en"` を付け、等幅はその
+**等幅の書体は持たない**——その札は Poppins、目次の行き先・一覧の札・タグ・
+実績値・GitHub の札は本文の書体（等幅の小さな大文字は読みにくかった）。
+英字だけの小見出しは `src/ui/components.tsx` の `langOf` が `lang="en"` を付け、Poppins はその
 `:lang(en)` にだけ掛ける。年と期間は和文を含むので `tabular-nums`。`test/theme.test.ts` の
 「文字の段」がセレクタを名指しで数えている——足すのは和文が入らないと確かめてから。
 
 **見出しと本文の段。** 節の見出し（`SectionHead` の `h1`、`/all` の `h2`）と個人ページの章
 （About / Skills / Career。`chapter`）は Cavani の名札——`--fs-md` の大文字を字間を広く取り
-（`--track-label`）、右へ1本の罫線を伸ばす。ページの主役はその下の中身。入口の大見出しと
+（`--track-label`。和文は `.head--ja` で狭める）、右へ1本の罫線を伸ばす。ページの主役はその下の中身。入口の大見出しと
 作品のページの作品名（`SectionHead` の `item`。`.head--item`）は最上段の `--fs-display-xl` で、
 一覧の行の題（`--fs-display-xs`）より2段以上大きい。行の説明は `--fs-base`、段落（`.bio p`）は
 `--fs-md` で、1行は約40字（`--measure: 40em`）。小節の見出し（`SectionHead` の `sub`。作品の
@@ -187,16 +187,18 @@ H.264 の動画（MP4・MOV。MOV も MP4 として置く）（`src/lib/image.ts
 動きの終わりの姿と同じ）。
 
 **動きは持ち主が動画で見て選んだ組だけ**（app.css の「動き」の節。量と長さは `:root` の
-`--rise`・`--dur-reveal`・`--stagger`・`--twinkle`・`--opening-load`・`--opening-open`）。
+`--rise`・`--dur-reveal`・`--stagger`・`--type-step`・`--twinkle`・`--opening-load`・`--opening-open`）。
 - 読み込みの幕（外から入口へ来たときだけ。`fromInside`。`Layout` の `opening` が幕の要素 `Opening` を出す）:
   真っ黒の幕（`--opening-ground`。墨ではなく黒）の真ん中でロゴの O が回り（`OpeningMark`。
   ロゴと同じ向きで止まる）、下の線が読み込みのように
   満ちてから（進んでは少し止まる）、幕が上下に開く。
   線は本物の進みではなく、見せるための間（`--opening-load`。伸ばすと入口に着くたびの待ちが伸びる）。
   JavaScript は使わず、動かすのは位置・倍率・回転・透明度だけ。
+  幕は画面の下の縁に触れず、開くときも縁を越えない（iPhone の Safari が上下の帯を黒のまま残した）。
   動きを減らす設定・紙・強制色では幕ごと出さず、入口の字も待たせない（止めるだけだと幕が残る）
 - 入口の幕開け: 札 → 大見出し → 線 → 打ち替える言葉 → リード文 → 押し手が1回だけ順に（幕が
-  開き始めると同時に。`--reveal-from`）。Contact も1文 → 表の行を同じに
+  開き始めると同時に。`--reveal-from`）。大見出しは打ち替える言葉と同じ打ち方で1字ずつ打つ
+  （`TypedHeadline`。消さない。打ち終えるのを待たずに、ほかもいつもの間で出る）。Contact も1文 → 表の行を同じに
 - 打ち替える言葉（`TypedWords`。サイト設定の `heroRoles`）: 大見出しの下で言葉を1字ずつ打っては
   消す（Cavani の入口）。止まった姿は最初の言葉を打ち終えたところ
 - ページを移るとき: 本文が少し下から入り、目次の印が移った先で左から満ちる。印を横に滑らせない
@@ -253,9 +255,9 @@ admin.css が `navigation: none` で打ち消し、動きを減らす設定で�
 
 **骨格は1つ——上の帯・本文の枠・足元**（`src/ui/Layout.tsx`。骨格のプリセットは持たない）。本文の枠
 （`.frame`）は左の柱と本文（`main`）。**左の柱（`Pillar`。900 以上）**は名札（1人のサイトの持ち主。
-`owner`）・目次・サイトの行き先を縦に積み、帯の下に貼り付く——窓を外した横幅を、飾りではなく
-名乗りと行き先に使う。目次と行き先は帯・足元と同じ中身の2組目で、見えるのは
-片方だけ: 柱のあるページ（`body[data-pillar]`）の 900 以上でだけ、帯の目次・足元の行き先・入口の札・
+`owner`）・目次・サイトの行き先・著作権表示を縦に積み、帯の下に貼り付く——窓を外した横幅を
+名乗りと行き先に使う。目次から下は帯・足元と同じ中身の2組目で、見えるのは
+片方だけ: 柱のあるページ（`body[data-pillar]`）の 900 以上でだけ、帯の目次・足元ごと・入口の札・
 個人ページの頭の名札を畳む（名札の h1 は読み上げに残す）。**畳むのは、同じ
 中身が柱に立っているものだけ**（`test/theme.test.ts` の「部品の作法」、`test/public.test.ts` の
 「左の柱」）。`/all` と 404 / 500 には立てない。900 未満は本文だけ（左右は `--frame-x`）。上の帯はロゴと目次（と
@@ -353,8 +355,8 @@ Team に戻る。人数は数えて告知しない。
 ### 作品の並びと選択肢
 
 **選択肢は表で持つ。** プラットフォームは `platforms` テーブルが正（自由入力は表記ゆれで札が
-揃わない）。行を入れるのは移行で、`seed.sql` ではない（seed にしか無いと、新しい環境の用意に
-本番の全消去が要る）。
+揃わない）。足す・直す・消すのは管理画面（`src/routes/admin/platforms.tsx` と、作品のフォームの
+「選択肢に無いとき」）。初めの5つは移行が入れる（`seed.sql` ではない）。
 
 **個人開発と業務は、公開ページでは1つの一覧（Projects）。** データの区分（`items.type`）と
 管理画面のタブは分かれたまま、公開ページでは新しい順（年 → 並び順 → 作った順。
@@ -393,9 +395,6 @@ HTML に絵・件数の帯は置かない。
 （ワードマークと favicon の SVG、favicon・apple-touch-icon・共有カードの PNG）は
 `scripts/logo/export.mjs` が書く。共有カードは墨の地（`LOGO_COLORS`）に白い字。
 
-**メンバーの天体（`members.celestial_body` / `celestial_accent`）は使わない列。** 読む口も書く口も
-外し、列だけを残している（前のコードが読む。expand → contract の contract を次のリリースで出す）。
-
 ## 文言
 
 - 見出しは言い切り。動詞で終える
@@ -423,9 +422,8 @@ HTML に絵・件数の帯は置かない。
 
 **Projects に項目を足す・トップの節を並べる** → 管理画面から。コードは触らない。
 
-**プラットフォームの種類を増やす** → `npx drizzle-kit generate --custom --name <名前>` で空の移行を
-作り、`INSERT OR IGNORE INTO platforms …` を1行（0011 に倣う）。本番へ `d1 execute --remote` で
-手打ちしない（リポジトリに残らない）。
+**プラットフォームの種類を増やす・外した画像を取り出す** → 管理画面から（作品 → プラットフォーム、
+概要 → 外した画像）。本番へ `d1 execute --remote` で手打ちしない（リポジトリに残らない）。
 
 **メンバーの項目（列）を増やす** → `src/db/schema.ts` → `npm run db:generate` →
 `src/routes/admin/members.tsx` のフォームと `src/routes/public/member-page.tsx`・
@@ -537,9 +535,9 @@ URL を動かすなら前の URL は転送で残す（貼られたリンクを�
   `MIGRATION_DB` に前の移行まで流して行を入れてから確かめる
 - **データを書き換える移行は、expand → contract の2リリースで出す。** 移行は deploy より先に
   流れるので、「新しい DB ＋ 前のコード」（deploy の失敗・`wrangler rollback`）も「前の DB ＋
-  新しいコード」（流し忘れ）も起きる。先のリリースで読む側を広げ（`src/blocks.ts` の
-  `LEGACY_BLOCK_KEYS`）、`test/deploy.test.ts` の「前の DB ＋ 今のコード」のように、書き換えの
-  前後で同じ HTML になることを確かめる。前の形を外してよいのは、どの環境にも当たったあと
+  新しいコード」（流し忘れ）も起きる。先のリリースで読む側を合わせ（列を落とすなら先に読まなくする）、
+  `test/deploy.test.ts` の「前の DB ＋ 今のコード」のように、移行の前後で同じ HTML になることを
+  確かめる。前の形を外してよいのは、どの環境にも当たったあと
 - `0006`・`0007` の移行は旧認証列も同時に落とした。それより前の Worker へ戻すなら D1 も戻す（README）。
 - **`seed.sql` はローカルの開発・検査専用で、中身を全部消す。** `db:seed:local` だけが
   流す。本番への seed 経路は作らず、内容は管理画面から登録する。作品の検査画像は
@@ -587,7 +585,7 @@ URL を動かすなら前の URL は転送で残す（貼られたリンクを�
   （`/images/*`）
 - `public/` の静的なファイルはミドルウェアを通らないので `public/_headers`（上限 100 本）。HSTS と
   Permissions-Policy は `src/lib/headers.ts` の値を両方に付ける
-- `public/.well-known/security.txt` の Expires は毎年更新（切れる30日前から CI が落ちる）
+- `/.well-known/security.txt` は Worker が出す（連絡先はサイト設定、期限は応答のたび。`crawl.ts`）
 
 **公開ページの「管理画面」の入口はログイン中だけ出る**（`src/routes/public/page.tsx` の
 `adminHref`。クッキーが無ければ D1 に聞かない。行き先は `blockAdminPath`）。出したページは
