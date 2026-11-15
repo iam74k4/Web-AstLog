@@ -1138,9 +1138,20 @@ export const ItemShots = ({ images }: { images: ItemImage[] }) =>
               aria-pressed={index === 0 ? 'true' : 'false'}
               key={image.url || `thumb-${index}`}
             >
-              <span class="gallery__mini">
-                {isVideoUrl(image.url) || !image.url ? (
-                  <span aria-hidden="true">▷</span>
+              {/*
+                見本は飾り（名前は押し手の aria-label が言う）なので、枠ごと読み上げから外す。
+                動画は1コマ目を見本にし（本文の Clip と同じ #t=0.1 と preload="metadata"。controls を
+                持たない video は押す部品にならないので、押し手の中に置ける）、上に再生の印を重ねる。
+                灰色の面に ▷ だけだったころは、静止画の見本と並ぶと作りかけに見えた
+              */}
+              <span class="gallery__mini" aria-hidden="true">
+                {isVideoUrl(image.url) ? (
+                  <>
+                    <video src={`${image.url}#t=0.1`} muted playsinline preload="metadata" />
+                    <span class="gallery__play">▷</span>
+                  </>
+                ) : !image.url ? (
+                  <span>▷</span>
                 ) : (
                   <img src={image.url} alt="" loading="lazy" decoding="async" />
                 )}

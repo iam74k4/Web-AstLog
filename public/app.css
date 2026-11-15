@@ -1449,6 +1449,16 @@ body[data-site] > .frame {
 }
 
 /*
+  横に並んだとき、短いほうの塊は読み進めるあいだ帯の下に残る（長い Work の横で、短い Personal の
+  下が丸ごと白く空いた）。動くのは短いほうだけ——長いほうは行の高さいっぱいで、ずれる余地が無い。
+  縦に積んだときも同じで、どの塊も自分の高さの行に居るので動かない
+*/
+.story-parts--columns > * {
+  position: sticky;
+  top: var(--top-clear);
+}
+
+/*
   作品の文書のページの本文（components.tsx の DocumentBody。プライバシーポリシーとサポート）。
   段落・箇条書き・太字・リンクは .bio の規則のまま。足すのは見出しの間合いと、### の
   見出し（.doc__head）だけ。
@@ -1702,16 +1712,35 @@ body[data-site] > .frame {
 
 .gallery__mini {
   display: grid;
+  grid-template-areas: 'mini';
   place-items: center;
   aspect-ratio: var(--thumb-ratio);
   background: var(--surface);
 }
 
-.gallery__mini img {
+.gallery__mini :is(img, video) {
   width: 100%;
   height: 100%;
   aspect-ratio: var(--thumb-ratio);
   object-fit: contain;
+}
+
+/*
+  動画の見本の上の再生の印。見本の1コマ目に重ね（同じ格子の1区画に置く）、墨の四角に白い字で
+  どの絵の上でも読める（角は立てる）。押す的は見本の押し手ごと（印は押し手の一部）
+*/
+.gallery__mini > * {
+  grid-area: mini;
+}
+
+.gallery__play {
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: calc(var(--tap) * 0.7);
+  background: var(--ink);
+  color: var(--bg);
+  font-size: var(--fs-sm);
 }
 
 .gallery__index {
@@ -2831,6 +2860,7 @@ body[data-site] > .frame {
   箱（枠・面・影）には入れない。
 */
 .contact {
+  container: contact / inline-size;
   display: flex;
   flex-direction: column;
   gap: var(--sp-7);
@@ -2921,6 +2951,44 @@ body[data-site] > .frame {
 
 .availability__dot--later {
   background: linear-gradient(90deg, currentColor 50%, transparent 50%);
+}
+
+/*
+  表と受付状況が横に並ぶ幅（--contact-main + --availability-col + 間 --sp-7 = 692px。クエリの
+  条件には段を書けないので、和をここに書く）では、2つの表の上の罫線を同じ高さにそろえる。
+  上の段に誘いの1文と受付状況の見出し、下の段に連絡先の表と受付状況の行を置く格子にする
+  （.contact__main と .availability の箱を外して、中身を格子に並べる）。並ばない幅は上の
+  折り返しのまま
+*/
+@container contact (min-width: 692px) {
+  .contact__body {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: var(--sp-6) var(--sp-7);
+  }
+
+  .contact__main,
+  .availability {
+    display: contents;
+  }
+
+  .contact__lead {
+    grid-area: 1 / 1;
+  }
+
+  .contact-list {
+    grid-area: 2 / 1;
+  }
+
+  .availability > .side-head {
+    grid-area: 1 / 2;
+    align-self: end;
+    margin-bottom: 0;
+  }
+
+  .availability__list {
+    grid-area: 2 / 2;
+  }
 }
 
 /*
@@ -3713,18 +3781,21 @@ body[data-site] > .frame {
 
 /*
   締めの幕開け。Contact は入口と対のページなので、同じ rise と同じ間で、誘いの1文 → 表の行
-  （受付状況は表の2行目と一緒）→ 相談の流れの順に1回だけ下から入る。表は最初の画面に収まるので、一覧の行のような画面に入るときの動き
+  （受付状況は表の最後の行と一緒）→ 相談の流れの順に1回だけ下から入る。表は最初の画面に収まるので、一覧の行のような画面に入るときの動き
   （view()）では動かない。サポートのページの表（.doc-contact）は本文の続きなので動かさない
 */
 .contact__main > .contact__lead,
 .contact .contact-list__row,
-.contact :is(.availability, .steps) {
+.contact :is(.availability > *, .steps) {
   animation: rise var(--dur-reveal) var(--ease) both;
 }
 
-/* 受付状況は表の2行目と一緒に、相談の流れは表の行のあと */
-.contact .availability {
-  animation-delay: calc(var(--stagger) * 2);
+/*
+  受付状況は表の最後の行と一緒に、相談の流れはそのあと。表の途中と一緒にすると、狭い画面
+  （受付状況が表の下に回る）で、まだ現れていない表の行より下の受付状況が先に入った
+*/
+.contact .availability > * {
+  animation-delay: calc(var(--stagger) * 5);
 }
 
 .contact .steps {

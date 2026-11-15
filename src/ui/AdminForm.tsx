@@ -1,5 +1,5 @@
 import type { Child } from 'hono/jsx'
-import { type Pair, pairsText, str } from '../lib/format'
+import { headlineText, type Pair, pairsText, str } from '../lib/format'
 import { AVAILABILITY, SITE_SETTING_LIMITS, type SiteSettings } from '../site'
 
 /*
@@ -79,8 +79,17 @@ export const FormErrors = ({
     </section>
   ) : null
 
-export const FormSection = (props: { title: string; note?: string; children?: Child }) => (
-  <section class="form-section">
+/*
+  preview は、その節の欄が出る公開ページの画面（サイト設定の「プレビューする画面」の値）。節に
+  触れると、管理画面の補助が横の完成形をその画面へ替える（admin-behavior.ts）
+*/
+export const FormSection = (props: {
+  title: string
+  note?: string
+  preview?: string
+  children?: Child
+}) => (
+  <section class="form-section" data-preview-screen={props.preview}>
     <div class="form-section__head">
       <h2 class="form-section__title">{props.title}</h2>
       {props.note ? <p class="form-section__note">{props.note}</p> : null}
@@ -304,14 +313,19 @@ export const PairRows = (props: {
               placeholder={props.titlePlaceholder}
               aria-label={`${props.legend} ${index + 1} の見出し`}
             />
-            <input
-              class="input"
-              type="text"
+            {/*
+              説明は2行の欄（1行の欄では、長い説明が欄の幅で切れて全文が見えなかった）。保存の形は
+              1組1行なので、打った改行は readPairRows が文の継ぎ目に畳む
+            */}
+            <textarea
+              class="input input--area"
               name={`${props.field}Text`}
-              value={pair.text}
+              rows={2}
               placeholder={props.textPlaceholder}
               aria-label={`${props.legend} ${index + 1} の説明`}
-            />
+            >
+              {pair.text}
+            </textarea>
           </div>
         )
       })}
@@ -328,7 +342,8 @@ export const PairRows = (props: {
 */
 export function readPairRows(form: FormData, field: string): { text: string; error?: string } {
   const titles = form.getAll(`${field}Title`).map((value) => str(value))
-  const texts = form.getAll(`${field}Text`).map((value) => str(value))
+  // 説明の欄は複数行。改行は継ぎ目に畳む（和文どうしは詰め、欧文が隣なら半角の空き。headlineText）
+  const texts = form.getAll(`${field}Text`).map((value) => headlineText(str(value)))
   const pairs: Pair[] = []
   const problems: string[] = []
   for (let index = 0; index < Math.max(titles.length, texts.length); index += 1) {

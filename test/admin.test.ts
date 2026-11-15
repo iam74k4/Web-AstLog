@@ -3246,7 +3246,7 @@ describe('大事にしていること（見出しと説明の組の欄）', () =
     expect(response.status).toBe(400)
     const page = await response.text()
     expect(page).toContain('2 行目は見出しを入れてください')
-    expect(page).toContain('value="説明だけ"')
+    expect(page).toMatch(/<textarea[^>]*>説明だけ<\/textarea>/)
     // 畳んだ「プロフィールを詳しく書く」は開いて返す（FormDetails）
     expect(page).toMatch(
       /<details class="form-details" open="">\s*<summary class="form-details__summary">プロフィールを詳しく書く/,
