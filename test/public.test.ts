@@ -1211,11 +1211,12 @@ describe('締めのページ（Contact）', () => {
     expect(rows[0]?.[1]).toBe(mail)
   })
 
-  it('Contact は見出し・誘いの1文・連絡先の表の3つ。足元には行き先を出さない', async () => {
+  it('Contact は見出し・誘いの1文・連絡先の表。受付状況と相談の流れは書いたときだけ。足元には行き先を出さない', async () => {
     /*
       表だけだと、何の相談なら送ってよいかを言うものが無く、住所録に見えた。誘いの1文
       （contactLead）を見出しと表のあいだに置き、検索結果の説明文にも同じ1文を使う。
-      受付状況のような2文目は置かない。所在地の行も置かない。
+      受付状況（Availability）と相談の流れ（How it works）はサイト設定で書いたときだけ
+      （test/site-settings.test.ts）。所在地の行は置かない。
       ページは h1 をちょうど1つ持つ決まり（WCAG 1.3.1）も保つ。
     */
     await seedMember({ location: 'Kanagawa, Japan' })
@@ -1231,10 +1232,12 @@ describe('締めのページ（Contact）', () => {
       .join('')
     expect(
       contact.startsWith(
-        `<div class="contact"><p class="contact__lead">${lead}</p><dl class="contact-list">`,
+        `<div class="contact"><div class="contact__body"><div class="contact__main"><p class="contact__lead">${lead}</p><dl class="contact-list">`,
       ),
     ).toBe(true)
     expect(contact.match(/<p\b/g)).toHaveLength(1)
+    expect(contact).not.toContain('class="availability"')
+    expect(contact).not.toContain('class="steps"')
     expect(contact).not.toContain('Location')
     expect(html).toContain(`<meta name="description" content="${SITE.contactLead}"/>`)
     expect(main).toContain('aria-label="Contact"')
@@ -2470,6 +2473,50 @@ describe('個人ページは1ページ', () => {
     const whole = await okText('/all')
     expect(whole).toContain('<h4 class="side-head" lang="en">Work</h4>')
     expect(whole).toContain('<h4 class="side-head" lang="en">Personal</h4>')
+  })
+
+  it('大事にしていること（Principles）は紹介の段落と Work / Personal のあいだ。小見出しの塊は横に並べる', async () => {
+    /*
+      紹介が「何をしてきたか」、大事にしていることが「どう考えて仕事をするか」。続く
+      Work / Personal の前に読ませる。Work / Personal は並べる幅があれば横に並べる
+      （.story-parts--columns。経歴の Experience / Education と同じ決め方）
+    */
+    await seedMember({
+      bio: ['紹介の段落です。', 'Work:', '仕事の話です。', 'Personal:', '個人の話です。'].join(
+        '\n\n',
+      ),
+      principlesText:
+        '手作業は仕組みに | 同じ作業を二度したら、自動化を考えます。\n| 見出しの無い行\n先に動くものを',
+    })
+    const main = mainOf(await okText('/members/okazaki'))
+    const about = main.slice(
+      main.indexOf('id="about"'),
+      main.indexOf('</section>', main.indexOf('id="about"')),
+    )
+    expect(about).toContain('<h3 class="side-head" lang="en">Principles</h3><ul class="pairs">')
+    expect(about).toContain(
+      '<li class="pairs__item"><strong class="pairs__title">手作業は仕組みに</strong><span class="pairs__text">同じ作業を二度したら、自動化を考えます。</span></li>',
+    )
+    // 説明の無い組は見出しだけ。見出しの無い行は出さない（管理画面は保存させない）
+    expect(about).toContain(
+      '<li class="pairs__item"><strong class="pairs__title">先に動くものを</strong></li>',
+    )
+    expect(about).not.toContain('見出しの無い行')
+    expect(about.indexOf('紹介の段落です。')).toBeLessThan(about.indexOf('Principles'))
+    expect(about.indexOf('Principles')).toBeLessThan(about.indexOf('>Work<'))
+    expect(about).toContain('<div class="story-parts story-parts--columns">')
+    // 作品の Story は縦のまま（上から順に読む話）
+    expect(css).toContain('.story-parts--columns {')
+    // 全体ページは About（h3）の下なので h4
+    const whole = await okText('/all')
+    expect(whole).toContain('<h4 class="side-head" lang="en">Principles</h4>')
+  })
+
+  it('紹介文が無くても、大事にしていることがあれば About に出す（「準備中です」にしない）', async () => {
+    await seedMember({ bio: '', principlesText: '先に動くものを | 試作で確かめます。' })
+    const main = mainOf(await okText('/members/okazaki'))
+    expect(main).toContain('<h3 class="side-head" lang="en">Principles</h3>')
+    expect(main).not.toContain('準備中です')
   })
 
   it('下書きのメンバーは、ページも前の続きの URL も 404', async () => {

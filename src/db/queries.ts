@@ -283,6 +283,29 @@ export async function saveSiteSettings(db: Db, site: SiteSettings, version?: str
   else await write
 }
 
+/*
+  サイト設定の一部の欄だけを書く（概要の「受付状況」。src/routes/admin/site-settings.tsx の
+  /site/availability）。ほかの欄の行には触れない。書いた行の日時が変わるので、開いたままの
+  サイト設定のフォーム（版は site. の行の値と日時。settingsSnapshot）は保存で競合を返す——
+  受付状況を変えたあとに、古い受付状況を含むフォームで上書きしない
+*/
+export async function saveSiteSettingValues(db: Db, values: Partial<SiteSettings>) {
+  const updatedAt = new Date().toISOString()
+  const rows = Object.entries(values).map(([key, value]) => ({
+    key: `site.${key}`,
+    value: value ?? '',
+    updatedAt,
+  }))
+  if (!rows.length) return
+  await db
+    .insert(schema.settings)
+    .values(rows)
+    .onConflictDoUpdate({
+      target: schema.settings.key,
+      set: { value: sql`excluded.value`, updatedAt },
+    })
+}
+
 /* ------------------------------------------------------------- 構成 */
 
 // 構成の行（並び順）。公開ページの並び（publishedBlocks）と管理画面の構成の一覧が読む

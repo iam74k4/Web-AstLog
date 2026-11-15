@@ -75,6 +75,7 @@ export const PUBLIC_MEMBER_COLUMNS = {
   bio: true,
   skillsText: true,
   careerText: true,
+  principlesText: true,
   avatarUrl: true,
   github: true,
   email: true,

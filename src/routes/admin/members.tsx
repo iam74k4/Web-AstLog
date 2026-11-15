@@ -8,7 +8,7 @@ import type { Db } from '../../db/queries'
 import * as schema from '../../db/schema'
 import type { AppEnv } from '../../env'
 import { newToken } from '../../lib/auth'
-import { bool, headlineLines, isHttpsUrl, ONGOING_HINT, str } from '../../lib/format'
+import { bool, headlineLines, isHttpsUrl, ONGOING_HINT, parsePairs, str } from '../../lib/format'
 import { IMAGE_ACCEPT } from '../../lib/image'
 import { MARKDOWN_HINT } from '../../lib/markdown'
 import { isContactEmail } from '../../site'
@@ -21,7 +21,9 @@ import {
   FormKey,
   FormSection,
   FormVersion,
+  PairRows,
   PublishToggle,
+  readPairRows,
   SlugRedirects,
 } from '../../ui/AdminForm'
 import { AdminLayout } from '../../ui/AdminLayout'
@@ -335,9 +337,9 @@ const MemberForm = (props: {
         </FormSection>
         <FormDetails
           title="プロフィールを詳しく書く"
-          note="所在地・紹介文・スキル・経歴・アバター画像（任意）"
+          note="所在地・紹介文・大事にしていること・スキル・経歴・アバター画像（任意）"
           errors={props.errors}
-          fields={['bio', 'skillsText', 'careerText', 'location', 'avatar']}
+          fields={['bio', 'principlesText', 'skillsText', 'careerText', 'location', 'avatar']}
         >
           <Field label="所在地" name="location" value={value('location')} />
           {/* 紹介文は個人ページの About に全段落が出る。長さに上限は無い（ページは縦に読む） */}
@@ -348,6 +350,21 @@ const MemberForm = (props: {
             rows={5}
             hint={`「です・ます」で。空行で段落を分ける。「Work:」「Personal:」のように末尾が : の1行を前後の空行で挟むと小見出し · ${MARKDOWN_HINT}`}
             error={props.errors?.bio}
+          />
+          {/*
+            大事にしていること。About の紹介の段落のすぐ下に横に並ぶ（components.tsx の
+            Principles）。組ごとの2つの欄で受け、書き方（「見出し | 説明」）を覚えさせない
+          */}
+          <PairRows
+            legend="大事にしていること"
+            name="principlesText"
+            field="principle"
+            pairs={parsePairs(value('principlesText'))}
+            rows={3}
+            titlePlaceholder="見出し（例: 手作業は仕組みに）"
+            textPlaceholder="説明（例: 同じ作業を二度したら、自動化できないかを先に考えます。）"
+            hint="About の紹介の段落の下に、横に並べて出します（3つが収まりのよい数）。見出しは短い言い切り、説明は「です・ます」の1文。空なら出しません"
+            error={props.errors?.principlesText}
           />
           <Area
             label="スキル"
@@ -597,7 +614,12 @@ export function readMemberForm(form: FormData, existing?: schema.Member) {
   const name = str(form.get('name'))
   const slug = readSlug(str(form.get('slug')), existing?.slug, name) ?? `member-${newToken(3)}`
   const sortOrder = readSortOrder(form, existing?.sortOrder)
-  const errors: Record<string, string> = { ...sortOrder.error }
+  // 大事にしていること（見出しと説明の組の欄。説明だけの行は公開ページで落ちるので、下書きでも止める）
+  const principles = readPairRows(form, 'principle')
+  const errors: Record<string, string> = {
+    ...sortOrder.error,
+    ...(principles.error ? { principlesText: principles.error } : {}),
+  }
 
   return {
     form,
@@ -616,6 +638,7 @@ export function readMemberForm(form: FormData, existing?: schema.Member) {
       bio: str(form.get('bio')),
       skillsText: str(form.get('skillsText')),
       careerText: str(form.get('careerText')),
+      principlesText: principles.text,
       github: str(form.get('github')) || null,
       email: str(form.get('email')) || null,
       sortOrder: sortOrder.value,

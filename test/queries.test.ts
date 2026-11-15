@@ -169,6 +169,7 @@ describe('公開の問い合わせが読む列', () => {
     'location',
     'name',
     'nameLatin',
+    'principlesText',
     'role',
     'skillsText',
     'slug',

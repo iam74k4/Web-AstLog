@@ -28,6 +28,7 @@ import {
   isOngoing,
   isSafeUrl,
   lineJoint,
+  type Pair,
   type SkillGroup,
   skillRows,
 } from '../lib/format'
@@ -41,7 +42,15 @@ import {
   prose,
   proseText,
 } from '../lib/markdown'
-import { isContactEmail, isDiscordName, SITE, type SiteSettings } from '../site'
+import {
+  AVAILABILITY,
+  type AvailabilityState,
+  isAvailabilityState,
+  isContactEmail,
+  isDiscordName,
+  SITE,
+  type SiteSettings,
+} from '../site'
 import {
   DiscordIcon,
   GithubIcon,
@@ -1163,8 +1172,17 @@ export const ItemShots = ({ images }: { images: ItemImage[] }) =>
   全体ページは作品名（h3）の下なので h4（SkillGroups の level と同じ）。見た目は同じ。
   個人ページの About（src/blocks.ts の aboutParts。Work / Personal）も同じ部品で描く。
 */
-export const StoryParts = ({ parts, level }: { parts: StoryPart[]; level: 3 | 4 }) => (
-  <div class="story-parts">
+export const StoryParts = ({
+  parts,
+  level,
+  columns,
+}: {
+  parts: StoryPart[]
+  level: 3 | 4
+  // 並べる幅があれば塊を横に並べる（About の Work / Personal。AboutParts）
+  columns?: boolean
+}) => (
+  <div class={columns ? 'story-parts story-parts--columns' : 'story-parts'}>
     {parts.map((part) =>
       part.heading ? (
         <div key={part.heading}>
@@ -1185,6 +1203,89 @@ export const StoryParts = ({ parts, level }: { parts: StoryPart[]; level: 3 | 4 
     )}
   </div>
 )
+
+/*
+  英字の小見出し（.side-head。Skills の塊・Story の欄と同じ形）。段は置かれる場所の階層で
+  変わるので、呼ぶ側が渡す（見た目は同じ）
+*/
+const SideHeading = ({ level, text }: { level: 2 | 3 | 4; text: string }) =>
+  level === 2 ? (
+    <h2 class="side-head" lang={langOf(text)}>
+      {text}
+    </h2>
+  ) : level === 3 ? (
+    <h3 class="side-head" lang={langOf(text)}>
+      {text}
+    </h3>
+  ) : (
+    <h4 class="side-head" lang={langOf(text)}>
+      {text}
+    </h4>
+  )
+
+/*
+  見出しと説明の組の並び（大事にしていること・相談の流れ。src/lib/format.ts の parsePairs）。
+  組は並べる幅があれば横に並べ（1列が --pair-col 以上入るとき）、無ければ縦に積む。組ごとに
+  上へ1本の罫線を引く——列が折り返しても、どの組も同じ形で始まる（組と組のあいだに縦の線を
+  引くと、折り返した行の頭にだけ線が残った）。見出しの無い組は出さない（管理画面は保存させない。
+  その前に入った行を落とす）。numbered は並び順に意味がある組（相談の流れ）で、<ol> と番号
+*/
+const PairList = ({ pairs, numbered }: { pairs: Pair[]; numbered?: boolean }) => {
+  const items = pairs
+    .filter((pair) => pair.title)
+    .map((pair, index) => (
+      <li class="pairs__item" key={index}>
+        {numbered ? (
+          <span class="pairs__number" aria-hidden="true">
+            {String(index + 1).padStart(2, '0')}
+          </span>
+        ) : null}
+        <strong class="pairs__title">{pair.title}</strong>
+        {pair.text ? <span class="pairs__text">{pair.text}</span> : null}
+      </li>
+    ))
+  return numbered ? <ol class="pairs pairs--numbered">{items}</ol> : <ul class="pairs">{items}</ul>
+}
+
+export const shownPairs = (pairs: Pair[]) => pairs.some((pair) => pair.title)
+
+/*
+  大事にしていること（members.principles_text）。About の紹介の段落のすぐ下に置く——紹介が
+  「何をしてきたか」、この組が「どう考えて仕事をするか」で、続く Work / Personal の前に読ませる
+*/
+export const Principles = ({ pairs, level }: { pairs: Pair[]; level: 3 | 4 }) =>
+  shownPairs(pairs) ? (
+    <div class="principles">
+      <SideHeading level={level} text="Principles" />
+      <PairList pairs={pairs} />
+    </div>
+  ) : null
+
+/*
+  個人ページの About（全体ページの Profile の About も同じ）。紹介の段落（小見出しの無い頭の
+  塊）→ 大事にしていること → 小見出しの塊（Work / Personal …）の順に積み、小見出しの塊は
+  並べる幅があれば横に並べる（経歴の Experience / Education と同じ決め方。.story-parts--columns）。
+  作品の Story は同じ StoryParts を縦のまま使う（上から順に読む話なので並べない）
+*/
+export const AboutParts = ({
+  parts,
+  principles,
+  level,
+}: {
+  parts: StoryPart[]
+  principles: Pair[]
+  level: 3 | 4
+}) => {
+  const lead = parts.filter((part) => !part.heading)
+  const headed = parts.filter((part) => part.heading)
+  return (
+    <div class="about">
+      {lead.length ? <StoryParts parts={lead} level={level} /> : null}
+      <Principles pairs={principles} level={level} />
+      {headed.length ? <StoryParts parts={headed} level={level} columns /> : null}
+    </div>
+  )
+}
 
 /*
   作品のページの本文の小節「Story」（#story）。ItemDetail のすぐ下に置く
@@ -1902,12 +2003,14 @@ export const DocumentBody = ({
 export const ProfileWhole = ({
   member,
   about,
+  principles,
   skills,
   career,
   children,
 }: {
   member: PublicMember
   about: StoryPart[]
+  principles: Pair[]
   skills: SkillGroup[]
   career: CareerGroup[]
   children?: Child
@@ -1920,11 +2023,11 @@ export const ProfileWhole = ({
       </p>
     ) : null}
     {children}
-    {about.length ? (
+    {about.length || shownPairs(principles) ? (
       <div>
         <SectionHead title="About" sub={3} />
-        {/* About の h3 の下なので、Work / Personal の小見出しは h4 */}
-        <StoryParts parts={about} level={4} />
+        {/* About の h3 の下なので、Principles・Work / Personal の小見出しは h4 */}
+        <AboutParts parts={about} principles={principles} level={4} />
       </div>
     ) : null}
     {skills.length ? (
@@ -2165,20 +2268,95 @@ export const ContactList = (links: ContactLinks) => (
   </dl>
 )
 
+/*
+  受付状況（Availability。サイト設定の availability…）。札（Status・Response・Hours・Format）と
+  中身の表で、書いた行だけ出す。状態の文は src/site.ts の AVAILABILITY が決め、頭に状態の点を
+  置く（塗り = 受付中、半分 = 着手は先、輪だけ = 止めている。点は飾りで、状態は字が言う）
+*/
+type AvailabilityValues = Pick<
+  SiteSettings,
+  'availability' | 'availabilityReply' | 'availabilityHours' | 'availabilityFormat'
+>
+
+const availabilityRows = (site: AvailabilityValues) => {
+  const state: AvailabilityState | null = isAvailabilityState(site.availability)
+    ? site.availability
+    : null
+  return [
+    { label: 'Status', value: state ? AVAILABILITY[state].text : '', state },
+    { label: 'Response', value: site.availabilityReply, state: null },
+    { label: 'Hours', value: site.availabilityHours, state: null },
+    { label: 'Format', value: site.availabilityFormat, state: null },
+  ].filter((row) => row.value)
+}
+
+export const Availability = ({ site, level }: { site: AvailabilityValues; level: 2 | 3 }) => {
+  const rows = availabilityRows(site)
+  return rows.length ? (
+    <div class="availability">
+      <SideHeading level={level} text="Availability" />
+      <dl class="availability__list">
+        {rows.map((row) => (
+          <div class="availability__row" key={row.label}>
+            <dt lang="en">{row.label}</dt>
+            <dd>
+              {row.state ? (
+                <span
+                  class={`availability__dot availability__dot--${row.state}`}
+                  aria-hidden="true"
+                />
+              ) : null}
+              {row.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  ) : null
+}
+
+// 相談の流れ（How it works。サイト設定の contactSteps）。上から順に番号を付けて横に並べる
+export const Steps = ({ pairs, level }: { pairs: Pair[]; level: 2 | 3 }) =>
+  shownPairs(pairs) ? (
+    <div class="steps">
+      <SideHeading level={level} text="How it works" />
+      <PairList pairs={pairs} numbered />
+    </div>
+  ) : null
+
+/*
+  締めのページ。誘いの1文と連絡先の表（.contact__main）の横に受付状況を置き、並べる幅が
+  無ければ表の下へ回す（.contact__body。幅の括りを持たず、箱の幅で決まる）。相談の流れは
+  その下に横いっぱい。受付状況と相談の流れは書いたときだけ出す。小見出しはこのページの
+  h1 の下の h2（全体ページでは Contact が h2 なので h3）
+*/
 export const Contact = ({
   whole,
   lead,
+  availability,
+  steps,
   ...links
-}: ContactLinks & { lead: string; whole?: boolean }) => (
+}: ContactLinks & {
+  lead: string
+  availability: AvailabilityValues
+  steps: Pair[]
+  whole?: boolean
+}) => (
   <Screen id="contact" label="Contact">
     <SectionHead title="Contact" h1={!whole} />
     <div class="contact">
-      {lead ? (
-        <p class="contact__lead">
-          <Phrases text={lead} />
-        </p>
-      ) : null}
-      <ContactList {...links} />
+      <div class="contact__body">
+        <div class="contact__main">
+          {lead ? (
+            <p class="contact__lead">
+              <Phrases text={lead} />
+            </p>
+          ) : null}
+          <ContactList {...links} />
+        </div>
+        <Availability site={availability} level={whole ? 3 : 2} />
+      </div>
+      <Steps pairs={steps} level={whole ? 3 : 2} />
     </div>
   </Screen>
 )

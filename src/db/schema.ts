@@ -51,6 +51,12 @@ export const members = sqliteTable(
     skillsText: text('skills_text').notNull().default(''),
     // 1行 = 「期間 | 会社・学校 | 役割・学科」（2列目が太い1行目、3列目が小さい2行目）
     careerText: text('career_text').notNull().default(''),
+    /*
+      大事にしていること。1行 = 「見出し | 説明」（src/lib/format.ts の parsePairs）。個人ページの
+      About の紹介の段落のすぐ下に、横に並べて出す。管理画面は1行ずつの欄（見出しと説明の組）で
+      受け、保存するときにこの形へ畳む（src/ui/AdminForm.tsx の readPairRows）
+    */
+    principlesText: text('principles_text').notNull().default(''),
     // /images/<key>（KV にアップロードしたもの）か /assets/...（同梱）。null なら頭文字
     avatarUrl: text('avatar_url'),
     github: text('github'),

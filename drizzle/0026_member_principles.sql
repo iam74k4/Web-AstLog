@@ -1,0 +1,1 @@
+ALTER TABLE `members` ADD `principles_text` text DEFAULT '' NOT NULL;

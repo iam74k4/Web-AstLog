@@ -112,13 +112,15 @@ describe('前の DB ＋ 今のコード', () => {
   /*
     使わなくなった天体の列（members.celestial_body / celestial_accent）を落とす移行（0025）。
     読む側から先に外した版（expand → contract の1段目）が出たあとで出す。行を持った D1 に
-    0024 まで流してから当て、前後で同じ画面になること、メンバーの行が残って管理画面から
-    足して直せることを見る（列を落とすだけなら表を作り直さない。CLAUDE.md「移行」）
+    ほかの移行を全部流してから当て、前後で同じ画面になること、メンバーの行が残って管理画面から
+    足して直せることを見る（列を落とすだけなら表を作り直さない。CLAUDE.md「移行」）。
+    あとの移行（0026 の列を足すもの）も先に流すのは、今のコードがその列を読むから——
+    0024 で止めると、比べているのが 0025 ではなく「足りない列」になる
   */
   it('天体の列を落とす移行（0025）の前後で同じ画面。行は残り、メンバーを足して直せる', async () => {
     const drop = migrationNamed('drop_member_celestial')
     await emptyD1()
-    await migrate((name) => name < drop)
+    await migrate((name) => name !== drop)
     await liveRows()
     const before = await snapshot()
     await migrate((name) => name === drop)

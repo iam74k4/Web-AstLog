@@ -1,5 +1,7 @@
 import { timeInJapan } from '../lib/format'
 import { type MediaUsage, megabytes } from '../lib/media-usage'
+import type { SiteSettings } from '../site'
+import { AvailabilityFields } from './AdminForm'
 import { AdminLayout } from './AdminLayout'
 import { StatusPill } from './components'
 
@@ -59,8 +61,13 @@ export const AdminDashboard = (props: {
   blockDrafts: number
   pages: number
   storage: MediaUsage & { quota: number }
+  availability: Pick<
+    SiteSettings,
+    'availability' | 'availabilityReply' | 'availabilityHours' | 'availabilityFormat'
+  >
+  flash?: string | null
 }) => (
-  <AdminLayout title="概要" active="dashboard" account={props.account}>
+  <AdminLayout title="概要" active="dashboard" account={props.account} flash={props.flash}>
     <div class="admin-head">
       <div class="admin-head__title">
         <span class="crumbs">サイト全体</span>
@@ -105,6 +112,37 @@ export const AdminDashboard = (props: {
           全体をプレビュー ↗
         </a>
       </div>
+    </section>
+
+    {/*
+      受付状況（Contact の Availability）。状態はよく変わるので、サイト設定を開かずにここで
+      1回の保存で変えられるようにした。書くのは受付状況の4つの欄だけ
+      （src/routes/admin/site-settings.tsx の /site/availability）。サイト設定にも同じ欄がある
+    */}
+    <section class="dashboard-settings" aria-labelledby="dashboard-availability-title">
+      <div class="dashboard-settings__head">
+        <h2 id="dashboard-availability-title">受付状況</h2>
+        <p>
+          {props.hasContact
+            ? 'Contact の連絡先の表の横に出ます。保存すると公開中のサイトに反映されます。'
+            : '公開する連絡先が無いため、いまは Contact のページがありません（保存はできます）。'}
+        </p>
+      </div>
+      <form method="post" action="/admin/site/availability" class="form dashboard-availability">
+        <div class="form-grid">
+          <AvailabilityFields site={props.availability} />
+        </div>
+        <div class="dashboard-availability__actions">
+          <button class="btn btn--primary" type="submit">
+            受付状況を保存
+          </button>
+          {props.hasContact ? (
+            <a class="btn btn--ghost" href="/contact" target="_blank" rel="noreferrer">
+              Contact を見る ↗
+            </a>
+          ) : null}
+        </div>
+      </form>
     </section>
 
     {props.next ? (

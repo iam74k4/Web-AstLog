@@ -7,6 +7,7 @@ import {
   paragraphs,
   parseCareer,
   parseLines,
+  parsePairs,
   parseSkills,
 } from './lib/format'
 import { type DocumentBlock, documentBlocks, MARKDOWN_HINT, prose } from './lib/markdown'
@@ -430,9 +431,12 @@ export function aboutParts(text: string): StoryPart[] {
   ProfileWhole）はこの列を描く。開き方を2か所に書くと、個人ページと全体ページで
   同じ人の中身が違って見える。
 */
-export function memberUnits(member: Pick<Member, 'bio' | 'skillsText' | 'careerText'>) {
+export function memberUnits(
+  member: Pick<Member, 'bio' | 'principlesText' | 'skillsText' | 'careerText'>,
+) {
   return {
     about: aboutParts(member.bio),
+    principles: parsePairs(member.principlesText),
     skills: parseSkills(member.skillsText),
     career: parseCareer(member.careerText),
   }

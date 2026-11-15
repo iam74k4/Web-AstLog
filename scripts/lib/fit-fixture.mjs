@@ -229,6 +229,33 @@ function bio(shape) {
   return ['Work:', ...parts.slice(0, 4), 'Personal:', ...parts.slice(4)].join('\n\n')
 }
 
+/*
+  大事にしていること（members.principles_text）は4組。見出しは長めの語、説明は2文ほど——
+  組は横に並べる（.pairs）ので、4組目が折り返して2段になる形と、長い説明の高さを測る
+*/
+function principles(id) {
+  return Array.from({ length: 4 }, (_, i) => `${words(14, id + i)} | ${text(60, id + i + 2)}`).join(
+    '\n',
+  )
+}
+
+/*
+  Contact の受付状況と相談の流れ。状態は文のいちばん長い「着手は先」、ほかの3行は上限ちょうど
+  （src/site.ts の SITE_SETTING_LIMITS）、相談の流れは5組（4列の画面で2段に折り返す）
+*/
+const contactSettings = () => {
+  const steps = Array.from({ length: 5 }, (_, i) => `${words(10, i)} | ${text(50, i + 3)}`)
+  return [
+    ['site.availability', 'later'],
+    ['site.availabilityReply', words(40, 1)],
+    ['site.availabilityHours', words(60, 2)],
+    ['site.availabilityFormat', words(60, 3)],
+    ['site.contactSteps', steps.join('\n')],
+  ]
+    .map(([key, value]) => `(${sql(key)}, ${sql(value)})`)
+    .join(', ')
+}
+
 function memberRows() {
   const heavy = (id, slug, name, role, shape) => ({
     id,
@@ -242,6 +269,7 @@ function memberRows() {
     bio: bio(shape),
     skills_text: SKILLS,
     career_text: career(shape),
+    principles_text: principles(id),
     avatar_url: '/images/avatars/avatar.png',
     github: `https://github.com/${slug}`,
     email: `${slug}@example.com`,
@@ -255,6 +283,7 @@ function memberRows() {
     bio: text(80, id),
     skills_text: '',
     career_text: '',
+    principles_text: '',
     avatar_url: avatar ? '/images/avatars/avatar.png' : null,
     github: null,
     email: null,
@@ -540,6 +569,7 @@ export function fixture({ solo = false } = {}) {
     */
     // 打ち替える言葉は上限ちょうどの1つ（1つなら動かずに置くだけなので、いつ測っても全部の字が出ている）
     "INSERT OR REPLACE INTO settings (key, value) VALUES ('site.email', 'contact@example.com'), ('site.github', 'https://github.com/example'), ('site.heroRoles', 'Senior Software Engineer');",
+    `INSERT OR REPLACE INTO settings (key, value) VALUES ${contactSettings()};`,
   ].join('\n')
 
   const itemPath = (item) => `/${item.type === 'app' ? 'apps' : 'works'}/item/${item.slug}`

@@ -1,4 +1,6 @@
 import type { Child } from 'hono/jsx'
+import { type Pair, pairsText, str } from '../lib/format'
+import { AVAILABILITY, SITE_SETTING_LIMITS, type SiteSettings } from '../site'
 
 /*
   管理画面のフォームの部品。どの管理画面も、この部品だけで欄と操作を組む。
@@ -259,6 +261,165 @@ export const SlugRedirects = (props: {
       </span>
     </fieldset>
   ) : null
+
+/*
+  見出しと説明の組を1行ずつ受ける欄（メンバーの「大事にしていること」と、Contact の「相談の
+  流れ」）。「見出し | 説明」の書き方を覚えなくても直せるように、組ごとに2つの欄を並べる
+  （作品のリンクの欄と同じ形。行を足すのは AddRow）。保存する形は1行1件のテキスト
+  （src/lib/format.ts の pairsText）で、読むのは readPairRows。
+
+  持っている組を全部と、空いた行を足して出す（rows まで。持っている組が rows 以上なら空いた
+  行を1つ）——持っている組を切って出すと、出なかった組が保存で黙って消える。name は保存する
+  欄の名前（知らせの鍵）、field は送る欄の名前の頭（principle → principleTitle / principleText）
+*/
+export const PairRows = (props: {
+  legend: string
+  name: string
+  field: string
+  pairs: Pair[]
+  rows: number
+  titlePlaceholder?: string
+  textPlaceholder?: string
+  hint?: string
+  error?: string
+}) => {
+  const blank = { title: '', text: '' }
+  const rows = [
+    ...props.pairs,
+    ...Array.from({ length: Math.max(1, props.rows - props.pairs.length) }, () => blank),
+  ]
+  return (
+    <fieldset class="field field--wide fieldset" aria-describedby={describedBy(props)}>
+      <legend class="field__label">{props.legend}</legend>
+      {rows.map((pair, index) => {
+        // 弾いたあとの描き直しでだけ、通らなかった行に印を付ける（説明だけで見出しの無い行）
+        const bad = Boolean(props.error) && (!pair.title || pair.title.includes('|')) && pair.text
+        return (
+          <div class="pair-row" key={index}>
+            <input
+              class={bad ? 'input input--error' : 'input'}
+              type="text"
+              name={`${props.field}Title`}
+              value={pair.title}
+              placeholder={props.titlePlaceholder}
+              aria-label={`${props.legend} ${index + 1} の見出し`}
+            />
+            <input
+              class="input"
+              type="text"
+              name={`${props.field}Text`}
+              value={pair.text}
+              placeholder={props.textPlaceholder}
+              aria-label={`${props.legend} ${index + 1} の説明`}
+            />
+          </div>
+        )
+      })}
+      <AddRow rows=".pair-row" />
+      <Feedback name={props.name} error={props.error} hint={props.hint} />
+    </fieldset>
+  )
+}
+
+/*
+  PairRows の欄を読む。空いた行は畳み、見出しの無い行（説明だけ）と見出しに「|」のある行は
+  何行目かを言って返す——「|」は保存の形の区切りなので、見出しに入ると説明が黙って割れる。
+  返す text は弾いたときもそのまま描き直せる形（見出しの無い行も「| 説明」で残す）
+*/
+export function readPairRows(form: FormData, field: string): { text: string; error?: string } {
+  const titles = form.getAll(`${field}Title`).map((value) => str(value))
+  const texts = form.getAll(`${field}Text`).map((value) => str(value))
+  const pairs: Pair[] = []
+  const problems: string[] = []
+  for (let index = 0; index < Math.max(titles.length, texts.length); index += 1) {
+    const title = titles[index] ?? ''
+    const text = texts[index] ?? ''
+    if (!title && !text) continue
+    if (!title) problems.push(`${index + 1} 行目は見出しを入れてください`)
+    else if (title.includes('|')) problems.push(`${index + 1} 行目の見出しに「|」は使えません`)
+    pairs.push({ title, text })
+  }
+  const text = pairsText(pairs)
+  return problems.length ? { text, error: `${problems.join('。')}。` } : { text }
+}
+
+/*
+  受付状況の4つの欄（Contact の Availability）。置くのはサイト設定と、概要の「受付状況」の
+  2か所——状態はよく変わるので、概要から1回の保存で変えられるようにした
+  （src/routes/admin/dashboard.tsx・src/routes/admin/site-settings.tsx の /site/availability）。
+  状態は選ぶだけで、公開ページの文は状態ごとに決まっている（src/site.ts の AVAILABILITY）。
+  押して選べるよう、選択肢は並べて見せ（ラジオ）、それぞれに公開ページに出る文を添える
+*/
+export const AvailabilityFields = (props: {
+  site: Pick<
+    SiteSettings,
+    'availability' | 'availabilityReply' | 'availabilityHours' | 'availabilityFormat'
+  >
+  errors?: Record<string, string> | null
+}) => {
+  const choices = [
+    ...Object.entries(AVAILABILITY).map(([value, state]) => ({
+      value,
+      label: state.label,
+      shown: state.text,
+    })),
+    { value: '', label: '出さない', shown: '状態の行を出しません' },
+  ]
+  return (
+    <>
+      <fieldset
+        class="field field--wide fieldset"
+        aria-describedby={describedBy({ name: 'availability', error: props.errors?.availability })}
+      >
+        <legend class="field__label">受付の状態</legend>
+        <div class="choices">
+          {choices.map((choice) => (
+            <label class="choice" key={choice.value}>
+              <input
+                type="radio"
+                name="availability"
+                value={choice.value}
+                checked={props.site.availability === choice.value}
+              />
+              <span class="choice__body">
+                <span class="choice__label">{choice.label}</span>
+                <span class="choice__note">{choice.shown}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        <Feedback name="availability" error={props.errors?.availability} />
+      </fieldset>
+      <Field
+        label="返信の目安"
+        name="availabilityReply"
+        value={props.site.availabilityReply}
+        placeholder="2日以内"
+        hint="「Response」の行。空なら出しません"
+        maxlength={SITE_SETTING_LIMITS.availabilityReply}
+        error={props.errors?.availabilityReply}
+      />
+      <Field
+        label="連絡のつく時間"
+        name="availabilityHours"
+        value={props.site.availabilityHours}
+        placeholder="平日 20–24時・土日（日本時間）"
+        hint="「Hours」の行。空なら出しません"
+        maxlength={SITE_SETTING_LIMITS.availabilityHours}
+        error={props.errors?.availabilityHours}
+      />
+      <Field
+        label="進め方"
+        name="availabilityFormat"
+        value={props.site.availabilityFormat}
+        placeholder="オンライン"
+        hint="「Format」の行。空なら出しません"
+        maxlength={SITE_SETTING_LIMITS.availabilityFormat}
+        error={props.errors?.availabilityFormat}
+      />
+    </>
+  )
+}
 
 /*
   行を足す手（リンク・ブロックの行）。管理画面の補助（admin-behavior.ts）が、いちばん後ろの行を

@@ -311,6 +311,26 @@
     「gmail.co / m」と折れた
   */
   --contact-label: 126px;
+  /*
+    Contact の上の段（.contact__body）。誘いの1文と表（.contact__main）と受付状況
+    （.availability）は、2つの下限の和が入る幅なら横に並び、入らなければ受付状況が表の下へ回る
+    （1440 の本文の列で横、900 前後と電話では縦）。受付状況の札の列は Response が1行に入る幅
+  */
+  --contact-main: 400px;
+  --availability-col: 260px;
+  --availability-label: 104px;
+  /*
+    見出しと説明の組（.pairs。大事にしていることと相談の流れ）の1列の幅の下限。1440 の本文の
+    列で相談の流れの4つが1行に並び、900 前後で2列、電話で1列
+  */
+  --pair-col: 200px;
+  /*
+    個人ページの About の小見出しの塊（Work / Personal。.story-parts--columns）の1列の幅の下限。
+    1280 以上の本文の列で2列に並び、900 前後と電話では縦に積む。1列は1行約24字以上
+  */
+  --about-col: 360px;
+  /* 受付状況の状態の点（.availability__dot）。字の x の高さほど */
+  --state-dot: 0.6em;
 
   --ease: cubic-bezier(0.23, 1, 0.32, 1);
   --dur-fast: 180ms;
@@ -1105,7 +1125,9 @@ body[data-site] > .frame {
   .bio :is(p, li),
   .doc__head,
   .gallery__description,
-  .career :is(.title, .org, .career__item)
+  .career :is(.title, .org, .career__item),
+  .pairs :is(.pairs__title, .pairs__text),
+  .availability dd
 ) {
   word-break: auto-phrase;
   text-wrap: pretty;
@@ -1411,6 +1433,19 @@ body[data-site] > .frame {
   display: flex;
   flex-direction: column;
   gap: var(--sp-6);
+}
+
+/*
+  個人ページの About の小見出しの塊（Work / Personal。components.tsx の AboutParts）。並べる幅が
+  あれば横に並べ（1列が --about-col 以上入るとき）、無ければ縦に積む。経歴の塊
+  （.career-groups）と同じ決め方で、幅の括りを増やさない。段落の1行は列の幅か --measure の
+  狭いほう。塊は上にそろえる（長さが違っても、小見出しが同じ高さに並ぶ）
+*/
+.story-parts--columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--about-col)), 1fr));
+  align-items: start;
+  gap: var(--sp-6) var(--sp-7);
 }
 
 /*
@@ -2304,6 +2339,75 @@ body[data-site] > .frame {
 }
 
 /*
+  個人ページの About（components.tsx の AboutParts）。紹介の段落 → 大事にしていること →
+  小見出しの塊（Work / Personal）を、塊と塊のあいだより一段広い間で縦に積む
+*/
+.about {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-7);
+}
+
+/*
+  見出しと説明の組の並び（components.tsx の PairList。大事にしていることと相談の流れ）。並べる
+  幅があれば横に並べ（1列が --pair-col 以上入るとき）、無ければ縦に積む。組ごとに上へ1本の
+  罫線（一覧の行と同じ --line）——折り返しても、どの組も同じ形で始まる。箱（枠・面）には
+  入れない。見出しは本文の字の太字、説明は一段小さく淡い字
+*/
+.pairs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--pair-col)), 1fr));
+  gap: var(--sp-5) var(--sp-7);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pairs__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--line);
+}
+
+.pairs__title {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.pairs__text {
+  color: var(--ink-mid);
+  font-size: var(--fs-sm);
+  line-height: 1.8;
+}
+
+/*
+  大事にしていること（components.tsx の Principles）。見出しの左に墨の太い線（作品のページの
+  実績値と同じ --rule-bold）——短い言い切りを、本文の段落と違う「標語」として立たせる
+*/
+.principles .pairs__title {
+  padding-inline-start: var(--sp-3);
+  border-inline-start: var(--rule-bold) solid var(--ink);
+  font-size: var(--fs-lg);
+  line-height: 1.4;
+}
+
+/*
+  相談の流れ（components.tsx の Steps）。組の頭に番号（01・02 …。並びは <ol> が読み上げに
+  渡すので、番号は見た目だけ）。番号は数字の札と同じ Poppins
+*/
+.pairs__number {
+  color: var(--ink-mid);
+  font-family: var(--font-latin);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  letter-spacing: var(--track-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
   段落の中の小さな Markdown（components.tsx の Note の rich。src/lib/markdown.ts）。紹介文・
   作品の本文・メモだけが持つ。
 
@@ -2729,6 +2833,26 @@ body[data-site] > .frame {
 .contact {
   display: flex;
   flex-direction: column;
+  gap: var(--sp-7);
+  min-width: 0;
+}
+
+/*
+  上の段: 誘いの1文と表（.contact__main）の横に受付状況（.availability）。2つの下限
+  （--contact-main・--availability-col）の和が入る幅なら横に並べ、入らなければ受付状況が
+  表の下へ回る（折り返し。幅の括りを持たない）。横に並ぶときの幅は 3 : 2
+*/
+.contact__body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--sp-7);
+}
+
+.contact__main {
+  display: flex;
+  flex: 3 1 var(--contact-main);
+  flex-direction: column;
   align-items: flex-start;
   gap: var(--sp-6);
   min-width: 0;
@@ -2736,6 +2860,67 @@ body[data-site] > .frame {
 
 .contact__lead {
   margin: 0;
+}
+
+/*
+  受付状況（components.tsx の Availability）。札（Status・Response・Hours・Format）と中身の
+  行を罫線で区切る（連絡先の表と同じ --line と札の字）。中身は本文の字——行き先の表より
+  一段静かにして、表を主役のままにする
+*/
+.availability {
+  flex: 2 1 var(--availability-col);
+  min-width: 0;
+}
+
+.availability__list {
+  margin: 0;
+  border-top: 1px solid var(--line);
+}
+
+.availability__row {
+  display: grid;
+  grid-template-columns: var(--availability-label) minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding-block: var(--sp-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.availability dt {
+  color: var(--ink-mid);
+  font-family: var(--font-latin);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  letter-spacing: var(--track-caption);
+  text-transform: uppercase;
+}
+
+.availability dd {
+  margin: 0;
+  font-size: var(--fs-base);
+  line-height: 1.7;
+}
+
+/*
+  状態の点（丸いのは状態の点だから。CLAUDE.md「動き」の角の決まり）。塗り = 受付中、
+  左半分 = 着手は先、輪だけ = 止めている。色は字の墨だけで、状態は隣の字が言う
+*/
+.availability__dot {
+  display: inline-block;
+  width: var(--state-dot);
+  height: var(--state-dot);
+  margin-inline-end: var(--sp-3);
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  vertical-align: 0.08em;
+}
+
+.availability__dot--open {
+  background: currentColor;
+}
+
+.availability__dot--later {
+  background: linear-gradient(90deg, currentColor 50%, transparent 50%);
 }
 
 /*
@@ -3527,13 +3712,23 @@ body[data-site] > .frame {
 }
 
 /*
-  締めの幕開け。Contact は入口と対のページなので、同じ rise と同じ間で、誘いの1文 → 表の行の
-  順に1回だけ下から入る。表は最初の画面に収まるので、一覧の行のような画面に入るときの動き
+  締めの幕開け。Contact は入口と対のページなので、同じ rise と同じ間で、誘いの1文 → 表の行
+  （受付状況は表の2行目と一緒）→ 相談の流れの順に1回だけ下から入る。表は最初の画面に収まるので、一覧の行のような画面に入るときの動き
   （view()）では動かない。サポートのページの表（.doc-contact）は本文の続きなので動かさない
 */
-.contact > .contact__lead,
-.contact .contact-list__row {
+.contact__main > .contact__lead,
+.contact .contact-list__row,
+.contact :is(.availability, .steps) {
   animation: rise var(--dur-reveal) var(--ease) both;
+}
+
+/* 受付状況は表の2行目と一緒に、相談の流れは表の行のあと */
+.contact .availability {
+  animation-delay: calc(var(--stagger) * 2);
+}
+
+.contact .steps {
+  animation-delay: calc(var(--stagger) * 6);
 }
 
 .contact .contact-list__row:nth-child(1) {

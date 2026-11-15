@@ -19,7 +19,43 @@ export const SITE = {
   x: '',
   // Discord のユーザー名（@ は付けない）。名前から開ける URL が無いので、Contact に字で出す
   discord: '',
+  /*
+    Contact の受付状況（Availability）。状態は AVAILABILITY の鍵か空（状態の行を出さない）。
+    返信の目安・連絡のつく時間・進め方は書いた行だけ出す。4つとも空なら Availability ごと出さない
+  */
+  availability: '',
+  availabilityReply: '',
+  availabilityHours: '',
+  availabilityFormat: '',
+  // Contact の相談の流れ（How it works）。1行 = 「見出し | 説明」（parsePairs）。空なら出さない
+  contactSteps: '',
 } as const
+
+/*
+  受付状況の状態。公開ページの文はここで決め、管理画面では選ぶだけにする——状態は
+  よく変わるので、変えるたびに文を書き直させない（概要の「受付状況」から1回の保存で
+  変えられる。src/routes/admin/dashboard.tsx）。label は管理画面の選択肢、text は公開
+  ページの文。状態は字で言う（点の形だけで分けない）
+*/
+export const AVAILABILITY = {
+  open: { label: '受付中', text: '新しいご相談を受け付けています' },
+  later: {
+    label: '受付中（着手は先）',
+    text: 'ご相談は受け付けています（着手は少し先になります）',
+  },
+  closed: { label: '受付を止めている', text: 'いまは新しいご依頼を受け付けていません' },
+} as const
+export type AvailabilityState = keyof typeof AVAILABILITY
+export const isAvailabilityState = (value: string): value is AvailabilityState =>
+  Object.hasOwn(AVAILABILITY, value)
+
+// 受付状況の欄（概要の「受付状況」が保存するのはこの4つだけ）
+export const AVAILABILITY_KEYS = [
+  'availability',
+  'availabilityReply',
+  'availabilityHours',
+  'availabilityFormat',
+] as const
 
 /*
   足元の行き先は GitHub → Instagram → X → Discord → Mail の順（components.tsx の Socials）。
@@ -36,11 +72,13 @@ export const SITE_SETTING_KEYS = [
   'instagram',
   'x',
   'discord',
+  ...AVAILABILITY_KEYS,
+  'contactSteps',
 ] as const
 export type SiteSettingKey = (typeof SITE_SETTING_KEYS)[number]
 
 /*
-  あとから足した欄（入口の打ち替える言葉・Instagram・X・Discord）。既定は空（出さない）なので、行がまだ無くても管理画面の
+  あとから足した欄（入口の打ち替える言葉・Instagram・X・Discord・受付状況・相談の流れ）。既定は空（出さない）なので、行がまだ無くても管理画面の
   概要では「保存済み」に数える——欄を足した日に、保存済みのサイトが「一部保存済み」に戻らない
   ように（src/routes/admin/dashboard.tsx）
 */
@@ -49,6 +87,8 @@ export const SITE_SETTING_LATER_KEYS: readonly SiteSettingKey[] = [
   'instagram',
   'x',
   'discord',
+  ...AVAILABILITY_KEYS,
+  'contactSteps',
 ]
 export type SiteSettings = Record<SiteSettingKey, string>
 
@@ -64,6 +104,12 @@ export const SITE_SETTING_LIMITS = {
   instagram: 2048,
   x: 2048,
   discord: 32,
+  availability: 16,
+  // 受付状況の行は札（Response・Hours・Format）の横の1行。短い言い切りで書く長さ
+  availabilityReply: 40,
+  availabilityHours: 60,
+  availabilityFormat: 60,
+  contactSteps: 1200,
 } as const
 
 // biome-ignore lint/suspicious/noControlCharactersInRegex: 制御文字を弾くのがこの検査の目的
@@ -120,9 +166,21 @@ export function siteSettingsErrors(site: SiteSettings): Record<string, string> |
   for (const key of ['tagline', 'contactLead'] as const) {
     if (!site[key]) errors[key] = '文を入れてください'
   }
-  for (const key of ['tagline', 'heroLead', 'contactLead'] as const) {
+  for (const key of [
+    'tagline',
+    'heroLead',
+    'contactLead',
+    'availabilityReply',
+    'availabilityHours',
+    'availabilityFormat',
+  ] as const) {
     if (CONTROL.test(site[key])) errors[key] = '改行や制御文字を含めないでください'
   }
+  if (site.availability && !isAvailabilityState(site.availability)) {
+    errors.availability = '受付の状態を選び直してください'
+  }
+  if (CONTROL_BUT_NEWLINE.test(site.contactSteps))
+    errors.contactSteps = '制御文字を含めないでください'
   const roles = heroRoleWords(site)
   if (CONTROL_BUT_NEWLINE.test(site.heroRoles)) errors.heroRoles = '制御文字を含めないでください'
   else if (roles.length > HERO_ROLES.words) {
