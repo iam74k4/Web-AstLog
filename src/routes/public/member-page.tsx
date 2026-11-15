@@ -1,16 +1,17 @@
 import type { Child } from 'hono/jsx'
 import { memberUnits } from '../../blocks'
 import type { PublicMember } from '../../domain'
+import { headlineText } from '../../lib/format'
 import { plainText } from '../../lib/markdown'
 import { SITE, type SiteSettings } from '../../site'
 import {
   CareerGroups,
   Empty,
+  HeadlinePhrases,
   Hero,
   Nameplate,
   Note,
   OwnSocials,
-  Phrases,
   Screen,
   SectionHead,
   SkillGroups,
@@ -81,8 +82,10 @@ export function memberPage(
     一文が説明の頭に立つ）。長さは describe が切る
   */
   const description = describe(
-    sentences(titled ? '' : member.headline, plainText(about[0]?.paragraphs[0] ?? '')) ||
-      `${nameWithRole(member)}のプロフィール`,
+    sentences(
+      titled ? '' : headlineText(member.headline),
+      plainText(about[0]?.paragraphs[0] ?? ''),
+    ) || `${nameWithRole(member)}のプロフィール`,
   )
 
   const node = (
@@ -99,7 +102,7 @@ export function memberPage(
         <Nameplate member={member} heading={titled || !member.headline} title={titled} />
         {member.headline && !titled ? (
           <h1 class="hero__headline">
-            <Phrases text={member.headline} />
+            <HeadlinePhrases text={member.headline} />
           </h1>
         ) : null}
         {/*

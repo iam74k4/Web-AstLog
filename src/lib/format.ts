@@ -213,6 +213,37 @@ export function str(value: FormValue): string {
 }
 
 /*
+  大見出し（members.headline）の行。管理画面の欄で打った改行が、そのまま大見出しの行の
+  変わり目になる（行の組み方は src/ui/components.tsx の headlinePhrases）。行の前後の空きと
+  空の行は捨てる——空の行を残すと、見出しの中に字の無い1行ぶんの穴が空く。
+  保存のときにこの形へ畳む（src/routes/admin/members.tsx の readMemberForm。フォームは改行を
+  CRLF で送ってくる）
+*/
+export const headlineLines = (text: string) =>
+  text
+    .split(/\r\n?|\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== '')
+
+// 和文の字（かな・漢字・和文の約物・全角）。行の継ぎ目に空きを置くかを決める
+const WIDE = /[　-ヿ㐀-䶿一-鿿豈-﫿＀-￯]/
+
+/*
+  大見出しを1行の文に畳む。行を改めない場所（説明文・読み上げの名前・Team のカード・
+  lang の判定）はこれを読む。改行のまま渡すと、lang の判定（langOf）は改行を英字と見なさず、
+  英字だけの大見出しに lang="en" が付かなくなる。
+  継ぎ目は、両側が和文なら詰め、片側でも欧文なら半角の空きを1つ（英数字と日本語の
+  あいだに半角の空き、の決まりと同じ）
+*/
+export const lineJoint = (before: string, after: string) =>
+  WIDE.test([...before].at(-1) ?? '') && WIDE.test([...after][0] ?? '') ? '' : ' '
+
+export const headlineText = (text: string) =>
+  headlineLines(text)
+    .map((line, i, lines) => (i === 0 ? line : `${lineJoint(lines[i - 1] ?? '', line)}${line}`))
+    .join('')
+
+/*
   人が打った整数（並び順）と、フォームが送る id（担当メンバー）を読む。
   読めなければ null——空も null。空をどう扱うか（いまの値のまま・既定の数）は
   呼ぶ側が決める。

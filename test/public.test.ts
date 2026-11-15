@@ -176,6 +176,23 @@ describe('トップページ', () => {
     expect(order).toEqual([...order].sort((a, b) => a - b))
   })
 
+  it('改行を打った大見出しは、個人ページの h1 では行ごとに積み、Team のカードでは1行に畳む', async () => {
+    await seedMember({ headline: 'Harder, Better,\nFaster, Stronger.' })
+    await seedMember({ slug: 'hoshino', name: '星野', sortOrder: 20 })
+
+    const page = await okText('/members/okazaki')
+    expect(page).toContain(
+      '<h1 class="hero__headline"><span class="phrase">Harder, Better,</span> <span class="phrase">Faster, Stronger.</span></h1>',
+    )
+    // 説明文は1行に畳んだ文から（改行を残すと、検索結果の文が語の途中でつながる）
+    expect(page).toContain('content="Harder, Better, Faster, Stronger.')
+
+    // カードの小さな1行では行を改めない
+    expect(await okText('/all')).toContain(
+      '<span class="member__lead">Harder, Better, Faster, Stronger.</span>',
+    )
+  })
+
   it('メンバーが2人なら横長、3人以上ならグリッドにする', async () => {
     // 1人のサイトでは Team そのものが無い（プロフィールに置き換わる）
     await seedMember()
@@ -562,6 +579,36 @@ describe('入口の画面', () => {
     expect(h1).toContain(
       '</span></span><span class="phrase" aria-hidden="true"><span class="hero__char" style="--i: 4">速</span>',
     )
+  })
+
+  /*
+    管理画面の欄で打った改行が、入口の大見出しの行の変わり目になる（headlinePhrases）。
+    英字の大見出しは句読点の規則では1行のままで、行を決められるのは改行だけ。行の中は
+    句読点で切らない（行を決めた人の見出しを、さらに割らない）
+  */
+  it('改行を打った大見出しは、打った行ごとに塊を作る。読み上げと字は1行に畳んだ文', async () => {
+    await seedMember({ headline: 'Harder, Better,\nFaster, Stronger.' })
+    const hero = heroOf(await okText('/'))
+    const h1 = hero.match(/<h1[^>]*>.*?<\/h1>/)?.[0] ?? ''
+    // 改行のままでは英字だけと見なされず、lang="en" が落ちる——1行に畳んで判定する
+    expect(h1).toMatch(/^<h1 lang="en" aria-label="Harder, Better, Faster, Stronger.">/)
+    expect(h1.match(/class="phrase"/g)).toHaveLength(2)
+    // 2行目の頭の「F」は 15 字目。行が変わっても打つ番号は続く。継ぎ目の空きは打たない
+    expect(h1).toContain(
+      '</span></span> <span class="phrase" aria-hidden="true"><span class="hero__char" style="--i: 15">F</span>',
+    )
+    // 字をつなぐと1行の文（継ぎ目の空きは塊の外の素の字。検索エンジン・Ctrl-F が読む）
+    expect(h1.replace(/<[^>]+>/g, '')).toBe('Harder, Better, Faster, Stronger.')
+  })
+
+  it('改行を打った和文の大見出しは、行の中の句読点では切らない', async () => {
+    await seedMember({ headline: 'つくる工程そのものを、速くする。\nそれが仕事です。' })
+    const h1 = heroOf(await okText('/')).match(/<h1[^>]*>.*?<\/h1>/)?.[0] ?? ''
+    // 句読点で切れば3つ。打った行は2つ
+    expect(h1.match(/class="phrase"/g)).toHaveLength(2)
+    // 和文どうしの継ぎ目は詰める
+    expect(h1.replace(/<[^>]+>/g, '')).toBe('つくる工程そのものを、速くする。それが仕事です。')
+    expect(h1).toContain('aria-label="つくる工程そのものを、速くする。それが仕事です。"')
   })
 
   it('入口の大見出しは、その人の大見出し。名前は大見出しの上の札。押し手も Hero の中', async () => {
@@ -2722,6 +2769,14 @@ describe('1人のサイトのプロフィール', () => {
     expect(two).toContain('<div class="head"><h2>Team</h2>')
     expect(two).not.toContain('<section id="profile"')
     expect(two.match(/<h1[^>]*>/g) ?? []).toHaveLength(1)
+  })
+
+  it('/all の Profile の大見出しも、打った改行の行ごとに積む', async () => {
+    await seedMember({ headline: 'つくる工程そのものを、速くする。\nそれが仕事です。' })
+    const html = await okText('/all')
+    expect(html).toContain(
+      '<p class="profile__headline"><span class="phrase">つくる工程そのものを、速くする。</span><span class="phrase">それが仕事です。</span></p>',
+    )
   })
 
   it('sitemap にはプロフィールを1度だけ載せ、/team と前の続きの URL は載せない', async () => {

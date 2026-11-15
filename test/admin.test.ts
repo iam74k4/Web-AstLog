@@ -2541,6 +2541,36 @@ describe('大見出し・ブロックの見出しの上限（公開の関門）'
     expect(await db().select().from(schema.members)).toHaveLength(0)
   })
 
+  /*
+    大見出しの欄は複数行で、打った改行が見出しの行の変わり目（src/ui/components.tsx の
+    headlinePhrases）。改行は字数に数えない——上限ちょうどの字を2行に分けても公開できる
+  */
+  it('大見出しの改行は字数に数えず、CRLF・空の行・前後の空きを畳んで LF の行で持つ', async () => {
+    const signed = await signIn()
+    const half = 'あ'.repeat(MAX_CHARS.memberHeadline / 2)
+    const response = await signed('/admin/members', {
+      method: 'POST',
+      body: form({
+        name: '岡崎 昂功',
+        slug: 'okazaki',
+        headline: `  ${half}  \r\n\r\n${half}\r\n`,
+        published: '1',
+      }),
+    })
+    expect(response.status).toBe(303)
+    const [saved] = await db().select().from(schema.members)
+    expect(saved?.headline).toBe(`${half}\n${half}`)
+
+    // 編集の欄は複数行の textarea で、打った行のまま返す
+    const edit = await (await signed(`/admin/members/${saved?.id}/edit`)).text()
+    expect(edit).toMatch(
+      new RegExp(
+        `<textarea class="input input--area" name="headline"[^>]*>${half}\\n${half}</textarea>`,
+      ),
+    )
+    expect(edit).toContain('Enter で改行した所で行が変わる')
+  })
+
   it('下書きでは長さを見ない（上限より前に書いた人を行き止まりにしない）', async () => {
     const signed = await signIn()
     const response = await signed('/admin/members', {

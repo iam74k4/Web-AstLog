@@ -167,8 +167,13 @@ export const Area = (props: {
   */
   required?: boolean
   maxlength?: number
+  /*
+    欄の格子の半分の幅に置く（既定は1行ぶん全部）。短い複数行の欄（大見出し）を、
+    隣の1行の欄と並べるときだけ。広げると隣の欄の横が空く
+  */
+  half?: boolean
 }) => (
-  <label class="field field--wide">
+  <label class={props.half ? 'field' : 'field field--wide'}>
     <span class="field__label" id={`field-${props.name}-label`}>
       {props.label}
     </span>
