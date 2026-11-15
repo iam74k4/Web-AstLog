@@ -111,7 +111,7 @@ describe('動画を上げる', () => {
     expect(gallery).not.toMatch(/autoplay|loop/)
     // 見本の列の動画は1コマ目を見本にし、再生の印を重ねる（押す手は見本の押し手。video は controls を持たない）
     expect(gallery).toContain(
-      `<span class="gallery__mini"><video src="${video?.url}#t=0.1" muted="" playsinline="" preload="metadata" aria-hidden="true"></video><span class="gallery__play" aria-hidden="true">▷</span></span>`,
+      `<span class="gallery__mini" aria-hidden="true"><video src="${video?.url}#t=0.1" muted="" playsinline="" preload="metadata"></video><span class="gallery__play">▷</span></span>`,
     )
     // 動画はリンクで包まない（覆いが再生の手を塞ぐ）。原寸の手は画像だけ
     expect(gallery).not.toContain(`href="${video?.url}"`)
