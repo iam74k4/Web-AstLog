@@ -24,18 +24,18 @@
     "check:media-restore": "node scripts/check-media-restore.mjs"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.6.4",
+    "@biomejs/biome": "^2.6.6",
     "@cloudflare/vitest-plugin": "^1.8.0",
     "@cloudflare/workers-types": "^5.20261031.1",
     "drizzle-kit": "^0.31.11",
-    "playwright": "^1.64.1",
+    "playwright": "^1.65.0",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.5",
+    "vitest": "^5.1.0",
     "wrangler": "^4.156.0"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.4",
-    "hono": "^4.13.14"
+    "hono": "^4.13.17"
   },
   "overrides": {
     "undici": "7.30.1",
