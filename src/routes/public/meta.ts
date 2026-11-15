@@ -55,8 +55,9 @@ export const excerpt = (text: string) => {
 export const siteTitle = (solo?: PublicMember) =>
   solo ? pageTitle(nameWithRole(solo)) : `${SITE.name} — Projects`
 
+// リード文は書かなくてよい欄。空なら、1人は名乗りだけ、2人以上はサイトの一言で説明する
 export const siteDescription = (solo?: PublicMember, site: SiteSettings = SITE) =>
-  solo ? `${nameWithRole(solo)}のポートフォリオ。${site.heroLead}` : site.heroLead
+  solo ? `${nameWithRole(solo)}のポートフォリオ。${site.heroLead}` : site.heroLead || site.tagline
 
 /*
   ページごとの説明文（<meta name="description"> と og:description）。
@@ -153,7 +154,8 @@ export const siteJsonLd = (members: PublicMember[], site: SiteSettings = SITE) =
     return {
       '@context': 'https://schema.org',
       ...personJsonLd(solo, SITE.origin, {
-        description: site.heroLead,
+        // リード文を書いていなければ description を名乗らない（空文字を名乗らない）
+        ...(site.heroLead ? { description: site.heroLead } : {}),
         ...(sameAs.length ? { sameAs } : {}),
       }),
     }
@@ -164,7 +166,7 @@ export const siteJsonLd = (members: PublicMember[], site: SiteSettings = SITE) =
     '@type': 'Organization',
     name: SITE.name,
     url: SITE.origin,
-    description: site.heroLead,
+    ...(site.heroLead ? { description: site.heroLead } : {}),
     ...(sameAs.length ? { sameAs } : {}),
     member: members.map((member) => personJsonLd(member, `${SITE.origin}/members/${member.slug}`)),
   }

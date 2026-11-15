@@ -14,6 +14,8 @@ export const db = () => drizzle(env.DB, { schema })
 // 連絡先を設定したサイトの代表値。アプリの初期値に個人データを残さない。
 export const TEST_SITE = {
   ...SITE,
+  // 既定のリード文は空（出さない）。入口の組み方を見るテストのために1文を書いておく
+  heroLead: '試作のアプリと、仕事の自動化をまとめています。',
   email: 'contact@example.test',
   github: 'https://github.com/example',
 }

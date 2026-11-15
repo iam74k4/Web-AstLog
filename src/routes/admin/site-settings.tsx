@@ -82,8 +82,7 @@ const SiteSettingsPage = (props: {
           label="入口の紹介文"
           name="heroLead"
           value={props.site.heroLead}
-          hint="入口のリード文とサイトの説明文に出ます"
-          required
+          hint="入口の大見出しの下のリード文と、サイトの説明文に出ます。空なら出しません"
           maxlength={SITE_SETTING_LIMITS.heroLead}
           error={props.errors?.heroLead}
         />

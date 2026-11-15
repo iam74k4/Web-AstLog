@@ -140,15 +140,17 @@ export function renderBlock(
               <h1>
                 <Phrases text={name} />
               </h1>
-              <p class="hero__lead">
-                <Phrases text={site.heroLead} />
-              </p>
+              {site.heroLead ? (
+                <p class="hero__lead">
+                  <Phrases text={site.heroLead} />
+                </p>
+              ) : null}
             </Hero>
           ),
         }
       }
       /*
-        入口。札・大見出し・リード文・押し手を左の軸に積む。絵も件数の帯も置かない——
+        入口。札・大見出し・リード文（書いたときだけ）・押し手を左の軸に積む。絵も件数の帯も置かない——
         最初の画面の主役は字で、件数（「07 Projects」「Since 2024」）は数の少なさを
         目立たせるだけだった。
 
@@ -189,9 +191,12 @@ export function renderBlock(
             */}
             <TypedHeadline text={statement} />
             {typed.length ? <TypedWords words={typed} /> : null}
-            <p class="hero__lead">
-              <Phrases text={site.heroLead} />
-            </p>
+            {/* リード文はサイト設定で書いたときだけ（空なら大見出しの下はすぐ押し手） */}
+            {site.heroLead ? (
+              <p class="hero__lead">
+                <Phrases text={site.heroLead} />
+              </p>
+            ) : null}
             {band || profile ? (
               <div class="hero__actions">
                 {band ? <Cta href={band.href}>Projects</Cta> : null}

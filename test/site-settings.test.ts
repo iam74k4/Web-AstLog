@@ -141,6 +141,32 @@ describe('サイト設定', () => {
     expect((await get('/contact')).status).toBe(404)
   })
 
+  it('入口の紹介文は空にでき、空ならリード文・説明文・構造化データから外れる', async () => {
+    await seedMember({ name: '岡崎 昂功', role: 'System Engineer' })
+    await saveSiteSettings(db(), configured)
+    await touch()
+    expect(await okText('/')).toContain('class="hero__lead"')
+    const signed = await signIn()
+    const response = await signed('/admin/site', {
+      method: 'POST',
+      body: form({ ...configured, heroLead: '' }),
+    })
+    expect(response.status).toBe(303)
+    expect((await loadSiteSettings(db())).heroLead).toBe('')
+    for (const path of ['/', '/all']) {
+      const html = await okText(path)
+      expect(html, path).not.toContain('class="hero__lead"')
+      expect(html, path).not.toContain(configured.heroLead)
+    }
+    const top = await okText('/')
+    // 説明文は名乗りだけ。「。」で終わり、空の文を足さない
+    expect(top).toContain(
+      'name="description" content="岡崎 昂功（System Engineer）のポートフォリオ。"',
+    )
+    // 空の description を名乗らない
+    expect(top).not.toMatch(/"@type":"Person"[^}]*"description"/)
+  })
+
   it('不正な URL・メールや長すぎる文は保存せず、入力欄で理由を返す', async () => {
     const signed = await signIn()
     const response = await signed('/admin/site', {
