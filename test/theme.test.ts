@@ -1182,11 +1182,25 @@ describe('部品の作法', () => {
 */
 describe('Profile と Contact の並べ方', () => {
   it('About の塊が横に並ぶとき、短いほうは帯の下に残る（長いほうは行いっぱいで動かない）', () => {
-    const rule = bodyOf(sheet, '.story-parts--columns > * {')
+    const columns = bodyOf(sheet, '.story-parts--columns {')
+    expect(columns).toContain('container: about-parts / inline-size')
+    // 塊は上にそろえる（伸ばすと短いほうも行いっぱいになり、残らない）
+    expect(columns).toContain('align-items: start')
+    // 条件は2列の下限と間の和。段の値を変えたら、クエリの数も変える
+    const root = bodyOf(sheet, ':root {')
+    const px = (name: string) => Number(root.match(new RegExp(`${name}:\\s*([\\d.]+)px;`))?.[1])
+    const wide = blockAt(
+      sheet,
+      `@container about-parts (min-width: ${px('--about-col') * 2 + px('--sp-7')}px) {`,
+    )
+    const rule = bodyOf(wide, '.story-parts--columns > * {')
     expect(rule).toContain('position: sticky')
     expect(rule).toContain('top: var(--top-clear)')
-    // 塊は上にそろえる（伸ばすと短いほうも行いっぱいになり、残らない）
-    expect(bodyOf(sheet, '.story-parts--columns {')).toContain('align-items: start')
+  })
+
+  it('About の塊を縦に積む幅では貼らない（上の塊が残り、下の塊がその上に重なって流れた）', () => {
+    const outside = sheet.replace(blockAt(sheet, '@container about-parts'), '')
+    expect(outside).not.toMatch(/\.story-parts--columns > \*\s*\{[^}]*sticky/)
   })
 
   it('連絡先の表と受付状況が横に並ぶ幅では、2つの表の上の罫線を同じ高さにそろえる', () => {
