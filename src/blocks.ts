@@ -1,6 +1,7 @@
 import type { Block, Item, Member } from './db/schema'
 import { type ItemDocumentKey, STORY_SECTIONS, type StoryColumn, type StoryPart } from './domain'
 import {
+  headlineLines,
   isSafeUrl,
   ONGOING_HINT,
   paragraphs,
@@ -365,11 +366,12 @@ function itemPublishErrors(target: Extract<PublishTarget, { kind: 'item' }>) {
 
 /*
   メンバー。大見出しは個人ページの頭に大きく出る1つの文（MAX_CHARS.memberHeadline）。
+  数えるのは字だけで、打った改行は数えない（改行は行の変わり目の印で、出る字ではない）。
   止める理由は全部まとめて返す（publishErrors の決まり）。
 */
 function memberPublishErrors(target: Extract<PublishTarget, { kind: 'member' }>) {
   const errors: Record<string, string> = {}
-  const headline = chars(target.headline)
+  const headline = chars(headlineLines(target.headline).join(''))
   if (headline > MAX_CHARS.memberHeadline) {
     errors.headline = `大見出しは ${MAX_CHARS.memberHeadline} 字までです（いま ${headline} 字）`
   }
