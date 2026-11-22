@@ -3251,7 +3251,9 @@ describe('管理画面への入口', () => {
     ]
     for (const [path, href] of cases) {
       const response = await signed(path)
-      expect(await response.text(), path).toContain(`<a class="top__admin" href="${href}">`)
+      expect(await response.text(), path).toContain(
+        `<a class="top__admin" href="${href}" aria-label="管理画面">`,
+      )
       // 共有のキャッシュに置かれると、次の訪問者に入口が出る
       expect(response.headers.get('cache-control'), path).toBe('private, no-store')
     }
@@ -3267,7 +3269,9 @@ describe('管理画面への入口', () => {
     const signed = await signIn()
 
     const html = await (await signed(`/block-${block.id}`)).text()
-    expect(html).toContain(`<a class="top__admin" href="/admin/blocks/${block.id}/edit">`)
+    expect(html).toContain(
+      `<a class="top__admin" href="/admin/blocks/${block.id}/edit" aria-label="管理画面">`,
+    )
   })
 
   it('期限の切れたセッションでは出さない', async () => {

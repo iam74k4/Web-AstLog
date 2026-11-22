@@ -767,6 +767,15 @@ body[data-site] > .frame {
 }
 
 /*
+  後ろに管理画面への入口（.top__admin）が続くときは、右の余白へはみ出さない。はみ出すと
+  帯の箱が入口の手前の間（gap）を食い、溢れた行き先のぼかしが鉛筆に触れて、目次の続きの
+  ように見えた。ぼかしの空き（padding）は残すので、溢れていなければ最後の行き先は薄まらない
+*/
+.toc:not(:last-child) {
+  margin-inline-end: 0;
+}
+
+/*
   目次に番号は振らない。目次の番号はブロックの並び順でしかなく、読む人に言う
   ことが無い（src/ui/Layout.tsx の目次の注記）。
 
@@ -819,12 +828,23 @@ body[data-site] > .frame {
 .top__admin {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   flex-shrink: 0;
   gap: var(--sp-2);
+  min-width: var(--tap);
   min-height: var(--tap);
   color: var(--accent);
   font-size: var(--fs-sm);
   transition: scale var(--dur-spring) var(--ease-spring);
+}
+
+/*
+  600 未満は鉛筆だけ（名前はリンクの aria-label が読み上げに渡す）。電話の幅では
+  「管理画面」の4字が目次の幅を食っていた。的は --tap の四角のまま、鉛筆は的の右端に
+  寄せる（版面の右の縦の線にそろい、的の余りが目次のぼかしとの間になる）
+*/
+.top__admin-label {
+  display: none;
 }
 
 /* --- 足元 --- */
@@ -3244,6 +3264,11 @@ body[data-site] > .frame {
   .top,
   .toc {
     gap: var(--sp-6);
+  }
+
+  /* 管理画面への入口は、幅があれば鉛筆に名前を添える（600 未満で外す理由は素の規則に） */
+  .top__admin-label {
+    display: inline;
   }
 
   /* 押し手は列いっぱいに伸ばさず、字の幅に戻す（600 未満で伸ばす理由は素の .cta に） */

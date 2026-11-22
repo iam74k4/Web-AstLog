@@ -251,11 +251,14 @@ export const Brand = ({ href = '/' }: { href?: string } = {}) => (
   同じタブで開く。管理画面の側には「サイトを見る ↗」が別タブで付いているので、
   行き来の片方は同じタブ、片方は別タブになる。こちらまで別タブにすると、
   直して見に来るたびにタブが1枚ずつ増えていく。
+
+  名前は aria-label にも置く。600 未満は鉛筆だけを見せる（app.css の .top__admin-label）ので、
+  見える字が消えても読み上げの名前が残るように。
 */
 export const AdminLink = ({ href }: { href: string }) => (
-  <a class="top__admin" href={href}>
+  <a class="top__admin" href={href} aria-label="管理画面">
     <PencilIcon />
-    管理画面
+    <span class="top__admin-label">管理画面</span>
   </a>
 )
 

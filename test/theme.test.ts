@@ -1146,6 +1146,21 @@ describe('部品の作法', () => {
     expect(bodyOf(blockAt(sheet, '@media (pointer: coarse)'), ':root {')).toContain('--tap: 44px')
   })
 
+  it('管理画面への入口は目次のぼかしに触れず、電話の幅では鉛筆だけ', () => {
+    /*
+      目次は右のぼかしのぶん負の margin で右の余白へはみ出す。後ろに入口が続くときも
+      はみ出すと、帯の箱が入口の手前の間を食い、溢れた行き先のぼかしが鉛筆に触れた
+    */
+    expect(bodyOf(sheet, '.toc {')).toContain('margin-inline-end: calc(var(--fade-w) * -1)')
+    expect(bodyOf(sheet, '.toc:not(:last-child) {')).toContain('margin-inline-end: 0')
+    // 600 未満は名前を畳み（読み上げは aria-label）、的は --tap の四角のまま
+    expect(bodyOf(sheet, '.top__admin-label {')).toContain('display: none')
+    expect(bodyOf(sheet, '.top__admin {')).toContain('min-width: var(--tap)')
+    expect(bodyOf(blockAt(sheet, '@media (min-width: 600px)'), '.top__admin-label {')).toContain(
+      'display: inline',
+    )
+  })
+
   it('目次のいまのページは、帯の見えている幅の中で開く（貼り付く帯のときだけ）', () => {
     /*
       CSS だけで組む帯は、何もしなければいつも左端で開き、並びの後ろの
