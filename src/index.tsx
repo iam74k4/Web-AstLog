@@ -36,7 +36,9 @@ const app = new Hono<AppEnv>()
     実行されないデータなので、none でも止まらない
   - style-src に 'unsafe-inline'——ページの切り替えの名前（view-transition-name）と
     アバターの寸法（--avatar-size）を style 属性で渡している。スクリプトではない
-  - img-src は 'self' だけ——favicon は public/assets のファイル、ロゴはページに直に描く SVG
+  - img-src は 'self' だけ——favicon は public/assets のファイル、ロゴはページに直に描く SVG。
+    管理画面の編集の画面だけ blob: を足す（アバターの調整のダイアログが、選んだ画像を
+    ブラウザの中の blob: の URL で出す。src/ui/crop-behavior.ts。ログインの画面と公開ページには足さない）
   - form-action 'self'——管理画面のフォームはどれも同じオリジンへ送る。
     OAuth の入口はフォームではなく GET のリンクなので、ここに掛からない
   - frame-ancestors 'none'——ほかのサイトの枠に入れさせない。プレビューのみ同一オリジンの枠を許す
@@ -97,7 +99,10 @@ app.use(async (c, next) => {
         : admin &&
             c.req.path !== '/admin/login' &&
             /^text\/html/.test(headers.get('content-type') ?? '')
-          ? PAGE_CSP.replace("script-src 'none'", `script-src '${ADMIN_CSP}'`)
+          ? PAGE_CSP.replace("script-src 'none'", `script-src '${ADMIN_CSP}'`).replace(
+              "img-src 'self'",
+              "img-src 'self' blob:",
+            )
           : !admin &&
               isGalleryPage(c.req.path) &&
               /^text\/html/.test(headers.get('content-type') ?? '')

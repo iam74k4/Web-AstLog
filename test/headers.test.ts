@@ -54,8 +54,9 @@ function expectPageHeaders(response: Response, label: string, admin = false) {
   expect(csp['base-uri'], label).toBe("'none'")
   expect(csp['form-action'], label).toBe("'self'")
   expect(csp['frame-ancestors'], label).toBe("'none'")
-  // 画像は同じオリジンだけ（favicon も public/assets のファイル）。アバターの寸法は style 属性で渡す
-  expect(csp['img-src'], label).toBe("'self'")
+  // 画像は同じオリジンだけ（favicon も public/assets のファイル）。アバターの寸法は style 属性で渡す。
+  // 管理画面の編集の画面だけ blob: を足す（アバターの調整のダイアログ。src/ui/crop-behavior.ts）
+  expect(csp['img-src'], label).toBe(admin ? "'self' blob:" : "'self'")
   expect(csp['style-src'], label).toBe("'self' 'unsafe-inline'")
   expect(response.headers.get('x-content-type-options'), label).toBe('nosniff')
   /*

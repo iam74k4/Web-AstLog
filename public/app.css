@@ -66,6 +66,7 @@
   --admin-live-height: calc(100svh - 2 * var(--gutter));
   --admin-preview-width: 1280px;
   --admin-preview-height: 88svh;
+  --admin-crop-width: 360px;
   --admin-art-size: 96px;
   --admin-thumb-width: 112px;
   --admin-thumb-height: 70px;

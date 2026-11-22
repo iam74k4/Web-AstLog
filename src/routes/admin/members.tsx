@@ -15,6 +15,7 @@ import { isContactEmail } from '../../site'
 import {
   Area,
   Confirm,
+  CropDialog,
   Field,
   FormActions,
   FormDetails,
@@ -398,6 +399,7 @@ const MemberForm = (props: {
               type="file"
               name="avatar"
               accept={IMAGE_ACCEPT}
+              data-crop=""
             />
             {props.errors?.avatar ? (
               <span class="field__error" id="field-avatar-error">
@@ -418,6 +420,18 @@ const MemberForm = (props: {
             <div class="field">
               <span class="field__label">いまのアバター</span>
               <img class="icon-preview" src={member.avatarUrl} alt="" width="64" height="64" />
+              {/*
+                いまの画像の位置と大きさを合わせ直す（調整のダイアログ。crop-behavior.ts）。
+                JavaScript が動くまで隠す（.crop-open[hidden]）——押しても何も起きないボタンを出さない
+              */}
+              <button
+                type="button"
+                class="btn btn--ghost crop-open"
+                data-crop-current={member.avatarUrl}
+                hidden
+              >
+                位置と大きさを調整
+              </button>
               <label class="check">
                 <input
                   type="checkbox"
@@ -510,6 +524,7 @@ const MemberForm = (props: {
           />
         </div>
       </form>
+      <CropDialog title="アバターを調整" />
     </AdminLayout>
   )
 }

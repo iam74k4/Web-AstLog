@@ -135,6 +135,65 @@ try {
     )
     await go(page, '/admin/members/1/edit')
     assert.notEqual(await page.locator('[name=name]').inputValue(), 'プレビューだけの名前')
+    /*
+      アバターの調整（Discord のアイコンの調整と同じ。src/ui/crop-behavior.ts）。画像を選ぶと
+      ダイアログが開き、ドラッグと大きさで合わせて「適用」すると、切り抜いた正方形の画像がファイル欄へ
+      入る。やめる（Esc）と欄は空に戻り、元の画像は送られない。blob: の画像が CSP に止められない
+      ことは、上の console の監視（Content Security Policy）が拾う。
+    */
+    await go(page, '/admin/members/1/edit')
+    await page
+      .locator('details')
+      .filter({ has: page.locator('[name=avatar]') })
+      .locator('summary')
+      .click()
+    const crop = page.locator('dialog.crop')
+    const picked = page.locator('[name=avatar]')
+    const wide = join(ROOT, 'scripts/fixtures/media/sample-screen-01.jpg')
+    assert.equal(await crop.evaluate((node) => node.open), false, '調整のダイアログが初めから開く')
+    assert.ok(await page.locator('[data-crop-current]').isVisible(), '調整のボタンが出ない')
+    await picked.setInputFiles(wide)
+    await crop.waitFor()
+    const stage = await crop.locator('.crop__stage').boundingBox()
+    assert.ok(Math.abs(stage.width - stage.height) < 1, `${width}: 調整の枠が正方形でない`)
+    assert.ok(stage.x >= 0 && stage.x + stage.width <= width, `${width}: 調整の枠がはみ出す`)
+    const place = () => crop.locator('.crop__image').evaluate((node) => node.style.transform)
+    const first = await place()
+    await crop.locator('.crop__zoom input').fill('600')
+    await page.mouse.move(stage.x + stage.width / 2, stage.y + stage.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(stage.x + stage.width / 2 + 50, stage.y + stage.height / 2 + 30, {
+      steps: 4,
+    })
+    await page.mouse.up()
+    assert.notEqual(await place(), first, '拡大してドラッグしても画像が動かない')
+    await page.keyboard.press('Escape')
+    await crop.waitFor({ state: 'hidden' })
+    assert.equal(await picked.evaluate((input) => input.files.length), 0, 'やめても元の画像が残る')
+    await picked.setInputFiles(wide)
+    await crop.waitFor()
+    await crop.locator('[data-crop-apply]').click()
+    await crop.waitFor({ state: 'hidden' })
+    const made = await picked.evaluate(async (input) => {
+      const file = input.files[0]
+      const bitmap = await createImageBitmap(file)
+      return {
+        count: input.files.length,
+        type: file.type,
+        size: file.size,
+        w: bitmap.width,
+        h: bitmap.height,
+      }
+    })
+    assert.equal(made.count, 1)
+    assert.equal(made.type, 'image/jpeg', '写真（JPEG）は JPEG のまま')
+    assert.equal(made.w, made.h, '切り抜いた画像が正方形でない')
+    assert.ok(
+      made.w <= 512 && made.size <= 1_000_000,
+      `切り抜いた画像が大きい ${made.w}px ${made.size}B`,
+    )
+    // 保存前の完成形はこの画像で描き直される（見ている人の「適用した」の手応え）
+    await go(page, '/admin/members/1/edit')
     // 保存済み・保存前・横の完成形を、公開と同じショーケースで操作できる。
     await go(page, '/admin/items')
     const savedLink = page.locator('[data-saved-preview]').first()
