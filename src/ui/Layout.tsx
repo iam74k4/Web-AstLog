@@ -125,8 +125,8 @@ const Copyright = () => (
   なく名乗りと行き先に使う（持ち主が選んだ形）。
 
   目次・行き先・著作権表示は、上の帯と足元にあるものと同じ中身をもう1組置く。同時に見えるのは片方だけ
-  （900 以上は柱、900 未満は上の帯と足元。app.css が display: none で切り替えるので、読み上げにも
-  片方しか出ない）。HTML を1組にして CSS で置き場所だけ動かすと、帯の貼り付け・横に送る目次・
+  （900 以上は柱、900 未満は上の帯と足元——目次は 600 未満なら下の SiteMenu。app.css が
+  display: none で切り替えるので、読み上げにも片方しか出ない）。HTML を1組にして CSS で置き場所だけ動かすと、帯の貼り付け・横に送る目次・
   ページの切り替えの名前が全部絡むので、2組にした
 */
 const Pillar = ({
@@ -164,6 +164,38 @@ const Pillar = ({
       <Copyright />
     </div>
   </div>
+)
+
+/*
+  600 未満の上の帯の目次。ボタン（Menu）で、帯のすぐ下に行き先を縦に並べたパネルを開く。
+  目次の3組目——上の帯の目次（.toc）・左の柱（Pillar）と同じ中身で、同時に見えるのは1組だけ
+  （app.css が幅で切り替える。読み上げにも片方しか出ない）。
+
+  電話の幅では、ロゴと行き先とログイン中の管理画面の入口が1行に収まらず、横に送る帯の
+  最後の行き先が切れていた。開け閉めは popover 属性（HTML）だけで、script は使わない——
+  外を押す・Esc で閉じるのもブラウザが持つ。popover を知らないブラウザでは、app.css が
+  ボタンを出さずに今までの横に送る帯を残す（行き先が消えない）。全体ページ（/all）は目次を
+  折り返すので、ここは出さない。
+*/
+const SiteMenu = ({ nav }: { nav: NavItem[] }) => (
+  <>
+    <button class="menu-btn" type="button" popovertarget="site-menu" lang="en">
+      <span class="menu-btn__icon" aria-hidden="true" />
+      Menu
+    </button>
+    <nav id="site-menu" class="menu" popover="auto" aria-label="ページの移動">
+      {nav.map((item) => (
+        <a
+          key={item.href}
+          href={item.href}
+          aria-current={item.active ? 'page' : undefined}
+          lang={langOf(item.label)}
+        >
+          {item.label}
+        </a>
+      ))}
+    </nav>
+  </>
 )
 
 export const Layout = (props: {
@@ -268,7 +300,8 @@ export const Layout = (props: {
         {/*
         上の帯。ロゴ（入口へ）と目次と、ログイン中だけ管理画面への入口。ページの上に
         貼り付き（全体ページを除く）、ページを移っても同じ場所に居る。目次は、左の柱が
-        見えている幅（900 以上）では柱が受け、ここでは畳む（Pillar）。
+        見えている幅（900 以上）では柱が受け、ここでは畳む（Pillar）。600 未満は
+        ボタンで開くパネルが受ける（SiteMenu）。
       */}
         <header class="top">
           <Brand href={props.preview ? '/admin/preview' : '/'} />
@@ -303,6 +336,7 @@ export const Layout = (props: {
             ))}
           </nav>
           {props.admin ? <AdminLink href={props.admin} /> : null}
+          {props.whole || !props.nav.length ? null : <SiteMenu nav={props.nav} />}
         </header>
         {/*
         tabindex={-1} は「Skip to content」のため。Safari（と iOS の全ブラウザ）は
