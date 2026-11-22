@@ -804,6 +804,125 @@
   color: var(--ink-mid);
 }
 
+/*
+  画像の位置と大きさを合わせるダイアログ（AdminForm.tsx の CropDialog。src/ui/crop-behavior.ts が
+  動かす）。stage が切り抜く正方形で、その上に丸の外を白く薄く覆う mask と、丸の縁を重ねる。
+  画像は JavaScript が幅・高さ・transform を置く（枠の外へはみ出した分は stage が切る）
+*/
+.crop {
+  width: min(calc(100% - var(--sp-5)), var(--admin-crop-width));
+  padding: var(--sp-5);
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.crop::backdrop {
+  background: var(--bg);
+  opacity: 0.8;
+}
+
+.crop[open] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.crop__title {
+  font-size: var(--fs-md);
+}
+
+.crop__help,
+.crop__status {
+  color: var(--ink-weak);
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+}
+
+/* 知らせの行は空のあいだ場所を取らない（押したあとだけ出る） */
+.crop__status:empty {
+  display: none;
+}
+
+.crop__stage {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: var(--surface);
+  cursor: grab;
+  touch-action: none;
+}
+
+.crop__stage:active {
+  cursor: grabbing;
+}
+
+.crop__stage:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.crop__image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* 丸の外を薄く覆う。mask は透明（丸の中）と不透明（外）の切り替えだけを使う（色は見ない） */
+.crop__mask {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  opacity: 0.72;
+  mask-image: radial-gradient(
+    circle closest-side,
+    transparent calc(100% - 1px),
+    var(--ink) calc(100% - 1px)
+  );
+  pointer-events: none;
+}
+
+/* 丸の縁。暗い画像にも明るい画像にも見えるよう、白と薄い線の二重 */
+.crop__stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0 0 2px var(--bg),
+    inset 0 0 0 3px var(--line-strong);
+  pointer-events: none;
+}
+
+.crop__zoom {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  color: var(--ink-mid);
+  font-size: var(--fs-sm);
+}
+
+.crop__zoom input {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--tap);
+  accent-color: var(--accent);
+}
+
+.crop__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+}
+
+/* .btn の display が hidden 属性より強いので、ここで畳む（.add-row[hidden] と同じ） */
+.crop-open[hidden] {
+  display: none;
+}
+
 .fieldset {
   display: flex;
   flex-direction: column;

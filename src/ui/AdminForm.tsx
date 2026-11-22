@@ -238,6 +238,50 @@ export const Select = (props: {
 )
 
 /*
+  画像の位置と大きさを合わせるダイアログ（Discord のアイコンの調整と同じ）。丸の中が表示される範囲。
+  動かすのは src/ui/crop-behavior.ts で、ファイル欄の data-crop と組になる。**JavaScript が無ければ
+  閉じたまま出ない**（画像は今までどおり選んで送れる）ので、中の文は JavaScript がある前提で書く。
+
+  フォームの外に置く（ダイアログの中のボタンが、編集のフォームを送らないように）。ボタンは type=button。
+  stage は指とマウスで動かす面（touch-action: none）。矢印と +/- のキーでも動かせるよう tabindex を
+  持ち、独自のキー操作を持つ面なので role は application（group は fieldset に置き換えられる
+  ——Biome の useSemanticElements——が、これは入力欄のまとまりではない）。使い方は aria-describedby で伝える。
+*/
+export const CropDialog = (props: { title: string }) => (
+  <dialog class="crop" aria-labelledby="crop-title">
+    <h2 class="crop__title" id="crop-title">
+      {props.title}
+    </h2>
+    <p class="crop__help" id="crop-help">
+      ドラッグで位置を、スライダーで大きさを合わせます。丸の中が表示される範囲です
+    </p>
+    <div
+      class="crop__stage"
+      tabindex={0}
+      role="application"
+      aria-label="画像の位置"
+      aria-describedby="crop-help"
+    >
+      <img class="crop__image" alt="" draggable="false" />
+      <span class="crop__mask" aria-hidden="true" />
+    </div>
+    <label class="crop__zoom">
+      <span>大きさ</span>
+      <input type="range" min={0} max={1000} step={1} value={0} />
+    </label>
+    <p class="crop__status" role="status" />
+    <div class="crop__actions">
+      <button type="button" class="btn btn--ghost" data-crop-cancel>
+        キャンセル
+      </button>
+      <button type="button" class="btn btn--primary" data-crop-apply>
+        適用
+      </button>
+    </div>
+  </dialog>
+)
+
+/*
   前の URL（slug を変えたときに残る転送の行。src/db/schema.ts の item_slug_redirects /
   member_slug_redirects）。見えるようにして、転送をやめる手を持つ——転送に使っている slug は
   ほかの行が使えないので（貼られた URL が黙って別の行を指さないように）、打ち間違いで作った

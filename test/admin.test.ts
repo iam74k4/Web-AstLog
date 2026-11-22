@@ -7,7 +7,10 @@ import * as schema from '../src/db/schema'
 import { STORY_SECTIONS } from '../src/domain'
 import { isOngoing, ONGOING_HINT, yearFrom } from '../src/lib/format'
 import { SITE_VERSION_KEY } from '../src/lib/page-cache'
+import { IMAGE_MAX_BYTES } from '../src/routes/admin/images'
 import { MAX_FORM_BYTES } from '../src/routes/admin/request'
+import { ADMIN_BEHAVIOR } from '../src/ui/admin-behavior'
+import { CROP_INIT } from '../src/ui/crop-behavior'
 import { db, form, get, okText, resetDb, seedItem, seedMember, signIn, touch } from './helpers'
 import { avif, file, gif, heic, jpeg, padded, png, svg, webp } from './images'
 
@@ -3303,6 +3306,61 @@ describe('並び順の数', () => {
     })
     const row = await db().query.members.findFirst({ where: eq(schema.members.id, member.id) })
     expect(row?.sortOrder).toBe(50)
+  })
+})
+
+/*
+  アバターの調整（Discord のアイコンの調整と同じ。src/ui/crop-behavior.ts）。動きはブラウザの
+  中（check:admin が実際に操作して測る）。ここは、サーバーが出す土台——ダイアログ・ファイル欄の
+  印・調整のボタン——と、補助のスクリプトの安全面を見る。JavaScript が無ければ閉じたまま出ない
+  ので、画像は今までどおり選んで送れる。
+*/
+describe('アバターの調整（ダイアログ）', () => {
+  it('編集画面はダイアログとファイル欄の印を持ち、いまの画像があれば調整のボタンを隠して出す', async () => {
+    const member = await seedMember({ avatarUrl: '/images/avatars/face.png' })
+    const signed = await signIn()
+    const html = await (await signed(`/admin/members/${member.id}/edit`)).text()
+    expect(html).toMatch(/<dialog class="crop"/)
+    expect(html).toMatch(/type="file" name="avatar" accept="[^"]*" data-crop=""/)
+    // ダイアログはフォームの外（中のボタンが編集のフォームを送らない）。ボタンはどれも type=button
+    const form = /<form method="post" action="\/admin\/members\/\d+"[\s\S]*?<\/form>/.exec(html)
+    expect(form?.[0]).not.toContain('class="crop"')
+    const dialog = /<dialog class="crop"[\s\S]*?<\/dialog>/.exec(html)?.[0] ?? ''
+    expect(dialog.match(/<button/g)).toHaveLength(2)
+    expect(dialog.match(/<button type="button"/g)).toHaveLength(2)
+    // 動くまで隠す（JavaScript が無いと、押しても何も起きないボタンになる）
+    expect(html).toMatch(
+      /<button type="button" class="btn btn--ghost crop-open" data-crop-current="\/images\/avatars\/face.png" hidden/,
+    )
+
+    // 画像の無い人・新しい人は、調整のボタンを持たない（ダイアログとファイル欄の印はある）
+    const none = await seedMember({ slug: 'none', name: '画像なし' })
+    const empty = await (await signed(`/admin/members/${none.id}/edit`)).text()
+    // 属性の形で見る（全ページに入る補助のスクリプトも、セレクタとして同じ字を持つ）
+    expect(empty).not.toContain('data-crop-current="')
+    expect(empty).toContain('data-crop=""')
+    const added = await (await signed('/admin/members/new')).text()
+    expect(added).not.toContain('data-crop-current="')
+    expect(added).toMatch(/<dialog class="crop"/)
+    // 作品の編集など、調整を使わない画面にはダイアログを出さない
+    const item = await seedItem()
+    expect(await (await signed(`/admin/items/${item.id}/edit`)).text()).not.toContain(
+      'class="crop"',
+    )
+  })
+
+  it('補助のスクリプトは管理画面の1本に入っていて、<script> を閉じる字を持たず、ユーザーの入力を埋め込まない', () => {
+    expect(ADMIN_BEHAVIOR).toContain(CROP_INIT)
+    // <script> の中にそのまま置く文なので、閉じる字・コメントの始まりを持たない
+    expect(CROP_INIT).not.toMatch(/<\/script|<!--/i)
+    // 画像の出し方は blob: の URL だけ（CSP は img-src に blob: を足している）。データ URL は使わない
+    expect(CROP_INIT).toContain('URL.createObjectURL')
+    expect(CROP_INIT).not.toContain('data:')
+    // 書き出しは正方形・512px まで・サーバーの上限（IMAGE_MAX_BYTES = 1,000,000）の内側
+    expect(CROP_INIT).toContain('const OUTPUT = 512')
+    const limit = Number(/const LIMIT = (\d+)/.exec(CROP_INIT)?.[1])
+    expect(limit).toBeGreaterThan(0)
+    expect(limit).toBeLessThan(IMAGE_MAX_BYTES)
   })
 })
 

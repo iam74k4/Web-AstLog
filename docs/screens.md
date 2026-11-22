@@ -9,7 +9,7 @@
 CSP（`default-src 'self'; script-src 'none'; object-src 'none'; base-uri 'none';
 form-action 'self'; frame-ancestors 'none'; img-src 'self';
 style-src 'self' 'unsafe-inline'`）・`X-Content-Type-Options: nosniff`・
-`Referrer-Policy: strict-origin-when-cross-origin` を付ける。公開 HTML の `script-src` は原則 `'none'`。作品ページだけ `GALLERY_CSP` を許す。管理画面は編集補助の `ADMIN_CSP` だけを許す。保存前プレビューは script 無しで、`frame-ancestors` を同一オリジンに限って許す。自分の CSP を持つ
+`Referrer-Policy: strict-origin-when-cross-origin` を付ける。公開 HTML の `script-src` は原則 `'none'`。作品ページだけ `GALLERY_CSP` を許す。管理画面は編集補助の `ADMIN_CSP` だけを許し、編集の画面の `img-src` にだけ `blob:` を足す（アバターの調整のダイアログが、選んだ画像をブラウザの中の URL で出す）。保存前プレビューは script 無しで、`frame-ancestors` を同一オリジンに限って許す。自分の CSP を持つ
 `/images/*` はそのまま（上書きしない）。`/admin/*` はさらに `Cache-Control: no-store` と
 `Cross-Origin-Opener-Policy: same-origin`（ほかのサイトが開いた窓に手を出させない。公開ページに
 付けると、sandbox の枠から開いた窓がページを開けない）。
@@ -469,7 +469,7 @@ Team のページは作らず、その位置にこの人のページが並ぶ。
 | アカウント | `GET /admin/account` | 要 | 紐づいたアカウント（提供元・@ログイン名かメールアドレス・最後のログイン〔日本時間〕）と「すべての端末からログアウト」。左ナビの足元の名前から入る。紐づけ・外しはここではしない |
 | すべての端末からログアウト | `POST /admin/account/logout-all` | 要 | その人のセッションを、いまの端末のものも含めて全部消し、`/admin/login?out=all` へ |
 | プロフィールの一覧 | `GET /admin/members`<br>`POST /admin/members/:id/publish`<br>`POST /admin/members/:id/move` | 要 | 行に 公開/下書き・↑↓（並びの入れ替え。10 刻みで振り直す）・「公開する / 下書きにする」（公開は関門を通し、止めたら編集画面へ `?publish=blocked`）・編集・削除・保存済みプレビュー。公開中の行には「サイトで見る ↗」。名前を押すと編集。**メンバーが1人のあいだは一覧を出さず、その人の編集画面へ 303**（`?deleted=` などの知らせは付けたまま。保存は一覧を通らず編集画面へ直に戻る。編集画面に「＋ メンバーを追加」を出す） |
-| Member フォーム | `GET /admin/members/new`<br>`GET /admin/members/:id/edit` | 要 | 追加と編集で同じテンプレート。アバターのある人には、いまのアバターの見本と「アバターを外す」（頭文字に戻す）。前の URL があれば、作品と同じく一覧して転送をやめられる。追加のフォームは一度きりの札（`formKey`）を hidden で持つ。編集の slug の欄は「変えると、前の URL は新しい URL へ転送する。空にしたときはいまのまま」と言う |
+| Member フォーム | `GET /admin/members/new`<br>`GET /admin/members/:id/edit` | 要 | 追加と編集で同じテンプレート。アバターのある人には、いまのアバターの見本と「アバターを外す」（頭文字に戻す）。JavaScript があれば、画像を選ぶと調整のダイアログ（Discord のアイコンの調整と同じ。ドラッグで位置、スライダー・ホイール・ピンチ・矢印キーと +/- で拡大。枠いっぱいより小さくはできない）が開き、「適用」で切り抜いた正方形の画像（最大 512px。PNG が大きければ JPEG）をファイル欄へ入れ直す（やめれば欄は空に戻る。GIF と開けない画像は調整せず、そのまま送る）。アバターのある人には「位置と大きさを調整」で、いまの画像を開き直せる。JavaScript が無ければダイアログは閉じたままで、画像は今までどおり選んで送る。前の URL があれば、作品と同じく一覧して転送をやめられる。追加のフォームは一度きりの札（`formKey`）を hidden で持つ。編集の slug の欄は「変えると、前の URL は新しい URL へ転送する。空にしたときはいまのまま」と言う |
 | Member 保存 | `POST /admin/members`<br>`POST /admin/members/:id` | 要 | multipart。アバターは作品の画像と同じ検査（中身の先頭のバイトで PNG・JPEG・WebP・AVIF・GIF だけ、1MB まで。GIF は 3MB まで）と付け足しの外し方（撮った場所など。位置を持つ AVIF は 400）で KV の `avatars/` へ。GitHub は `https://` の絶対 URL だけ（下書きでも検査。畳んだ連絡先の欄は `inputmode` で入力を助け、サーバーで検査してエラーのまとまりを開く）。並び順は全角の数字を半角に直して読み、数でなければ 400（空ならいまの値）。大見出しは改行（CRLF）・空の行・行の前後の空きを畳んで LF の行で持ち、長さは**公開の保存でだけ**見る（公開の関門。改行は数えない）。slug の欄が空なら編集ではいまの slug のまま。変えたら前の slug を `member_slug_redirects` に残す（行の書き換えと同じ batch）。ほかの人のいまの slug・前の slug は使わせない。同じ札で同じ名前の2度目の送信は書かずに一覧へ。検査が全部通ってから KV に置き、D1 が落ちたら置いた画像を消す。差し替えで使われなくなった画像は D1 のあとで消す。止める理由は全部まとめて返す。成功で `?saved=1`（下書きなら `?saved=draft`。slug を変えたら `&moved=1`）を付けて一覧へ |
 | Member 削除 | `GET /admin/members/:id/delete`（確認）<br>`POST` 同 URL（実行） | 要 | 確認画面を必ず挟む。キャンセルは来た画面へ（編集から来たら `?from=edit` で編集へ） |
 | 作品の一覧 | `GET /admin/items`（すべて）<br>`GET /admin/items?type=app\|work`（区分で絞る） | 要 | 名前を押すと編集。初めに開くのは全部を混ぜた並び（公開ページの Projects と同じ順: 年の新しい順 → 並び順 → 作った順）で、行に区分の札を出す。すべて / 個人開発 / 業務をタブで切り替える。行に恒久リンクの URL（無ければ「恒久リンクなし」）、「公開する / 下書きにする」、すべての並びでは同じ年の中の ↑↓ |
