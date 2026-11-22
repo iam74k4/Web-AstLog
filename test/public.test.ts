@@ -48,6 +48,8 @@ const pillarOf = (html: string) =>
   html.split('<div class="pillar">')[1]?.split('<main id="main"')[0] ?? ''
 const pillarNavOf = (html: string) =>
   html.split('<nav class="pillar__nav"')[1]?.split('</nav>')[0] ?? ''
+// 600 未満の目次（src/ui/Layout.tsx の SiteMenu。ボタンで開くパネル）
+const menuOf = (html: string) => html.split('class="menu"')[1]?.split('</nav>')[0] ?? ''
 
 // 上の帯だけを見る（ロゴと目次）。最初の </header> は上の帯のもの（入口の Hero はその後ろ）
 const topOf = (html: string) =>
@@ -1361,10 +1363,11 @@ describe('ページの URL', () => {
     // 英字だけの行き先には lang="en"（読み上げの発音の印）
     expect(tocOf(html)).toContain('<a href="/members/okazaki" lang="en">Profile</a>')
     // 1つの目次に2つ付くと、どちらが「いま」なのか読み上げでも見た目でも決まらない。上の帯の
-    // 目次と柱の目次に1つずつ（同時に見えるのは片方だけ）
+    // 目次・電話のメニュー・柱の目次に1つずつ（同時に見えるのは1組だけ）
     expect(tocOf(html).match(/aria-current="page"/g)).toHaveLength(1)
+    expect(menuOf(html).match(/aria-current="page"/g)).toHaveLength(1)
     expect(pillarNavOf(html).match(/aria-current="page"/g)).toHaveLength(1)
-    expect(html.match(/aria-current="page"/g)).toHaveLength(2)
+    expect(html.match(/aria-current="page"/g)).toHaveLength(3)
   })
 
   it('公開ページの HTML は装飾の絵を持たない。本文の画像は作品とアバターだけ', async () => {
@@ -3251,7 +3254,9 @@ describe('管理画面への入口', () => {
     ]
     for (const [path, href] of cases) {
       const response = await signed(path)
-      expect(await response.text(), path).toContain(`<a class="top__admin" href="${href}">`)
+      expect(await response.text(), path).toContain(
+        `<a class="top__admin" href="${href}" aria-label="管理画面">`,
+      )
       // 共有のキャッシュに置かれると、次の訪問者に入口が出る
       expect(response.headers.get('cache-control'), path).toBe('private, no-store')
     }
@@ -3267,7 +3272,9 @@ describe('管理画面への入口', () => {
     const signed = await signIn()
 
     const html = await (await signed(`/block-${block.id}`)).text()
-    expect(html).toContain(`<a class="top__admin" href="/admin/blocks/${block.id}/edit">`)
+    expect(html).toContain(
+      `<a class="top__admin" href="/admin/blocks/${block.id}/edit" aria-label="管理画面">`,
+    )
   })
 
   it('期限の切れたセッションでは出さない', async () => {
@@ -3685,6 +3692,41 @@ describe('左の柱', () => {
     // 全体ページは節を縦に積んだ1本の文書（紙にも刷る）。404 は D1 に聞かないので、名札も目次も無い
     expect(await okText('/all')).not.toMatch(/data-pillar|class="pillar"/)
     expect(await (await get('/no-such-page')).text()).not.toMatch(/data-pillar|class="pillar"/)
+  })
+})
+
+/*
+  600 未満の目次（src/ui/Layout.tsx の SiteMenu）。帯の右端の3本線のボタンが、帯の下に行き先を縦に
+  並べたパネルを開く。上の帯の目次・左の柱と同じ中身の3組目で、見えるのは1組だけ（app.css）。
+  開け閉めは popover 属性だけで、script は持たない
+*/
+describe('電話のメニュー', () => {
+  const links = (html: string) => [...html.matchAll(/<a [^>]*href="([^"]+)"/g)].map((m) => m[1])
+
+  it('上の帯の目次と同じ行き先・同じ印を、ボタンで開くパネルに持つ', async () => {
+    await seedMember()
+    await seedItem({ slug: 'appmixer' })
+    for (const path of ['/', '/projects', '/members/okazaki', '/contact', '/apps/item/appmixer']) {
+      const html = await okText(path)
+      expect(links(menuOf(html)), path).toEqual(links(tocOf(html)))
+      expect(menuOf(html).match(/aria-current="page"/g), path).toEqual(
+        tocOf(html).match(/aria-current="page"/g),
+      )
+      // ボタンはパネルを名指しし、パネルはブラウザが開け閉めする（popover。script に頼らない）
+      // 見た目は3本線だけ。名前は aria-label が読み上げに渡す
+      expect(html, path).toContain(
+        '<button class="menu-btn" type="button" popovertarget="site-menu" aria-label="Menu" lang="en"><span class="menu-btn__icon" aria-hidden="true"></span></button>',
+      )
+      expect(html, path).toContain(
+        '<nav id="site-menu" class="menu" popover="auto" aria-label="ページの移動">',
+      )
+    }
+  })
+
+  it('全体ページは目次を折り返すので、ボタンを持たない。404 にも無い', async () => {
+    await seedMember()
+    expect(await okText('/all')).not.toContain('menu-btn')
+    expect(await (await get('/no-such-page')).text()).not.toContain('menu-btn')
   })
 })
 

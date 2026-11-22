@@ -217,22 +217,31 @@ const measure = ([, cfg]) => {
   const main = document.querySelector('main')
   const foot = document.querySelector('.foot')
   /*
-    目次は2組ある——上の帯の目次（.toc）と、900 以上で本文の左に立つ柱の目次（.pillar__nav。
-    src/ui/Layout.tsx の Pillar）。同時に見えるのは片方だけなので、見えているほうを測る。
-    両方見えていたら同じ行き先が2組並んでいて、両方消えていたら移る手が無い
+    目次は3組ある——上の帯の目次（.toc）、600 未満でそれを受けるメニューのボタン（.menu-btn。
+    開くパネルは tocPass が測る）、900 以上で本文の左に立つ柱の目次（.pillar__nav。
+    src/ui/Layout.tsx の SiteMenu と Pillar）。同時に見えるのは1組だけなので、見えているものを測る。
+    2組見えていたら同じ行き先が並んでいて、どれも消えていたら移る手が無い
   */
   const pillar = document.querySelector('.pillar')
   const shown = (el) => Boolean(el?.getClientRects().length)
-  const navs = [top?.querySelector('.toc'), pillar?.querySelector('.pillar__nav')].filter(shown)
+  const navs = [
+    top?.querySelector('.toc'),
+    top?.querySelector('.menu-btn'),
+    pillar?.querySelector('.pillar__nav'),
+  ].filter(shown)
   const toc = navs[0]
   if (!top || !main || !foot || !toc) {
     return {
-      problems: ['.top / main / .foot / 見えている目次（.toc か .pillar__nav）のどれかが無い'],
+      problems: [
+        '.top / main / .foot / 見えている目次（.toc か .menu-btn か .pillar__nav）のどれかが無い',
+      ],
       anchor: null,
       tall: 0,
     }
   }
-  if (navs.length > 1) problems.push('目次が2組とも見えている（上の帯と左の柱）')
+  if (navs.length > 1) {
+    problems.push(`目次が ${navs.length} 組見えている（上の帯・メニュー・左の柱のどれか1つのはず）`)
+  }
   // 柱が見えているなら、足元の行き先は柱が受ける（どちらにも無い・両方にある、を止める）。
   // 本文の中の、その人の行き先（個人ページの OwnSocials）は数えない
   const socials = [...document.querySelectorAll('.pillar__foot > .socials, .foot .socials')]
@@ -382,9 +391,9 @@ const measure = ([, cfg]) => {
   if (wide.length) problems.push(`画面の横にはみ出している: ${list(wide)}`)
   if (cut.length) problems.push(`切られている: ${list(cut)}`)
 
-  // (8) 押す的。目次の行き先と管理画面への入口は --tap（指の姿では 44px）
+  // (8) 押す的。目次の行き先・メニューのボタン・管理画面への入口は --tap（指の姿では 44px）
   const tap = parseFloat(getComputedStyle(root).getPropertyValue('--tap'))
-  for (const hand of document.querySelectorAll('.toc a, .pillar__nav a, .top__admin')) {
+  for (const hand of document.querySelectorAll('.toc a, .pillar__nav a, .top__admin, .menu-btn')) {
     const tall = hand.getBoundingClientRect().height
     if (tall > 0 && tall < tap - slack) {
       problems.push(
@@ -502,6 +511,48 @@ const tocMark = ([slack]) => {
   }
 }
 
+/*
+  (12) 600 未満のメニュー。ボタンを押して開いたパネルが、帯の下から画面の中に下り（帯とボタンを
+  覆わない）、いまのページの行が画面の中にあり、行き先の的が --tap 以上か。開いたあとは
+  Esc で閉じる（popover がブラウザに持たせている手。閉じなければ、開いたまま次へ進めない）
+*/
+const menuOpen = ([slack]) => {
+  const menu = document.querySelector('.menu')
+  const top = document.querySelector('.top')
+  if (!menu || !top) return { problems: ['メニューのパネル（.menu）が無い'] }
+  if (!menu.matches(':popover-open')) return { problems: ['ボタンを押してもメニューが開かない'] }
+  const problems = []
+  const box = menu.getBoundingClientRect()
+  const floor = top.getBoundingClientRect().bottom
+  if (box.top < floor - slack) {
+    problems.push(
+      `開いたメニューが帯を覆う（上端 ${Math.round(box.top)}px・帯の下端 ${Math.round(floor)}px）`,
+    )
+  }
+  if (box.left < -slack || box.right > innerWidth + slack) {
+    problems.push(
+      `開いたメニューが画面の横にはみ出す（${Math.round(box.left)}〜${Math.round(box.right)}px）`,
+    )
+  }
+  const tap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tap'))
+  for (const link of menu.querySelectorAll('a')) {
+    const tall = link.getBoundingClientRect().height
+    if (tall < tap - slack) {
+      problems.push(
+        `メニューの的「${link.textContent.trim()}」が ${Math.round(tall)}px（--tap は ${tap}px）`,
+      )
+    }
+  }
+  const mark = menu.querySelector("a[aria-current='page']")
+  if (mark) {
+    const at = mark.getBoundingClientRect()
+    if (at.top < floor - slack || at.bottom > innerHeight + slack) {
+      problems.push(`メニューのいまのページ「${mark.textContent.trim()}」が画面の外`)
+    }
+  }
+  return { problems }
+}
+
 async function tocPass(browser, base, paths) {
   const failures = []
   let checked = 0
@@ -516,6 +567,24 @@ async function tocPass(browser, base, paths) {
     for (const path of paths) {
       await page.goto(base + path, { waitUntil: 'load' })
       await page.evaluate(() => document.fonts.ready.then(() => true))
+      const button = page.locator('.top .menu-btn')
+      if (await button.isVisible()) {
+        await button.click()
+        // 開くときの入り（少し上から下りる）を待ってから測る
+        await page.evaluate(() =>
+          Promise.all(
+            (document.querySelector('.menu')?.getAnimations() ?? []).map((one) => one.finished),
+          ),
+        )
+        const opened = await page.evaluate(menuOpen, [SLACK])
+        for (const problem of opened.problems) failures.push(`${where} ${path} — ${problem}`)
+        await page.keyboard.press('Escape')
+        if (await page.evaluate(() => document.querySelector('.menu')?.matches(':popover-open'))) {
+          failures.push(`${where} ${path} — Esc でメニューが閉じない`)
+        }
+        checked += 1
+        continue
+      }
       const found = await page.evaluate(tocMark, [SLACK])
       if (!found) continue
       checked += 1
@@ -786,7 +855,7 @@ async function main() {
         `横のはみ出し 0・切られた要素 0・h1 はどれも1つ・一番下まで送っても目次が見え、送った先は帯の下。` +
         `いちばん長いページ ${result.longest.tall}px（${result.longest.where}）。` +
         `見出しの錨のずれ 最大 ${result.drift}px。` +
-        `目次の印 ${result.toc.checked} ページが帯の中（うち ${result.toc.scrolled} ページは送って開いた）。` +
+        `目次の印 ${result.toc.checked} ページが帯かメニューの中（うち ${result.toc.scrolled} ページは送って開いた）。` +
         `/all は ${result.whole.checked} 通りとも横に動かない`,
     )
   }

@@ -975,10 +975,27 @@ describe('部品の作法', () => {
         rule.decls.some(([name, value]) => name === 'display' && value === 'none'),
     )
     expect(folds.map((rule) => rule.selectors.join(', '))).toEqual([
+      '.menu-btn, .menu:popover-open',
       'body[data-pillar] :is(.top .toc, .foot)',
       "body[data-pillar='owner'] .hero--cover > .eyebrow",
     ])
-    for (const rule of folds) expect(rule.context.join(' ')).toContain('min-width: 900px')
+    const [menu, ...pillarFolds] = folds
+    for (const rule of pillarFolds) expect(rule.context.join(' ')).toContain('min-width: 900px')
+    /*
+      600 未満の目次（ボタンで開くパネル。Layout.tsx の SiteMenu）も同じ形。帯の目次を畳むのは
+      popover を知っているブラウザの 600 未満だけで、600 以上はボタンとパネルを畳んで帯の目次を出す
+    */
+    expect(menu?.context.join(' ')).toContain('min-width: 600px')
+    const popover = blockAt(sheet, '@supports selector(:popover-open)')
+    expect(bodyOf(popover, ':where(body:not([data-whole])) .top .toc {')).toContain('display: none')
+    expect(bodyOf(popover, '.menu-btn {')).toContain('display: inline-flex')
+    expect(bodyOf(sheet, '.menu-btn {')).toContain('display: none')
+    expect(
+      bodyOf(
+        blockAt(sheet, '@media (min-width: 600px)'),
+        ':where(body:not([data-whole])) .top .toc {',
+      ),
+    ).toContain('display: flex')
     // 柱は素で畳み、出すのは 900 以上だけ（畳む相手と同じ括り）
     expect(bodyOf(sheet, '.pillar {')).toContain('display: none')
     const wide = blockAt(blockAt(sheet, '@media screen'), '@media (min-width: 900px)')
@@ -1146,6 +1163,21 @@ describe('部品の作法', () => {
     expect(bodyOf(blockAt(sheet, '@media (pointer: coarse)'), ':root {')).toContain('--tap: 44px')
   })
 
+  it('管理画面への入口は目次のぼかしに触れず、電話の幅では鉛筆だけ', () => {
+    /*
+      目次は右のぼかしのぶん負の margin で右の余白へはみ出す。後ろに入口が続くときも
+      はみ出すと、帯の箱が入口の手前の間を食い、溢れた行き先のぼかしが鉛筆に触れた
+    */
+    expect(bodyOf(sheet, '.toc {')).toContain('margin-inline-end: calc(var(--fade-w) * -1)')
+    expect(bodyOf(sheet, '.toc:has(+ .top__admin) {')).toContain('margin-inline-end: 0')
+    // 600 未満は名前を畳み（読み上げは aria-label）、的は --tap の四角のまま
+    expect(bodyOf(sheet, '.top__admin-label {')).toContain('display: none')
+    expect(bodyOf(sheet, '.top__admin {')).toContain('min-width: var(--tap)')
+    expect(bodyOf(blockAt(sheet, '@media (min-width: 600px)'), '.top__admin-label {')).toContain(
+      'display: inline',
+    )
+  })
+
   it('目次のいまのページは、帯の見えている幅の中で開く（貼り付く帯のときだけ）', () => {
     /*
       CSS だけで組む帯は、何もしなければいつも左端で開き、並びの後ろの
@@ -1160,12 +1192,15 @@ describe('部品の作法', () => {
     expect(marker.body).toContain('scroll-margin-inline: var(--fade-w)')
     /*
       左の柱の目次も同じ（目次の長いサイトや背の低い窓では、柱の中だけを縦に送る。印が柱の下に
-      隠れたまま開かない）。使うのは帯の目次と柱の目次の2か所だけ
+      隠れたまま開かない）。600 未満のメニューのパネルも同じ。使うのは帯・柱・メニューの3か所だけ
     */
     const pillar = bodyOf(frame, ".pillar__nav a[aria-current='page'] {")
     expect(pillar).toContain('scroll-initial-target: nearest')
     expect(pillar).toContain('scroll-margin-block: var(--page-pad)')
-    expect(sheet.split('scroll-initial-target').length).toBe(3)
+    expect(bodyOf(sheet, ".menu a[aria-current='page'] {")).toContain(
+      'scroll-initial-target: nearest',
+    )
+    expect(sheet.split('scroll-initial-target').length).toBe(4)
   })
 
   it('読まれない値を :root に置かない', () => {

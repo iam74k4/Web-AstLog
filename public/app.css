@@ -182,6 +182,14 @@
   --top-h: 64px;
   /* 目次のいまのページを塗る帯の高さ（指の的 --tap より低い） */
   --toc-chip-h: 32px;
+  /*
+    600 未満の目次（ボタンで開くパネル。「骨格」の .menu）。行き先1行の高さは指の的（--tap）より
+    1段大きく、ボタンの3本線（開くと ×）の幅・線どうしの間・太さ
+  */
+  --menu-row-h: 56px;
+  --menu-icon-w: 20px;
+  --menu-icon-gap: 6px;
+  --menu-icon-stroke: 1.5px;
   /* 入口の大見出しの下の短い太い線の太さ */
   --rule-bold: 3px;
   /*
@@ -734,6 +742,11 @@ body[data-site] > .frame {
   color: var(--ink);
 }
 
+/* ロゴの右の余りは全部ロゴが持つ。目次が畳まれた幅でも、管理画面の入口とメニューのボタンは帯の右端に寄る */
+.top > .brand {
+  margin-inline-end: auto;
+}
+
 /*
   ワードマーク（ΛSTLOG。src/ui/icons.tsx の Wordmark）。上の帯とログイン画面。高さで
   大きさを決め、幅は縦横比から。字の色を継ぐ（currentColor）
@@ -764,6 +777,16 @@ body[data-site] > .frame {
   overflow-x: auto;
   scrollbar-width: none;
   mask-image: var(--fade-right);
+}
+
+/*
+  後ろに管理画面への入口（.top__admin）が続くときは、右の余白へはみ出さない。はみ出すと
+  帯の箱が入口の手前の間（gap）を食い、溢れた行き先のぼかしが鉛筆に触れて、目次の続きの
+  ように見えた。ぼかしの空き（padding）は残すので、溢れていなければ最後の行き先は薄まらない。
+  :has を知らないブラウザはこの1本を捨てる（はみ出したまま）
+*/
+.toc:has(+ .top__admin) {
+  margin-inline-end: 0;
 }
 
 /*
@@ -819,12 +842,191 @@ body[data-site] > .frame {
 .top__admin {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   flex-shrink: 0;
   gap: var(--sp-2);
+  min-width: var(--tap);
   min-height: var(--tap);
   color: var(--accent);
   font-size: var(--fs-sm);
   transition: scale var(--dur-spring) var(--ease-spring);
+}
+
+/*
+  600 未満は鉛筆だけ（名前はリンクの aria-label が読み上げに渡す）。電話の幅では
+  「管理画面」の4字が目次の幅を食っていた。的は --tap の四角のまま、鉛筆は的の右端に
+  寄せる（版面の右の縦の線にそろい、的の余りが目次のぼかしとの間になる）
+*/
+.top__admin-label {
+  display: none;
+}
+
+/*
+  600 未満の目次（src/ui/Layout.tsx の SiteMenu）。帯の右端の3本線のボタンで、帯のすぐ下に行き先を
+  縦に並べたパネルを開く。ボタンは線だけで字を持たない（名前「Menu」は aria-label が読み上げに渡す）。
+  的は --tap の四角で、線は鉛筆と同じく的の右端に寄せる（版面の右の縦の線にそろう）。電話の幅ではロゴ・行き先・管理画面の入口が1行に収まらず、横に送る
+  帯の最後の行き先が切れていた。
+
+  開け閉めは popover 属性だけ（script は無い。外を押す・Esc で閉じるのもブラウザが持つ）。
+  ボタンを出して帯の目次を畳むのは、popover を知っているブラウザだけ（下の @supports）——
+  知らないブラウザでは、押しても開かないボタンの代わりに今までの横に送る帯が残る。
+  全体ページ（/all）は目次を折り返すので、ボタンを持たない（Layout.tsx が出さない）。
+*/
+.menu-btn {
+  display: none;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: var(--tap);
+  min-height: var(--tap);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+  transition: scale var(--dur-spring) var(--ease-spring);
+}
+
+/*
+  3本線。真ん中の線は要素そのものの上の枠線で、上下の2本（::before / ::after）は真ん中に重ねてから
+  --menu-icon-gap だけ上下へずらす。開いている間は真ん中が消え、上下が真ん中へ戻って × に回る。
+  線は背景ではなく枠線で描く（強制色では背景が地の色に塗り替えられ、線が消える）
+*/
+.menu-btn__icon {
+  position: relative;
+  width: var(--menu-icon-w);
+  border-top: var(--menu-icon-stroke) solid;
+  transition: border-color var(--dur) var(--ease);
+}
+
+.menu-btn__icon::before,
+.menu-btn__icon::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: calc(var(--menu-icon-stroke) * -1);
+  border-top: var(--menu-icon-stroke) solid;
+  transition:
+    translate var(--dur) var(--ease),
+    rotate var(--dur) var(--ease);
+}
+
+.menu-btn__icon::before {
+  translate: 0 calc(var(--menu-icon-gap) * -1);
+}
+
+.menu-btn__icon::after {
+  translate: 0 var(--menu-icon-gap);
+}
+
+.top:has(.menu:popover-open) .menu-btn__icon {
+  border-top-color: transparent;
+}
+
+.top:has(.menu:popover-open) .menu-btn__icon::before {
+  translate: 0 0;
+  rotate: 45deg;
+}
+
+.top:has(.menu:popover-open) .menu-btn__icon::after {
+  translate: 0 0;
+  rotate: -45deg;
+}
+
+/*
+  開いたパネル。帯のすぐ下から画面の幅いっぱいに下ろし、帯（とボタン）は覆わない——同じ
+  ボタンで閉じられる。閉じている間はブラウザが display: none にしているので、開いた姿にだけ
+  形を書く（.menu に display を書くと、閉じたパネルが出てしまう）。行き先が多ければパネルの
+  中だけを縦に送る。箱（影）は持たず、下の罫線で本文と分ける
+*/
+.menu:popover-open {
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  inset: var(--top-h) 0 auto;
+  width: auto;
+  height: auto;
+  max-height: calc(100% - var(--top-h));
+  margin: 0;
+  padding: var(--sp-5) 0 var(--sp-6);
+  overflow-y: auto;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  transition:
+    opacity var(--dur) var(--ease),
+    translate var(--dur) var(--ease);
+}
+
+/* 開くときだけ、少し上から入る（閉じるときはすぐ消える） */
+@starting-style {
+  .menu:popover-open {
+    opacity: 0;
+    translate: 0 calc(var(--sp-3) * -1);
+  }
+}
+
+/* 帯の下の本文は薄い白で覆う（管理画面のダイアログと同じ）。押せばパネルは閉じる */
+.menu::backdrop {
+  top: var(--top-h);
+  background: var(--bg);
+  opacity: 0.8;
+}
+
+/*
+  行き先は罫線で区切った行。いまのページは行ごと墨で塗る（目次の墨の四角と同じ印。強制色では
+  下線。末尾の強制色の節）。矢印はサイトの中の続きの →。行き先が多くてパネルの中を縦に送る
+  ときも、いまのページの行が見える位置で開く（左の柱の目次と同じ。知らないブラウザは頭から開く）
+*/
+.menu a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  min-height: var(--menu-row-h);
+  padding-inline: var(--gutter);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--fs-display-xs);
+  font-weight: 500;
+}
+
+.menu a:first-child {
+  border-top: 1px solid var(--line);
+}
+
+.menu a::after {
+  content: '→';
+  color: var(--ink-weak);
+  font-size: var(--fs-md);
+}
+
+.menu a[aria-current='page'] {
+  /* biome-ignore lint/correctness/noUnknownProperty: CSS Scroll Snap 2 の性質で、Biome の一覧にまだ無い（Chromium 133 から）。知らないブラウザは捨てる */
+  scroll-initial-target: nearest;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.menu a[aria-current='page']::after {
+  color: inherit;
+}
+
+/* 行は画面の幅いっぱいなので、フォーカスの輪郭は行の内側に描く */
+.menu a:focus-visible {
+  outline-offset: calc(var(--focus-ring) * -1);
+}
+
+@supports selector(:popover-open) {
+  :where(body:not([data-whole])) .top .toc {
+    display: none;
+  }
+
+  .menu-btn {
+    display: inline-flex;
+  }
 }
 
 /* --- 足元 --- */
@@ -3246,6 +3448,24 @@ body[data-site] > .frame {
     gap: var(--sp-6);
   }
 
+  /* 管理画面への入口は、幅があれば鉛筆に名前を添える（600 未満で外す理由は素の規則に） */
+  .top__admin-label {
+    display: inline;
+  }
+
+  /*
+    幅があれば目次は帯の中に1行で並ぶ。ボタンとパネルは畳む（開いたまま窓を広げても、
+    パネルが帯の目次と2組並ばない）
+  */
+  :where(body:not([data-whole])) .top .toc {
+    display: flex;
+  }
+
+  .menu-btn,
+  .menu:popover-open {
+    display: none;
+  }
+
   /* 押し手は列いっぱいに伸ばさず、字の幅に戻す（600 未満で伸ばす理由は素の .cta に） */
   .hero__actions > .cta {
     flex: none;
@@ -3382,6 +3602,8 @@ body[data-site] > .frame {
 .toc a:active,
 .pillar__nav a:active,
 .top__admin:active,
+.menu-btn:active,
+.menu a:active,
 .band:active,
 .member:active,
 .back:active {
@@ -4163,11 +4385,6 @@ body[data-opening] {
       display: none;
     }
 
-    /* 目次が無くなったぶん、管理画面への入口は帯の右端へ */
-    body[data-pillar] .top__admin {
-      margin-inline-start: auto;
-    }
-
     body[data-pillar='owner'] .hero--cover > .eyebrow {
       display: none;
     }
@@ -4339,7 +4556,7 @@ body[data-opening] {
     display: none;
   }
 
-  :is(.toc, .pillar__nav) a[aria-current='page'] {
+  :is(.toc, .pillar__nav, .menu) a[aria-current='page'] {
     text-decoration: underline;
     text-underline-offset: var(--sp-3);
   }
