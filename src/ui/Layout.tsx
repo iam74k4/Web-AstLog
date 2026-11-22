@@ -167,7 +167,8 @@ const Pillar = ({
 )
 
 /*
-  600 未満の上の帯の目次。ボタン（Menu）で、帯のすぐ下に行き先を縦に並べたパネルを開く。
+  600 未満の上の帯の目次。3本線のボタンで、帯のすぐ下に行き先を縦に並べたパネルを開く。
+  ボタンは線だけで字を持たないので、名前「Menu」は aria-label で読み上げに渡す（英語の札なので lang="en"）。
   目次の3組目——上の帯の目次（.toc）・左の柱（Pillar）と同じ中身で、同時に見えるのは1組だけ
   （app.css が幅で切り替える。読み上げにも片方しか出ない）。
 
@@ -179,9 +180,8 @@ const Pillar = ({
 */
 const SiteMenu = ({ nav }: { nav: NavItem[] }) => (
   <>
-    <button class="menu-btn" type="button" popovertarget="site-menu" lang="en">
+    <button class="menu-btn" type="button" popovertarget="site-menu" aria-label="Menu" lang="en">
       <span class="menu-btn__icon" aria-hidden="true" />
-      Menu
     </button>
     <nav id="site-menu" class="menu" popover="auto" aria-label="ページの移動">
       {nav.map((item) => (

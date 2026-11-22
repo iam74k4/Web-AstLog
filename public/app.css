@@ -184,11 +184,11 @@
   --toc-chip-h: 32px;
   /*
     600 未満の目次（ボタンで開くパネル。「骨格」の .menu）。行き先1行の高さは指の的（--tap）より
-    1段大きく、ボタンの2本線（開くと ×）の幅・間・太さ
+    1段大きく、ボタンの3本線（開くと ×）の幅・線どうしの間・太さ
   */
   --menu-row-h: 56px;
   --menu-icon-w: 20px;
-  --menu-icon-h: 10px;
+  --menu-icon-gap: 6px;
   --menu-icon-stroke: 1.5px;
   /* 入口の大見出しの下の短い太い線の太さ */
   --rule-bold: 3px;
@@ -742,7 +742,7 @@ body[data-site] > .frame {
   color: var(--ink);
 }
 
-/* ロゴの右の余りは全部ロゴが持つ。目次が畳まれた幅でも、管理画面の入口と Menu は帯の右端に寄る */
+/* ロゴの右の余りは全部ロゴが持つ。目次が畳まれた幅でも、管理画面の入口とメニューのボタンは帯の右端に寄る */
 .top > .brand {
   margin-inline-end: auto;
 }
@@ -862,8 +862,9 @@ body[data-site] > .frame {
 }
 
 /*
-  600 未満の目次（src/ui/Layout.tsx の SiteMenu）。帯の右端の「Menu」で、帯のすぐ下に行き先を
-  縦に並べたパネルを開く。電話の幅ではロゴ・行き先・管理画面の入口が1行に収まらず、横に送る
+  600 未満の目次（src/ui/Layout.tsx の SiteMenu）。帯の右端の3本線のボタンで、帯のすぐ下に行き先を
+  縦に並べたパネルを開く。ボタンは線だけで字を持たない（名前「Menu」は aria-label が読み上げに渡す）。
+  的は --tap の四角で、線は鉛筆と同じく的の右端に寄せる（版面の右の縦の線にそろう）。電話の幅ではロゴ・行き先・管理画面の入口が1行に収まらず、横に送る
   帯の最後の行き先が切れていた。
 
   開け閉めは popover 属性だけ（script は無い。外を押す・Esc で閉じるのもブラウザが持つ）。
@@ -874,28 +875,27 @@ body[data-site] > .frame {
 .menu-btn {
   display: none;
   align-items: center;
-  gap: var(--sp-3);
+  justify-content: flex-end;
   min-width: var(--tap);
   min-height: var(--tap);
   padding: 0;
   border: 0;
   background: none;
   color: var(--ink);
-  font-family: var(--font-display);
-  font-size: var(--fs-md);
-  font-weight: 500;
   cursor: pointer;
   transition: scale var(--dur-spring) var(--ease-spring);
 }
 
 /*
-  2本線。開いている間は × に回る。線は背景ではなく枠線で描く（強制色では背景が地の色に
-  塗り替えられ、線が消える）
+  3本線。真ん中の線は要素そのものの上の枠線で、上下の2本（::before / ::after）は真ん中に重ねてから
+  --menu-icon-gap だけ上下へずらす。開いている間は真ん中が消え、上下が真ん中へ戻って × に回る。
+  線は背景ではなく枠線で描く（強制色では背景が地の色に塗り替えられ、線が消える）
 */
 .menu-btn__icon {
   position: relative;
   width: var(--menu-icon-w);
-  height: var(--menu-icon-h);
+  border-top: var(--menu-icon-stroke) solid;
+  transition: border-color var(--dur) var(--ease);
 }
 
 .menu-btn__icon::before,
@@ -903,6 +903,7 @@ body[data-site] > .frame {
   content: '';
   position: absolute;
   inset-inline: 0;
+  top: calc(var(--menu-icon-stroke) * -1);
   border-top: var(--menu-icon-stroke) solid;
   transition:
     translate var(--dur) var(--ease),
@@ -910,20 +911,24 @@ body[data-site] > .frame {
 }
 
 .menu-btn__icon::before {
-  top: 0;
+  translate: 0 calc(var(--menu-icon-gap) * -1);
 }
 
 .menu-btn__icon::after {
-  bottom: 0;
+  translate: 0 var(--menu-icon-gap);
+}
+
+.top:has(.menu:popover-open) .menu-btn__icon {
+  border-top-color: transparent;
 }
 
 .top:has(.menu:popover-open) .menu-btn__icon::before {
-  translate: 0 calc((var(--menu-icon-h) - var(--menu-icon-stroke)) / 2);
+  translate: 0 0;
   rotate: 45deg;
 }
 
 .top:has(.menu:popover-open) .menu-btn__icon::after {
-  translate: 0 calc((var(--menu-icon-h) - var(--menu-icon-stroke)) / -2);
+  translate: 0 0;
   rotate: -45deg;
 }
 

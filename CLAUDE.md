@@ -66,7 +66,7 @@ Story の `h2`、`/all` の Profile の `h3`）は `--fs-lg` で線を引かな�
 
 **目次は（600 以上）1行のまま横に送り、いまの行き先が見える所で開く**（印に
 `scroll-initial-target: nearest`）。右端のぼかし（`--fade-right`）ぶん余白へはみ出す
-（`--fade-w`）。`/all` は折り返す。**600 未満は「Menu」で開くパネル**（`SiteMenu`）。
+（`--fade-w`）。`/all` は折り返す。**600 未満は3本線で開くパネル**（`SiteMenu`）。
 開閉は `popover` だけ（知らなければ帯）。
 
 ### 部品と層

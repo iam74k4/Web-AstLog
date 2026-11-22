@@ -3696,7 +3696,7 @@ describe('左の柱', () => {
 })
 
 /*
-  600 未満の目次（src/ui/Layout.tsx の SiteMenu）。帯の右端の「Menu」が、帯の下に行き先を縦に
+  600 未満の目次（src/ui/Layout.tsx の SiteMenu）。帯の右端の3本線のボタンが、帯の下に行き先を縦に
   並べたパネルを開く。上の帯の目次・左の柱と同じ中身の3組目で、見えるのは1組だけ（app.css）。
   開け閉めは popover 属性だけで、script は持たない
 */
@@ -3713,8 +3713,9 @@ describe('電話のメニュー', () => {
         tocOf(html).match(/aria-current="page"/g),
       )
       // ボタンはパネルを名指しし、パネルはブラウザが開け閉めする（popover。script に頼らない）
+      // 見た目は3本線だけ。名前は aria-label が読み上げに渡す
       expect(html, path).toContain(
-        '<button class="menu-btn" type="button" popovertarget="site-menu" lang="en">',
+        '<button class="menu-btn" type="button" popovertarget="site-menu" aria-label="Menu" lang="en"><span class="menu-btn__icon" aria-hidden="true"></span></button>',
       )
       expect(html, path).toContain(
         '<nav id="site-menu" class="menu" popover="auto" aria-label="ページの移動">',
