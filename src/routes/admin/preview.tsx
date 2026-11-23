@@ -676,6 +676,7 @@ previewRoutes.post('/preview/site', async (c) => {
     github: '公開する GitHub URL',
     instagram: '公開する Instagram URL',
     discord: '公開する Discord のユーザー名',
+    discordUrl: '公開する Discord URL',
     x: '公開する X URL',
     availability: '受付の状態',
     availabilityReply: '返信の目安',

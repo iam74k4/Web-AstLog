@@ -17,8 +17,14 @@ export const SITE = {
   github: '',
   instagram: '',
   x: '',
-  // Discord のユーザー名（@ は付けない）。名前から開ける URL が無いので、Contact に字で出す
+  // Discord のユーザー名（@ は付けない）。Contact に字で出す
   discord: '',
+  /*
+    Discord を開く URL（プロフィール https://discord.com/users/<数字の ID> か招待リンク）。
+    ユーザー名からは開ける URL が作れないので、開けるようにするならこちらを入れる。空なら
+    足元の印は Contact の Discord の行へ送る
+  */
+  discordUrl: '',
   /*
     Contact の受付状況（Availability）。状態は AVAILABILITY の鍵か空（状態の行を出さない）。
     返信の目安・連絡のつく時間・進め方は書いた行だけ出す。4つとも空なら Availability ごと出さない
@@ -72,6 +78,7 @@ export const SITE_SETTING_KEYS = [
   'instagram',
   'x',
   'discord',
+  'discordUrl',
   ...AVAILABILITY_KEYS,
   'contactSteps',
 ] as const
@@ -87,6 +94,7 @@ export const SITE_SETTING_LATER_KEYS: readonly SiteSettingKey[] = [
   'instagram',
   'x',
   'discord',
+  'discordUrl',
   ...AVAILABILITY_KEYS,
   'contactSteps',
 ]
@@ -104,6 +112,7 @@ export const SITE_SETTING_LIMITS = {
   instagram: 2048,
   x: 2048,
   discord: 32,
+  discordUrl: 200,
   availability: 16,
   // 受付状況の行は札（Response・Hours・Format）の横の1行。短い言い切りで書く長さ
   availabilityReply: 40,
@@ -145,16 +154,31 @@ export const isContactEmail = (email: string) =>
 
 /*
   Discord のユーザー名（2〜32 字の英数字・_・.）。@ と旧来の #0000 は付けない。名前から開ける
-  URL が無いので、Contact に字で出し、足元の印はその行（/contact#discord）へ送る
+  URL は無いので、Contact に字で出す。開く URL（discordUrl）が無ければ、足元の印はその行
+  （/contact#discord）へ送る
 */
 export const isDiscordName = (name: string) => /^[a-z0-9_.]{2,32}$/i.test(name)
+
+/*
+  Discord を開く URL。Discord のプロフィール（数字の ID）か招待リンクだけを通す——どこへでも
+  行ける URL にすると、Discord の印から別のサイトへ出る。query やフラグメントも持たせない
+*/
+export const isDiscordUrl = (url: string) =>
+  /^https:\/\/(?:(?:www\.)?discord\.com\/(?:users\/\d{15,21}|invite\/[A-Za-z0-9-]{2,32})|discord\.gg\/[A-Za-z0-9-]{2,32})\/?$/.test(
+    url,
+  )
 
 /*
   サイトに連絡の手があるか。Contact のページを出すかを決める（src/blocks.ts の blockShown）。
   形の通らない値は無いものとして数える——描く部品（components.tsx の Contact）も同じ検査で落とす
 */
-export const hasContact = (site: Pick<SiteSettings, 'email' | 'github' | 'discord'>) =>
-  isContactEmail(site.email) || isHttpsUrl(site.github) || isDiscordName(site.discord)
+export const hasContact = (
+  site: Pick<SiteSettings, 'email' | 'github' | 'discord' | 'discordUrl'>,
+) =>
+  isContactEmail(site.email) ||
+  isHttpsUrl(site.github) ||
+  isDiscordName(site.discord) ||
+  isDiscordUrl(site.discordUrl)
 
 export function siteSettingsErrors(site: SiteSettings): Record<string, string> | null {
   const errors: Record<string, string> = {}
@@ -195,6 +219,10 @@ export function siteSettingsErrors(site: SiteSettings): Record<string, string> |
   if (site.discord && !isDiscordName(site.discord)) {
     errors.discord =
       'Discord のユーザー名を入れてください（英数字・_・. の 2〜32 字。@ は付けない）'
+  }
+  if (site.discordUrl && !isDiscordUrl(site.discordUrl)) {
+    errors.discordUrl =
+      'Discord のプロフィール（https://discord.com/users/数字の ID）か招待リンク（https://discord.gg/…）を入れてください'
   }
   return Object.keys(errors).length ? errors : null
 }

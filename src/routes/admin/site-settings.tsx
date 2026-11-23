@@ -186,9 +186,18 @@ const SiteSettingsPage = (props: {
           label="公開する Discord のユーザー名"
           name="discord"
           value={props.site.discord}
-          hint="@ は付けない（例: iam74k4）。Contact に名前を出し、ページ下部の印はその行へ移ります。空なら出しません"
+          hint="@ は付けない（例: iam74k4）。Contact に名前を出します。下の URL が空なら、ページ下部の印はその行へ移ります。空なら出しません"
           maxlength={SITE_SETTING_LIMITS.discord}
           error={props.errors?.discord}
+        />
+        <Field
+          label="公開する Discord URL"
+          name="discordUrl"
+          type="url"
+          value={props.site.discordUrl}
+          hint="プロフィール（https://discord.com/users/数字の ID）か招待リンク（https://discord.gg/…）。入れると、ページ下部の印と Contact の Discord の行から Discord を開けます。ID は Discord の設定で開発者モードをオンにし、自分のプロフィールの「ユーザーIDをコピー」で取れます"
+          maxlength={SITE_SETTING_LIMITS.discordUrl}
+          error={props.errors?.discordUrl}
         />
       </FormSection>
       <FormSection

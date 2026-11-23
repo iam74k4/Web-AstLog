@@ -195,6 +195,7 @@ export function itemDocumentPage(
               x={site.x}
               instagram={site.instagram}
               discord={site.discord}
+              discordUrl={site.discordUrl}
             />
           </div>
         ) : null}
