@@ -187,12 +187,11 @@ H.264 の動画（MP4・MOV。MOV も MP4 として置く）（`src/lib/image.ts
 動きの終わりの姿と同じ）。
 
 **動きは持ち主が動画で見て選んだ組だけ**（app.css の「動き」の節。量と長さは `:root` の
-`--rise`・`--dur-reveal`・`--stagger`・`--type-step`・`--twinkle`・`--opening-load`・`--opening-open`）。
+`--rise`・`--dur-reveal`・`--stagger`・`--type-step`・`--twinkle`・`--opening-*`）。
 - 読み込みの幕（外から入口へ来たときだけ。`fromInside`。`Layout` の `opening` が幕の要素 `Opening` を出す）:
-  真っ黒の幕（`--opening-ground`。墨ではなく黒）の真ん中でロゴの O が回り（`OpeningMark`。
-  ロゴと同じ向きで止まる）、下の線が読み込みのように
-  満ちてから（進んでは少し止まる）、幕が上下に開く。
-  線は本物の進みではなく、見せるための間（`--opening-load`。伸ばすと入口に着くたびの待ちが伸びる）。
+  真っ黒の幕（`--opening-ground`。墨でなく黒）の真ん中でロゴの O が回り（`OpeningMark`）、
+  下の線が満ちてから（進んでは少し止まる）、幕が上下に開き、ロゴは帯のロゴへ移る（`opening-land`）。
+  線は本物の進みではなく見せるための間（`--opening-load`。伸ばすと入口に着くたびの待ちが伸びる）。
   JavaScript は使わず、動かすのは位置・倍率・回転・透明度だけ。
   幕は画面の下の縁に触れず、開くときも縁を越えない（iPhone の Safari が上下の帯を黒のまま残した）。
   動きを減らす設定・紙・強制色では幕ごと出さず、入口の字も待たせない（止めるだけだと幕が残る）

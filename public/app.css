@@ -211,10 +211,12 @@
   --top-clear: calc(var(--top-h) + var(--sp-5));
 
   /*
-    上の帯のロゴ（ワードマーク ΛSTLOG）の字の高さ。字の幅は字の高さの約 6.3 倍
-    （15px で 95px）。ログイン画面のワードマークも同じ規則（.brand__word）
+    上の帯のロゴ（ワードマーク ΛSTLOG）の字の高さ。字の幅は字の高さの --wordmark-ratio 倍
+    （15px で 95px。src/ui/logo.ts の WORDMARK の viewBox の幅 ÷ 高さ。test/theme.test.ts が
+    突き合わせる）。ログイン画面のワードマークも同じ規則（.brand__word）
   */
   --brand-h: 15px;
+  --wordmark-ratio: 6.308;
 
   /*
     段落（.bio の p と箇条書き。紹介文・メモ・作品の説明と本文）の1行の長さ。約40字で止める。
@@ -378,11 +380,16 @@
     --opening-edge は幕が画面の下の縁から空け、開き始めに上の縁からも外す幅（理由は「動き」の
     節の .opening）。
     --ease-curtain は幕の開き、--ease-loader は O が回り出して静かに止まる曲線。
-    幕が開き切るまで約 1 秒（0.7 秒満ちて 0.36 秒で開く）。2 秒近く待たせていたころは、入口に
-    着くたびに黒い画面が長く残った
+    --opening-land は幕が開き始めてから、幕のロゴが上の帯のロゴへ移り終えるまで。
+    --opening-land-scale は移り終えたときの倍率（上の帯のロゴの高さ --brand-h ÷ 幕のロゴの高さ
+    --opening-mark-h。test/theme.test.ts が突き合わせる）。
+    入口の字が出始めるまで 0.7 秒（2 秒近く待たせていたころは、入口に着くたびに黒い画面が
+    長く残った）。幕は 0.36 秒で開き、ロゴはそこから 0.64 秒で帯に収まる
   */
   --opening-load: 700ms;
   --opening-open: 360ms;
+  --opening-land: 640ms;
+  --opening-land-scale: 0.75;
   --opening-mark-h: 20px;
   --opening-gap: 22px;
   --opening-edge: 8px;
@@ -4056,14 +4063,17 @@ body[data-site] > .frame {
 /*
   読み込みの幕（入口だけ。src/ui/Layout.tsx の Opening。外から入口へ来たときだけ、body に
   data-opening が立ち、幕の要素 .opening が出る）。真っ黒の幕の真ん中でロゴの O が回り、下の線が
-  読み込みのように満ちる——一定の速さではなく、進んでは少し止まる。満ちきると幕が上下に開く
-  （持ち主の「幕の動きをローディングみたいに」。Cavani の読み込みの幕を下敷きにした形）。
+  読み込みのように満ちる——一定の速さではなく、進んでは少し止まる。満ちきると幕が上下に開き、
+  幕のロゴは墨に変わりながら縮んで、上の帯のロゴの位置へ移って重なる（持ち主の「幕の動きを
+  ローディングみたいに」。Cavani の読み込みの幕を下敷きにした形。ロゴを消さずに帯へ収めるのは、
+  幕の間を「待たされた」ではなく「サイトに入った」に見せるため）。
 
   ページはもう届いているので、線が見せているのは本物の進みではなく、見せるための間
   （--opening-load）。入口の字は幕が開き始めると同時に現れ始める（--reveal-from）。
 
   軽さのために: JavaScript は使わない。幕は .opening の2つの疑似要素で、毎コマ動かすのは
-  倍率（scale）・回転（rotate）・透明度だけ——描き直しの要らない合成だけで動く。箱の位置を
+  位置（translate）・倍率（scale）・回転（rotate）・透明度だけ——描き直しの要らない合成だけで
+  動く。箱の位置を
   変えるのは開き始めの1度だけ（opening-lift）。押す手は幕を通り抜ける（pointer-events: none）。
   開き終えたら隠す（visibility）。
 
@@ -4093,6 +4103,11 @@ body[data-opening] {
   }
 }
 
+/*
+  幕の箱は大きさの問い合わせの容器（container-type: size）。移るロゴは、この箱の幅と高さ
+  （cqw / cqh）から帯のロゴまでの道のりを出す——画面の単位（vw / vh）は、スクロールバーの幅や
+  iPhone の Safari の道具の列のぶん、この箱の大きさとずれる
+*/
 .opening {
   position: fixed;
   inset: 0 0 var(--opening-edge);
@@ -4101,9 +4116,10 @@ body[data-opening] {
   place-items: center;
   color: var(--accent-ink);
   pointer-events: none;
+  container-type: size;
   animation:
     opening-lift 1ms linear var(--opening-load) forwards,
-    opening-done 1ms linear calc(var(--opening-load) + var(--opening-open)) forwards;
+    opening-done 1ms linear calc(var(--opening-load) + var(--opening-land)) forwards;
 }
 
 /* 幕の上下の半分。下の半分は 1px 重ねる（端数の高さで、合わせ目から白い地が線になって覗かない） */
@@ -4127,19 +4143,31 @@ body[data-opening] {
   transform-origin: bottom;
 }
 
-/* ロゴと線。幕より手前に置き、幕が開き始めると同時に消える。線の幅はロゴの幅 */
+/* ロゴと線。幕より手前に置く。線の幅はロゴの幅 */
 .opening__load {
   position: relative;
   z-index: 1;
   display: grid;
   gap: var(--opening-gap);
-  animation: opening-out calc(var(--opening-open) / 2) var(--ease) var(--opening-load) forwards;
 }
 
+/*
+  幕が開き始めると、ロゴは墨に変わり（真ん中から幕が割れるので、すぐ白い地の上に出る）、
+  縮みながら上の帯のロゴの位置へ移る（opening-land）。移り終えると幕ごと隠れ、同じ形の
+  帯のロゴがそこに残る
+*/
 .opening__mark {
   display: block;
   width: auto;
   height: var(--opening-mark-h);
+  animation:
+    opening-land var(--opening-land) var(--ease-curtain) var(--opening-load) forwards,
+    opening-ink calc(var(--opening-open) / 2) var(--ease) var(--opening-load) forwards;
+}
+
+/* 線は幕が開き始めると同時に消える */
+.opening__bar {
+  animation: opening-out calc(var(--opening-open) / 2) var(--ease) var(--opening-load) forwards;
 }
 
 /* O（輪と衛星）だけが輪の中心のまわりを回り、ロゴと同じ向きで止まる（icons.tsx の OpeningMark） */
@@ -4195,6 +4223,48 @@ body[data-opening] {
   }
 }
 
+/*
+  幕のロゴから帯のロゴへの道のり。始まりは幕の真ん中（開き始めに箱の上が --opening-edge だけ
+  下がる——opening-lift——ので、その半分を戻して同じ所から動き出す）。終わりは帯のロゴの
+  真ん中: 横は本文の枠の左（「骨格」の --frame-x と同じ式を、この箱の幅 100cqw で）とロゴの幅の
+  半分、縦は帯の高さの半分（下の罫線 1px を除く）。ロゴの真ん中は線とのあいだのぶん
+  （--opening-gap と線の 1px の半分）上にある
+*/
+@keyframes opening-land {
+  from {
+    translate: 0 calc(var(--opening-edge) / -2);
+  }
+  to {
+    translate: calc(
+        max(var(--gutter), (100cqw - var(--w-page)) / 2) +
+        var(--brand-h) *
+        var(--wordmark-ratio) /
+        2 -
+        50cqw
+      )
+      calc((var(--top-h) - 1px) / 2 - var(--opening-edge) - 50cqh + (var(--opening-gap) + 1px) / 2);
+    scale: var(--opening-land-scale);
+  }
+}
+
+@keyframes opening-ink {
+  to {
+    color: var(--ink);
+  }
+}
+
+/* 帯のロゴは、幕のロゴが移り終えるまで隠しておく（移る途中に同じロゴが2つ見えない） */
+body[data-opening] .top > .brand {
+  animation: opening-brand 1ms linear calc(var(--opening-load) + var(--opening-land)) backwards;
+}
+
+@keyframes opening-brand {
+  from,
+  to {
+    opacity: 0;
+  }
+}
+
 /* 幕の半分は、外側の縁へ縮んで開く（無地なので、滑って出ていくのと同じに見える） */
 @keyframes opening-part {
   to {
@@ -4224,6 +4294,11 @@ body[data-opening] {
   /* 幕が無いので、入口の字も待たせず、地も黒くしない */
   body[data-opening] {
     --reveal-from: 0ms;
+    animation: none;
+  }
+
+  /* 帯のロゴも隠さない（移ってくる幕のロゴが無い） */
+  body[data-opening] .top > .brand {
     animation: none;
   }
 }
