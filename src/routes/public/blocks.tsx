@@ -389,6 +389,7 @@ export function renderBlock(
             x={site.x}
             instagram={site.instagram}
             discord={site.discord}
+            discordUrl={site.discordUrl}
             availability={site}
             steps={parsePairs(site.contactSteps)}
             whole={whole}

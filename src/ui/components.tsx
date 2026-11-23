@@ -48,6 +48,7 @@ import {
   isAvailabilityState,
   isContactEmail,
   isDiscordName,
+  isDiscordUrl,
   SITE,
   type SiteSettings,
 } from '../site'
@@ -2070,8 +2071,9 @@ export const ProfileWhole = ({
   見た目はアイコンだけ（持ち主の「アイコンだけでよい」。X は印も字も「X」で、二重に読めた）。
   名前は読み上げにだけ渡す（.sr-only。英字なので lang="en"）。マウスで重ねたときは title で
   名前を出す。押す的はアイコンより広い --tap の四角（app.css の .socials）。並びと名前は
-  GitHub・Instagram・X・Discord・Mail（メールの名前も英語でそろえる）。Discord だけは外へ
-  出ず、Contact の Discord の行へ送る（ユーザー名から開ける URL が無い）。
+  GitHub・Instagram・X・Discord・Mail（メールの名前も英語でそろえる）。Discord は開く URL
+  （discordUrl）があればそこへ外へ出し、無ければ Contact の Discord の行へ送る（ユーザー名から
+  開ける URL は作れない）。
 
   owner は「誰の行き先か」。サイトの行き先（足元）は渡さず、その人だけの行き先
   （OwnSocials）が名前を渡す。読み上げの名前が「青木 春香の GitHub」になる。
@@ -2088,6 +2090,7 @@ export const Socials = ({
   instagram,
   x,
   discord,
+  discordUrl,
   email,
   owner,
 }: {
@@ -2095,13 +2098,16 @@ export const Socials = ({
   instagram?: string | null
   x?: string | null
   discord?: string | null
+  discordUrl?: string | null
   email?: string | null
   owner?: string
 }) => {
   const mail = email && isContactEmail(email) ? email : null
   const chat = discord && isDiscordName(discord) ? discord : null
+  const chatUrl = discordUrl && isDiscordUrl(discordUrl) ? discordUrl : null
   // 1つも無ければ枠も置かない（Contact のページの足元は、Instagram も X も無いと空になる）
-  if (!isHttpsUrl(github) && !isHttpsUrl(instagram) && !isHttpsUrl(x) && !chat && !mail) return null
+  if (!isHttpsUrl(github) && !isHttpsUrl(instagram) && !isHttpsUrl(x) && !chat && !chatUrl && !mail)
+    return null
   return (
     <div class="socials">
       {isHttpsUrl(github) ? (
@@ -2123,10 +2129,15 @@ export const Socials = ({
         </a>
       ) : null}
       {/*
-        Discord はユーザー名から開ける URL が無い。Contact の Discord の行（名前を字で出す）へ
-        送る。サイトの中の行き先なので同じタブで開く
+        Discord は開く URL（discordUrl）があれば、ほかの行き先と同じく外へ別のタブで開く。
+        無ければ Contact の Discord の行（名前を字で出す）へ送る——サイトの中なので同じタブ
       */}
-      {chat ? (
+      {chatUrl ? (
+        <a href={chatUrl} rel="me noreferrer" target="_blank" title="Discord">
+          <DiscordIcon />
+          <SocialName owner={owner} name="Discord" />
+        </a>
+      ) : chat ? (
         <a href="/contact#discord" title={`Discord: ${chat}`}>
           <DiscordIcon />
           <SocialName owner={owner} name="Discord" />
@@ -2203,6 +2214,7 @@ type ContactLinks = {
   x?: string | null
   instagram?: string | null
   discord?: string | null
+  discordUrl?: string | null
 }
 
 // 外のサイトの行き先。札・印・URL・見せる名前
@@ -2222,7 +2234,33 @@ const awayRows = ({ github, x, instagram }: ContactLinks) =>
   残さない）。受け取れない値（検査より前に入った行）は表と同じく数えない
 */
 export const hasContactRows = (links: ContactLinks) =>
-  isContactEmail(links.email) || isDiscordName(links.discord ?? '') || awayRows(links).length > 0
+  isContactEmail(links.email) ||
+  isDiscordName(links.discord ?? '') ||
+  isDiscordUrl(links.discordUrl ?? '') ||
+  awayRows(links).length > 0
+
+const DiscordRow = ({ name, url }: { name?: string | null; url?: string | null }) => {
+  const shown = name && isDiscordName(name) ? name : null
+  const open = url && isDiscordUrl(url) ? url : null
+  if (!shown && !open) return null
+  return (
+    <div class="contact-list__row" id="discord">
+      <dt lang="en">
+        <DiscordIcon />
+        Discord
+      </dt>
+      {open ? (
+        <dd>
+          <a class="contact-list__link" href={open} rel="me noreferrer" target="_blank">
+            <span class="contact-list__to">{shown ?? open.replace(/^https:\/\//, '')}</span>
+          </a>
+        </dd>
+      ) : (
+        <dd>{shown}</dd>
+      )}
+    </div>
+  )
+}
 
 /*
   連絡先の表（Email / GitHub / X / Instagram / Discord）。Contact のページと、作品の
@@ -2267,18 +2305,12 @@ export const ContactList = (links: ContactLinks) => (
       </div>
     ))}
     {/*
-      Discord はユーザー名から開ける URL が無いので、名前を字で出す（リンクにしない。
-      行は押せる面を持たない）。足元の Discord の印はこの行（#discord）へ送る
+      Discord。開く URL（discordUrl）があれば、ほかの外の行き先と同じく行ごと押せるリンクにし、
+      見せる字はユーザー名（無ければ URL の頭を落としたもの）。URL が無ければユーザー名を字で
+      出すだけ（リンクにしない。行は押せる面を持たない）。足元の印は URL が無いときこの行
+      （#discord）へ送る
     */}
-    {links.discord && isDiscordName(links.discord) ? (
-      <div class="contact-list__row" id="discord">
-        <dt lang="en">
-          <DiscordIcon />
-          Discord
-        </dt>
-        <dd>{links.discord}</dd>
-      </div>
-    ) : null}
+    <DiscordRow name={links.discord} url={links.discordUrl} />
   </dl>
 )
 
@@ -2397,6 +2429,7 @@ export const SiteSocials = ({
       instagram={site.instagram}
       x={site.x}
       discord={site.discord}
+      discordUrl={site.discordUrl}
       email={site.email}
     />
   )

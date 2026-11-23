@@ -325,7 +325,7 @@ Projects・Profile・Contact・打ち込むブロックがそれぞれ1ページ
 **足元は著作権表示とサイトの行き先だけ**（「© 年 AstLog」と、GitHub → Instagram → X → Discord → Mail の
 順の行き先。アイコンだけで、名前は読み上げに渡す。`src/ui/components.tsx` の `SiteSocials`）。名前・職種・一言と
 `/all` への1本は置かない——`/all` は sitemap と管理画面の「ページ構成」から開く。
-Instagram・X・Discord は空なら出さない（Discord は Contact の行へ送る）。誰のサイトかは入口の札（1人のサイトなら「名前・職種・所在地」）と Profile が
+Instagram・X・Discord は空なら出さない（Discord は URL が無ければ Contact へ）。誰のサイトかは入口の札（1人のサイトなら「名前・職種・所在地」）と Profile が
 言う。入口の大見出しはその人の一文（`members.headline`。無ければ名前）で、名前を真ん中に据えない
 （名前は Profile が出す）。顔は名札（個人ページの頭と、左の柱。`Nameplate`）にだけ。
 上の帯には名乗りを置かない（ロゴ・目次・管理画面の入口だけ）。
@@ -383,7 +383,7 @@ HTML に絵・件数の帯は置かない。
 「Profile →」（1人のサイトでその人のページが並びにあるとき。`profileOf`）は枠線だけの2本目
 （`Cta` の `quiet`。同じ強さを2本並べない）。`/all` の頭は名前を目に見える `h1` で置く。
 
-**Contact は連絡先があるときだけ出す。** メール・GitHub・Discord のどれかがサイト設定にあれば
+**Contact は連絡先があるときだけ出す。** メール・GitHub・Discord のどれかが設定にあれば
 （`src/site.ts` の `hasContact`）、`blockShown` が数える。無ければページも目次の行も作らない。
 
 **Contact は見える h1・誘いの1文・連絡先の表、あれば受付状況と相談の流れ**。1文（`contactLead`）は description
