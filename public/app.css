@@ -377,10 +377,12 @@
     --opening-turn は O が回る量（1回転と4分の3。ロゴと同じ向きで止まる）。
     --opening-edge は幕が画面の下の縁から空け、開き始めに上の縁からも外す幅（理由は「動き」の
     節の .opening）。
-    --ease-curtain は幕の開き、--ease-loader は O が回り出して静かに止まる曲線
+    --ease-curtain は幕の開き、--ease-loader は O が回り出して静かに止まる曲線。
+    幕が開き切るまで約 1 秒（0.7 秒満ちて 0.36 秒で開く）。2 秒近く待たせていたころは、入口に
+    着くたびに黒い画面が長く残った
   */
-  --opening-load: 1500ms;
-  --opening-open: 440ms;
+  --opening-load: 700ms;
+  --opening-open: 360ms;
   --opening-mark-h: 20px;
   --opening-gap: 22px;
   --opening-edge: 8px;
