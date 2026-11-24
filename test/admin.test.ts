@@ -4,7 +4,7 @@ import { asc, eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { blockType, MAX_CHARS } from '../src/blocks'
 import * as schema from '../src/db/schema'
-import { STORY_SECTIONS } from '../src/domain'
+import { ITEM_STATUSES, STORY_SECTIONS } from '../src/domain'
 import { isOngoing, ONGOING_HINT, yearFrom } from '../src/lib/format'
 import { SITE_VERSION_KEY } from '../src/lib/page-cache'
 import { IMAGE_MAX_BYTES } from '../src/routes/admin/images'
@@ -2782,6 +2782,56 @@ describe('作品の保存は、全部書けるか何も書かないか', () => {
     expect(html).toContain('プラットフォームが見つかりません')
     expect(html).toContain('value="残ってほしい題"')
     expect(await db().select().from(schema.items)).toHaveLength(0)
+  })
+})
+
+/*
+  作品の状態（items.status。src/domain.ts の ITEM_STATUSES）。選択肢から選ぶだけの欄で、
+  選択肢に無い値は保存させない。欄の無い送信（この欄より前に開いた編集画面）はいまの状態のまま
+*/
+describe('作品の状態', () => {
+  const statusOf = async () => (await db().select().from(schema.items))[0]?.status
+
+  it('選んだ状態で保存し、編集画面ではその状態が選ばれている', async () => {
+    const signed = await signIn()
+    await signed('/admin/items', {
+      method: 'POST',
+      body: form({ type: 'app', title: 'Nonet', status: 'developing' }),
+    })
+    expect(await statusOf()).toBe('developing')
+    const [item] = await db().select().from(schema.items)
+    const edit = await (await signed(`/admin/items/${item?.id}/edit`)).text()
+    expect(edit).toContain(
+      '<option value="developing" selected="">開発中（In development）</option>',
+    )
+    for (const status of ITEM_STATUSES) expect(edit).toContain(`value="${status.key}"`)
+  })
+
+  it('欄の無い送信はいまの状態のまま。空で送れば札を外す', async () => {
+    const signed = await signIn()
+    const item = await seedItem({ title: 'AppMixer', status: 'selling' })
+    await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: form({ type: 'app', title: 'AppMixer' }),
+    })
+    expect(await statusOf()).toBe('selling')
+    await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: form({ type: 'app', title: 'AppMixer', status: '' }),
+    })
+    expect(await statusOf()).toBe('')
+  })
+
+  it('選択肢に無い値は、400 で選び直してもらう', async () => {
+    const signed = await signIn()
+    const item = await seedItem({ title: 'AppMixer', status: 'selling' })
+    const response = await signed(`/admin/items/${item.id}`, {
+      method: 'POST',
+      body: form({ type: 'app', title: 'AppMixer', status: 'sold-out' }),
+    })
+    expect(response.status).toBe(400)
+    expect(await response.text()).toContain('状態が選択肢にありません')
+    expect(await statusOf()).toBe('selling')
   })
 })
 

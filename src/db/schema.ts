@@ -224,6 +224,13 @@ export const items = sqliteTable(
       1つの作品に1本だけだから。どれを押し手にするかはリンクの並びが決める
     */
     leadLink: integer('lead_link').notNull().default(0),
+    /*
+      作品の状態（開発中・販売中など）。値は src/domain.ts の ITEM_STATUSES の鍵か空（札を出さない）。
+      一覧の行と作品のページの札に、年のあとに出る。enum にしないのは、空を許すためと、
+      知らない値の行（D1 を手で直した行）を描く側が黙って捨てられるようにするため（itemStatusName）。
+      既にある行は ''（NOT NULL に定数の既定値なので ALTER で入る）
+    */
+    status: text('status').notNull().default(''),
     published: integer('published').notNull().default(0),
     /*
       同じ年の中の並び（小さいほど先）。個人開発と業務で1つの数の並びとして

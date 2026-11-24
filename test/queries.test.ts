@@ -202,6 +202,7 @@ describe('公開の問い合わせが読む列', () => {
     'metricUnit',
     'metricNote',
     'leadLink',
+    'status',
     'published',
     'sortOrder',
     'formKey',

@@ -59,6 +59,37 @@ export const totalOf = (counts: KindCounts) =>
   ITEM_KIND_KEYS.reduce((sum, kind) => sum + counts[kind], 0)
 
 /*
+  作品の状態（items.status）。データの値・管理画面の呼び名（label）・公開ページの札（name）の
+  対応は、この表が正。札は一覧の行（components.tsx の ItemRow）と作品のページの添え
+  （src/routes/public/item.tsx の itemPage）に、年のあとに並ぶ。
+
+  開発中・販売中のような状態を説明文に書くと、発売や公開のたびに文を書き直すことになり、
+  直し忘れた文が古い状態を言い続けた。状態は選ぶだけの欄にして、説明文は何であるかだけを言う。
+  選択肢から選ばせるのは、作品ごとに言い方が揺れないため（プラットフォームと同じ理由）。
+  札の言葉は区分の札（KIND_NAME）と同じく英語、管理画面は日本語（CLAUDE.md「文言」）。
+
+  空の値は「札を出さない」。この列より前からある行は空のまま（ALTER の既定値）。
+  知らない値（D1 を手で直した行・移行を流す前の DB）も札を出さない——描く側も itemStatusName を
+  通して見る（検査は保存と描画の2か所）。並びは管理画面の選択肢に出る順。
+*/
+export const ITEM_STATUSES = [
+  { key: 'developing', label: '開発中', name: 'In development' },
+  { key: 'preparing', label: '準備中', name: 'Coming soon' },
+  { key: 'available', label: '公開中', name: 'Available' },
+  { key: 'selling', label: '販売中', name: 'On sale' },
+  { key: 'discontinued', label: '終了', name: 'Discontinued' },
+] as const
+
+export type ItemStatus = (typeof ITEM_STATUSES)[number]['key']
+
+export const isItemStatus = (value: string): value is ItemStatus =>
+  ITEM_STATUSES.some((status) => status.key === value)
+
+// 公開ページの札の言葉。空・知らない値は null（札を出さない）
+export const itemStatusName = (value: string): string | null =>
+  ITEM_STATUSES.find((status) => status.key === value)?.name ?? null
+
+/*
   公開ページが読むメンバーの列（src/db/queries.ts の listPublishedMembers /
   findPublishedMember がこの列だけを引く）。members に列を足しても、ここに足すまでは公開の
   リクエストで読まれない——行を丸ごと読むと、描く側で1回 `...member` と書くだけで、

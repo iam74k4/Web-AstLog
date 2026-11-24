@@ -8,9 +8,11 @@ import * as schema from '../../db/schema'
 import {
   ITEM_DOCUMENTS,
   ITEM_KINDS,
+  ITEM_STATUSES,
   type ItemDocumentKey,
   type ItemKind,
   isItemKind,
+  isItemStatus,
   KIND_LABEL,
   readKind,
   STORY_SECTIONS,
@@ -508,6 +510,7 @@ function itemDraft(
       platformNew: submitted.platformNew ?? '',
       category: submitted.category ?? '',
       year: submitted.year ?? '',
+      status: submitted.status ?? '',
       summary: submitted.summary ?? '',
       body: submitted.body ?? '',
       story: storyOf((column) => submitted[column] ?? ''),
@@ -535,6 +538,7 @@ function itemDraft(
     platformNew: '',
     category: item?.category ?? '',
     year: item ? item.year : (defaults?.year ?? ''),
+    status: item?.status ?? '',
     summary: item?.summary ?? '',
     body: item?.body ?? '',
     story: storyOf((column) => item?.[column] ?? ''),
@@ -564,6 +568,8 @@ type ItemDraft = {
   platformNew: string
   category: string
   year: string
+  // 作品の状態（ITEM_STATUSES の鍵か空）
+  status: string
   summary: string
   // テンプレートより前に書いた本文（中身があるときだけ欄を出す。StoryFields）
   body: string
@@ -947,7 +953,7 @@ const ItemForm = (props: ItemFormData) => {
           />
         </FormSection>
         {/*
-          一覧の行の左に出る札（プラットフォームか業界・年）。畳んだ「任意」の欄に入れていたころは、
+          一覧の行の左に出る札（プラットフォームか業界・年・状態）。畳んだ「任意」の欄に入れていたころは、
           題だけで保存した作品が年の無いまま一覧の最後に並び、札も空で、開いて探すまで理由が
           分からなかった。年は並びを決めるので、いつも見えるところに置く
         */}
@@ -1001,6 +1007,24 @@ const ItemForm = (props: ItemFormData) => {
                 : undefined
             }
             hint="終わったものは「2026」、続いているものは「2024 — 現在」。一覧は頭の数字4桁で新しい順に並ぶ"
+          />
+          {/*
+            状態は説明文に書かず、ここで選ぶ（説明文に書くと、発売や公開のたびに文を直すことになる）。
+            札は英語で出るので、選択肢に札の言葉を添える（src/domain.ts の ITEM_STATUSES）
+          */}
+          <Select
+            label="状態"
+            name="status"
+            value={d.status}
+            error={props.errors?.status}
+            options={[
+              { value: '', label: '（なし）' },
+              ...ITEM_STATUSES.map((status) => ({
+                value: status.key,
+                label: `${status.label}（${status.name}）`,
+              })),
+            ]}
+            hint="一覧の行と作品のページの札に、年のあとに英語で出る。発売・公開したら切り替える"
           />
           {/*
             選択肢に無い種類は、ここに書いて保存すれば選択肢に足して付ける（readItemForm）。
@@ -1452,6 +1476,14 @@ export function readItemForm(
     errors.platformKey = 'プラットフォームが見つかりません。選び直してください'
   }
   /*
+    状態。欄の無い送信（この欄より前に開いたままの編集画面）は、いまの状態のまま——空として
+    読むと、古い画面から保存しただけで札が消える。選択肢に無い値は保存させない
+  */
+  const status = form.has('status') || !existing ? str(form.get('status')) : existing.status
+  if (status && !isItemStatus(status)) {
+    errors.status = '状態が選択肢にありません。選び直してください'
+  }
+  /*
     「選択肢に無いとき」に名前を書いた保存。同じ名前の選択肢がもうあればそれを付け、無ければ
     選択肢に足して付ける（newPlatform。保存の batch が作品より先に書く。platformWrites）。
     書いてあれば、上の選択より優先する——わざわざ名前を打つほうが強い意思表示
@@ -1495,6 +1527,7 @@ export function readItemForm(
       */
       slug: readSlug(str(form.get('slug')), existing?.slug, title) ?? `item-${newToken(3)}`,
       year,
+      status,
       summary: str(form.get('summary')),
       /*
         前の本文の欄は、中身があるときだけフォームに出る（StoryFields）。欄の無い送信は
@@ -1567,6 +1600,7 @@ function submittedItem(form: FormData): Record<string, string> {
     category: str(form.get('category')),
     // 保存と同じく半角に直して返す（年の欄の知らせが、保存したときと同じ答えを出す）
     year: halfWidthDigits(str(form.get('year'))),
+    status: str(form.get('status')),
     summary: str(form.get('summary')),
     body: str(form.get('body')),
     ...storyOf((column) => str(form.get(column))),
