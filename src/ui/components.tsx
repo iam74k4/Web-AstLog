@@ -12,6 +12,7 @@ import {
   type ItemKind,
   type ItemView,
   itemImages,
+  itemStatusName,
   KIND_NAME,
   KIND_PATH,
   type KindCounts,
@@ -775,7 +776,7 @@ export const itemTransition = (item: { slug: string | null }) =>
   item.slug && /^[a-z0-9-]+$/.test(item.slug) ? `view-transition-name:item-${item.slug}` : undefined
 
 /*
-  一覧（Projects）の1行。札（区分・プラットフォームか業界・年・担当）・題と説明・
+  一覧（Projects）の1行。札（区分・プラットフォームか業界・年・状態・担当）・題と説明・
   実績値・行き先・技術・矢印を並べる（狭い画面では縦に積む。app.css の「一覧の行」）。
   番号とサムネイルは置かない——どちらも行を見分ける手がかりにならず（番号は並び順でしか
   なく、絵は画像のある作品にしか付かないので行の高さと右の列がそろわなかった）、行の字を
@@ -824,6 +825,7 @@ export const ItemRow = ({
 }) => {
   const href = itemHref(item)
   const where = item.platformLabel ?? item.category
+  const status = itemStatusName(item.status)
   const icon = item.iconUrl ? (
     <img
       class="entry__icon"
@@ -854,6 +856,7 @@ export const ItemRow = ({
         {showKind ? <li lang="en">{KIND_NAME[item.type]}</li> : null}
         {where ? <li lang={langOf(where)}>{where}</li> : null}
         {item.year ? <li class="entry__year">{item.year}</li> : null}
+        {status ? <li lang="en">{status}</li> : null}
         {showMember && item.memberName && item.memberSlug ? (
           <li>
             <a class="entry__member" href={`/members/${item.memberSlug}`}>

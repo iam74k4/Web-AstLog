@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import css from '../public/app.css'
 import { saveSiteSettings } from '../src/db/queries'
 import * as schema from '../src/db/schema'
-import { ITEM_DOCUMENTS, ITEM_KINDS } from '../src/domain'
+import { ITEM_DOCUMENTS, ITEM_KINDS, ITEM_STATUSES } from '../src/domain'
 import { sniffImage } from '../src/lib/image'
 import { publicRoutes } from '../src/routes/public/routes'
 import { itemDocumentHref, itemHref, LinkList, LinkRow, splitPhrases } from '../src/ui/components'
@@ -2127,6 +2127,51 @@ describe('作品の押し手', () => {
     )
     expect(row).toContain('href="https://example.test/guide"')
     expect(row).not.toContain('links__lead')
+  })
+})
+
+/*
+  作品の状態（items.status）。開発中・販売中のような状態を説明文に書くと、発売のたびに文を
+  直すことになる。状態は選ぶだけの欄で、札（英語）は一覧の行と作品のページの添えに、年のあとに出る。
+  空と知らない値（D1 を手で直した行・移行を流す前の DB が返す列の名前の字）は札を出さない
+*/
+describe('作品の状態', () => {
+  it('一覧の行の札と作品のページの添えに、年のあとに英語で出る', async () => {
+    await seedItem({
+      title: 'Nonet',
+      slug: 'nonet',
+      platformKey: 'web',
+      year: '2026',
+      status: 'developing',
+    })
+    for (const path of ['/projects', '/all']) {
+      expect(mainOf(await okText(path)), path).toContain(
+        '<li class="entry__year">2026</li><li lang="en">In development</li></ul>',
+      )
+    }
+    expect(mainOf(await okText('/apps/item/nonet'))).toContain(
+      '>Web · 2026 · In development</span>',
+    )
+  })
+
+  it('どの状態にも札の言葉がある', async () => {
+    for (const [index, status] of ITEM_STATUSES.entries()) {
+      await seedItem({ title: `作品${index}`, slug: `item-${index}`, status: status.key })
+      expect(mainOf(await okText(`/apps/item/item-${index}`)), status.key).toContain(status.name)
+    }
+  })
+
+  it('空の状態と知らない値は、札を出さない', async () => {
+    await seedItem({ title: 'AppMixer', slug: 'appmixer', year: '2026' })
+    await seedItem({ title: 'Nonet', slug: 'nonet', year: '2026', status: 'status' })
+    const list = mainOf(await okText('/projects'))
+    expect(list.match(/<li class="entry__year">2026<\/li><\/ul>/g)).toHaveLength(2)
+    expect(list).not.toContain('>status<')
+    for (const slug of ['appmixer', 'nonet']) {
+      expect(mainOf(await okText(`/apps/item/${slug}`)), slug).toMatch(
+        /<span class="note"[^>]*>2026<\/span>/,
+      )
+    }
   })
 })
 

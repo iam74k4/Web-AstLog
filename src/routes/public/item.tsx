@@ -16,6 +16,7 @@ import {
   type ItemKind,
   type ItemView,
   itemImages,
+  itemStatusName,
   KIND_LABEL,
 } from '../../domain'
 import type { AppEnv } from '../../env'
@@ -102,7 +103,10 @@ export function itemPage(
     documentHref?: (key: ItemDocumentKey) => string | null
   } = {},
 ) {
-  const note = [item.platformLabel ?? item.category, item.year].filter(Boolean).join(' · ')
+  // 添えは一覧の行の札と同じ順（プラットフォームか業界・年・状態）
+  const note = [item.platformLabel ?? item.category, item.year, itemStatusName(item.status)]
+    .filter(Boolean)
+    .join(' · ')
   const documents = ITEM_DOCUMENTS.flatMap((doc) => {
     const url = itemDocument(item, doc.key).length ? links.documentHref?.(doc.key) : null
     return url ? [{ label: doc.title, url }] : []
