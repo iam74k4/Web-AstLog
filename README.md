@@ -210,14 +210,15 @@ Profile / Team は公開中が1人ならプロフィール、複数なら一覧�
 `no-store`・`noindex` で守り、公開ページのキャッシュの版を変えない。
 
 管理画面の「サイト設定」（`/admin/site`）でサイトの一言・入口の紹介文・Contact の案内文・
-公開するメールアドレス・GitHub URL・Instagram / X の URL・Discord のユーザー名と、Contact の
+公開するメールアドレス・GitHub URL・Instagram / X の URL・Discord のユーザー名と開く URL（プロフィールか招待リンク。
+入れると足元の印と Contact の行から Discord を開ける）と、Contact の
 受付状況（受付の状態・返信の目安・連絡のつく時間・進め方）と相談の流れ、柱の底の音楽の札を編集する。
 受付状況は概要（`/admin`）の「受付状況」からも1回の保存で変えられる。音楽の札は Apple Music の曲の
 URL を貼るだけで、保存のときに曲名・アーティスト名・ジャケットを Apple の公開の検索 API から引く
 （名前は直せる。ジャケットは KV の `music/` に写す。`src/lib/apple-music.ts`）。保存した値は
 D1 の `settings` の `site.*` に入り、公開ページと説明文・構造化データに反映される。空にした連絡先は掲載しない。
 入口の紹介文も空にでき、空なら入口のリード文を出さない。
-メール・GitHub・Discord がどれも未設定なら Contact のページは作らない（目次にも sitemap にも出ない。送る手の無い
+メール・GitHub・Discord（名前か URL）がどれも未設定なら Contact のページは作らない（目次にも sitemap にも出ない。送る手の無い
 ページを置かない）。どちらかを入れると、次の表示から Contact が並びの最後に出る。
 
 空の D1 には個人のプロフィール・作品・メール・GitHub を入れない。メンバーと作品はそれぞれの

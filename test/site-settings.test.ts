@@ -30,6 +30,7 @@ const configured: SiteSettings = {
   instagram: 'https://www.instagram.com/astlog.example',
   x: 'https://x.com/astlog_example',
   discord: 'astlog_example',
+  discordUrl: 'https://discord.com/users/123456789012345678',
   availability: 'open',
   availabilityReply: '2日以内',
   availabilityHours: '平日の夜と土日',
@@ -75,6 +76,7 @@ describe('サイト設定', () => {
       instagram: '',
       x: '',
       discord: '',
+      discordUrl: '',
       availability: '',
       availabilityReply: '',
       availabilityHours: '',
@@ -177,6 +179,7 @@ describe('サイト設定', () => {
             instagram: '',
             x: '',
             discord: '',
+            discordUrl: '',
           }),
         })
       ).status,
@@ -356,8 +359,9 @@ describe('入口で打ち替える言葉', () => {
 })
 
 /*
-  Discord はユーザー名から開ける URL が無い。Contact の表に名前を字で出し（リンクにしない）、
-  足元の印はその行（/contact#discord）へ送る。Discord だけでも Contact のページを作る
+  Discord はユーザー名から開ける URL が無い。開く URL（discordUrl。プロフィールか招待リンク）が
+  無ければ、Contact の表に名前を字で出し（リンクにしない）、足元の印はその行（/contact#discord）へ
+  送る。URL があれば、足元の印と表の行はそこへ外へ出る。Discord だけでも Contact のページを作る
 */
 describe('Discord', () => {
   it('Contact に名前を字で出し、足元の印はその行へ送る', async () => {
@@ -393,6 +397,61 @@ describe('Discord', () => {
       })
       expect(response.status, discord).toBe(400)
       expect(await response.text(), discord).toContain('Discord のユーザー名を入れてください')
+    }
+  })
+
+  it('開く URL があれば、足元の印と Contact の行から Discord を開ける', async () => {
+    const url = 'https://discord.com/users/123456789012345678'
+    await saveSiteSettings(db(), { ...TEST_SITE, discord: 'iam74k4', discordUrl: url })
+    await touch()
+    const top = await okText('/')
+    const foot = top.slice(top.indexOf('<footer'))
+    expect(foot).toContain(`<a href="${url}" rel="me noreferrer" target="_blank" title="Discord">`)
+    expect(foot).not.toContain('/contact#discord')
+    // 並びは変わらない（GitHub → Instagram → X → Discord → Mail）
+    expect(foot.indexOf('github.com')).toBeLessThan(foot.indexOf(url))
+    expect(foot.indexOf(url)).toBeLessThan(foot.indexOf('mailto:'))
+    // 表の行は、ほかの外の行き先と同じく行ごと押せるリンク。見せる字はユーザー名
+    expect(await okText('/contact')).toContain(
+      `<a class="contact-list__link" href="${url}" rel="me noreferrer" target="_blank"><span class="contact-list__to">iam74k4</span></a>`,
+    )
+  })
+
+  it('URL だけでも Contact のページを作り、表には URL の頭を落として出す', async () => {
+    await saveSiteSettings(db(), { ...SITE, discordUrl: 'https://discord.gg/astlog' })
+    await touch()
+    expect(await okText('/')).toContain('href="/contact"')
+    expect(await okText('/contact')).toContain(
+      '<span class="contact-list__to">discord.gg/astlog</span>',
+    )
+  })
+
+  it('Discord のプロフィールか招待リンクでない URL は保存しない', async () => {
+    const signed = await signIn()
+    for (const discordUrl of [
+      'https://example.com/users/123456789012345678',
+      'http://discord.com/users/123456789012345678',
+      'https://discord.com/users/iam74k4',
+      'https://discord.gg/astlog?x=1',
+      'https://discord.com.evil.test/users/123456789012345678',
+    ]) {
+      const response = await signed('/admin/site', {
+        method: 'POST',
+        body: siteForm({ ...configured, discordUrl }),
+      })
+      expect(response.status, discordUrl).toBe(400)
+      expect(await response.text(), discordUrl).toContain('Discord のプロフィール')
+    }
+    for (const discordUrl of [
+      'https://discord.com/users/123456789012345678',
+      'https://discord.gg/astlog',
+      'https://discord.com/invite/astlog',
+    ]) {
+      const response = await signed('/admin/site', {
+        method: 'POST',
+        body: siteForm({ ...configured, discordUrl }),
+      })
+      expect(response.status, discordUrl).toBe(303)
     }
   })
 })

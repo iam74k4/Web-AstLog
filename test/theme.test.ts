@@ -3,7 +3,7 @@ import adminCss from '../public/admin.css'
 import css from '../public/app.css'
 import * as schema from '../src/db/schema'
 import { ADMIN_BEHAVIOR } from '../src/ui/admin-behavior'
-import { ICON, LOGO_COLORS } from '../src/ui/logo'
+import { ICON, LOGO_COLORS, WORDMARK } from '../src/ui/logo'
 import { db, get, okText, resetDb, seedItem, seedMember, signIn, touch } from './helpers'
 
 beforeEach(resetDb)
@@ -1852,7 +1852,13 @@ describe('動き', () => {
     expect(curtain).toContain('position: fixed')
     expect(curtain).toContain('pointer-events: none')
     // 毎コマ動かすのは倍率・回転・透明度だけ（幅や高さを動かすと毎コマ描き直しになる）
-    for (const name of ['opening-part', 'opening-turn', 'opening-fill', 'opening-out']) {
+    for (const name of [
+      'opening-part',
+      'opening-turn',
+      'opening-fill',
+      'opening-out',
+      'opening-land',
+    ]) {
       expect(keyframesOf(name), name).not.toMatch(
         /\b(width|height|top|left|bottom|right|inset)\s*:/,
       )
@@ -1909,6 +1915,38 @@ describe('動き', () => {
     // 開き始め（地が白に戻るのと同じ時）に、箱の上も縁から外す
     expect(curtain).toContain('opening-lift 1ms linear var(--opening-load) forwards')
     expect(keyframesOf('opening-lift')).toContain('top: var(--opening-edge)')
+  })
+
+  it('幕のロゴは消さずに、上の帯のロゴの位置へ縮んで移り、帯のロゴと入れ替わる', () => {
+    const root = bodyOf(sheet, ':root {')
+    const value = (name: string) => Number(root.match(new RegExp(`${name}: ([\\d.]+)`))?.[1])
+    // 帯のロゴの幅は高さ × --wordmark-ratio。ロゴの形（viewBox）と同じ比で、着地の横の位置に使う
+    const [, , width, height] = WORDMARK.viewBox.split(' ').map(Number)
+    expect(value('--wordmark-ratio')).toBeCloseTo((width ?? 0) / (height ?? 1), 3)
+    // 移り終えた大きさは帯のロゴと同じ（倍率 = 帯のロゴの高さ ÷ 幕のロゴの高さ）
+    expect(value('--opening-land-scale')).toBeCloseTo(
+      value('--brand-h') / value('--opening-mark-h'),
+      3,
+    )
+    // 道のりは幕の箱の大きさ（cqw / cqh）から出す。画面の単位はスクロールバーや Safari の道具の列でずれる
+    expect(bodyOf(sheet, '.opening {')).toContain('container-type: size')
+    const land = keyframesOf('opening-land')
+    expect(land).toContain('50cqw')
+    expect(land).toContain('50cqh')
+    expect(land).not.toMatch(/\d(?:vw|vh|svh|dvh|lvh)\b/)
+    expect(land).toContain('scale: var(--opening-land-scale)')
+    // 移る途中に同じロゴが2つ見えない。帯のロゴは移り終えるまで隠し、止める設定では隠さない
+    expect(bodyOf(sheet, 'body[data-opening] .top > .brand {')).toContain(
+      'animation: opening-brand 1ms linear calc(var(--opening-load) + var(--opening-land)) backwards',
+    )
+    expect(bodyOf(sheet, '.opening {')).toContain(
+      'opening-done 1ms linear calc(var(--opening-load) + var(--opening-land)) forwards',
+    )
+    const off = blockAt(
+      sheet,
+      '@media (prefers-reduced-motion: reduce), print, (forced-colors: active)',
+    )
+    expect(bodyOf(off, 'body[data-opening] .top > .brand {')).toContain('animation: none')
   })
 
   it('読み込みの線は一定の速さで満ちない。進んでは少し止まる（読み込みの間合い）', () => {

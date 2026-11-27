@@ -142,6 +142,12 @@ INSERT INTO item_links (item_id, label, url, sort_order) VALUES
 -- 1 の1本目（Download）は押し手にする（items.lead_link）
 UPDATE items SET lead_link = 1 WHERE id = 1;
 
+-- 状態の札（items.status。src/domain.ts の ITEM_STATUSES）。いちばん長い札（In development）と、
+-- 札の無い作品（3・4 と業務の2件）が並ぶ形にしておく（check:fit が札の区画の幅を測る）
+UPDATE items SET status = 'selling' WHERE id = 1;
+UPDATE items SET status = 'developing' WHERE id = 2;
+UPDATE items SET status = 'available' WHERE id = 5;
+
 -- 作品の文書のページ（/apps/item/sample-mixer/privacy・…/support）。中身は形を測るための見本で、
 -- 本番のアプリの規約ではない（本番は管理画面の「プライバシーポリシーとサポートを書く」で書く）。
 -- 「## 日本語」「## English」で分けた文書の言語の切り替え、### の見出し、太字・箇条書き・
