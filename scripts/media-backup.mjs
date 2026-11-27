@@ -8,9 +8,9 @@ import { pathToFileURL } from 'node:url'
 import { ROOT, WRANGLER, WRANGLER_ARGS } from './lib/dev-server.mjs'
 
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex')
-const mediaKey = /^(?:avatars|items)\/[a-zA-Z0-9][a-zA-Z0-9._-]*$/
+const mediaKey = /^(?:avatars|items|music)\/[a-zA-Z0-9][a-zA-Z0-9._-]*$/
 const referenceSql =
-  'SELECT avatar_url AS url FROM members WHERE avatar_url IS NOT NULL UNION SELECT image_url FROM items WHERE image_url IS NOT NULL UNION SELECT icon_url FROM items WHERE icon_url IS NOT NULL UNION SELECT url FROM item_shots'
+  "SELECT avatar_url AS url FROM members WHERE avatar_url IS NOT NULL UNION SELECT image_url FROM items WHERE image_url IS NOT NULL UNION SELECT icon_url FROM items WHERE icon_url IS NOT NULL UNION SELECT url FROM item_shots UNION SELECT value FROM settings WHERE key = 'site.musicArt' AND value <> ''"
 
 function run(args) {
   return new Promise((resolveRun, reject) => {
@@ -50,7 +50,7 @@ export async function mediaBackup({ mode, directory, local = false, persistTo, s
   if (mode === 'export') {
     await mkdir(dir, { recursive: true, mode: 0o700 })
     const entries = []
-    for (const prefix of ['avatars/', 'items/', 'archive/']) {
+    for (const prefix of ['avatars/', 'items/', 'music/', 'archive/']) {
       const listed = JSON.parse(
         (await run(['kv', 'key', 'list', ...binding, '--prefix', prefix])).toString(),
       )
@@ -140,7 +140,9 @@ export async function mediaBackup({ mode, directory, local = false, persistTo, s
     ...new Set(
       queries
         .flatMap((result) => result.results)
-        .map((row) => String(row.url).replace(/^\/images\//, ''))
+        // 音楽の札のジャケット（site.musicArt）は1行に1曲で並ぶ
+        .flatMap((row) => String(row.url).split('\n'))
+        .map((url) => url.replace(/^\/images\//, ''))
         .filter((key) => mediaKey.test(key)),
     ),
   ]

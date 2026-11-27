@@ -3,9 +3,9 @@ import type { User } from './db/schema'
 export type Env = {
   DB: D1Database
   /*
-    アバターと作品の画像（avatars/ と items/）。R2 が未有効なので当面ここ。
+    アバターと作品の画像と音楽の札のジャケット（avatars/・items/・music/）。R2 が未有効なので当面ここ。
     ほかに1行だけ、公開ページの写しの内容の版（site:version。src/lib/page-cache.ts）。
-    /images/* は IMAGE_KEY で2つの置き場しか開かないので、この行は外から読めない
+    /images/* は IMAGE_KEY で3つの置き場しか開かないので、この行は外から読めない
   */
   MEDIA: KVNamespace
   /*

@@ -373,6 +373,8 @@ const measure = ([, cfg]) => {
     for (let up = el.parentElement; up && up !== document.body; up = up.parentElement) {
       const upStyle = getComputedStyle(up)
       if (scrolls(upStyle)) break
+      // 1行で末尾を省く箱の中の字（音楽の札の曲名の下線の箱など）は、省くのが決まりどおり
+      if (upStyle.textOverflow === 'ellipsis') break
       if (!clips(upStyle)) continue
       const box = up.getBoundingClientRect()
       const x = ['hidden', 'clip'].includes(upStyle.overflowX)
@@ -704,6 +706,17 @@ async function measureRun(browser, base, run, typefaces) {
         // 書体が決まる前に測ると、行の高さが見積もりとずれる
         await page.evaluate(() => document.fonts.ready.then(() => true))
 
+        /*
+          音楽の札の入れ替わりは止め、最初の曲で測る（入れ替わりの途中のジャケットは枠の外に居て、
+          測った時刻しだいで「切られている」と数えた）。止まった姿は動きを減らす設定と同じ
+        */
+        await page.evaluate(() => {
+          for (const animation of document.getAnimations()) {
+            if (!animation.effect?.target?.closest?.('.music')) continue
+            animation.pause()
+            animation.currentTime = 0
+          }
+        })
         for (const typeface of typefaces) {
           const found = await page.evaluate(measure, [
             typeface,

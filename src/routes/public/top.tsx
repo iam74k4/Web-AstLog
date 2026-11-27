@@ -13,7 +13,7 @@ import type { AppEnv } from '../../env'
 import { fromInside } from '../../lib/page-cache'
 import { tableOfContents } from '../../lib/sequence'
 import { SITE } from '../../site'
-import { Empty, SiteSocials } from '../../ui/components'
+import { Empty, SiteMusic, SiteSocials } from '../../ui/components'
 import { Layout, type NavItem } from '../../ui/Layout'
 import { renderBlock } from './blocks'
 import {
@@ -239,6 +239,7 @@ export async function renderScreen(c: Context<AppEnv>, slug: string | null) {
     jsonLd: firstOnly(links, link, siteJsonLd(members, site)),
     // Contact では足元に行き先を出さない（本文の連絡先の表に同じ行き先がある。SiteSocials）
     footer: <SiteSocials site={site} contact={current.block.type === 'contact'} />,
+    music: <SiteMusic site={site} />,
     adminPath: blockAdminPath(current.block, solo),
     // 幕は外から入口へ来たときだけ（サイトの中から戻るたびには待たせない。page-cache.ts の fromInside）
     opening: current.block.type === 'hero' && !fromInside((name) => c.req.header(name)),

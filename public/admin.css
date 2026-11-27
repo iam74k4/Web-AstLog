@@ -986,6 +986,33 @@
   margin-top: var(--sp-4);
 }
 
+/*
+  音楽の札の曲の行（AdminForm.tsx の MusicRows）。600 未満は URL・曲名・アーティスト名を積み、
+  ジャケットは右上。600 以上は1行に並べる（下の「600px 以上」）。まだ引いていない行は、
+  ジャケットの場所を罫線の枠だけで空けておく（行ごとに欄の位置がずれない）
+*/
+.music-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--music-art);
+  gap: var(--sp-1) var(--sp-3);
+}
+
+.music-row > .input {
+  grid-column: 1;
+}
+
+.music-row + .music-row {
+  margin-top: var(--sp-4);
+}
+
+.music-row__art {
+  grid-area: 1 / 2 / span 3;
+  width: var(--music-art);
+  height: var(--music-art);
+  object-fit: cover;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
 /* 説明の欄は2行ぶん（rows）の高さ。ほかの複数行の欄の下限（.input--area）は持たない */
 .pair-row .input--area {
   min-height: 0;
@@ -1493,6 +1520,24 @@
   }
 
   :is(.link-row, .pair-row) + :is(.link-row, .pair-row) {
+    margin-top: 0;
+  }
+
+  /* 音楽の曲の行は URL・曲名・アーティスト名・ジャケットを1行に */
+  .music-row {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 3fr) minmax(0, 2fr) var(--music-art);
+    align-items: center;
+  }
+
+  .music-row > .input {
+    grid-column: auto;
+  }
+
+  .music-row__art {
+    grid-area: auto;
+  }
+
+  .music-row + .music-row {
     margin-top: 0;
   }
 

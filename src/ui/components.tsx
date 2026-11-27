@@ -52,6 +52,7 @@ import {
   isDiscordUrl,
   SITE,
   type SiteSettings,
+  shownMusic,
 } from '../site'
 import {
   DiscordIcon,
@@ -472,6 +473,51 @@ export const Hero = ({
     {children}
   </header>
 )
+
+/*
+  柱の底の音楽の札（サイト設定の「音楽」。曲は src/lib/apple-music.ts が Apple から引く）。
+  ジャケット（角の立った正方形）の右に、英字の小見出し「On repeat」・曲名・アーティスト名を積み、
+  押すと Apple Music の曲のページを別のタブで開く。置くのは左の柱の底（目次と行き先のあいだの
+  余り）と、900 未満の足元の頭（Layout の music。同時に見えるのは片方だけ）。
+  2曲以上は同じ場所に重ね、上から順に 4 秒ごとに横へ送る（app.css の「動き」の music-*。曲の
+  数は data-count で渡す）。動きを減らす設定では最初の曲だけが出る。
+  曲の URL・名前・KV に写したジャケットが揃った曲だけを出す（shownMusic。手で DB に入った値や
+  外の画像を指す値から描かない）。ジャケットは飾り——曲名とアーティスト名を字で持つので alt は空
+*/
+export const SiteMusic = ({
+  site,
+}: {
+  site: Pick<SiteSettings, 'musicUrl' | 'musicTitle' | 'musicArtist' | 'musicArt'>
+}) => {
+  const tracks = shownMusic(site)
+  if (!tracks.length) return null
+  return (
+    <div class="music" data-count={tracks.length}>
+      <span class="music__label" lang="en">
+        On repeat
+      </span>
+      <ul class="music__songs">
+        {tracks.map((track) => (
+          <li class="music__song" key={track.url}>
+            <a class="music__link" href={track.url} target="_blank" rel="noreferrer">
+              <span class="music__frame">
+                <img class="music__art" src={track.art} alt="" width="48" height="48" />
+              </span>
+              <span class="music__text">
+                <span class="music__title" lang={langOf(track.title)}>
+                  <span class="music__name">{track.title}</span>
+                </span>
+                <span class="music__artist" lang={langOf(track.artist)}>
+                  {track.artist}
+                </span>
+              </span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
 
 /*
   文を句読点（、。！？）の直後でだけ折れるようにする。

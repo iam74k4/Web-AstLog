@@ -21,7 +21,8 @@ export const SHOT_LIMIT_NOTE = `${IMAGE_LIMIT_NOTE}・動画は位置情報を�
 
 /*
   画像は KV に置く。R2 が未有効なのと、画像は読むばかりで書き換えが稀なため。
-  置き場は2つ——メンバーの顔（avatars/）と作品のスクリーンショット（items/）。
+  置き場は3つ——メンバーの顔（avatars/）と作品のスクリーンショット（items/）と、柱の底の
+  音楽の札のジャケット（music/。Apple から引いたものを写す。src/lib/apple-music.ts）。
   取り込みの経路と検査（種類と大きさ）は1本で、置き場の名前だけが違う。種類を決めたら、
   撮った場所などの付け足しを外してから置く（src/lib/image-metadata.ts の stripMetadata。
   外せない AVIF と動画は、位置があれば断る。並びが途中で読めず付け足しが残るものも断る）。
@@ -41,7 +42,9 @@ export const SHOT_LIMIT_NOTE = `${IMAGE_LIMIT_NOTE}・動画は位置情報を�
   戻り値で「選ばれていない」と「弾いた」を区別する。同じ null にすると、
   大きすぎる画像を選んだ人に「保存しました」と出てしまう。
 */
-type ImageFolder = 'avatars' | 'items'
+type ImageFolder = 'avatars' | 'items' | 'music'
+// こちらが上げた画像の URL（片付けで消してよいもの）。置き場を足すときはここにも1語
+const OWN_IMAGE = /^\/images\/(avatars|items|music)\//
 export type PickedImage = SniffedImage & { bytes: ArrayBuffer }
 type Picked = { image: PickedImage | null; error?: string }
 
@@ -100,6 +103,9 @@ function cleaned(format: SniffedImage, view: Uint8Array<ArrayBuffer>): Picked {
 export const pickImage = (form: FormData, field: string): Promise<Picked> =>
   pickFile(form.get(field))
 
+// 外から取ってきた画像（音楽の札のジャケット）。欄から選んだ画像と同じ検査を通す
+export const pickBlob = (file: File): Promise<Picked> => pickFile(file)
+
 /*
   同じ名前の欄が並ぶとき（作品のほかの画像の、追加の欄）。欄の順に1つずつ同じ検査を
   通す。空の欄も「選ばれていない」として並びに残す——並んだ代替テキストの欄と、
@@ -124,7 +130,7 @@ export async function putImage(
   folder: ImageFolder,
   name: string,
 ) {
-  const fallback = folder === 'avatars' ? 'member' : 'item'
+  const fallback = { avatars: 'member', items: 'item', music: 'track' }[folder]
   const key = `${folder}/${toSlug(name) || fallback}-${newToken(16)}.${image.extension}`
   // 大きさも添える（容量を数えるとき、中身を読まずに一覧の metadata だけで足せる。src/lib/media-usage.ts）
   await kv.put(key, image.bytes, {
@@ -162,7 +168,7 @@ export async function quotaErrors(
   外の URL は KV に無いので触らない。
 */
 export async function removeImage(kv: KVNamespace, url: string | null | undefined) {
-  if (!url || !/^\/images\/(avatars|items)\//.test(url)) return
+  if (!url || !OWN_IMAGE.test(url)) return
   await kv.delete(url.replace('/images/', ''))
 }
 
@@ -173,7 +179,7 @@ export async function removeImage(kv: KVNamespace, url: string | null | undefine
 */
 export async function discardImages(kv: KVNamespace, urls: readonly (string | null | undefined)[]) {
   for (const url of urls) {
-    if (!url || !/^\/images\/(avatars|items)\//.test(url)) continue
+    if (!url || !OWN_IMAGE.test(url)) continue
     try {
       // 控えが取れなければ原本を消さない。公開URLからは外し、控えは別の名前で期限付きにする。
       await archiveImage(kv, url.replace('/images/', ''))

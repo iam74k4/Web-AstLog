@@ -1,3 +1,4 @@
+import { appleMusicTrack, isMusicArt } from './lib/apple-music'
 import { isHttpsUrl } from './lib/format'
 
 /*
@@ -35,6 +36,17 @@ export const SITE = {
   availabilityFormat: '',
   // Contact の相談の流れ（How it works）。1行 = 「見出し | 説明」（parsePairs）。空なら出さない
   contactSteps: '',
+  /*
+    柱の底の音楽の札（components.tsx の SiteMusic）。曲は MUSIC_MAX 曲まで、4つの欄の同じ行が
+    1曲（1行に1曲。musicTracks）。書くのは Apple Music の曲の URL だけで、曲名・アーティスト名・
+    ジャケットは保存のときに Apple から引く（src/lib/apple-music.ts）。名前は直せる（日本の
+    ストアだとアーティスト名がカタカナで返ることがある）。ジャケットは KV に写した画像の URL で、
+    フォームからは受け取らない。揃わない曲は札に出さない（shownMusic）
+  */
+  musicUrl: '',
+  musicTitle: '',
+  musicArtist: '',
+  musicArt: '',
 } as const
 
 /*
@@ -63,6 +75,9 @@ export const AVAILABILITY_KEYS = [
   'availabilityFormat',
 ] as const
 
+// 音楽の札の欄（ジャケットの musicArt はフォームから受け取らない。readSiteForm）
+export const MUSIC_KEYS = ['musicUrl', 'musicTitle', 'musicArtist', 'musicArt'] as const
+
 /*
   足元の行き先は GitHub → Instagram → X → Discord → Mail の順（components.tsx の Socials）。
   Contact のページを出すかを決めるのはメール・GitHub・Discord（hasContact）——Instagram と X は
@@ -81,11 +96,12 @@ export const SITE_SETTING_KEYS = [
   'discordUrl',
   ...AVAILABILITY_KEYS,
   'contactSteps',
+  ...MUSIC_KEYS,
 ] as const
 export type SiteSettingKey = (typeof SITE_SETTING_KEYS)[number]
 
 /*
-  あとから足した欄（入口の打ち替える言葉・Instagram・X・Discord・受付状況・相談の流れ）。既定は空（出さない）なので、行がまだ無くても管理画面の
+  あとから足した欄（入口の打ち替える言葉・Instagram・X・Discord・受付状況・相談の流れ・音楽）。既定は空（出さない）なので、行がまだ無くても管理画面の
   概要では「保存済み」に数える——欄を足した日に、保存済みのサイトが「一部保存済み」に戻らない
   ように（src/routes/admin/dashboard.tsx）
 */
@@ -97,6 +113,7 @@ export const SITE_SETTING_LATER_KEYS: readonly SiteSettingKey[] = [
   'discordUrl',
   ...AVAILABILITY_KEYS,
   'contactSteps',
+  ...MUSIC_KEYS,
 ]
 export type SiteSettings = Record<SiteSettingKey, string>
 
@@ -119,6 +136,11 @@ export const SITE_SETTING_LIMITS = {
   availabilityHours: 60,
   availabilityFormat: 60,
   contactSteps: 1200,
+  // 音楽の4つの欄は1行に1曲を並べた全体の長さ。1曲ずつは musicProblems が見る
+  musicUrl: 10_250,
+  musicTitle: 250,
+  musicArtist: 250,
+  musicArt: 1_000,
 } as const
 
 // biome-ignore lint/suspicious/noControlCharactersInRegex: 制御文字を弾くのがこの検査の目的
@@ -133,8 +155,57 @@ const CONTROL_BUT_NEWLINE = /[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f]/
   電話の幅（390）の大見出しの段（--fs-display-xs）で1行に収まる長さで止める
 */
 export const HERO_ROLES = { words: 4, width: 24 } as const
-const roleWidth = (word: string) =>
+// 字の幅。半角を 1、それ以外（全角）を 2 と数える
+const textWidth = (word: string) =>
   [...word].reduce((sum, letter) => sum + (/[\u0020-\u007e]/.test(letter) ? 1 : 2), 0)
+
+/*
+  音楽の札の名前の幅の上限（半角で数え、全角は2字）。札は柱の目次と行き先のあいだの余りに
+  置き、余りが札より狭い窓では畳む（app.css の @container music-slot）。いちばん狭い柱
+  （161px）でも、曲名は3行・アーティスト名は2行までに収まる長さにして、畳む高さを1つに決める。
+  Apple の名前が長いとき（feat. や Remastered の付いたもの）は、欄で短くしてもらう
+*/
+export const MUSIC_NAME_WIDTH = { musicTitle: 40, musicArtist: 24 } as const
+
+/*
+  音楽の札に並べる曲の数の上限。札は 4 秒ごとに1曲ずつ横へ送り（app.css の music-art-<数>）、
+  入れ替わりの動きは曲の数ごとに書いてあるので、上限を変えるならそこも一緒に
+*/
+export const MUSIC_MAX = 5
+// 1曲の URL・Apple Music の曲のページの URL の長さ
+export const MUSIC_URL_MAX = 2048
+
+export type MusicTrack = { url: string; title: string; artist: string; art: string }
+
+// 4つの欄の同じ行を1曲に組む（URL の無い行は曲にならない）
+export function musicTracks(
+  site: Pick<SiteSettings, 'musicUrl' | 'musicTitle' | 'musicArtist' | 'musicArt'>,
+): MusicTrack[] {
+  const lines = (value: string) => value.split(/\r?\n/)
+  const titles = lines(site.musicTitle)
+  const artists = lines(site.musicArtist)
+  const arts = lines(site.musicArt)
+  return lines(site.musicUrl)
+    .map((url, index) => ({
+      url: url.trim(),
+      title: (titles[index] ?? '').trim(),
+      artist: (artists[index] ?? '').trim(),
+      art: (arts[index] ?? '').trim(),
+    }))
+    .filter((track) => track.url)
+}
+
+// 保存済みの曲（同じ URL）のジャケットを重ねる。ほかは空（まだ引いていない・片付けた）
+export const musicWithArt = (tracks: readonly MusicTrack[], saved: readonly MusicTrack[]) =>
+  tracks.map((track) => ({ ...track, art: saved.find((one) => one.url === track.url)?.art ?? '' }))
+
+// 曲の並びを4つの欄に戻す（1行に1曲）
+export const musicFields = (tracks: readonly MusicTrack[]) => ({
+  musicUrl: tracks.map((track) => track.url).join('\n'),
+  musicTitle: tracks.map((track) => track.title).join('\n'),
+  musicArtist: tracks.map((track) => track.artist).join('\n'),
+  musicArt: tracks.map((track) => track.art).join('\n'),
+})
 export const heroRoleWords = (site: Pick<SiteSettings, 'heroRoles'>) =>
   site.heroRoles
     .split(/\r?\n/)
@@ -180,9 +251,74 @@ export const hasContact = (
   isDiscordName(site.discord) ||
   isDiscordUrl(site.discordUrl)
 
+/*
+  音楽の札に出す曲。曲の URL・曲名・アーティスト名・KV に写したジャケットの4つが揃った曲だけを、
+  上限まで（描く部品 components.tsx の SiteMusic が使う）。URL の形・名前の字・ジャケットの置き場は
+  ここでも見る——手で DB に入った値から、外の画像や別の置き場を指す <img> を出さない
+*/
+export const shownMusic = (
+  site: Pick<SiteSettings, 'musicUrl' | 'musicTitle' | 'musicArtist' | 'musicArt'>,
+) =>
+  musicTracks(site)
+    .filter(
+      (track) =>
+        Boolean(appleMusicTrack(track.url)) &&
+        Boolean(track.title) &&
+        Boolean(track.artist) &&
+        !CONTROL.test(track.title + track.artist) &&
+        isMusicArt(track.art),
+    )
+    .slice(0, MUSIC_MAX)
+
+export const hasMusic = (
+  site: Pick<SiteSettings, 'musicUrl' | 'musicTitle' | 'musicArtist' | 'musicArt'>,
+) => shownMusic(site).length > 0
+
+/*
+  曲の並びの検査。何曲目の何が通らないかを1つの知らせにまとめる（管理画面の欄は曲ごとの行で、
+  知らせは行の並びの下に1つ。AdminForm.tsx の MusicRows）。名前が空なのは通す——保存のときに
+  Apple から引く（site-settings.tsx の resolveMusic）
+*/
+export function musicProblems(tracks: readonly MusicTrack[]): string | null {
+  const problems: string[] = []
+  if (tracks.length > MUSIC_MAX) problems.push(`曲は ${MUSIC_MAX} 曲までにしてください`)
+  tracks.forEach((track, index) => {
+    const at = `${index + 1} 曲目`
+    if (
+      [...track.url].length > MUSIC_URL_MAX ||
+      CONTROL.test(track.url) ||
+      !appleMusicTrack(track.url)
+    ) {
+      problems.push(
+        `${at}: Apple Music の曲の URL を入れてください（ミュージックで曲の「共有 → リンクをコピー」。アルバムやプレイリストのリンクは使えません）`,
+      )
+    } else if (tracks.findIndex((other) => other.url === track.url) < index) {
+      problems.push(`${at}: 同じ曲がもう並んでいます`)
+    }
+    for (const [key, name] of [
+      ['musicTitle', '曲名'],
+      ['musicArtist', 'アーティスト名'],
+    ] as const) {
+      const value = key === 'musicTitle' ? track.title : track.artist
+      const width = MUSIC_NAME_WIDTH[key]
+      if (CONTROL.test(value)) problems.push(`${at}: ${name}に改行や制御文字を含めないでください`)
+      else if (textWidth(value) > width) {
+        problems.push(
+          `${at}: ${name}は半角 ${width} 字（全角 ${width / 2} 字）までにしてください。柱の幅に収まる長さです（Apple Music の名前が長いときは、ここで短くして保存します。例: (feat. …) を外す）`,
+        )
+      }
+    }
+    if (track.art && !isMusicArt(track.art)) {
+      problems.push(`${at}: ジャケットを読み直してください（曲の URL を入れ直して保存）`)
+    }
+  })
+  return problems.length ? `${problems.join('。')}。` : null
+}
+
 export function siteSettingsErrors(site: SiteSettings): Record<string, string> | null {
   const errors: Record<string, string> = {}
   for (const key of SITE_SETTING_KEYS) {
+    if ((MUSIC_KEYS as readonly string[]).includes(key)) continue
     if ([...site[key]].length > SITE_SETTING_LIMITS[key]) {
       errors[key] = `${SITE_SETTING_LIMITS[key]} 字までにしてください`
     }
@@ -200,6 +336,8 @@ export function siteSettingsErrors(site: SiteSettings): Record<string, string> |
   ] as const) {
     if (CONTROL.test(site[key])) errors[key] = '改行や制御文字を含めないでください'
   }
+  const music = musicProblems(musicTracks(site))
+  if (music) errors.music = music
   if (site.availability && !isAvailabilityState(site.availability)) {
     errors.availability = '受付の状態を選び直してください'
   }
@@ -209,7 +347,7 @@ export function siteSettingsErrors(site: SiteSettings): Record<string, string> |
   if (CONTROL_BUT_NEWLINE.test(site.heroRoles)) errors.heroRoles = '制御文字を含めないでください'
   else if (roles.length > HERO_ROLES.words) {
     errors.heroRoles = `言葉は ${HERO_ROLES.words} つまでにしてください`
-  } else if (roles.some((word) => roleWidth(word) > HERO_ROLES.width)) {
+  } else if (roles.some((word) => textWidth(word) > HERO_ROLES.width)) {
     errors.heroRoles = `1つの言葉は半角 ${HERO_ROLES.width} 字（全角 ${HERO_ROLES.width / 2} 字）までにしてください`
   }
   if (site.email && !isContactEmail(site.email)) errors.email = 'メールアドレスを1つ入れてください'
@@ -233,7 +371,11 @@ export function siteSettingsErrors(site: SiteSettings): Record<string, string> |
 */
 export function normalizeSiteSettings(raw: Partial<SiteSettings>): SiteSettings {
   const site = Object.fromEntries(
-    SITE_SETTING_KEYS.map((key) => [key, (raw[key] ?? SITE[key]).trim()]),
+    SITE_SETTING_KEYS.map((key) => {
+      const value = raw[key] ?? SITE[key]
+      // 音楽の欄は1行に1曲で、行の位置が曲を組む。全体を trim すると、空の行が抜けて曲がずれる
+      return [key, (MUSIC_KEYS as readonly string[]).includes(key) ? value : value.trim()]
+    }),
   ) as SiteSettings
   const errors = siteSettingsErrors(site)
   if (errors) {

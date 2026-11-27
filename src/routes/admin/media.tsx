@@ -20,9 +20,9 @@ import { AdminLayout } from '../../ui/AdminLayout'
 export const mediaRoutes = new Hono<AppEnv>()
 
 // 控えのキー。公開の置き場のキー（images.ts の IMAGE_KEY）の頭に archive/ を付けた形だけ
-const ARCHIVE_KEY = /^archive\/(avatars|items)\/([A-Za-z0-9][A-Za-z0-9._-]{0,120})$/
+const ARCHIVE_KEY = /^archive\/(avatars|items|music)\/([A-Za-z0-9][A-Za-z0-9._-]{0,120})$/
 
-const PLACE_LABEL = { avatars: 'アバター', items: '作品の画像' } as const
+const PLACE_LABEL = { avatars: 'アバター', items: '作品の画像', music: '音楽のジャケット' } as const
 
 type ArchiveMeta = { contentType?: string; size?: number; archivedAt?: string }
 

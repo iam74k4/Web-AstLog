@@ -10,8 +10,8 @@ import { isMediaType } from '../../lib/image'
   同居していて、版の行がここから読めないのはこの縛りのおかげ。縛らないと、
   あとから同じ KV に何かを置いた日に、それが黙って読み出せるようになる。
 
-  通すのは、こちらが付けた名前の2つの置き場だけ——avatars/（メンバーの顔）と
-  items/（作品のスクリーンショット）。名前は src/routes/admin/images.ts の
+  通すのは、こちらが付けた名前の3つの置き場だけ——avatars/（メンバーの顔）と
+  items/（作品のスクリーンショット）と music/（柱の底の音楽の札のジャケット）。名前は src/routes/admin/images.ts の
   putImage が付ける形（英数字で始まり、英数字と . _ - だけ）。乱数の長さは見ない——
   いまの 32 字のキーも、それより前に置いた 8 字のキーも同じ形で通る（貼られた URL を
   殺さない）。名前の上限 121 字は、slug（64 字）・乱数・拡張子が収まる長さ。
@@ -39,7 +39,7 @@ import { isMediaType } from '../../lib/image'
   取れない動画を再生しない。範囲は1つだけ読み、複数の範囲は無視して全体を返す（許される
   答え方）。中身は KV から全体を読んで切り出す——1本 10MB までなので Worker のメモリに収まる。
 */
-const IMAGE_KEY = /^(?:avatars|items)\/[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/
+const IMAGE_KEY = /^(?:avatars|items|music)\/[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/
 
 export async function serveImage(c: Context<AppEnv>) {
   const key = c.req.path.replace(/^\/images\//, '')

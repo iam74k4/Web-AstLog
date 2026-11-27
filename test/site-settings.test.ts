@@ -37,6 +37,10 @@ const configured: SiteSettings = {
   availabilityFormat: 'オンライン',
   contactSteps:
     'ご連絡 | メールで一言いただければ十分です。\nお話し | オンラインで30分ほど伺います。',
+  musicUrl: '',
+  musicTitle: '',
+  musicArtist: '',
+  musicArt: '',
 }
 
 const plain = (html: string) => html.replace(/<[^>]*>/g, '')
@@ -78,6 +82,10 @@ describe('サイト設定', () => {
       availabilityHours: '',
       availabilityFormat: '',
       contactSteps: '',
+      musicUrl: '',
+      musicTitle: '',
+      musicArtist: '',
+      musicArt: '',
     })
     for (const path of ['/', '/all']) {
       const html = await okText(path)
@@ -492,6 +500,10 @@ describe('受付状況と相談の流れ', () => {
       availabilityHours: '',
       availabilityFormat: '',
       contactSteps: '',
+      musicUrl: '',
+      musicTitle: '',
+      musicArtist: '',
+      musicArt: '',
     })
     await touch()
     const some = await okText('/contact')

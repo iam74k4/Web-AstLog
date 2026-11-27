@@ -38,11 +38,11 @@ Worker を通らない `public/` のファイル（`/app.css`・`/admin.css`・`
 並べ方（骨格）も選ばせない（前は管理の「見た目」でアクセント色と書体を選べた）。
 
 骨格は **上の帯・本文・足元**（`src/ui/Layout.tsx`）。900 以上では、本文の左に**左の柱**が立つ——
-名札（1人のサイトの持ち主の顔・名前・肩書き）・目次・サイトの行き先・著作権表示を縦に積み、帯の下に貼り付く
+名札（1人のサイトの持ち主の顔・名前・肩書き）・目次・音楽の札（サイト設定の「音楽」。5曲まで。2曲以上は上から順に 4 秒ごとに横へ送って入れ替わる。目次と行き先のあいだの余りの底。余りが狭い背の低い窓では出さない）・サイトの行き先・著作権表示を縦に積み、帯の下に貼り付く
 （そのあいだ、上の帯の目次・足元（行き先と著作権表示。足元ごと）・入口の札・個人ページの頭の名札は畳む。同じ中身を2つ
 見せない。`/all` と 404 / 500 には立てない）。上の帯はロゴ（ΛSTLOG。入口へ）と目次と、
 ログイン中だけ「管理画面」の入口（600 未満は鉛筆の印だけ）。600 未満の目次は帯の右端の3本線のボタン（字は持たず、名前「Menu」は読み上げに渡す）で、帯の下に行き先を縦に並べたパネルを開く（`popover`。知らないブラウザでは横に送る帯のまま）。足元は著作権表示「© 年 AstLog」と、サイトの行き先（GitHub →
-Instagram → X → Discord → メール。サイト設定にあるものだけ。Discord は開く URL（`discordUrl`。プロフィールか招待リンク）があればそこへ外へ出し、無ければ Contact の Discord の行へ送る）。900 未満では、目次は上の帯、行き先と著作権表示は足元が受ける。
+Instagram → X → Discord → メール。サイト設定にあるものだけ。Discord は開く URL（`discordUrl`。プロフィールか招待リンク）があればそこへ外へ出し、無ければ Contact の Discord の行へ送る）。900 未満では、目次は上の帯、音楽の札・行き先・著作権表示は足元が受ける（音楽の札は足元の頭に2行の小さな形で。`/all` には出さない）。
 
 公開ページは**節ごとに1ページ**（入口・Projects・Profile・Contact と打ち込むブロック）で、
 **普通に縦にスクロールする**。目次の1行が1ページで、上の帯はページの上に
@@ -84,7 +84,7 @@ Instagram → X → Discord → メール。サイト設定にあるものだけ
 | クローラへの指示 | `GET /robots.txt` | `text/plain`。`/admin/` だけ外す | — |
 | URL の一覧 | `GET /sitemap.xml` | `application/xml`。公開中のページを数え上げる | — |
 | 脆弱性の連絡先 | `GET /.well-known/security.txt` | `text/plain`（RFC 9116）。連絡先はサイト設定のメール（無ければ GitHub）、期限は応答のたびに半年先 | 連絡先がどちらも無ければ 404 |
-| 画像 | `GET /images/avatars/…`<br>`GET /images/items/…` | KV に入れたアバターと作品の画像。キーの形（置き場 / 英数字で始まり英数字と `. _ -` だけの名前）に合わないものは読みに行かない（KV のキーを外に開く口なので、置き場の外は読ませない）。どの応答にも `X-Content-Type-Options: nosniff` と `Content-Security-Policy: default-src 'none'; sandbox`（同じオリジンで配るので、画像のふりをした文書が直に開かれても走らせない）と `Cross-Origin-Resource-Policy: same-site`（ほかのサイトのページに埋め込ませない）。content-type は KV に入れた型が5種類（PNG・JPEG・WebP・AVIF・GIF）か動画（MP4）ならそのまま、それ以外（以前の SVG・HEIC）は `application/octet-stream` の添付（`Content-Disposition: attachment`）。範囲の要求（`Range: bytes=…`）には 206（`Accept-Ranges: bytes`。iPhone の Safari は範囲で取れない動画を再生しない）、中身の外は 416 | 該当なし・形が合わないものは 404 |
+| 画像 | `GET /images/avatars/…`<br>`GET /images/items/…`<br>`GET /images/music/…` | KV に入れたアバターと作品の画像と、音楽の札のジャケット。キーの形（置き場 / 英数字で始まり英数字と `. _ -` だけの名前）に合わないものは読みに行かない（KV のキーを外に開く口なので、置き場の外は読ませない）。どの応答にも `X-Content-Type-Options: nosniff` と `Content-Security-Policy: default-src 'none'; sandbox`（同じオリジンで配るので、画像のふりをした文書が直に開かれても走らせない）と `Cross-Origin-Resource-Policy: same-site`（ほかのサイトのページに埋め込ませない）。content-type は KV に入れた型が5種類（PNG・JPEG・WebP・AVIF・GIF）か動画（MP4）ならそのまま、それ以外（以前の SVG・HEIC）は `application/octet-stream` の添付（`Content-Disposition: attachment`）。範囲の要求（`Range: bytes=…`）には 206（`Accept-Ranges: bytes`。iPhone の Safari は範囲で取れない動画を再生しない）、中身の外は 416 | 該当なし・形が合わないものは 404 |
 | ページ | `GET /:screen` | そのブロックのページ（`/projects` `/team` …）。中身は全件で、割らない。1人のサイトの `/team` はプロフィールへ 301 | 無いページ名は 404。ページの名前の形（`hero` `projects` `team` `contact` か `block-<id>`）でなければ D1 に聞かずに 404 |
 | 割っていたころの続き | `GET /:screen/:page` | 同じページ（`/projects/2` → `/projects`）へ素の 301。query（絞り込み）は付けたまま | 名前の形か番号の形（1始まりの数）が合わなければ 404 |
 
@@ -487,7 +487,7 @@ Team のページは作らず、その位置にこの人のページが並ぶ。
 | ブロック移動 | `POST /admin/blocks/:id/move`（`dir=up\|down`） | 要 | 並び順を 10 刻みで振り直し、動かした行（`#block-<id>`）へ戻る |
 | 既定の並び | `POST /admin/blocks/init` | 要 | 何も置いていないときだけ4つを入れる。「数えてから足す」を1文（`INSERT … SELECT … WHERE NOT EXISTS`）でやるので、2本同時に来ても2組にならない |
 | ブロック削除 | `GET /admin/blocks/:id/delete`（確認）<br>`POST` 同 URL（実行） | 要 | 決まった中身のものは、外しても登録した項目は消えない |
-| サイト設定 | `GET /admin/site`<br>`POST` 同 URL（保存）<br>`POST /admin/site/availability`（概要の受付状況） | 要 | 入口と Contact の文言・連絡先・受付状況・相談の流れを目的ごとに編集（相談の流れは見出しと説明の組の欄。説明は2行の欄で、改行は保存で畳む）。節に触れると、横の完成形がその欄の出る画面（入口・Contact）に切り替わる（管理画面の補助。動かなければ頭の「プレビューする画面」で選ぶ）。保存前に同じ画面でプレビューできる。空の連絡先は掲載しない。概要からの受付状況の保存は受付状況の4つの欄だけを書き、弾いたときはこの画面で欄を示す |
+| サイト設定 | `GET /admin/site`<br>`POST` 同 URL（保存）<br>`POST /admin/site/availability`（概要の受付状況） | 要 | 入口と Contact の文言・連絡先・受付状況・相談の流れ・音楽の札を目的ごとに編集（音楽の札は Apple Music の曲の URL を5曲まで行ごとに貼り、保存のときに曲名・アーティスト名・ジャケットを Apple の検索 API から引く。ジャケットは KV の `music/` に写し、名前は欄で直せる。Apple に届かない・ジャケットが取れないときは 502、曲でない URL・見つからない曲は 400 で、どちらも入力を残して何も書かない。相談の流れは見出しと説明の組の欄。説明は2行の欄で、改行は保存で畳む）。節に触れると、横の完成形がその欄の出る画面（入口・Contact）に切り替わる（管理画面の補助。動かなければ頭の「プレビューする画面」で選ぶ）。保存前に同じ画面でプレビューできる。空の連絡先は掲載しない。概要からの受付状況の保存は受付状況の4つの欄だけを書き、弾いたときはこの画面で欄を示す |
 
 どの画面も、左ナビの足元の「サイトを見る ↗」から公開ページを別タブで開ける。
 その下の名前（最後にログインしたアカウントの @ログイン名かメールアドレス）は
