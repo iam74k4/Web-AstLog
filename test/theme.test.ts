@@ -1743,10 +1743,12 @@ describe('動き', () => {
     expect(motion).toContain('@supports (animation-timeline: view())')
   })
 
-  it('終わらない動きは、経歴のいまの行の星と、入口の打ち替える言葉だけ', () => {
+  it('終わらない動きは、経歴のいまの行の星と、入口の打ち替える言葉と、音楽の札の入れ替わりだけ', () => {
     /*
       打ち替える言葉（言葉を打っては消す巡りと、カーソルの点滅）は、持ち主が動画で見て選んだ
-      Cavani の入口。数ごとの巡り（typed-2〜4）は animation-name だけを差し替える
+      Cavani の入口。数ごとの巡り（typed-2〜4）は animation-name だけを差し替える。音楽の札の
+      入れ替わり（ジャケットを横へ送る「めくる」）も持ち主が動画で選んだもので、曲の数ごとの
+      巡り（music-*-2〜5）を札の data-count が差し替える
     */
     const forever = rulesOf(sheet)
       .filter((rule) =>
@@ -1758,8 +1760,31 @@ describe('動き', () => {
         '.career__now .period::before',
         ':is(.typed__words--2, .typed__words--3, .typed__words--4) > .typed__word',
         ':is(.typed__words--2, .typed__words--3, .typed__words--4)::after',
+        '.music__song',
+        '.music__art',
+        '.music__text',
       ].sort(),
     )
+    // 曲の数ごとの巡り（src/site.ts の MUSIC_MAX まで）。1曲の札は巡りの名前を持たず、動かない
+    for (const n of [2, 3, 4, 5]) {
+      for (const name of ['music-shown', 'music-art', 'music-text']) {
+        expect(sheet, `${name}-${n}`).toContain(`@keyframes ${name}-${n} {`)
+      }
+      expect(bodyOf(sheet, `.music[data-count='${n}'] {`)).toContain(`--music-count: ${n}`)
+    }
+    expect(sheet).not.toContain(`.music[data-count='1']`)
+    // 止まった姿（動きを減らす設定）は最初の曲だけ。2曲目からは素で隠す
+    expect(bodyOf(sheet, '.music__song + .music__song {')).toContain('visibility: hidden')
+    // 読んでいるあいだは替えない（キーボードで選ぶ・マウスを乗せると止まる）
+    expect(
+      bodyOf(sheet, '.music:focus-within :is(.music__song, .music__art, .music__text) {'),
+    ).toContain('animation-play-state: paused')
+    expect(
+      bodyOf(
+        blockAt(sheet, '@media (hover: hover)'),
+        '.music:hover :is(.music__song, .music__art, .music__text) {',
+      ),
+    ).toContain('animation-play-state: paused')
   })
 
   it('打ち替える言葉は、止まった姿で最初の言葉を打ち終えている。行は折らず、カーソルは刷らない', () => {

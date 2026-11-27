@@ -14,7 +14,13 @@ import * as schema from '../../db/schema'
 import { ITEM_DOCUMENTS, ITEM_KIND_KEYS, type ItemView, type KindCounts } from '../../domain'
 import type { AppEnv } from '../../env'
 import { bool, str, yearFrom } from '../../lib/format'
-import { SITE_SETTING_KEYS, type SiteSettings } from '../../site'
+import {
+  musicFields,
+  musicTracks,
+  musicWithArt,
+  SITE_SETTING_KEYS,
+  type SiteSettings,
+} from '../../site'
 import {
   Band,
   Empty,
@@ -701,15 +707,16 @@ previewRoutes.post('/preview/site', async (c) => {
   for (const key of SITE_SETTING_KEYS) {
     if (errors?.[key]) previewErrors[key] = `${labels[key]}: ${errors[key]}`
   }
+  if (errors?.music) previewErrors.music = `音楽: ${errors.music}`
   if (!screen) previewErrors.previewScreen = 'プレビューする画面を選び直してください'
   if (errors || !screen) return validationFailure(c, previewErrors, '/admin/site')
   const saved = await snapshot(c)
   /*
     音楽の札のジャケットは、保存のときに Apple から引く（site-settings.tsx の resolveMusic）。
-    プレビューでは引かないので、曲が保存済みと同じときだけ保存済みのジャケットと重ねて描く
-    （曲を替えたプレビューでは札を出さない）
+    プレビューでは引かないので、保存済みの曲（同じ URL）にだけ保存済みのジャケットを重ねて描く
+    （まだ保存していない曲は札に出ない。src/site.ts の shownMusic）
   */
-  if (site.musicUrl === saved.site.musicUrl) site.musicArt = saved.site.musicArt
+  Object.assign(site, musicFields(musicWithArt(musicTracks(site), musicTracks(saved.site))))
   return renderSnapshot(c, { ...saved, site, data: { ...saved.data, site } }, screen, {
     editHref: '/admin/site',
     unsaved: true,

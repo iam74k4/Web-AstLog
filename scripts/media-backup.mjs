@@ -140,7 +140,9 @@ export async function mediaBackup({ mode, directory, local = false, persistTo, s
     ...new Set(
       queries
         .flatMap((result) => result.results)
-        .map((row) => String(row.url).replace(/^\/images\//, ''))
+        // 音楽の札のジャケット（site.musicArt）は1行に1曲で並ぶ
+        .flatMap((row) => String(row.url).split('\n'))
+        .map((url) => url.replace(/^\/images\//, ''))
         .filter((key) => mediaKey.test(key)),
     ),
   ]

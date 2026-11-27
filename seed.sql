@@ -275,7 +275,8 @@ INSERT OR REPLACE INTO settings (key, value) VALUES
   ('site.contactSteps', 'ご連絡 | メールで、やりたいことを一言いただければ十分です。' || char(10) || 'お話し | オンラインで30分ほど、目的と制約を伺います。' || char(10) || 'ご提案 | 進め方と期間の目安を、文書でお送りします。' || char(10) || '開発 | 動くものを早めにお見せし、確かめながら進めます。'),
   -- 柱の底の音楽の札。ジャケットは検査用の画像（scripts/fixtures/media/music-cover.png。ローカルの KV だけ）
   -- 曲は作り話（実在の曲の URL を入れると、管理画面でその曲を貼っても「同じ曲」として Apple に聞き直さない）
-  ('site.musicUrl', 'https://music.apple.com/jp/album/sample/1000000000?i=1000000001'),
-  ('site.musicTitle', 'Night Drive'),
-  ('site.musicArtist', 'Sample Artist'),
-  ('site.musicArt', '/images/music/music-cover.png');
+  -- 1行に1曲（4つの欄の同じ行が1曲）。札は上から順に 4 秒ごとに入れ替わる
+  ('site.musicUrl', 'https://music.apple.com/jp/album/sample/1000000000?i=1000000001' || char(10) || 'https://music.apple.com/jp/album/sample/1000000000?i=1000000002' || char(10) || 'https://music.apple.com/jp/album/sample/1000000000?i=1000000003'),
+  ('site.musicTitle', 'Night Drive' || char(10) || 'Morning Light' || char(10) || 'Slow Tide'),
+  ('site.musicArtist', 'Sample Artist' || char(10) || 'Sample Band' || char(10) || 'Sample Trio'),
+  ('site.musicArt', '/images/music/music-cover.png' || char(10) || '/images/music/music-cover-2.png' || char(10) || '/images/music/music-cover-3.png');

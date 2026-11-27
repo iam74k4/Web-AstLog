@@ -706,6 +706,17 @@ async function measureRun(browser, base, run, typefaces) {
         // 書体が決まる前に測ると、行の高さが見積もりとずれる
         await page.evaluate(() => document.fonts.ready.then(() => true))
 
+        /*
+          音楽の札の入れ替わりは止め、最初の曲で測る（入れ替わりの途中のジャケットは枠の外に居て、
+          測った時刻しだいで「切られている」と数えた）。止まった姿は動きを減らす設定と同じ
+        */
+        await page.evaluate(() => {
+          for (const animation of document.getAnimations()) {
+            if (!animation.effect?.target?.closest?.('.music')) continue
+            animation.pause()
+            animation.currentTime = 0
+          }
+        })
         for (const typeface of typefaces) {
           const found = await page.evaluate(measure, [
             typeface,

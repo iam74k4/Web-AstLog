@@ -6,6 +6,10 @@ import { appleMusicTrack, fetchArtwork, lookupAppleTrack } from '../../lib/apple
 import { parsePairs, str } from '../../lib/format'
 import {
   AVAILABILITY_KEYS,
+  type MusicTrack,
+  musicFields,
+  musicTracks,
+  musicWithArt,
   SITE_SETTING_KEYS,
   SITE_SETTING_LIMITS,
   type SiteSettings,
@@ -18,6 +22,7 @@ import {
   FormActions,
   FormSection,
   FormVersion,
+  MusicRows,
   PairRows,
   readPairRows,
   Select,
@@ -41,9 +46,9 @@ export const siteSettingsRoutes = new Hono<AppEnv>()
   欄（PairRows）で受けて1行1件に畳み、ほかは欄の名前のまま。知らせはサイト設定の検査
   （siteSettingsErrors）と、組の欄の何行目か（readPairRows）を合わせたもの。
 
-  音楽の札のジャケット（musicArt）はフォームから受け取らない——画像の URL は、保存のときに
-  Apple から引いて KV に写したもの（resolveMusic）だけ。ここでは空にし、呼ぶ側が保存済みの
-  値を重ねる
+  音楽の札の曲は行ごとの欄（MusicRows。同じ名前の欄が並ぶ）から読み、URL の無い行は畳む。
+  ジャケット（musicArt）はフォームから受け取らない——画像の URL は、保存のときに Apple から
+  引いて KV に写したもの（resolveMusic）だけ。ここでは空にし、呼ぶ側が保存済みの値を重ねる
 */
 export function readSiteForm(form: FormData): {
   site: SiteSettings
@@ -51,11 +56,24 @@ export function readSiteForm(form: FormData): {
 } {
   const steps = readPairRows(form, 'step')
   const site = Object.fromEntries(
-    SITE_SETTING_KEYS.map((key) => [
-      key,
-      key === 'contactSteps' ? steps.text : key === 'musicArt' ? '' : str(form.get(key)),
-    ]),
+    SITE_SETTING_KEYS.map((key) => [key, key === 'contactSteps' ? steps.text : str(form.get(key))]),
   ) as SiteSettings
+  const urls = form.getAll('musicUrl').map((value) => str(value))
+  const titles = form.getAll('musicTitle').map((value) => str(value))
+  const artists = form.getAll('musicArtist').map((value) => str(value))
+  Object.assign(
+    site,
+    musicFields(
+      urls
+        .map((url, index) => ({
+          url,
+          title: titles[index] ?? '',
+          artist: artists[index] ?? '',
+          art: '',
+        }))
+        .filter((track) => track.url),
+    ),
+  )
   const errors = {
     ...siteSettingsErrors(site),
     ...(steps.error ? { contactSteps: steps.error } : {}),
@@ -243,41 +261,10 @@ const SiteSettingsPage = (props: {
       </FormSection>
       <FormSection
         title="音楽"
-        note="いま繰り返し聴いている1曲を、ジャケットと一緒に左の柱の下（狭い画面ではページ下部）に出します。押すと Apple Music の曲のページが別のタブで開きます。"
+        note="いま繰り返し聴いている曲を、ジャケットと一緒に左の柱の下（狭い画面ではページ下部）に出します。2曲以上なら、上から順に 4 秒ごとに横へ送って入れ替わります。押すと、そのとき出ている曲の Apple Music のページが別のタブで開きます。"
         preview="hero"
       >
-        <Field
-          label="Apple Music の曲の URL"
-          name="musicUrl"
-          type="url"
-          inputmode="url"
-          value={props.site.musicUrl}
-          hint="ミュージックで曲の「共有 → リンクをコピー」で取った URL を貼ります。保存のときに、曲名・アーティスト名・ジャケットを Apple Music から読み込みます。空にして保存すると札を外します"
-          maxlength={SITE_SETTING_LIMITS.musicUrl}
-          error={props.errors?.musicUrl ?? props.errors?.musicArt}
-        />
-        <Field
-          label="曲名"
-          name="musicTitle"
-          value={props.site.musicTitle}
-          hint="空なら Apple Music の曲名を入れます。曲を替えると、新しい曲の名前に入れ替わります。半角 40 字（全角 20 字）まで"
-          maxlength={SITE_SETTING_LIMITS.musicTitle}
-          error={props.errors?.musicTitle}
-        />
-        <Field
-          label="アーティスト名"
-          name="musicArtist"
-          value={props.site.musicArtist}
-          hint="名前がカタカナで入ったとき（例: アヴィーチー）は、ここで直して保存します（例: Avicii）。空なら Apple Music の名前に戻します。半角 24 字（全角 12 字）まで"
-          maxlength={SITE_SETTING_LIMITS.musicArtist}
-          error={props.errors?.musicArtist}
-        />
-        {props.site.musicArt ? (
-          <div class="field">
-            <span class="field__label">いまのジャケット</span>
-            <img class="icon-preview" src={props.site.musicArt} alt="" width="64" height="64" />
-          </div>
-        ) : null}
+        <MusicRows tracks={musicTracks(props.site)} error={props.errors?.music} />
       </FormSection>
       <FormActions cancelHref="/admin/site" previewAction="/admin/preview/site" />
     </form>
@@ -304,76 +291,75 @@ const MUSIC_ERRORS = {
     'Apple Music からジャケットを読み込めませんでした。少し時間をおいて、もう一度保存してください',
 } as const
 
-type MusicValues = Pick<SiteSettings, 'musicTitle' | 'musicArtist' | 'musicArt'>
 type ResolvedMusic =
-  | { values: MusicValues; placed: string | null; retired: string | null }
-  | { field: string; error: string; status: 400 | 502 }
+  | { tracks: MusicTrack[]; placed: string[]; retired: string[] }
+  | { error: string; status: 400 | 502; placed: string[] }
 
 /*
-  音楽の札の曲を決める（保存の前。KV に置くのは検査が通ってから）。
-  - URL が空: 札を外す（名前も消し、前のジャケットは保存のあとで控えへ）
-  - 同じ曲: 書いた名前を残す。名前が空なら Apple の名前に戻す。ジャケットはそのまま
-  - 曲が替わった: Apple から名前とジャケットを引き直す。名前の欄は、前に保存した名前のまま
-    なら新しい曲の名前に入れ替え、書き替えてあればそれを残す（カタカナの直しを同じ保存で書ける）
-  ジャケットは KV の music/ に写す（placed）。保存が落ちたら commitWithImage が消す
+  音楽の札の曲を決める（保存の前。KV に置くのは検査が通ってから）。曲は行ごとに見る。
+  - 保存済みの曲（同じ URL）: ジャケットはそのまま。書いた名前を残し、名前が空なら Apple の名前に
+    戻す。並べ替えても Apple には聞き直さない
+  - 新しい曲: Apple から名前とジャケットを引く。名前の欄は、その行に前に保存していた曲の名前の
+    ままなら新しい曲の名前に入れ替え、書き替えてあればそれを残す（カタカナの直しを同じ保存で書ける）
+  外した曲のジャケットは、保存のあとで控えへ移す（retired）。途中で止めたときは、置いたジャケットを
+  呼ぶ側が片付ける（placed）。保存が落ちたら commitWithImage が消す
 */
 async function resolveMusic(
   kv: KVNamespace,
-  site: SiteSettings,
-  saved: SiteSettings,
+  sent: readonly MusicTrack[],
+  saved: readonly MusicTrack[],
 ): Promise<ResolvedMusic> {
-  if (!site.musicUrl) {
-    return {
-      values: { musicTitle: '', musicArtist: '', musicArt: '' },
-      placed: null,
-      retired: saved.musicArt || null,
+  const tracks: MusicTrack[] = []
+  const placed: string[] = []
+  for (const [index, row] of sent.entries()) {
+    const at = `${index + 1} 曲目: `
+    const known = saved.find((track) => track.url === row.url && track.art)
+    const before = saved[index]
+    const kept = (key: 'title' | 'artist') =>
+      Boolean(row[key]) && (Boolean(known) || row[key] !== before?.[key])
+    if (known && kept('title') && kept('artist')) {
+      tracks.push({ ...row, art: known.art })
+      continue
     }
-  }
-  const sameSong = site.musicUrl === saved.musicUrl && Boolean(saved.musicArt)
-  const kept = (key: 'musicTitle' | 'musicArtist') =>
-    Boolean(site[key]) && (sameSong || site[key] !== saved[key])
-  if (sameSong && kept('musicTitle') && kept('musicArtist')) {
-    return {
-      values: {
-        musicTitle: site.musicTitle,
-        musicArtist: site.musicArtist,
-        musicArt: saved.musicArt,
-      },
-      placed: null,
-      retired: null,
+    const ref = appleMusicTrack(row.url)
+    if (!ref) return { error: at + MUSIC_ERRORS.missing, status: 400, placed }
+    const found = await lookupAppleTrack(ref)
+    if ('problem' in found) {
+      return {
+        error: at + MUSIC_ERRORS[found.problem],
+        status: found.problem === 'missing' ? 400 : 502,
+        placed,
+      }
     }
-  }
-  const ref = appleMusicTrack(site.musicUrl)
-  if (!ref) return { field: 'musicUrl', error: MUSIC_ERRORS.missing, status: 400 }
-  const found = await lookupAppleTrack(ref)
-  if ('problem' in found) {
-    return {
-      field: 'musicUrl',
-      error: MUSIC_ERRORS[found.problem],
-      status: found.problem === 'missing' ? 400 : 502,
+    const track = {
+      url: row.url,
+      title: kept('title') ? row.title : found.track.title,
+      artist: kept('artist') ? row.artist : found.track.artist,
+      art: known?.art ?? '',
     }
+    if (!known) {
+      const bytes = await fetchArtwork(found.track.artwork)
+      const picked = bytes ? await pickBlob(new File([bytes], 'artwork')) : null
+      if (!picked?.image) return { error: at + MUSIC_ERRORS.artwork, status: 502, placed }
+      const quota = await quotaErrors(kv, [['music', picked.image]])
+      if (quota) return { error: at + (quota.music ?? ''), status: 400, placed }
+      track.art = await putImage(kv, picked.image, 'music', track.title)
+      placed.push(track.art)
+    }
+    tracks.push(track)
   }
-  const values: MusicValues = {
-    musicTitle: kept('musicTitle') ? site.musicTitle : found.track.title,
-    musicArtist: kept('musicArtist') ? site.musicArtist : found.track.artist,
-    musicArt: saved.musicArt,
-  }
-  if (sameSong) return { values, placed: null, retired: null }
-  const bytes = await fetchArtwork(found.track.artwork)
-  const picked = bytes ? await pickBlob(new File([bytes], 'artwork')) : null
-  if (!picked?.image) return { field: 'musicUrl', error: MUSIC_ERRORS.artwork, status: 502 }
-  const quota = await quotaErrors(kv, [['musicUrl', picked.image]])
-  if (quota) return { field: 'musicUrl', error: quota.musicUrl ?? '', status: 400 }
-  const art = await putImage(kv, picked.image, 'music', values.musicTitle)
-  return { values: { ...values, musicArt: art }, placed: art, retired: saved.musicArt || null }
+  const kept = new Set(tracks.map((track) => track.art))
+  const retired = saved.map((track) => track.art).filter((art) => art && !kept.has(art))
+  return { tracks, placed, retired }
 }
 
 siteSettingsRoutes.post('/site', async (c) => {
   const form = await c.req.formData()
   const { site: sent, errors } = readSiteForm(form)
   const saved = await loadSiteSettings(db(c))
-  // ジャケットは送られてこない（readSiteForm）。描き直す画面には保存済みのものを見せる
-  let site: SiteSettings = { ...sent, musicArt: saved.musicArt }
+  const savedTracks = musicTracks(saved)
+  // ジャケットは送られてこない（readSiteForm）。描き直す画面には、保存済みの曲のジャケットを見せる
+  let site: SiteSettings = { ...sent, ...musicFields(musicWithArt(musicTracks(sent), savedTracks)) }
   const version = String(form.get('_version') ?? '')
   const back = (errors: Record<string, string>, status: 400 | 409 | 502) =>
     c.html(
@@ -383,30 +369,37 @@ siteSettingsRoutes.post('/site', async (c) => {
   if (version !== (await settingsVersion(db(c), 'site.')))
     return back({ _version: EDIT_CONFLICT }, 409)
   if (errors) return back(errors, 400)
-  const music = await resolveMusic(c.env.MEDIA, site, saved)
-  if ('error' in music) return back({ [music.field]: music.error }, music.status)
+  const music = await resolveMusic(c.env.MEDIA, musicTracks(sent), savedTracks)
+  if ('error' in music) {
+    await discardPlaced(c.env.MEDIA, music.placed)
+    return back({ music: music.error }, music.status)
+  }
   /*
     Apple の名前が欄の上限を超えたときは、Apple の名前を欄に入れて書き直してもらう。置いた
-    ジャケットは片付け、画面には保存済みのジャケットを見せる（消した画像を指さない）
+    ジャケットは片付け、画面には保存済みのジャケットだけを見せる（消した画像を指さない）
   */
-  const late = siteSettingsErrors({ ...site, ...music.values })
+  const resolved = { ...site, ...musicFields(music.tracks) }
+  const late = siteSettingsErrors(resolved)
   if (late) {
-    await removeImage(c.env.MEDIA, music.placed)
-    site = { ...site, ...music.values, musicArt: saved.musicArt }
+    await discardPlaced(c.env.MEDIA, music.placed)
+    site = { ...site, ...musicFields(musicWithArt(music.tracks, savedTracks)) }
     return back(late, 400)
   }
-  site = { ...site, ...music.values }
+  site = resolved
   try {
     await commitWithImage(c.env.MEDIA, music.placed, () => saveSiteSettings(db(c), site, version))
   } catch (error) {
     if (isEditConflict(error)) return back({ _version: EDIT_CONFLICT }, 409)
     throw error
   }
-  if (music.retired && music.retired !== site.musicArt) {
-    await discardImages(c.env.MEDIA, [music.retired])
-  }
+  await discardImages(c.env.MEDIA, music.retired)
   return c.redirect('/admin/site?saved=1', 303)
 })
+
+// 途中で止めた保存で置いたジャケットを消す（どの行からも指されない画像を KV に残さない）
+async function discardPlaced(kv: KVNamespace, placed: readonly string[]) {
+  for (const url of placed) await removeImage(kv, url).catch((error) => console.error(error))
+}
 
 /*
   概要の「受付状況」（src/ui/AdminDashboard.tsx）。受付状況の4つの欄だけを書く——状態はよく

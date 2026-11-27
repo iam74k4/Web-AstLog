@@ -1,6 +1,14 @@
 import type { Child } from 'hono/jsx'
 import { headlineText, type Pair, pairsText, str } from '../lib/format'
-import { AVAILABILITY, SITE_SETTING_LIMITS, type SiteSettings } from '../site'
+import {
+  AVAILABILITY,
+  MUSIC_MAX,
+  MUSIC_NAME_WIDTH,
+  MUSIC_URL_MAX,
+  type MusicTrack,
+  SITE_SETTING_LIMITS,
+  type SiteSettings,
+} from '../site'
 
 /*
   管理画面のフォームの部品。どの管理画面も、この部品だけで欄と操作を組む。
@@ -375,6 +383,73 @@ export const PairRows = (props: {
       })}
       <AddRow rows=".pair-row" />
       <Feedback name={props.name} error={props.error} hint={props.hint} />
+    </fieldset>
+  )
+}
+
+/*
+  音楽の札の曲の行（サイト設定の「音楽」）。MUSIC_MAX 行をいつも並べ、上から順に札に出す
+  （行を足す手を持たない——上限が小さいので、空いた行を見せておけば足りる）。1行は Apple Music の
+  曲の URL・曲名・アーティスト名と、いまのジャケット。欄は同じ名前で並び、readSiteForm が行ごとに
+  組む。知らせは行の並びの下に1つで、何曲目かを言う（src/site.ts の musicProblems）
+*/
+const MUSIC_HINT =
+  'ミュージックで曲の「共有 → リンクをコピー」で取った URL を貼ります。保存のときに、曲名・アーティスト名・ジャケットを Apple Music から読み込みます。名前がカタカナで入ったとき（例: アヴィーチー）は、欄で直して保存します（例: Avicii）。名前を空にすると Apple Music の名前に戻します。URL を空にした行は外します。曲名は半角 40 字・アーティスト名は半角 24 字まで（全角は2字）'
+
+export const MusicRows = (props: { tracks: readonly MusicTrack[]; error?: string }) => {
+  const blank: MusicTrack = { url: '', title: '', artist: '', art: '' }
+  const rows = Array.from({ length: MUSIC_MAX }, (_, index) => props.tracks[index] ?? blank)
+  const feedback = { name: 'music', error: props.error, hint: MUSIC_HINT }
+  return (
+    <fieldset class="field field--wide fieldset" aria-describedby={describedBy(feedback)}>
+      <legend class="field__label">曲（上から順に出します。{MUSIC_MAX} 曲まで）</legend>
+      {rows.map((track, index) => {
+        const at = `${index + 1} 曲目`
+        return (
+          <div class="music-row" key={index}>
+            <input
+              class="input"
+              type="url"
+              inputmode="url"
+              name="musicUrl"
+              value={track.url}
+              maxlength={MUSIC_URL_MAX}
+              placeholder="https://music.apple.com/jp/album/…?i=…"
+              aria-label={`${at}の Apple Music の URL`}
+            />
+            <input
+              class="input"
+              type="text"
+              name="musicTitle"
+              value={track.title}
+              maxlength={MUSIC_NAME_WIDTH.musicTitle}
+              placeholder="曲名"
+              aria-label={`${at}の曲名`}
+            />
+            <input
+              class="input"
+              type="text"
+              name="musicArtist"
+              value={track.artist}
+              maxlength={MUSIC_NAME_WIDTH.musicArtist}
+              placeholder="アーティスト名"
+              aria-label={`${at}のアーティスト名`}
+            />
+            {track.art ? (
+              <img
+                class="music-row__art"
+                src={track.art}
+                alt={`${at}のいまのジャケット`}
+                width="48"
+                height="48"
+              />
+            ) : (
+              <span class="music-row__art" aria-hidden="true" />
+            )}
+          </div>
+        )
+      })}
+      <Feedback {...feedback} />
     </fieldset>
   )
 }

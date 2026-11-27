@@ -374,6 +374,12 @@
   --stagger: 70ms;
   --twinkle: 5s;
   /*
+    音楽の札の入れ替わり（「動き」の節の music-*）。1曲の持ち時間と、入るのと抜けるのにかける
+    長さ。キーフレームの割合は --music-move が --music-step の 15% のときの値で書いてある
+  */
+  --music-step: 4s;
+  --music-move: calc(var(--music-step) * 0.15);
+  /*
     読み込みの幕（外から入口へ来たときだけ。src/lib/page-cache.ts の fromInside。「動き」の節の
     .opening）。--opening-load はロゴの O が回り線が満ちるあいだ（幕は閉じたまま。ページはもう
     届いていて、待たせているのは見せるための間だけなので、伸ばすなら入口に着くたびの待ちと引き換え）、
@@ -1100,35 +1106,21 @@ body[data-site] > .frame {
   音楽の札（components.tsx の SiteMusic）。ジャケットは角の立った正方形（--music-art）で、右に
   英字の小見出し・曲名・アーティスト名を積む。曲名だけ墨。面も枠も持たない（公開ページは箱を
   並べない）。ジャケットの上の縁を小見出しの頭にそろえる（真ん中でそろえると、小見出しが絵の
-  上へ飛び出した）。置き場所は左の柱の底（.pillar__music。900 以上）と足元の頭
+  上へ飛び出した）。置き場所は左の柱の底（.pillar__music。900 以上）と足元の頭。
+  2曲以上は同じ升に重ね、4 秒ごとに1曲ずつ横へ送る（「動き」の節の music-*）。札の高さは
+  いちばん高い曲で決まる（重ねた升）ので、入れ替わっても下の行き先は動かない。押せるのは札の
+  面ごと——いま出ている曲のリンクの ::after を面いっぱいに被せる（一覧の行と同じ stretched link）
 */
 .music {
-  display: flex;
-  min-width: 0;
-}
-
-.music__link {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--sp-4);
-  min-width: 0;
-  min-height: var(--tap);
-  color: var(--ink-mid);
-  text-decoration: none;
-  transition: scale var(--dur-spring) var(--ease-spring);
-}
-
-.music__art {
-  flex: none;
-  width: var(--music-art);
-  height: var(--music-art);
-  object-fit: cover;
-}
-
-.music__text {
+  position: relative;
   display: grid;
+  align-content: start;
   gap: var(--sp-1);
   min-width: 0;
+  min-height: var(--tap);
+  padding-inline-start: calc(var(--music-art) + var(--sp-4));
+  color: var(--ink-mid);
+  transition: scale var(--dur-spring) var(--ease-spring);
 }
 
 /* 「On repeat」。和文の入らない英字の小見出し（名札のローマ字と同じ字間の広い大文字） */
@@ -1138,6 +1130,73 @@ body[data-site] > .frame {
   font-weight: 600;
   letter-spacing: var(--track-label);
   text-transform: uppercase;
+}
+
+.music__songs {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+  曲は同じ升に重ねる。2曲目からは素では隠す——動きを減らす設定では、止まった姿の最初の曲
+  だけが残る。動いているあいだは「動き」の節の music-shown-<数> が出し入れする
+*/
+.music__song {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+
+.music__song + .music__song {
+  visibility: hidden;
+}
+
+.music__link {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.music__link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+/* フォーカスの輪郭は押せる面（札全体の覆い）に描く。リンクの字だけを囲むと、押せる面と食い違う */
+.music__link:focus-visible {
+  outline: none;
+}
+
+.music__link:focus-visible::after {
+  outline: var(--focus-ring) solid var(--accent);
+  outline-offset: var(--focus-offset);
+}
+
+.music__frame {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  width: var(--music-art);
+  height: var(--music-art);
+  overflow: hidden;
+}
+
+.music__art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.music__text {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
 }
 
 .music__title {
@@ -1196,27 +1255,27 @@ body[data-site] > .frame {
   期間の記号）。柱と同じ3行の札は、著作権表示と行き先だけの足元の中で1つだけ大きく見えた
 */
 .foot > .music {
+  gap: 0;
+  align-content: safe center;
   margin-bottom: var(--sp-2);
+  padding-inline-start: calc(var(--music-art-sm) + var(--sp-3));
 }
 
-.foot .music__link {
-  align-items: center;
-  gap: var(--sp-3);
-}
-
-.foot .music__art {
+.foot .music__frame {
+  inset-block-start: 50%;
   width: var(--music-art-sm);
   height: var(--music-art-sm);
+  translate: 0 -50%;
+}
+
+.foot .music__link,
+.foot .music__text {
+  gap: 0;
 }
 
 .foot .music__text {
   grid-template-columns: minmax(0, auto) auto;
   justify-content: start;
-  gap: 0;
-}
-
-.foot .music__label {
-  grid-column: 1 / -1;
 }
 
 .foot .music__artist {
@@ -3760,8 +3819,12 @@ body[data-site] > .frame {
 .menu a:active,
 .band:active,
 .member:active,
-.back:active,
-.music__link:active {
+.back:active {
+  scale: var(--press);
+}
+
+/* 音楽の札は面ごと押せるので、押したときは札ごと縮む（:has は列に並べない） */
+.music:has(.music__link:active) {
   scale: var(--press);
 }
 
@@ -3801,8 +3864,13 @@ body[data-site] > .frame {
     background-size: 100% 1px;
   }
 
-  .music__link:hover .music__name {
+  .music:hover .music__name {
     background-size: 100% 1px;
+  }
+
+  /* マウスを乗せた札は入れ替わりを止める（読んでいる途中で曲が替わらない） */
+  .music:hover :is(.music__song, .music__art, .music__text) {
+    animation-play-state: paused;
   }
 
   .member:hover {
@@ -3966,7 +4034,7 @@ body[data-site] > .frame {
   同じになる。持ち主が動画で見て選んだ組:
     - 読み込みの幕（外から入口へ来たときだけ）: 真っ黒の幕の真ん中でロゴの O が回り、線が読み込みの
       ように満ちてから、幕が上下に開く
-    - 終わらない動きは、経歴のいまの行の星と、入口の打ち替える言葉だけ
+    - 終わらない動きは、経歴のいまの行の星と、入口の打ち替える言葉と、音楽の札の入れ替わりだけ
     - 入口の幕開け: 札・大見出し・線・打ち替える言葉・リード文・押し手が順に1回だけ現れる。
       大見出しは打ち替える言葉と同じ打ち方で1字ずつ打つ（打ち終えるのを待たずに、ほかも出る）
     - 入口の打ち替える言葉: 大見出しの下で言葉を1字ずつ打っては消し、次の言葉へ（Cavani の入口）
@@ -4508,6 +4576,294 @@ body[data-opening] .top > .brand {
   to {
     opacity: 0.45;
     scale: 0.8;
+  }
+}
+
+/*
+  音楽の札の入れ替わり（2曲以上のとき。components.tsx の SiteMusic）。1曲の持ち時間は
+  --music-step（4 秒）で、入るのと抜けるのにその 15%。ジャケットは右から入って左へ抜け、曲名と
+  アーティスト名は少し横へずれながら消えて出る——字は重ねず、出ていく字が先の半分で消え、入る
+  字は後の半分で出る（重ねると2曲の字が読めないコマができた）。キーフレームの割合は曲の数で
+  決まるので、数ごとに書き（src/site.ts の MUSIC_MAX まで）、札の data-count で名前を差し替える。
+  1曲の札は名前が無いので動かない。マウスを乗せる・キーボードで選ぶと止まる。動きを減らす設定
+  では止まり、最初の曲だけが残る（素の .music__song + .music__song）
+*/
+.music[data-count='2'] {
+  --music-count: 2;
+  --music-shown: music-shown-2;
+  --music-slide: music-art-2;
+  --music-swap: music-text-2;
+}
+
+.music[data-count='3'] {
+  --music-count: 3;
+  --music-shown: music-shown-3;
+  --music-slide: music-art-3;
+  --music-swap: music-text-3;
+}
+
+.music[data-count='4'] {
+  --music-count: 4;
+  --music-shown: music-shown-4;
+  --music-slide: music-art-4;
+  --music-swap: music-text-4;
+}
+
+.music[data-count='5'] {
+  --music-count: 5;
+  --music-shown: music-shown-5;
+  --music-slide: music-art-5;
+  --music-swap: music-text-5;
+}
+
+/* 曲ごとの出番。1曲目は入り終えたところから始める（読み込んだときに、もう出ている） */
+.music__song {
+  --music-at: 0;
+  --music-run: calc(var(--music-step) * var(--music-count))
+    calc(var(--music-at) * var(--music-step) - var(--music-move));
+}
+
+.music__song:nth-child(2) {
+  --music-at: 1;
+}
+
+.music__song:nth-child(3) {
+  --music-at: 2;
+}
+
+.music__song:nth-child(4) {
+  --music-at: 3;
+}
+
+.music__song:nth-child(5) {
+  --music-at: 4;
+}
+
+.music__song {
+  animation: var(--music-shown) var(--music-run) step-end infinite both;
+}
+
+.music__art {
+  animation: var(--music-slide) var(--music-run) var(--ease) infinite both;
+}
+
+.music__text {
+  animation: var(--music-swap) var(--music-run) var(--ease) infinite both;
+}
+
+.music:focus-within :is(.music__song, .music__art, .music__text) {
+  animation-play-state: paused;
+}
+
+/* 2曲: 入る 0〜7.5%、出ている 〜50%、抜ける 〜57.5% */
+@keyframes music-shown-2 {
+  0% {
+    visibility: hidden;
+  }
+
+  0.01%,
+  57.5% {
+    visibility: visible;
+  }
+
+  57.51%,
+  100% {
+    visibility: hidden;
+  }
+}
+
+@keyframes music-art-2 {
+  0% {
+    translate: 100% 0;
+  }
+
+  7.5%,
+  50% {
+    translate: 0 0;
+  }
+
+  57.5%,
+  100% {
+    translate: -100% 0;
+  }
+}
+
+@keyframes music-text-2 {
+  0%,
+  3.75% {
+    opacity: 0;
+    translate: var(--sp-3) 0;
+  }
+
+  7.5%,
+  50% {
+    opacity: 1;
+    translate: 0 0;
+  }
+
+  53.75%,
+  100% {
+    opacity: 0;
+    translate: calc(var(--sp-3) * -1) 0;
+  }
+}
+
+/* 3曲: 入る 0〜5%、出ている 〜33.33%、抜ける 〜38.33% */
+@keyframes music-shown-3 {
+  0% {
+    visibility: hidden;
+  }
+
+  0.01%,
+  38.33% {
+    visibility: visible;
+  }
+
+  38.34%,
+  100% {
+    visibility: hidden;
+  }
+}
+
+@keyframes music-art-3 {
+  0% {
+    translate: 100% 0;
+  }
+
+  5%,
+  33.33% {
+    translate: 0 0;
+  }
+
+  38.33%,
+  100% {
+    translate: -100% 0;
+  }
+}
+
+@keyframes music-text-3 {
+  0%,
+  2.5% {
+    opacity: 0;
+    translate: var(--sp-3) 0;
+  }
+
+  5%,
+  33.33% {
+    opacity: 1;
+    translate: 0 0;
+  }
+
+  35.83%,
+  100% {
+    opacity: 0;
+    translate: calc(var(--sp-3) * -1) 0;
+  }
+}
+
+/* 4曲: 入る 0〜3.75%、出ている 〜25%、抜ける 〜28.75% */
+@keyframes music-shown-4 {
+  0% {
+    visibility: hidden;
+  }
+
+  0.01%,
+  28.75% {
+    visibility: visible;
+  }
+
+  28.76%,
+  100% {
+    visibility: hidden;
+  }
+}
+
+@keyframes music-art-4 {
+  0% {
+    translate: 100% 0;
+  }
+
+  3.75%,
+  25% {
+    translate: 0 0;
+  }
+
+  28.75%,
+  100% {
+    translate: -100% 0;
+  }
+}
+
+@keyframes music-text-4 {
+  0%,
+  1.875% {
+    opacity: 0;
+    translate: var(--sp-3) 0;
+  }
+
+  3.75%,
+  25% {
+    opacity: 1;
+    translate: 0 0;
+  }
+
+  26.875%,
+  100% {
+    opacity: 0;
+    translate: calc(var(--sp-3) * -1) 0;
+  }
+}
+
+/* 5曲: 入る 0〜3%、出ている 〜20%、抜ける 〜23% */
+@keyframes music-shown-5 {
+  0% {
+    visibility: hidden;
+  }
+
+  0.01%,
+  23% {
+    visibility: visible;
+  }
+
+  23.01%,
+  100% {
+    visibility: hidden;
+  }
+}
+
+@keyframes music-art-5 {
+  0% {
+    translate: 100% 0;
+  }
+
+  3%,
+  20% {
+    translate: 0 0;
+  }
+
+  23%,
+  100% {
+    translate: -100% 0;
+  }
+}
+
+@keyframes music-text-5 {
+  0%,
+  1.5% {
+    opacity: 0;
+    translate: var(--sp-3) 0;
+  }
+
+  3%,
+  20% {
+    opacity: 1;
+    translate: 0 0;
+  }
+
+  21.5%,
+  100% {
+    opacity: 0;
+    translate: calc(var(--sp-3) * -1) 0;
   }
 }
 

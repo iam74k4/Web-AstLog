@@ -257,15 +257,19 @@ const contactSettings = () => {
 }
 
 /*
-  柱の底の音楽の札。名前は上限ちょうど（src/site.ts の MUSIC_NAME_WIDTH。曲名 40・アーティスト名
-  24）——柱がいちばん狭い幅で札がいちばん高くなる。ジャケットは検査用の画像（demo-media.mjs）
+  柱の底の音楽の札。2曲で、1曲目の名前は上限ちょうど（src/site.ts の MUSIC_NAME_WIDTH。
+  曲名 40・アーティスト名 24）——柱がいちばん狭い幅で札がいちばん高くなる。check:fit は入れ替わりを
+  止めて最初の曲で測る。ジャケットは検査用の画像（demo-media.mjs）
 */
 const musicSettings = () =>
   [
-    ['site.musicUrl', 'https://music.apple.com/jp/album/fixture/1000000000?i=1000000001'],
-    ['site.musicTitle', 'Concerto No. 2 in C Minor: II. Adagio so'],
-    ['site.musicArtist', 'Leopold Stokowski & Orch'],
-    ['site.musicArt', '/images/music/music-cover.png'],
+    [
+      'site.musicUrl',
+      'https://music.apple.com/jp/album/fixture/1000000000?i=1000000001\nhttps://music.apple.com/jp/album/fixture/1000000000?i=1000000002',
+    ],
+    ['site.musicTitle', 'Concerto No. 2 in C Minor: II. Adagio so\nShort'],
+    ['site.musicArtist', 'Leopold Stokowski & Orch\nSample'],
+    ['site.musicArt', '/images/music/music-cover.png\n/images/music/music-cover-2.png'],
   ]
     .map(([key, value]) => `(${sql(key)}, ${sql(value)})`)
     .join(', ')

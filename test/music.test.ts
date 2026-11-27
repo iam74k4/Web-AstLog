@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadSiteSettings, saveSiteSettings } from '../src/db/queries'
 import { appleMusicTrack, lookupAppleTrack } from '../src/lib/apple-music'
 import { mediaUsage } from '../src/lib/media-usage'
-import { SITE_SETTING_KEYS, type SiteSettings } from '../src/site'
+import { MUSIC_KEYS, musicTracks, SITE_SETTING_KEYS, type SiteSettings } from '../src/site'
 import { db, form, get, okText, resetDb, seedItem, seedMember, signIn, touch } from './helpers'
 import { jpeg, png } from './images'
 
@@ -47,6 +47,12 @@ const SONGS: Record<string, Song> = {
     // 日本のストアはアーティスト名をカタカナで返すことがある
     artistName: 'アヴィーチー',
     art: 'nights',
+  },
+  '1453438470': {
+    trackId: 1453438470,
+    trackName: 'No Sleep (feat. Bonn)',
+    artistName: 'Martin Garrix',
+    art: 'sleep',
   },
   '1500000001': {
     trackId: 1500000001,
@@ -93,20 +99,30 @@ function apple(options: AppleOptions = {}) {
   return calls
 }
 
-// サイト設定のフォーム。いまの設定に音楽の欄だけを重ねて送る
-async function siteForm(music: Partial<Record<string, string>>) {
+type MusicForm = Record<string, string | string[]>
+
+/*
+  サイト設定のフォーム。いまの設定に音楽の欄だけを重ねて送る。曲は行ごとの欄（同じ名前の欄が
+  並ぶ。AdminForm.tsx の MusicRows）で、いまの曲を行に並べてから重ねる
+*/
+async function siteForm(music: MusicForm) {
   const site = await loadSiteSettings(db())
-  const values: Record<string, string> = {}
+  const values: MusicForm = {}
   for (const key of SITE_SETTING_KEYS) {
-    if (key !== 'contactSteps' && key !== 'musicArt') values[key] = site[key]
+    if (key === 'contactSteps' || (MUSIC_KEYS as readonly string[]).includes(key)) continue
+    values[key] = site[key]
   }
-  return form({ ...values, ...(music as Record<string, string>) })
+  const tracks = musicTracks(site)
+  values.musicUrl = tracks.map((track) => track.url)
+  values.musicTitle = tracks.map((track) => track.title)
+  values.musicArtist = tracks.map((track) => track.artist)
+  return form({ ...values, ...music })
 }
 
 const keys = async (prefix: string) =>
   (await env.MEDIA.list({ prefix })).keys.map((key) => key.name).sort()
 
-async function save(music: Partial<Record<string, string>>) {
+async function save(music: MusicForm) {
   const signed = await signIn()
   return signed('/admin/site', { method: 'POST', body: await siteForm(music) })
 }
@@ -325,6 +341,112 @@ describe('音楽の札を保存する', () => {
     await save({ musicUrl: HIGH_ON_LIFE, musicArt: '/images/items/other-1234abcd.png' })
     const site = await loadSiteSettings(db())
     expect(site.musicArt).toMatch(/^\/images\/music\//)
+  })
+})
+
+const NO_SLEEP = 'https://music.apple.com/jp/album/no-sleep-feat-bonn/1453438469?i=1453438470'
+
+describe('曲を並べる', () => {
+  it('3曲を一度に貼ると、上から順に名前とジャケットを引き、札に重ねて並べる', async () => {
+    await seedMember()
+    const calls = apple()
+    const response = await save({ musicUrl: [HIGH_ON_LIFE, NO_SLEEP, THE_NIGHTS, '', ''] })
+    expect(response.status).toBe(303)
+    const tracks = musicTracks(await loadSiteSettings(db()))
+    expect(tracks.map((track) => track.title)).toEqual([
+      'High on Life (feat. Bonn)',
+      'No Sleep (feat. Bonn)',
+      'The Nights',
+    ])
+    expect(tracks.every((track) => /^\/images\/music\//.test(track.art))).toBe(true)
+    expect(new Set(tracks.map((track) => track.art)).size).toBe(3)
+    expect(await keys('music/')).toHaveLength(3)
+    expect(calls).toHaveLength(6)
+    await touch()
+    const html = await okText('/')
+    // 柱と足元に1つずつ。曲は同じ升に重ね、数を data-count で渡す（app.css の music-<数>）
+    expect(html.match(/<div class="music" data-count="3">/g)).toHaveLength(2)
+    expect(html.match(/class="music__song"/g)).toHaveLength(6)
+    const card = html.slice(html.indexOf('class="pillar__music"'))
+    expect(card.indexOf('High on Life')).toBeLessThan(card.indexOf('No Sleep'))
+    expect(card.indexOf('No Sleep')).toBeLessThan(card.indexOf('The Nights'))
+  })
+
+  it('並べ替えても Apple には聞き直さず、ジャケットは曲について動く', async () => {
+    apple()
+    await save({ musicUrl: [HIGH_ON_LIFE, NO_SLEEP, THE_NIGHTS] })
+    const before = musicTracks(await loadSiteSettings(db()))
+    const calls = apple()
+    const sent = [before[2], before[0], before[1]].filter((track) => track !== undefined)
+    expect(
+      (
+        await save({
+          musicUrl: sent.map((track) => track.url),
+          musicTitle: sent.map((track) => track.title),
+          musicArtist: sent.map((track) => track.artist),
+        })
+      ).status,
+    ).toBe(303)
+    expect(calls).toEqual([])
+    const after = musicTracks(await loadSiteSettings(db()))
+    expect(after).toEqual(sent)
+  })
+
+  it('外した曲のジャケットだけを控えへ移す', async () => {
+    apple()
+    await save({ musicUrl: [HIGH_ON_LIFE, NO_SLEEP, THE_NIGHTS] })
+    const [first, second, third] = musicTracks(await loadSiteSettings(db()))
+    await save({
+      musicUrl: [HIGH_ON_LIFE, '', THE_NIGHTS],
+      musicTitle: [first?.title ?? '', '', third?.title ?? ''],
+      musicArtist: [first?.artist ?? '', '', third?.artist ?? ''],
+    })
+    const after = musicTracks(await loadSiteSettings(db()))
+    expect(after.map((track) => track.url)).toEqual([HIGH_ON_LIFE, THE_NIGHTS])
+    expect(after.map((track) => track.art)).toEqual([first?.art, third?.art])
+    expect(await keys('archive/music/')).toEqual([
+      `archive/${(second?.art ?? '').replace('/images/', '')}`,
+    ])
+  })
+
+  it('同じ曲を2つ並べる・6曲以上を送ると 400 で、何曲目かを言う', async () => {
+    apple()
+    const twice = await save({ musicUrl: [HIGH_ON_LIFE, HIGH_ON_LIFE] })
+    expect(twice.status).toBe(400)
+    expect(await twice.text()).toContain('2 曲目: 同じ曲がもう並んでいます')
+    const many = await save({
+      musicUrl: Array.from(
+        { length: 6 },
+        (_, index) => `https://music.apple.com/jp/album/x/1?i=${index + 10}`,
+      ),
+    })
+    expect(many.status).toBe(400)
+    expect(await many.text()).toContain('曲は 5 曲までにしてください')
+    expect(await keys('music/')).toEqual([])
+  })
+
+  it('2曲目で止まったら、1曲目で置いたジャケットも片付けて何も書かない', async () => {
+    apple()
+    const response = await save({
+      musicUrl: [HIGH_ON_LIFE, 'https://music.apple.com/jp/album/x/1?i=999'],
+    })
+    expect(response.status).toBe(400)
+    expect(await response.text()).toContain(
+      '2 曲目: この URL の曲が Apple Music で見つかりませんでした',
+    )
+    expect(await keys('music/')).toEqual([])
+    expect((await loadSiteSettings(db())).musicUrl).toBe('')
+  })
+
+  it('管理画面は曲の行を5つ並べ、いまのジャケットを行ごとに見せる', async () => {
+    apple()
+    await save({ musicUrl: [HIGH_ON_LIFE, NO_SLEEP] })
+    const signed = await signIn()
+    const html = await (await signed('/admin/site')).text()
+    expect(html.match(/class="music-row"/g)).toHaveLength(5)
+    expect(html).toContain('aria-label="1 曲目の Apple Music の URL"')
+    expect(html).toContain('aria-label="5 曲目のアーティスト名"')
+    expect(html.match(/class="music-row__art" src="\/images\/music\//g)).toHaveLength(2)
   })
 })
 
