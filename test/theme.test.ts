@@ -971,7 +971,7 @@ describe('部品の作法', () => {
     */
     const folds = rulesOf(sheet).filter(
       (rule) =>
-        rule.context.some((one) => /width/.test(one)) &&
+        rule.context.some((one) => one.startsWith('@media') && /width/.test(one)) &&
         rule.decls.some(([name, value]) => name === 'display' && value === 'none'),
     )
     expect(folds.map((rule) => rule.selectors.join(', '))).toEqual([
@@ -986,6 +986,22 @@ describe('部品の作法', () => {
       popover を知っているブラウザの 600 未満だけで、600 以上はボタンとパネルを畳んで帯の目次を出す
     */
     expect(menu?.context.join(' ')).toContain('min-width: 600px')
+    /*
+      幅ではなく高さで畳むのは、柱の底の音楽の札だけ（添え物で、名乗りでも行き先でもない）。
+      背の低い窓では柱があふれないよう、ほかのどこにも出さずに畳む。畳むのは柱の中の枠
+      （.pillar__music）が狭いときだけで、足元の札は幅で畳まない
+    */
+    const heightFolds = rulesOf(sheet).filter(
+      (rule) =>
+        rule.context.some((one) => one.startsWith('@container') && /height/.test(one)) &&
+        rule.decls.some(([name, value]) => name === 'display' && value === 'none'),
+    )
+    expect(heightFolds.map((rule) => rule.selectors.join(', '))).toEqual([
+      '.pillar__music > .music',
+    ])
+    const slot = rulesOf(sheet).find((rule) => rule.selectors.join(', ') === '.pillar__music')
+    expect(slot?.context.join(' ')).toContain('min-width: 900px')
+    expect(slot?.decls).toContainEqual(['container', 'music-slot / size'])
     const popover = blockAt(sheet, '@supports selector(:popover-open)')
     expect(bodyOf(popover, ':where(body:not([data-whole])) .top .toc {')).toContain('display: none')
     expect(bodyOf(popover, '.menu-btn {')).toContain('display: inline-flex')
@@ -1473,6 +1489,8 @@ describe('文字の段', () => {
         '.side-head:lang(en)',
         // 公開ページの数字だけの札（見出しの件数）
         '.head__count',
+        // 音楽の札の英字だけの小見出し「On repeat」（components.tsx の SiteMusic。字は部品が持つ）
+        '.music__label',
       ].sort(),
     )
   })

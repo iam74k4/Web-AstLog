@@ -373,6 +373,8 @@ const measure = ([, cfg]) => {
     for (let up = el.parentElement; up && up !== document.body; up = up.parentElement) {
       const upStyle = getComputedStyle(up)
       if (scrolls(upStyle)) break
+      // 1行で末尾を省く箱の中の字（音楽の札の曲名の下線の箱など）は、省くのが決まりどおり
+      if (upStyle.textOverflow === 'ellipsis') break
       if (!clips(upStyle)) continue
       const box = up.getBoundingClientRect()
       const x = ['hidden', 'clip'].includes(upStyle.overflowX)

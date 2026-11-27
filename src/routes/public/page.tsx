@@ -108,6 +108,8 @@ export async function screenPage(
     */
     jsonLd?: unknown
     footer: Child
+    // 音楽の札（components.tsx の SiteMusic。src/ui/Layout.tsx の music）
+    music?: Child
     // このページの中身を直す管理画面（adminHref が、ログインしている人にだけ出す）
     adminPath: string
     // 共有カードの画像。渡さなければサイトの1枚（src/ui/Layout.tsx の OgImage）
@@ -126,6 +128,7 @@ export async function screenPage(
       jsonLd={page.jsonLd}
       nav={page.nav}
       footer={page.footer}
+      music={page.music}
       admin={await adminHref(c, page.adminPath)}
       image={page.image}
       opening={page.opening}

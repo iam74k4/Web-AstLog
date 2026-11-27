@@ -1,3 +1,4 @@
+import { appleMusicTrack, isMusicArt } from './lib/apple-music'
 import { isHttpsUrl } from './lib/format'
 
 /*
@@ -29,6 +30,16 @@ export const SITE = {
   availabilityFormat: '',
   // Contact の相談の流れ（How it works）。1行 = 「見出し | 説明」（parsePairs）。空なら出さない
   contactSteps: '',
+  /*
+    柱の底の音楽の札（components.tsx の SiteMusic）。書くのは Apple Music の曲の URL だけで、
+    曲名・アーティスト名・ジャケットは保存のときに Apple から引く（src/lib/apple-music.ts）。
+    名前は直せる（日本のストアだとアーティスト名がカタカナで返ることがある）。ジャケットは
+    KV に写した画像の URL で、フォームからは受け取らない。4つ揃わなければ札を出さない
+  */
+  musicUrl: '',
+  musicTitle: '',
+  musicArtist: '',
+  musicArt: '',
 } as const
 
 /*
@@ -57,6 +68,9 @@ export const AVAILABILITY_KEYS = [
   'availabilityFormat',
 ] as const
 
+// 音楽の札の欄（ジャケットの musicArt はフォームから受け取らない。readSiteForm）
+export const MUSIC_KEYS = ['musicUrl', 'musicTitle', 'musicArtist', 'musicArt'] as const
+
 /*
   足元の行き先は GitHub → Instagram → X → Discord → Mail の順（components.tsx の Socials）。
   Contact のページを出すかを決めるのはメール・GitHub・Discord（hasContact）——Instagram と X は
@@ -74,11 +88,12 @@ export const SITE_SETTING_KEYS = [
   'discord',
   ...AVAILABILITY_KEYS,
   'contactSteps',
+  ...MUSIC_KEYS,
 ] as const
 export type SiteSettingKey = (typeof SITE_SETTING_KEYS)[number]
 
 /*
-  あとから足した欄（入口の打ち替える言葉・Instagram・X・Discord・受付状況・相談の流れ）。既定は空（出さない）なので、行がまだ無くても管理画面の
+  あとから足した欄（入口の打ち替える言葉・Instagram・X・Discord・受付状況・相談の流れ・音楽）。既定は空（出さない）なので、行がまだ無くても管理画面の
   概要では「保存済み」に数える——欄を足した日に、保存済みのサイトが「一部保存済み」に戻らない
   ように（src/routes/admin/dashboard.tsx）
 */
@@ -89,6 +104,7 @@ export const SITE_SETTING_LATER_KEYS: readonly SiteSettingKey[] = [
   'discord',
   ...AVAILABILITY_KEYS,
   'contactSteps',
+  ...MUSIC_KEYS,
 ]
 export type SiteSettings = Record<SiteSettingKey, string>
 
@@ -110,6 +126,11 @@ export const SITE_SETTING_LIMITS = {
   availabilityHours: 60,
   availabilityFormat: 60,
   contactSteps: 1200,
+  musicUrl: 2048,
+  // 曲名とアーティスト名は字の幅でも見る（MUSIC_NAME_WIDTH）。ここは欄の maxlength
+  musicTitle: 40,
+  musicArtist: 24,
+  musicArt: 200,
 } as const
 
 // biome-ignore lint/suspicious/noControlCharactersInRegex: 制御文字を弾くのがこの検査の目的
@@ -124,8 +145,17 @@ const CONTROL_BUT_NEWLINE = /[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f]/
   電話の幅（390）の大見出しの段（--fs-display-xs）で1行に収まる長さで止める
 */
 export const HERO_ROLES = { words: 4, width: 24 } as const
-const roleWidth = (word: string) =>
+// 字の幅。半角を 1、それ以外（全角）を 2 と数える
+const textWidth = (word: string) =>
   [...word].reduce((sum, letter) => sum + (/[\u0020-\u007e]/.test(letter) ? 1 : 2), 0)
+
+/*
+  音楽の札の名前の幅の上限（半角で数え、全角は2字）。札は柱の目次と行き先のあいだの余りに
+  置き、余りが札より狭い窓では畳む（app.css の @container music-slot）。いちばん狭い柱
+  （161px）でも、曲名は3行・アーティスト名は2行までに収まる長さにして、畳む高さを1つに決める。
+  Apple の名前が長いとき（feat. や Remastered の付いたもの）は、欄で短くしてもらう
+*/
+export const MUSIC_NAME_WIDTH = { musicTitle: 40, musicArtist: 24 } as const
 export const heroRoleWords = (site: Pick<SiteSettings, 'heroRoles'>) =>
   site.heroRoles
     .split(/\r?\n/)
@@ -156,6 +186,18 @@ export const isDiscordName = (name: string) => /^[a-z0-9_.]{2,32}$/i.test(name)
 export const hasContact = (site: Pick<SiteSettings, 'email' | 'github' | 'discord'>) =>
   isContactEmail(site.email) || isHttpsUrl(site.github) || isDiscordName(site.discord)
 
+/*
+  音楽の札を出せるか。曲の URL・曲名・アーティスト名・KV に写したジャケットの4つが揃ったときだけ
+  （描く部品 components.tsx の SiteMusic が見る）。URL の形とジャケットの置き場はここでも見る
+*/
+export const hasMusic = (
+  site: Pick<SiteSettings, 'musicUrl' | 'musicTitle' | 'musicArtist' | 'musicArt'>,
+) =>
+  Boolean(appleMusicTrack(site.musicUrl)) &&
+  Boolean(site.musicTitle) &&
+  Boolean(site.musicArtist) &&
+  isMusicArt(site.musicArt)
+
 export function siteSettingsErrors(site: SiteSettings): Record<string, string> | null {
   const errors: Record<string, string> = {}
   for (const key of SITE_SETTING_KEYS) {
@@ -173,8 +215,26 @@ export function siteSettingsErrors(site: SiteSettings): Record<string, string> |
     'availabilityReply',
     'availabilityHours',
     'availabilityFormat',
+    'musicTitle',
+    'musicArtist',
   ] as const) {
     if (CONTROL.test(site[key])) errors[key] = '改行や制御文字を含めないでください'
+  }
+  if (site.musicUrl && (CONTROL.test(site.musicUrl) || !appleMusicTrack(site.musicUrl))) {
+    errors.musicUrl =
+      'Apple Music の曲の URL を入れてください（ミュージックで曲の「共有 → リンクをコピー」。アルバムやプレイリストのリンクは使えません）'
+  }
+  // 字数の知らせより先に、幅の知らせを出す（全角を2字に数えるので、こちらが厳しい）
+  for (const key of ['musicTitle', 'musicArtist'] as const) {
+    const width = MUSIC_NAME_WIDTH[key]
+    if (!CONTROL.test(site[key]) && textWidth(site[key]) > width) {
+      errors[key] =
+        `半角 ${width} 字（全角 ${width / 2} 字）までにしてください。柱の幅に収まる長さです` +
+        '（Apple Music の名前が長いときは、ここで短くして保存します。例: (feat. …) を外す）'
+    }
+  }
+  if (site.musicArt && !isMusicArt(site.musicArt)) {
+    errors.musicArt = 'ジャケットを読み直してください（曲の URL を入れ直して保存）'
   }
   if (site.availability && !isAvailabilityState(site.availability)) {
     errors.availability = '受付の状態を選び直してください'
@@ -185,7 +245,7 @@ export function siteSettingsErrors(site: SiteSettings): Record<string, string> |
   if (CONTROL_BUT_NEWLINE.test(site.heroRoles)) errors.heroRoles = '制御文字を含めないでください'
   else if (roles.length > HERO_ROLES.words) {
     errors.heroRoles = `言葉は ${HERO_ROLES.words} つまでにしてください`
-  } else if (roles.some((word) => roleWidth(word) > HERO_ROLES.width)) {
+  } else if (roles.some((word) => textWidth(word) > HERO_ROLES.width)) {
     errors.heroRoles = `1つの言葉は半角 ${HERO_ROLES.width} 字（全角 ${HERO_ROLES.width / 2} 字）までにしてください`
   }
   if (site.email && !isContactEmail(site.email)) errors.email = 'メールアドレスを1つ入れてください'

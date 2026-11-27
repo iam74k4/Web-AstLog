@@ -23,6 +23,7 @@ import {
   itemHref,
   Screen,
   SectionHead,
+  SiteMusic,
   SiteSocials,
 } from '../../ui/components'
 import type { NavItem } from '../../ui/Layout'
@@ -127,6 +128,8 @@ function previewNav(saved: Snapshot): NavItem[] {
 }
 
 const footer = (saved: Snapshot) => <SiteSocials site={saved.site} />
+// 音楽の札。公開ページと同じく、全体ページ（/all）には出さない
+const music = (saved: Snapshot) => <SiteMusic site={saved.site} />
 
 function emptyBlock(block?: schema.Block) {
   const title = block ? block.title || blockType(block.type)?.label || 'プレビュー' : 'プレビュー'
@@ -219,6 +222,7 @@ function renderSnapshot(
       // 未保存の値はこの応答だけにある。移動で値が消えることを避け、目次を出さない。
       nav={options.unsaved ? [] : previewNav(saved)}
       footer={footer(saved)}
+      music={music(saved)}
       owner={soloMember(saved.members)}
       publicHref={screen === 'hero' ? '/' : `/${screen}`}
       {...options}
@@ -301,6 +305,7 @@ function memberResponse(
       draft={member.published !== 1}
       nav={options.unsaved ? [] : previewNav(saved)}
       footer={footer(memberContext)}
+      music={music(memberContext)}
       // 柱の名札も、書いている途中の内容で描く（保存済みの名前を混ぜない）
       owner={soloMember(members)}
       {...options}
@@ -340,6 +345,7 @@ function itemResponse(
       draft={item.published !== 1}
       nav={options.unsaved ? [] : previewNav(saved)}
       footer={footer(saved)}
+      music={music(saved)}
       owner={soloMember(saved.members)}
       {...options}
     >
@@ -397,6 +403,7 @@ for (const doc of ITEM_DOCUMENTS) {
         draft={item.published !== 1}
         nav={previewNav(saved)}
         footer={<SiteSocials site={saved.site} contact={page.contact} />}
+        music={music(saved)}
         owner={soloMember(saved.members)}
         editHref={`/admin/items/${id}/edit`}
       >
@@ -443,6 +450,7 @@ export async function validationFailure(
       still={live}
       nav={[]}
       footer={footer(saved)}
+      music={music(saved)}
       owner={soloMember(saved.members)}
     >
       <Screen id="preview-errors" label="入力の確認">
@@ -647,6 +655,7 @@ export async function renderBlockPreview(
       draft={options.draft ?? block.published !== 1}
       nav={options.unsaved ? [] : previewNav(saved)}
       footer={footer(saved)}
+      music={music(saved)}
       owner={soloMember(saved.members)}
     >
       {page.node}
@@ -682,6 +691,10 @@ previewRoutes.post('/preview/site', async (c) => {
     availabilityHours: '連絡のつく時間',
     availabilityFormat: '進め方',
     contactSteps: '相談の流れ',
+    musicUrl: 'Apple Music の曲の URL',
+    musicTitle: '曲名',
+    musicArtist: 'アーティスト名',
+    musicArt: 'ジャケット',
   }
   const previewErrors: Record<string, string> = {}
   for (const key of SITE_SETTING_KEYS) {
@@ -690,6 +703,12 @@ previewRoutes.post('/preview/site', async (c) => {
   if (!screen) previewErrors.previewScreen = 'プレビューする画面を選び直してください'
   if (errors || !screen) return validationFailure(c, previewErrors, '/admin/site')
   const saved = await snapshot(c)
+  /*
+    音楽の札のジャケットは、保存のときに Apple から引く（site-settings.tsx の resolveMusic）。
+    プレビューでは引かないので、曲が保存済みと同じときだけ保存済みのジャケットと重ねて描く
+    （曲を替えたプレビューでは札を出さない）
+  */
+  if (site.musicUrl === saved.site.musicUrl) site.musicArt = saved.site.musicArt
   return renderSnapshot(c, { ...saved, site, data: { ...saved.data, site } }, screen, {
     editHref: '/admin/site',
     unsaved: true,

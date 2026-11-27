@@ -198,6 +198,12 @@
   */
   --page-pad: clamp(32px, 5vw, 72px);
   /*
+    音楽の札（.music）のジャケットの一辺。柱は字4行ぶん、足元（900 未満）は足元の字に合わせた
+    字2行ぶん
+  */
+  --music-art: 48px;
+  --music-art-sm: 32px;
+  /*
     本文の節と節のあいだ（main の子どうし。個人ページの About / Skills / Career の章の
     あいだもこれ1つ）。狭い画面では詰める——電話で章ごとに 100px 近く空き、1人の
     プロフィールが別々の塊に見えた
@@ -1079,6 +1085,140 @@ body[data-site] > .frame {
 .foot__meta {
   color: var(--ink-weak);
   font-size: var(--fs-meta);
+}
+
+/*
+  音楽の札（components.tsx の SiteMusic）。ジャケットは角の立った正方形（--music-art）で、右に
+  英字の小見出し・曲名・アーティスト名を積む。曲名だけ墨。面も枠も持たない（公開ページは箱を
+  並べない）。ジャケットの上の縁を小見出しの頭にそろえる（真ん中でそろえると、小見出しが絵の
+  上へ飛び出した）。置き場所は左の柱の底（.pillar__music。900 以上）と足元の頭
+*/
+.music {
+  display: flex;
+  min-width: 0;
+}
+
+.music__link {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  min-width: 0;
+  min-height: var(--tap);
+  color: var(--ink-mid);
+  text-decoration: none;
+  transition: scale var(--dur-spring) var(--ease-spring);
+}
+
+.music__art {
+  flex: none;
+  width: var(--music-art);
+  height: var(--music-art);
+  object-fit: cover;
+}
+
+.music__text {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+/* 「On repeat」。和文の入らない英字の小見出し（名札のローマ字と同じ字間の広い大文字） */
+.music__label {
+  font-family: var(--font-latin);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+}
+
+.music__title {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--fs-meta);
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 英字の曲名だけ作品名と同じ Poppins（和文の曲名は本文の書体のまま） */
+.music__title:lang(en) {
+  font-family: var(--font-latin);
+}
+
+/* 曲名の下線は、一覧の行の題（.entry__link）と同じく触ると左から伸びる */
+.music__name {
+  background: linear-gradient(currentColor, currentColor) 0 100% / 0% 1px no-repeat;
+  transition: background-size var(--dur) var(--ease);
+}
+
+.music__artist {
+  font-size: var(--fs-meta);
+}
+
+/* 外へ出る・別のタブ（矢印は行き先で使い分ける） */
+.music__artist::after {
+  content: ' ↗';
+}
+
+/* 柱は幅が狭いので、曲名は折り返して全部出す（1行で切ると曲名が読めない） */
+.pillar__music .music__title {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/*
+  柱の札は、目次と柱の底のあいだの余り（.pillar__music。900 以上の括りで大きさを問える枠に
+  する）が札と目次からの間より狭い窓では出さない——出すと柱があふれ、背の低い窓（1366×768 の
+  ノート PC など）で行き先と著作権表示が柱の中のスクロールに隠れた。札は名乗りでも行き先でも
+  ない添え物なので、ここでだけ、ほかのどこにも出さずに畳む（足元は 900 以上で畳んである）。
+  畳む高さは、名前が上限ちょうど（src/site.ts の MUSIC_NAME_WIDTH）の札のいちばん高い形 +
+  目次からの間（--sp-6）。柱が広い（221px）と札は字5行まで（約 104）で 132px、狭い（200px 未満。
+  900〜1024 の画面の 161〜166px）と曲名が3〜4行に折れて約 145 まで伸びるので 172px
+*/
+@container music-slot (height < 132px) or ((width < 200px) and (height < 172px)) {
+  .pillar__music > .music {
+    display: none;
+  }
+}
+
+/*
+  足元（900 未満）は足元の字と同じ大きさまで縮める。ジャケットは字2行ぶん（--music-art-sm）、
+  字は小見出しと「曲名 · アーティスト名 ↗」の2行。区切りの「·」は名札・タグと同じ（「—」は
+  期間の記号）。柱と同じ3行の札は、著作権表示と行き先だけの足元の中で1つだけ大きく見えた
+*/
+.foot > .music {
+  margin-bottom: var(--sp-2);
+}
+
+.foot .music__link {
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.foot .music__art {
+  width: var(--music-art-sm);
+  height: var(--music-art-sm);
+}
+
+.foot .music__text {
+  grid-template-columns: minmax(0, auto) auto;
+  justify-content: start;
+  gap: 0;
+}
+
+.foot .music__label {
+  grid-column: 1 / -1;
+}
+
+.foot .music__artist {
+  white-space: nowrap;
+}
+
+.foot .music__artist::before {
+  content: '·';
+  display: inline-block;
+  width: var(--sp-4);
+  text-align: center;
 }
 
 /* --- 顔 --- */
@@ -3439,6 +3579,11 @@ body[data-site] > .frame {
     justify-content: space-between;
   }
 
+  /* 音楽の札は、その1行の上に1行を取る */
+  .foot > .music {
+    flex-basis: 100%;
+  }
+
   /*
     上の帯の間隔。600 未満は1段詰めて、電話（390）でも3つの行き先（Projects /
     Profile / Contact）とロゴが1行に収まるようにする
@@ -3606,7 +3751,8 @@ body[data-site] > .frame {
 .menu a:active,
 .band:active,
 .member:active,
-.back:active {
+.back:active,
+.music__link:active {
   scale: var(--press);
 }
 
@@ -3643,6 +3789,10 @@ body[data-site] > .frame {
   }
 
   :is(.entry:has(.entry__link)):hover .entry__link {
+    background-size: 100% 1px;
+  }
+
+  .music__link:hover .music__name {
     background-size: 100% 1px;
   }
 
@@ -4377,6 +4527,21 @@ body[data-opening] {
     }
 
     /*
+      音楽の札は、目次と柱の底のあいだの余り（.pillar__music。伸び縮みする枠）の底に付ける。
+      余りが狭い窓では札を出さない（素の @container）。枠の頭は目次との間（柱の gap）に重ね、
+      札を出さない窓での柱の高さを、札の無いときと同じにする
+    */
+    .pillar__music {
+      display: flex;
+      flex: 1 1 0;
+      flex-direction: column;
+      justify-content: flex-end;
+      min-height: 0;
+      margin-top: calc(var(--sp-6) * -1);
+      container: music-slot / size;
+    }
+
+    /*
       足元は足元ごと畳む（中身の2つは柱の底に立っている）。行き先だけを畳んで著作権表示の1行を
       残していたころは、柱（画面から帯を引いた高さ）の下に足元が積まれ、中身の短いページでも
       足元のぶんだけ必ず縦に送れた——「足元を画面の底に置く」が 900 以上でだけ崩れていた
@@ -4496,7 +4661,8 @@ body[data-opening] {
   .back,
   .skip,
   .band,
-  .cta {
+  .cta,
+  .music {
     display: none;
   }
 

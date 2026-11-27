@@ -3,7 +3,7 @@ import { MEDIA_ARCHIVE_PREFIX } from './media-retention'
 /*
   管理画面から上げた画像と動画が KV で使っている容量と、その上限。
 
-  数えるのは公開に使っている2つの置き場（avatars/・items/）だけ。外した画像の控え
+  数えるのは公開に使っている3つの置き場（avatars/・items/・music/）だけ。外した画像の控え
   （archive/。90日で消える）は数えない——数えると、外して空けたつもりの容量が90日戻らず、
   上限の近くで何も足せなくなる。控えは概要に別に出す。
 
@@ -13,7 +13,7 @@ import { MEDIA_ARCHIVE_PREFIX } from './media-retention'
 */
 export const MEDIA_QUOTA_BYTES = 300_000_000
 
-const LIVE_PREFIXES = ['avatars/', 'items/']
+const LIVE_PREFIXES = ['avatars/', 'items/', 'music/']
 
 export type MediaUsage = { used: number; archived: number }
 

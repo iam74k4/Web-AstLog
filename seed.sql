@@ -266,4 +266,10 @@ INSERT OR REPLACE INTO settings (key, value) VALUES
   ('site.availabilityReply', '2日以内'),
   ('site.availabilityHours', '平日の夜と土日（日本時間）'),
   ('site.availabilityFormat', 'オンライン'),
-  ('site.contactSteps', 'ご連絡 | メールで、やりたいことを一言いただければ十分です。' || char(10) || 'お話し | オンラインで30分ほど、目的と制約を伺います。' || char(10) || 'ご提案 | 進め方と期間の目安を、文書でお送りします。' || char(10) || '開発 | 動くものを早めにお見せし、確かめながら進めます。');
+  ('site.contactSteps', 'ご連絡 | メールで、やりたいことを一言いただければ十分です。' || char(10) || 'お話し | オンラインで30分ほど、目的と制約を伺います。' || char(10) || 'ご提案 | 進め方と期間の目安を、文書でお送りします。' || char(10) || '開発 | 動くものを早めにお見せし、確かめながら進めます。'),
+  -- 柱の底の音楽の札。ジャケットは検査用の画像（scripts/fixtures/media/music-cover.png。ローカルの KV だけ）
+  -- 曲は作り話（実在の曲の URL を入れると、管理画面でその曲を貼っても「同じ曲」として Apple に聞き直さない）
+  ('site.musicUrl', 'https://music.apple.com/jp/album/sample/1000000000?i=1000000001'),
+  ('site.musicTitle', 'Night Drive'),
+  ('site.musicArtist', 'Sample Artist'),
+  ('site.musicArt', '/images/music/music-cover.png');

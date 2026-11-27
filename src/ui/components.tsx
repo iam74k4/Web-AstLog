@@ -45,6 +45,7 @@ import {
 import {
   AVAILABILITY,
   type AvailabilityState,
+  hasMusic,
   isAvailabilityState,
   isContactEmail,
   isDiscordName,
@@ -470,6 +471,38 @@ export const Hero = ({
     {children}
   </header>
 )
+
+/*
+  柱の底の音楽の札（サイト設定の「音楽」。曲は src/lib/apple-music.ts が Apple から引く）。
+  ジャケット（角の立った正方形）の右に、英字の小見出し「On repeat」・曲名・アーティスト名を積み、
+  押すと Apple Music の曲のページを別のタブで開く。置くのは左の柱の底（目次と行き先のあいだの
+  余り）と、900 未満の足元の頭（Layout の music。同時に見えるのは片方だけ）。
+  曲の URL・名前・KV に写したジャケットが揃わなければ出さない（hasMusic。手で DB に入った値や
+  外の画像を指す値から描かない）。ジャケットは飾り——曲名とアーティスト名を字で持つので alt は空
+*/
+export const SiteMusic = ({
+  site,
+}: {
+  site: Pick<SiteSettings, 'musicUrl' | 'musicTitle' | 'musicArtist' | 'musicArt'>
+}) =>
+  hasMusic(site) ? (
+    <div class="music">
+      <a class="music__link" href={site.musicUrl} target="_blank" rel="noreferrer">
+        <img class="music__art" src={site.musicArt} alt="" width="48" height="48" />
+        <span class="music__text">
+          <span class="music__label" lang="en">
+            On repeat
+          </span>
+          <span class="music__title" lang={langOf(site.musicTitle)}>
+            <span class="music__name">{site.musicTitle}</span>
+          </span>
+          <span class="music__artist" lang={langOf(site.musicArtist)}>
+            {site.musicArtist}
+          </span>
+        </span>
+      </a>
+    </div>
+  ) : null
 
 /*
   文を句読点（、。！？）の直後でだけ折れるようにする。

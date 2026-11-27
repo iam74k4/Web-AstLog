@@ -132,10 +132,12 @@ const Copyright = () => (
 const Pillar = ({
   owner,
   nav,
+  music,
   socials,
 }: {
   owner?: PublicMember
   nav: NavItem[]
+  music?: Child
   socials: Child
 }) => (
   <div class="pillar">
@@ -159,6 +161,12 @@ const Pillar = ({
       いる幅では足元ごと畳む。柱は画面から帯を引いた高さなので、その下に足元を積むと、中身の短い
       ページでも足元のぶんだけ必ず縦に送れた（1行の著作権表示のために）
     */}
+    {/*
+      音楽の札（components.tsx の SiteMusic）。目次と柱の底のあいだの余り（.pillar__music）の底に
+      置き、余りが札より狭い背の低い窓では出さない——出すと柱があふれ、行き先と著作権表示が柱の
+      中のスクロールに隠れた（app.css の .pillar__music）
+    */}
+    {music ? <div class="pillar__music">{music}</div> : null}
     <div class="pillar__foot">
       {socials}
       <Copyright />
@@ -209,6 +217,11 @@ export const Layout = (props: {
     ここに載せたものは全ページに載る
   */
   footer: Child
+  /*
+    音楽の札（components.tsx の SiteMusic）。左の柱の底と、柱の無い幅の足元の頭に出る——足元の
+    行き先と同じく、ここに載せたものは全ページに載る。曲を置いていなければ SiteMusic が null
+  */
+  music?: Child
   /*
     縦に積んだ全体ページ（/all）のときだけ立てる。app.css は body のこの印で
     「ページの外枠」（表紙の高さ・貼り付く帯）を外す。
@@ -349,7 +362,14 @@ export const Layout = (props: {
         main の直接の子は今までどおり Screen / Hero だけ。
       */}
         <div class="frame">
-          {pillar ? <Pillar owner={props.owner} nav={props.nav} socials={props.footer} /> : null}
+          {pillar ? (
+            <Pillar
+              owner={props.owner}
+              nav={props.nav}
+              music={props.music}
+              socials={props.footer}
+            />
+          ) : null}
           <main id="main" tabindex={-1}>
             {props.children}
           </main>
@@ -360,6 +380,7 @@ export const Layout = (props: {
         （Pillar。どの幅でも片方には出ている）。全体ページ（/all）への1本は置かない（sitemap.xml が載せる）。
       */}
         <footer class="foot">
+          {props.music}
           <Copyright />
           {props.footer}
         </footer>
