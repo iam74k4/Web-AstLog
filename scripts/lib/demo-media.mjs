@@ -2,10 +2,11 @@
   検査用の作品画像は public/ に置かず、ローカルの KV にだけ入れる。置き場は名前で決める
   （avatar.png は顔、music- で始まるものは音楽の札のジャケット、ほかは作品の画像）。
 */
-const folderOf = (name) =>
-  name === 'avatar.png' ? 'avatars' : name.startsWith('music-') ? 'music' : 'items'
 import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
+
+const folderOf = (name) =>
+  name === 'avatar.png' ? 'avatars' : name.startsWith('music-') ? 'music' : 'items'
 
 const MEDIA = fileURLToPath(new URL('../fixtures/media/', import.meta.url))
 
